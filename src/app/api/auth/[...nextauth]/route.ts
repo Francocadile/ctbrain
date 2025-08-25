@@ -6,12 +6,8 @@ import { compare } from "bcryptjs";
 
 const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
-  session: {
-    strategy: "jwt"
-  },
-  pages: {
-    signIn: "/login"
-  },
+  session: { strategy: "jwt" },
+  pages: { signIn: "/login" },
   providers: [
     Credentials({
       name: "Email y contraseña",
@@ -43,16 +39,14 @@ const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        // @ts-expect-error agregar rol al token
-        token.role = (user as any).role;
+        (token as any).role = (user as any).role;
       }
       return token;
     },
     async session({ session, token }) {
-      // @ts-expect-error agregar rol a la sesión
-      session.user = session.user || {};
-      // @ts-expect-error agregar rol a la sesión
-      session.user.role = token.role;
+      const s = session as any;
+      s.user = s.user || {};
+      s.user.role = (token as any).role;
       return session;
     }
   }
