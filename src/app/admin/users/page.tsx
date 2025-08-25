@@ -177,7 +177,7 @@ export default function AdminUsersPage() {
           <div className="p-4 text-white/70">Sin usuarios</div>
         ) : (
           users.map((u) => {
-            const isMe = myEmail && u.email === myEmail;
+            const isMe = !!myEmail && u.email === myEmail; // boolean puro
             return (
               <div key={u.id} className="grid grid-cols-6 gap-2 border-t border-white/5 p-3 text-sm">
                 <div>{u.name}</div>
@@ -192,9 +192,9 @@ export default function AdminUsersPage() {
                   <select
                     defaultValue={u.role}
                     onChange={(e) => onChangeRole(u.id, e.target.value as Role)}
-                    disabled={isMe}
+                    disabled={!!isMe}
                     className="rounded border border-white/10 bg-black/30 px-2 py-1 text-xs disabled:opacity-50"
-                    title={isMe ? "No podés cambiar tu propio rol" : "Cambiar rol"}
+                    title={!!isMe ? "No podés cambiar tu propio rol" : "Cambiar rol"}
                   >
                     {(["ADMIN", "CT", "MEDICO", "JUGADOR", "DIRECTIVO"] as Role[]).map((r) => (
                       <option key={r} value={r}>
@@ -206,9 +206,9 @@ export default function AdminUsersPage() {
                 <div className="flex items-center">
                   <button
                     onClick={() => onDelete(u.id)}
-                    disabled={isMe}
+                    disabled={!!isMe}
                     className="rounded-2xl border border-red-600/40 px-3 py-1 text-xs text-red-300 hover:bg-red-600/10 disabled:opacity-50"
-                    title={isMe ? "No podés borrarte a vos mismo" : "Eliminar"}
+                    title={!!isMe ? "No podés borrarte a vos mismo" : "Eliminar"}
                   >
                     Borrar
                   </button>
