@@ -1,4 +1,4 @@
-import { PrismaClient, Role } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { hash } from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -12,16 +12,16 @@ async function main() {
 
   const admin = await prisma.user.upsert({
     where: { email },
-    update: {},
+    update: { password: passwordHashed, name, role: "ADMIN" },
     create: {
       name,
       email,
-      password: passwordHashed, // campo correcto según el schema
-      role: Role.ADMIN,
+      password: passwordHashed, // <-- campo "password"
+      role: "ADMIN",
     },
   });
 
-  console.log("✅ Usuario admin creado/actualizado:", {
+  console.log("✅ Usuario admin listo:", {
     id: admin.id,
     email: admin.email,
     role: admin.role,
@@ -36,4 +36,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
-
