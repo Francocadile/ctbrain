@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 import Container from "@/components/ui/container";
 import { env } from "@/lib/env";
-import TopRightLogout from "@/components/TopRightLogout";
-import Providers from "@/components/auth/Providers";
+import TopRightLogout from "@/components/auth/TopRightLogout"; // <- ruta correcta
+import Providers from "@/components/auth/Providers"; // asegura SessionProvider
 
 export const metadata: Metadata = {
   title: env.client.NEXT_PUBLIC_APP_NAME,
@@ -32,7 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Container>{children}</Container>
           </main>
 
-          {/* Footer global */}
+          {/* Footer */}
           <footer className="border-t border-brand-700/30 py-6 text-center text-xs text-white/60">
             {new Date().getFullYear()} • {env.client.NEXT_PUBLIC_APP_NAME}
           </footer>
@@ -41,3 +41,5 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
+
+
