@@ -1,3 +1,4 @@
+// src/app/admin/users/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -27,7 +28,7 @@ export default function AdminUsersPage() {
     setLoading(true);
     setErr(null);
     try {
-      const res = await fetch("/api/admin/users", { cache: "no-store" });
+      const res = await fetch("/api/users", { cache: "no-store" }); // 👈 FIX
       if (!res.ok) throw new Error("Error al listar");
       const data = await res.json();
       setUsers(data.users);
@@ -46,7 +47,7 @@ export default function AdminUsersPage() {
     e.preventDefault();
     setErr(null);
     try {
-      const res = await fetch("/api/admin/users", {
+      const res = await fetch("/api/users", { // 👈 FIX
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, name, role, password }),
