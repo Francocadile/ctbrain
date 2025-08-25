@@ -1,55 +1,64 @@
-import NextAuth, { type NextAuthOptions } from "next-auth";
-import Credentials from "next-auth/providers/credentials";
+import NextAuth, { NextAuthOptions } from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import { prisma } from "@/lib/prisma";
+import { PrismaClient, Role } from "@prisma/client";
 import { compare } from "bcryptjs";
 
-const authOptions: NextAuthOptions = {
+const prisma = new PrismaClient();
+
+export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   providers: [
-    Credentials({
-      name: "Email y contraseña",
+    CredentialsProvider({
+      name: "Credentials",
       credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Contraseña", type: "password" }
+        email: { label: "Email", type: "text" },
+        password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email }
+          where: { email: credentials.email },
         });
 
-        if (!user || !user.passwordHash) return null;
+        // OJO: ahora el campo es "password"
+        if (!user || !user.password) return null;
 
-        const ok = await compare(credentials.password, user.passwordHash);
+        const ok = await compare(credentials.password, user.password);
         if (!ok) return null;
 
+        // NextAuth solo necesita un objeto con id/email/name/image; pasamos role en jwt
         return {
           id: user.id,
           email: user.email,
-          name: user.name ?? null,
-          role: user.role
+          name: user.name ?? undefined,
+          image: user.image ?? undefined,
+          role: user.role as Role,
         } as any;
-      }
-    })
+      },
+    }),
   ],
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        (token as any).role = (user as any).role;
+        // @ts-expect-error custom field
+        token.role = (user as any).role ?? "JUGADOR";
       }
       return token;
     },
     async session({ session, token }) {
-      const s = session as any;
-      s.user = s.user || {};
-      s.user.role = (token as any).role;
+      if (session.user) {
+        // @ts-expect-error add id to session
+        session.user.id = token.sub;
+        // @ts-expect-error add role to session
+        session.user.role = (token as any).role ?? "JUGADOR";
+      }
       return session;
-    }
-  }
+    },
+  },
 };
 
 const handler = NextAuth(authOptions);
