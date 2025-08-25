@@ -12,7 +12,7 @@ model User {
   email         String   @unique
   name          String?
   role          Role     @default(JUGADOR)
-  password      String?  @db.Text   // opcional para permitir OAuth; requerido si usas credentials
+  password      String?  @db.Text   // hash bcrypt (nullable si usás OAuth)
   image         String?
   emailVerified DateTime?
   createdAt     DateTime @default(now())
