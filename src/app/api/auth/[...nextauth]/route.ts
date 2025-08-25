@@ -1,13 +1,13 @@
-import NextAuth, { NextAuthOptions } from "next-auth";
+import NextAuth, { type NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import { compare } from "bcryptjs";
 
-export const authOptions: NextAuthOptions = {
+const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   session: {
-    strategy: "jwt" // simple y rápido para MVP
+    strategy: "jwt"
   },
   pages: {
     signIn: "/login"
@@ -42,17 +42,16 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async jwt({ token, user }) {
-      // user existe solo al iniciar sesión
       if (user) {
-        // @ts-expect-error custom
+        // @ts-expect-error agregar rol al token
         token.role = (user as any).role;
       }
       return token;
     },
     async session({ session, token }) {
-      // @ts-expect-error custom
+      // @ts-expect-error agregar rol a la sesión
       session.user = session.user || {};
-      // @ts-expect-error custom
+      // @ts-expect-error agregar rol a la sesión
       session.user.role = token.role;
       return session;
     }
