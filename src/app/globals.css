@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --app-bg: #0b0b0b;
+}
+
+html, body {
+  height: 100%;
+  background: var(--app-bg);
+  color: white;
+}
+
+.container-aura {
+  @apply rounded-2xl shadow-aura border border-brand-700/40;
+}
