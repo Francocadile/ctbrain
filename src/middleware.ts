@@ -2,20 +2,20 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-const ROLE_HOME: Record<string, string> = {
+const ROLE_HOME = {
   ADMIN: "/admin",
   CT: "/ct",
   MEDICO: "/medico",
   JUGADOR: "/jugador",
   DIRECTIVO: "/directivo"
-};
+} as const;
 
-const PROTECTED_PREFIXES = ["/admin", "/ct", "/medico", "/jugador", "/directivo"];
+const PROTECTED_PREFIXES = Object.values(ROLE_HOME);
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // permitir estáticos y api auth
+  // permitir estáticos y endpoints públicos
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api/auth") ||
@@ -26,38 +26,36 @@ export async function middleware(req: NextRequest) {
   }
 
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  const role = (token as any)?.role as keyof typeof ROLE_HOME | undefined;
+  const roleHome = role ? ROLE_HOME[role] : undefined;
 
-  // Si está entrando al login y ya está logueado → mandarlo a su home por rol
-  if (pathname === "/login" && token?.role && ROLE_HOME[token.role]) {
-    return NextResponse.redirect(new URL(ROLE_HOME[token.role], req.url));
+  // si entra al login y ya está logueado → redirigir a su panel
+  if (pathname === "/login") {
+    if (roleHome) return NextResponse.redirect(new URL(roleHome, req.url));
+    return NextResponse.next();
   }
 
-  // Rutas protegidas por prefijo
+  // rutas protegidas por prefijo
   const needsAuth = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p));
+
   if (!needsAuth) {
-    // raíz: si está logueado, llévalo a su home por rol
-    if (pathname === "/" && token?.role && ROLE_HOME[token.role]) {
-      return NextResponse.redirect(new URL(ROLE_HOME[token.role], req.url));
+    // raíz: si está logueado, mandarlo a su panel
+    if (pathname === "/" && roleHome) {
+      return NextResponse.redirect(new URL(roleHome, req.url));
     }
     return NextResponse.next();
   }
 
-  // Si no hay sesión → login
-  if (!token) {
+  // si no hay sesión o rol válido → login
+  if (!token || !roleHome) {
     const url = new URL("/login", req.url);
     url.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(url);
   }
 
-  // Verificar acceso por prefijo
-  const role: string | undefined = (token as any).role;
-  if (!role || !ROLE_HOME[role]) {
-    return NextResponse.redirect(new URL("/login", req.url));
-  }
-
-  // Si intenta acceder a un prefijo que no es su home, bloqueamos
-  if (!pathname.startsWith(ROLE_HOME[role])) {
-    return NextResponse.redirect(new URL(ROLE_HOME[role], req.url));
+  // bloquea acceso a paneles de otros roles
+  if (!pathname.startsWith(roleHome)) {
+    return NextResponse.redirect(new URL(roleHome, req.url));
   }
 
   return NextResponse.next();
