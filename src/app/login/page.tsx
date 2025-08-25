@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 
-export default function LoginPage() {
+function LoginForm() {
   const params = useSearchParams();
   const callbackUrl = params.get("callbackUrl") || "/";
 
@@ -17,13 +17,12 @@ export default function LoginPage() {
     e.preventDefault();
     setErr(null);
     setLoading(true);
-    const res = await signIn("credentials", {
+    await signIn("credentials", {
       email,
       password,
       callbackUrl,
       redirect: true
     });
-    // si redirect: true, NextAuth maneja navegación; si falla no hay resuse
     setLoading(false);
   };
 
@@ -66,5 +65,13 @@ export default function LoginPage() {
         Serás redirigido a tu panel según tu rol.
       </p>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-white/70">Cargando…</div>}>
+      <LoginForm />
+    </Suspense>
   );
 }
