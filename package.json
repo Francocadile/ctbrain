@@ -11,6 +11,9 @@
     "format": "prettier --write .",
     "prepare": "husky || true && husky install",
     "test": "echo \"(placeholder)\""
+    "prisma": "prisma",
+    "postinstall": "prisma generate"
+
   },
   "dependencies": {
     "next": "14.2.5",
@@ -45,3 +48,4 @@
   },
   "packageManager": "pnpm@9.8.0"
 }
+
