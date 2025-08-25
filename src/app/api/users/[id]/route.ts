@@ -8,7 +8,7 @@ async function requireAdmin(request: Request) {
   if (!token || (token as any).role !== "ADMIN") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  return token as any; // devolvemos el token para usar email/sub
+  return token as any; // devolvemos el token usable
 }
 
 const UpdateRoleSchema = z.object({
@@ -23,15 +23,16 @@ export async function PATCH(
   const token = await requireAdmin(request);
   if (token instanceof NextResponse) return token;
 
-  // Identidad del admin autenticado
-  const meId = token.sub as string | undefined;
-  const meEmail = token.email as string | undefined;
+  const meId = (token.sub as string | undefined) ?? null;
+  const meEmail = (token.email as string | undefined) ?? null;
 
-  // Si no tenemos userId en el token, lo buscamos por email
-  let myUserId = meId;
+  let myUserId: string | null = meId;
   if (!myUserId && meEmail) {
-    const me = await prisma.user.findUnique({ where: { email: meEmail }, select: { id: true } });
-    myUserId = me?.id;
+    const me = await prisma.user.findUnique({
+      where: { email: meEmail },
+      select: { id: true },
+    });
+    myUserId = me?.id ?? null; // ✅ fijamos null si es undefined
   }
 
   if (myUserId && params.id === myUserId) {
@@ -73,11 +74,13 @@ export async function DELETE(
   const meId = (token.sub as string | undefined) ?? null;
   const meEmail = (token.email as string | undefined) ?? null;
 
-  // Resolución de mi propio id si falta
-  let myUserId = meId;
+  let myUserId: string | null = meId;
   if (!myUserId && meEmail) {
-    const me = await prisma.user.findUnique({ where: { email: meEmail }, select: { id: true } });
-    myUserId = me?.id;
+    const me = await prisma.user.findUnique({
+      where: { email: meEmail },
+      select: { id: true },
+    });
+    myUserId = me?.id ?? null; // ✅ fijamos null si es undefined
   }
 
   if (myUserId && params.id === myUserId) {
