@@ -12,7 +12,7 @@ model User {
   email         String   @unique
   name          String?
   role          Role     @default(JUGADOR)
-  passwordHash  String?  @db.Text
+  password      String?  @db.Text   // opcional para permitir OAuth; requerido si usas credentials
   image         String?
   emailVerified DateTime?
   createdAt     DateTime @default(now())
@@ -60,8 +60,8 @@ model VerificationToken {
 
 enum Role {
   ADMIN
-  CT         // Cuerpo Técnico
-  MEDICO     // Cuerpo Médico
+  CT
+  MEDICO
   JUGADOR
   DIRECTIVO
 }
