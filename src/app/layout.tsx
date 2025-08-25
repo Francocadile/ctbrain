@@ -1,8 +1,9 @@
+// src/app/layout.tsx
 import type { Metadata } from "next";
 import "./globals.css";
 import Container from "@/components/ui/container";
 import { env } from "@/lib/env";
-import TopRightLogout from "@/components/TopRightLogout";
+import TopRightLogout from "@/components/auth/TopRightLogout";
 
 export const metadata: Metadata = {
   title: env.client.NEXT_PUBLIC_APP_NAME,
@@ -25,7 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </Container>
         </header>
 
-        {/* Contenido (las secciones como /admin usan su propio layout interno) */}
+        {/* Contenido */}
         <main className="py-10">
           <Container>{children}</Container>
         </main>
