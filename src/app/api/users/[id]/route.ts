@@ -8,20 +8,38 @@ async function requireAdmin(request: Request) {
   if (!token || (token as any).role !== "ADMIN") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  return null;
+  return token as any; // devolvemos el token para usar email/sub
 }
 
-// PATCH → cambiar rol
 const UpdateRoleSchema = z.object({
   role: z.enum(["ADMIN", "CT", "MEDICO", "JUGADOR", "DIRECTIVO"]),
 });
 
+// PATCH → cambiar rol (prohibido sobre sí mismo)
 export async function PATCH(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const unauthorized = await requireAdmin(request);
-  if (unauthorized) return unauthorized;
+  const token = await requireAdmin(request);
+  if (token instanceof NextResponse) return token;
+
+  // Identidad del admin autenticado
+  const meId = token.sub as string | undefined;
+  const meEmail = token.email as string | undefined;
+
+  // Si no tenemos userId en el token, lo buscamos por email
+  let myUserId = meId;
+  if (!myUserId && meEmail) {
+    const me = await prisma.user.findUnique({ where: { email: meEmail }, select: { id: true } });
+    myUserId = me?.id;
+  }
+
+  if (myUserId && params.id === myUserId) {
+    return NextResponse.json(
+      { error: "No podés cambiar tu propio rol." },
+      { status: 400 }
+    );
+  }
 
   const body = await request.json();
   const parsed = UpdateRoleSchema.safeParse(body);
@@ -32,22 +50,42 @@ export async function PATCH(
     );
   }
 
-  const user = await prisma.user.update({
-    where: { id: params.id },
-    data: { role: parsed.data.role },
-    select: { id: true, email: true, name: true, role: true },
-  });
-
-  return NextResponse.json({ ok: true, user });
+  try {
+    const user = await prisma.user.update({
+      where: { id: params.id },
+      data: { role: parsed.data.role },
+      select: { id: true, email: true, name: true, role: true },
+    });
+    return NextResponse.json({ ok: true, user });
+  } catch {
+    return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
+  }
 }
 
-// DELETE → eliminar usuario
+// DELETE → eliminar usuario (prohibido sobre sí mismo)
 export async function DELETE(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  const unauthorized = await requireAdmin(request);
-  if (unauthorized) return unauthorized;
+  const token = await requireAdmin(request);
+  if (token instanceof NextResponse) return token;
+
+  const meId = (token.sub as string | undefined) ?? null;
+  const meEmail = (token.email as string | undefined) ?? null;
+
+  // Resolución de mi propio id si falta
+  let myUserId = meId;
+  if (!myUserId && meEmail) {
+    const me = await prisma.user.findUnique({ where: { email: meEmail }, select: { id: true } });
+    myUserId = me?.id;
+  }
+
+  if (myUserId && params.id === myUserId) {
+    return NextResponse.json(
+      { error: "No podés eliminar tu propia cuenta." },
+      { status: 400 }
+    );
+  }
 
   try {
     await prisma.user.delete({ where: { id: params.id } });
