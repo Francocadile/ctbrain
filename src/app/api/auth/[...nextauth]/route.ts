@@ -5,8 +5,8 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { PrismaClient, Role } from "@prisma/client";
 import { compare } from "bcryptjs";
 
-// ❗ Import RELATIVO (sin "@/")
-import prismaSingleton from "../../../lib/prisma";
+// ✅ OJO: 4 niveles hacia arriba hasta src/, luego lib/prisma
+import prismaSingleton from "../../../../lib/prisma";
 
 const prisma = (prismaSingleton as unknown as PrismaClient) || new PrismaClient();
 
@@ -32,7 +32,6 @@ export const authOptions: NextAuthOptions = {
         const ok = await compare(credentials.password, user.password);
         if (!ok) return null;
 
-        // Devolvemos lo mínimo + role para el JWT
         return {
           id: user.id,
           email: user.email,
@@ -46,14 +45,14 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        // @ts-ignore: extendemos el token con role
+        // @ts-ignore
         token.role = (user as any).role ?? "JUGADOR";
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        // @ts-ignore: agregamos id y role a session.user
+        // @ts-ignore
         session.user.id = token.sub;
         // @ts-ignore
         session.user.role = (token as any).role ?? "JUGADOR";
