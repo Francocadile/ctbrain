@@ -1,6 +1,8 @@
+// src/lib/prisma.ts
 import { PrismaClient } from "@prisma/client";
 
 declare global {
+  // Evita instancias duplicadas en dev (hot reload)
   // eslint-disable-next-line no-var
   var prisma: PrismaClient | undefined;
 }
@@ -8,10 +10,9 @@ declare global {
 export const prisma =
   global.prisma ??
   new PrismaClient({
-    log:
-      process.env.NODE_ENV === "development"
-        ? ["query", "error", "warn"]
-        : ["error"],
+    log: ["error", "warn"],
   });
 
-if (process.env.NODE_ENV !== "production") global.prisma = prisma;
+if (process.env.NODE_ENV !== "production") {
+  global.prisma = prisma;
+}
