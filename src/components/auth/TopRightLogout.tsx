@@ -4,7 +4,6 @@ import { useSession, signOut } from "next-auth/react";
 
 export default function TopRightLogout() {
   const { data } = useSession();
-
   if (!data?.user) return null;
 
   return (
