@@ -1,77 +1,112 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 
-function LoginForm() {
+export default function LoginPage() {
   const params = useSearchParams();
-  const callbackUrl = params.get("callbackUrl") || "/";
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const callbackUrl = params.get("callbackUrl") || "/";
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErr(null);
-    setLoading(true);
-    await signIn("credentials", {
+    setPending(true);
+    setError(null);
+
+    const res = await signIn("credentials", {
       email,
       password,
       callbackUrl,
-      redirect: true
+      redirect: false, // manejamos redirección manual
     });
-    setLoading(false);
+
+    setPending(false);
+
+    if (!res) {
+      setError("Error inesperado. Intenta de nuevo.");
+      return;
+    }
+
+    if (res.error) {
+      setError("Email o contraseña inválidos.");
+      return;
+    }
+
+    // si no hay error, redirigimos
+    if (res.url) {
+      window.location.href = res.url;
+    }
   };
 
   return (
-    <div className="mx-auto mt-10 max-w-md rounded-2xl border border-brand-700/40 p-6 shadow-aura">
-      <h1 className="mb-4 text-2xl font-semibold">Iniciar sesión</h1>
-      {err && <div className="mb-3 rounded bg-red-500/10 p-2 text-sm text-red-300">{err}</div>}
-      <form onSubmit={onSubmit} className="space-y-4">
-        <div>
-          <label className="mb-1 block text-sm text-white/80">Email</label>
-          <input
-            type="email"
-            className="w-full rounded border border-white/10 bg-black/40 p-2"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            placeholder="tu@correo.com"
-          />
+    <main className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
+      <div className="w-full max-w-sm rounded-2xl bg-white shadow p-6">
+        <h1 className="text-2xl font-semibold mb-1">Iniciar sesión</h1>
+        <p className="text-sm text-gray-500 mb-6">
+          Usá tu email y contraseña.
+        </p>
+
+        <form onSubmit={onSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Email</label>
+            <input
+              type="email"
+              autoComplete="email"
+              required
+              className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-black/10"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="admin@ctbrain.local"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Contraseña</label>
+            <input
+              type="password"
+              autoComplete="current-password"
+              required
+              className="w-full rounded-xl border px-3 py-2 outline-none focus:ring-2 focus:ring-black/10"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+            />
+          </div>
+
+          {error ? (
+            <p className="text-sm text-red-600">{error}</p>
+          ) : null}
+
+          <button
+            type="submit"
+            disabled={pending}
+            className="w-full rounded-xl bg-black text-white py-2 font-medium disabled:opacity-60"
+          >
+            {pending ? "Ingresando..." : "Ingresar"}
+          </button>
+        </form>
+
+        <div className="mt-6 text-xs text-gray-500">
+          <p>
+            ¿Olvidaste tu contraseña?{" "}
+            <span className="font-medium">Contactá al admin.</span>
+          </p>
+          <p className="mt-2">
+            Volver al{" "}
+            <Link href="/" className="underline">
+              inicio
+            </Link>
+            .
+          </p>
         </div>
-        <div>
-          <label className="mb-1 block text-sm text-white/80">Contraseña</label>
-          <input
-            type="password"
-            className="w-full rounded border border-white/10 bg-black/40 p-2"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            placeholder="••••••"
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-2xl bg-brand-500 px-4 py-2 font-medium hover:bg-brand-600 disabled:opacity-50"
-        >
-          {loading ? "Entrando..." : "Entrar"}
-        </button>
-      </form>
-      <p className="mt-4 text-center text-xs text-white/60">
-        Serás redirigido a tu panel según tu rol.
-      </p>
-    </div>
+      </div>
+    </main>
   );
 }
 
-export default function LoginPage() {
-  return (
-    <Suspense fallback={<div className="p-6 text-white/70">Cargando…</div>}>
-      <LoginForm />
-    </Suspense>
-  );
-}
