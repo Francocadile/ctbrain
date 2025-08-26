@@ -1,10 +1,9 @@
-import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import { PrismaClient } from "@prisma/client";
-import CredentialsProvider from "next-auth/providers/credentials";
+// src/lib/auth.ts
 import type { NextAuthOptions } from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
+import { PrismaAdapter } from "@next-auth/prisma-adapter";
+import { prisma } from "./prisma";
 import { compare } from "bcryptjs";
-
-const prisma = new PrismaClient();
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -18,11 +17,13 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials.password) return null;
+        if (!credentials?.email || !credentials?.password) return null;
 
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
         });
+
+        // Ahora el campo en DB es "password"
         if (!user || !user.password) return null;
 
         const ok = await compare(credentials.password, user.password);
@@ -33,25 +34,28 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name ?? undefined,
           image: user.image ?? undefined,
-          role: user.role,
+          role: user.role, // lo ponemos en el token luego
         } as any;
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user) token.role = (user as any).role ?? "JUGADOR";
+      if (user) {
+        // @ts-expect-error custom
+        token.role = (user as any).role ?? "JUGADOR";
+      }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        (session.user as any).id = token.sub;
-        (session.user as any).role = (token as any).role ?? "JUGADOR";
+        // @ts-expect-error add id to session
+        session.user.id = token.sub!;
+        // @ts-expect-error add role to session
+        session.user.role = (token as any).role ?? "JUGADOR";
       }
       return session;
     },
   },
+  secret: process.env.NEXTAUTH_SECRET,
 };
-
-export default authOptions;
-
