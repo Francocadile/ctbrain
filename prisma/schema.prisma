@@ -12,11 +12,12 @@ model User {
   email         String   @unique
   name          String?
   role          Role     @default(JUGADOR)
-  password      String?  @db.Text      // <-- usamos "password"
+  password      String?  @db.Text   // opcional para OAuth; requerido si usas credentials
   image         String?
   emailVerified DateTime?
   createdAt     DateTime @default(now())
 
+  // Relaciones NextAuth
   accounts Account[]
   sessions Session[]
 }
