@@ -1,10 +1,14 @@
 // src/app/api/auth/[...nextauth]/route.ts
-import NextAuth, { type NextAuthOptions } from "next-auth";
+import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import { prisma } from "../../../../lib/prisma";
+import { PrismaClient, Role } from "@prisma/client";
 import { compare } from "bcryptjs";
-import { Role } from "@prisma/client";
+
+// ❗ Import RELATIVO (sin "@/")
+import prismaSingleton from "../../../lib/prisma";
+
+const prisma = (prismaSingleton as unknown as PrismaClient) || new PrismaClient();
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -28,7 +32,7 @@ export const authOptions: NextAuthOptions = {
         const ok = await compare(credentials.password, user.password);
         if (!ok) return null;
 
-        // devolvemos los campos básicos; el role lo pasamos por el token
+        // Devolvemos lo mínimo + role para el JWT
         return {
           id: user.id,
           email: user.email,
@@ -42,16 +46,16 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        // @ts-expect-error: agregamos role al token
+        // @ts-ignore: extendemos el token con role
         token.role = (user as any).role ?? "JUGADOR";
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        // @ts-expect-error: agregamos id en la sesión
+        // @ts-ignore: agregamos id y role a session.user
         session.user.id = token.sub;
-        // @ts-expect-error: agregamos role en la sesión
+        // @ts-ignore
         session.user.role = (token as any).role ?? "JUGADOR";
       }
       return session;
