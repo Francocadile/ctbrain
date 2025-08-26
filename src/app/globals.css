@@ -1,17 +1,6 @@
-/* src/app/globals.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* (Opcional) Tus estilos globales extra debajo */
-:root {
-  --bg: #0b0b0b;
-  --fg: #ffffff;
-}
-html, body {
-  height: 100%;
-}
-body {
-  background: var(--bg);
-  color: var(--fg);
-}
+/* tus estilos globales extra... */
+
