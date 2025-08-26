@@ -23,7 +23,6 @@ export const authOptions: NextAuthOptions = {
           where: { email: credentials.email },
         });
 
-        // Ahora el campo en DB es "password"
         if (!user || !user.password) return null;
 
         const ok = await compare(credentials.password, user.password);
@@ -34,7 +33,7 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name ?? undefined,
           image: user.image ?? undefined,
-          role: user.role, // lo ponemos en el token luego
+          role: user.role, // lo pasamos al JWT en callback
         } as any;
       },
     }),
@@ -42,20 +41,20 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        // @ts-expect-error custom
-        token.role = (user as any).role ?? "JUGADOR";
+        // ya tenemos module augmentation para JWT.role
+        (token as any).role = (user as any).role ?? "JUGADOR";
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        // @ts-expect-error add id to session
-        session.user.id = token.sub!;
-        // @ts-expect-error add role to session
-        session.user.role = (token as any).role ?? "JUGADOR";
+        // evitamos ts-expect-error usando assertions
+        (session.user as any).id = token.sub!;
+        (session.user as any).role = (token as any).role ?? "JUGADOR";
       }
       return session;
     },
   },
   secret: process.env.NEXTAUTH_SECRET,
 };
+
