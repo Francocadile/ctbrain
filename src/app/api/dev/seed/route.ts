@@ -1,48 +1,98 @@
+// src/app/api/dev/seed/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient, Role } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { Role } from "@prisma/client";
 import { hash } from "bcryptjs";
 
-const prisma = new PrismaClient();
-
-// Si querés poder correrlo en prod, seteá SEED_ENABLE=true en las envs.
-export const dynamic = "force-dynamic";
-
 export async function GET() {
-  if (process.env.NODE_ENV === "production" && process.env.SEED_ENABLE !== "true") {
-    return NextResponse.json({ ok: false, error: "Seed deshabilitado en producción" }, { status: 403 });
+  // Evitamos que corra en producción
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json(
+      { error: "Seed deshabilitado en producción" },
+      { status: 403 }
+    );
   }
 
-  const plainPassword = process.env.SEED_PASSWORD || "admin123";
-  const password = await hash(plainPassword, 10);
-
-  const users: Array<{ email: string; name: string; role: Role }> = [
-    { email: "admin@ctbrain.local", name: "Admin", role: "ADMIN" },
-    { email: "ct@ctbrain.local", name: "CT", role: "CT" },
-    { email: "medico@ctbrain.local", name: "Medico", role: "MEDICO" },
-    { email: "jugador@ctbrain.local", name: "Jugador", role: "JUGADOR" },
-    { email: "directivo@ctbrain.local", name: "Directivo", role: "DIRECTIVO" },
-  ];
-
-  for (const u of users) {
-    await prisma.user.upsert({
-      where: { email: u.email },
-      update: {
-        name: u.name,
-        role: u.role,
-        password, // <<<<<<  AHORA ES "password"
+  try {
+    // Usuarios base
+    const users: Array<{
+      name: string;
+      email: string;
+      role: Role;
+      password: string;
+    }> = [
+      {
+        name: "Super Admin",
+        email: process.env.SEED_ADMIN_EMAIL ?? "admin@ctbrain.local",
+        role: "ADMIN",
+        password: process.env.SEED_ADMIN_PASSWORD ?? "admin123",
       },
-      create: {
-        email: u.email,
-        name: u.name,
-        role: u.role,
-        password, // <<<<<<  AHORA ES "password"
+      {
+        name: "CT Uno",
+        email: "ct1@ctbrain.local",
+        role: "CT",
+        password: "ct123456",
       },
+      {
+        name: "Médico Uno",
+        email: "medico1@ctbrain.local",
+        role: "MEDICO",
+        password: "medico123",
+      },
+      {
+        name: "Jugador Uno",
+        email: "jugador1@ctbrain.local",
+        role: "JUGADOR",
+        password: "jugador123",
+      },
+      {
+        name: "Directivo Uno",
+        email: "directivo1@ctbrain.local",
+        role: "DIRECTIVO",
+        password: "directivo123",
+      },
+    ];
+
+    const results = [];
+
+    for (const u of users) {
+      const passwordHashed = await hash(u.password, 10);
+
+      const res = await prisma.user.upsert({
+        where: { email: u.email },
+        update: {
+          name: u.name,
+          role: u.role,
+          password: passwordHashed,
+        },
+        create: {
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          password: passwordHashed, // OJO: campo correcto es `password`
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          createdAt: true,
+        },
+      });
+
+      results.push(res);
+    }
+
+    return NextResponse.json({
+      ok: true,
+      count: results.length,
+      users: results,
     });
+  } catch (err) {
+    console.error("GET /api/dev/seed error:", err);
+    return NextResponse.json(
+      { error: "No se pudo ejecutar el seed" },
+      { status: 500 }
+    );
   }
-
-  return NextResponse.json({
-    ok: true,
-    seeded: users.length,
-    hint: "Usá estas cuentas en /login con el password de SEED_PASSWORD (default admin123).",
-  });
 }
