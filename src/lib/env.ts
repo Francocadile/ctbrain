@@ -1,13 +1,19 @@
-import { z } from "zod";
+// Valida y expone variables de entorno
+const required = (val: string | undefined, key: string) => {
+  if (!val) throw new Error(`Missing env var: ${key}`);
+  return val;
+};
 
-const EnvSchema = z.object({
-  NEXTAUTH_URL: z.string().url().optional(),
-  NEXTAUTH_SECRET: z.string().min(1),
-  NODE_ENV: z.enum(["development", "test", "production"]).default("development")
-});
-
-export const env = EnvSchema.parse({
-  NEXTAUTH_URL: process.env.NEXTAUTH_URL,
-  NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
-  NODE_ENV: process.env.NODE_ENV
-});
+export const env = {
+  server: {
+    DATABASE_URL: required(process.env.DATABASE_URL, "DATABASE_URL"),
+    NEXTAUTH_SECRET: required(process.env.NEXTAUTH_SECRET, "NEXTAUTH_SECRET"),
+    NEXTAUTH_URL: required(process.env.NEXTAUTH_URL, "NEXTAUTH_URL")
+  },
+  client: {
+    NEXT_PUBLIC_APP_NAME: required(
+      process.env.NEXT_PUBLIC_APP_NAME,
+      "NEXT_PUBLIC_APP_NAME"
+    )
+  }
+} as const;
