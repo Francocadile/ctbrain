@@ -1,48 +1,21 @@
 // src/lib/env.ts
+import { z } from "zod";
 
-type NodeEnv = "development" | "test" | "production";
+const envSchema = z.object({
+  DATABASE_URL: z.string().min(1, "DATABASE_URL es obligatorio"),
+  NEXTAUTH_SECRET: z.string().min(1, "NEXTAUTH_SECRET es obligatorio"),
+  // En Vercel suele venir seteada; local puede quedar vacía sin romper
+  NEXTAUTH_URL: z.string().url().optional().or(z.literal("")),
+  NODE_ENV: z
+    .enum(["development", "test", "production"])
+    .default("development"),
+});
 
-type ClientEnv = {
-  NEXT_PUBLIC_APP_NAME: string;
-  NEXT_PUBLIC_FLAG_EXERCISES: boolean;
-  NEXT_PUBLIC_FLAG_VIDEOS: boolean;
-  NEXT_PUBLIC_FLAG_REPORTS: boolean;
+const rawEnv = {
+  DATABASE_URL: process.env.DATABASE_URL ?? "",
+  NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET ?? "",
+  NEXTAUTH_URL: process.env.NEXTAUTH_URL ?? "",
+  NODE_ENV: process.env.NODE_ENV ?? "development",
 };
 
-type ServerEnv = {
-  DATABASE_URL: string;
-  NEXTAUTH_URL: string;
-  NEXTAUTH_SECRET: string;
-  NODE_ENV: NodeEnv;
-};
-
-const toBool = (v?: string) => v === "true" || v === "1";
-
-/**
- * ÚNICA fuente de variables de entorno dentro de la app.
- * - client: solo claves NEXT_PUBLIC_ (seguras para el browser)
- * - server: solo en el servidor
- */
-export const env: { client: ClientEnv; server: ServerEnv } = {
-  client: {
-    NEXT_PUBLIC_APP_NAME:
-      process.env.NEXT_PUBLIC_APP_NAME ?? "CTBrain",
-    NEXT_PUBLIC_FLAG_EXERCISES: toBool(
-      process.env.NEXT_PUBLIC_FLAG_EXERCISES
-    ),
-    NEXT_PUBLIC_FLAG_VIDEOS: toBool(
-      process.env.NEXT_PUBLIC_FLAG_VIDEOS
-    ),
-    NEXT_PUBLIC_FLAG_REPORTS: toBool(
-      process.env.NEXT_PUBLIC_FLAG_REPORTS
-    ),
-  },
-  server: {
-    DATABASE_URL: process.env.DATABASE_URL ?? "",
-    NEXTAUTH_URL: process.env.NEXTAUTH_URL ?? "",
-    NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET ?? "dev-secret-change-me",
-    NODE_ENV: (process.env.NODE_ENV as NodeEnv) ?? "development",
-  },
-};
-
-export type { ClientEnv, ServerEnv };
+export const env = envSchema.parse(rawEnv);
