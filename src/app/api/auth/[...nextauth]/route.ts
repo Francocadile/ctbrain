@@ -17,6 +17,9 @@ const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET
 };
 
-const handler = NextAuth(authOptions);
+const handler = NextAuth({
+  adapter: PrismaAdapter(prisma),
+  providers: [/* tus providers existentes */],
+  // ...tu config existente
+});
 export { handler as GET, handler as POST };
-
