@@ -30,8 +30,8 @@ function isAuthed(session: any) {
 const createSessionSchema = z.object({
   title: z.string().min(2, "Título muy corto"),
   description: z.string().optional().nullable(),
-  // Recibimos ISO string y lo convertimos a Date en el handler
   date: z.string().datetime({ message: "Fecha inválida (usar ISO, ej: 2025-08-27T12:00:00Z)" }),
+  playerIds: z.array(z.string()).optional(), // NUEVO
 });
 
 // --- Select unificado (misma forma en GET/POST) ---
@@ -42,10 +42,9 @@ const sessionSelect = {
   date: true,
   createdAt: true,
   updatedAt: true,
-  // en tu schema actual 'createdBy' es string (userId)
-  createdBy: true,
-  // relación con User se llama 'user'
+  createdBy: true, // string userId
   user: { select: { id: true, name: true, email: true, role: true } },
+  players: { select: { id: true, name: true, email: true, role: true } }, // NUEVO
 } as const;
 
 // GET /api/sessions -> lista sesiones
@@ -92,7 +91,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { title, description, date } = parsed.data;
+    const { title, description, date, playerIds = [] } = parsed.data;
 
     const creatorEmail: string | undefined = session.user.email;
     if (!creatorEmail) {
@@ -113,6 +112,9 @@ export async function POST(req: Request) {
         description: description ?? null,
         date: new Date(date),
         createdBy: creator.id, // string userId
+        ...(playerIds.length
+          ? { players: { connect: playerIds.map((id) => ({ id })) } }
+          : {}),
       },
       select: sessionSelect,
     });
