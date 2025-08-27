@@ -3,10 +3,10 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 
-// Util: obtener lunes como inicio de semana (Monday-based)
+// --- Util: obtener lunes como inicio de semana (Monday-based, UTC) ---
 function getMonday(d: Date) {
   const day = d.getUTCDay(); // 0..6 (0 = Sunday)
-  const diff = (day === 0 ? -6 : 1 - day); // mover a Monday
+  const diff = day === 0 ? -6 : 1 - day; // mover a Monday
   const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
   monday.setUTCDate(monday.getUTCDate() + diff);
   monday.setUTCHours(0, 0, 0, 0);
@@ -19,6 +19,16 @@ function addDaysUTC(d: Date, days: number) {
   return x;
 }
 
+// --- Select unificado según schema actual ---
+const sessionSelect = {
+  id: true,
+  title: true,
+  description: true,
+  date: true,
+  createdBy: true, // string (userId)
+  user: { select: { id: true, name: true, email: true, role: true } },
+} as const;
+
 export async function GET(req: Request) {
   try {
     const session = (await getServerSession()) as any;
@@ -27,11 +37,11 @@ export async function GET(req: Request) {
     }
 
     const url = new URL(req.url);
-    // Opcional: start=YYYY-MM-DD (se interpretará como fecha UTC)
+    // Opcional: start=YYYY-MM-DD (UTC)
     const startParam = url.searchParams.get("start"); // ej: 2025-08-25
     const base = startParam ? new Date(`${startParam}T00:00:00.000Z`) : new Date();
-    const weekStart = getMonday(base);              // lunes 00:00 UTC
-    const weekEndExclusive = addDaysUTC(weekStart, 7); // próximo lunes
+    const weekStart = getMonday(base);                 // lunes 00:00 UTC
+    const weekEndExclusive = addDaysUTC(weekStart, 7); // próximo lunes (exclusivo)
 
     const items = await prisma.session.findMany({
       where: {
@@ -41,17 +51,11 @@ export async function GET(req: Request) {
         },
       },
       orderBy: { date: "asc" },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        date: true,
-        createdBy: { select: { id: true, name: true, email: true } },
-        players: { select: { id: true, name: true, email: true, role: true } },
-      },
+      select: sessionSelect,
+      take: 200,
     });
 
-    // Agrupar por día YYYY-MM-DD (UTC)
+    // Armar estructura por día YYYY-MM-DD (UTC)
     const days: Record<
       string,
       Array<{
@@ -64,33 +68,33 @@ export async function GET(req: Request) {
       }>
     > = {};
 
+    // Inicializar los 7 días
     for (let i = 0; i < 7; i++) {
       const d = addDaysUTC(weekStart, i);
       const key = d.toISOString().slice(0, 10); // YYYY-MM-DD
       days[key] = [];
     }
 
+    // Mapear resultados
     items.forEach((s) => {
       const key = new Date(s.date).toISOString().slice(0, 10);
       if (!days[key]) days[key] = [];
+
       days[key].push({
         id: s.id,
         title: s.title,
         description: s.description ?? null,
         date: new Date(s.date).toISOString(),
-        createdBy: s.createdBy
+        // createdBy: lo devolvemos desde la relación 'user'
+        createdBy: s.user
           ? {
-              id: s.createdBy.id,
-              name: s.createdBy.name ?? null,
-              email: s.createdBy.email ?? null,
+              id: s.user.id,
+              name: s.user.name ?? null,
+              email: s.user.email ?? null,
             }
           : null,
-        players: s.players.map((p) => ({
-          id: p.id,
-          name: p.name ?? null,
-          email: p.email ?? null,
-          role: p.role,
-        })),
+        // hasta definir el M2M players en el schema, devolvemos vacío
+        players: [],
       });
     });
 
