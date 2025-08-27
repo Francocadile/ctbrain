@@ -6,11 +6,10 @@ import {
   createSession,
   deleteSession,
   updateSession,
-  listPlayers,
   getMonday,
   toYYYYMMDDUTC,
   type SessionDTO,
-  type UserLite,
+  type SessionType,
 } from "@/lib/api/sessions";
 
 // Helpers de fecha
@@ -40,6 +39,23 @@ function toLocalInputValue(dateISO?: string) {
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
 }
 
+const TYPE_LABEL: Record<SessionType, string> = {
+  GENERAL: "General",
+  FUERZA: "Fuerza",
+  TACTICA: "Táctica",
+  AEROBICO: "Aeróbico",
+  RECUPERACION: "Recuperación",
+};
+function typeBadgeCls(t: SessionType) {
+  switch (t) {
+    case "FUERZA": return "bg-red-100 text-red-700";
+    case "TACTICA": return "bg-blue-100 text-blue-700";
+    case "AEROBICO": return "bg-green-100 text-green-700";
+    case "RECUPERACION": return "bg-purple-100 text-purple-700";
+    default: return "bg-gray-100 text-gray-700";
+  }
+}
+
 export default function PlanSemanalPage() {
   // Semana base (lunes)
   const [base, setBase] = useState<Date>(() => getMonday(new Date()));
@@ -50,17 +66,16 @@ export default function PlanSemanalPage() {
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
+  // Filtro por tipo
+  const [filterType, setFilterType] = useState<SessionType | "ALL">("ALL");
+
   // Crear / editar
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<SessionDTO | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState<string | null>("");
   const [dateLocal, setDateLocal] = useState(toLocalInputValue());
-
-  // Players
-  const [allPlayers, setAllPlayers] = useState<UserLite[]>([]);
-  const [playerIds, setPlayerIds] = useState<string[]>([]);
-  const [loadingPlayers, setLoadingPlayers] = useState(false);
+  const [type, setType] = useState<SessionType>("GENERAL");
 
   // Cargar datos de la semana
   async function loadWeek(d: Date) {
@@ -100,39 +115,23 @@ export default function PlanSemanalPage() {
   }, [weekStart]);
 
   // Abrir modal crear
-  async function openCreate() {
+  function openCreate() {
     setEditing(null);
     setTitle("");
     setDescription("");
     setDateLocal(toLocalInputValue());
-    setPlayerIds([]);
+    setType("GENERAL");
     setFormOpen(true);
-    await ensurePlayersLoaded();
   }
 
   // Abrir modal editar
-  async function openEdit(s: SessionDTO) {
+  function openEdit(s: SessionDTO) {
     setEditing(s);
     setTitle(s.title || "");
     setDescription(s.description ?? "");
     setDateLocal(toLocalInputValue(s.date));
-    setPlayerIds((s.players ?? []).map((p) => p.id));
+    setType((s.type as SessionType) ?? "GENERAL");
     setFormOpen(true);
-    await ensurePlayersLoaded();
-  }
-
-  async function ensurePlayersLoaded() {
-    if (allPlayers.length > 0) return;
-    setLoadingPlayers(true);
-    try {
-      const list = await listPlayers();
-      setAllPlayers(list);
-    } catch (e) {
-      console.error(e);
-      alert("No se pudieron cargar los jugadores");
-    } finally {
-      setLoadingPlayers(false);
-    }
   }
 
   // Guardar (crear o editar)
@@ -144,14 +143,15 @@ export default function PlanSemanalPage() {
           title: title.trim(),
           description: (description ?? "") || null,
           date: iso,
-          playerIds,
+          type,
         });
       } else {
         await updateSession(editing.id, {
           title: title.trim() || undefined,
-          description: description === "" ? null : (description ?? undefined),
+          description:
+            description === "" ? null : (description ?? undefined),
           date: iso,
-          playerIds,
+          type,
         });
       }
       setFormOpen(false);
@@ -176,7 +176,7 @@ export default function PlanSemanalPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Plan semanal</h1>
           <p className="text-sm text-gray-500">
@@ -184,7 +184,24 @@ export default function PlanSemanalPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Filtro tipo */}
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value as any)}
+            className="px-3 py-2 rounded-xl border"
+            title="Filtrar por tipo"
+          >
+            <option value="ALL">Todos los tipos</option>
+            <option value="GENERAL">General</option>
+            <option value="FUERZA">Fuerza</option>
+            <option value="TACTICA">Táctica</option>
+            <option value="AEROBICO">Aeróbico</option>
+            <option value="RECUPERACION">Recuperación</option>
+          </select>
+
+          <div className="w-px h-6 bg-gray-200 mx-1" />
+
           <button
             onClick={goPrevWeek}
             className="px-3 py-2 rounded-xl border hover:bg-gray-50"
@@ -205,7 +222,7 @@ export default function PlanSemanalPage() {
           </button>
           <button
             onClick={openCreate}
-            className="ml-3 px-4 py-2 rounded-xl bg-black text-white hover:opacity-90"
+            className="ml-1 px-4 py-2 rounded-xl bg-black text-white hover:opacity-90"
           >
             + Nueva sesión
           </button>
@@ -217,9 +234,10 @@ export default function PlanSemanalPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
           {orderedDays.map((key) => {
-            const list = days[key] || [];
-            const isToday =
-              new Date().toISOString().slice(0, 10) === key;
+            const all = days[key] || [];
+            const list =
+              filterType === "ALL" ? all : all.filter((s) => s.type === filterType);
+            const isToday = new Date().toISOString().slice(0, 10) === key;
 
             return (
               <div
@@ -251,7 +269,12 @@ export default function PlanSemanalPage() {
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <div className="font-medium truncate">{s.title}</div>
+                            <div className="font-medium flex items-center gap-2 truncate">
+                              <span className={`text-[11px] px-2 py-0.5 rounded-full ${typeBadgeCls(s.type as SessionType)}`}>
+                                {TYPE_LABEL[s.type as SessionType] ?? s.type}
+                              </span>
+                              <span className="truncate">{s.title}</span>
+                            </div>
                             {s.description ? (
                               <div className="text-sm text-gray-600">
                                 {s.description}
@@ -263,20 +286,6 @@ export default function PlanSemanalPage() {
                             {s.user ? (
                               <div className="text-xs text-gray-400">
                                 by {s.user.name || s.user.email || "CT"}
-                              </div>
-                            ) : null}
-                            {/* Chips de jugadores */}
-                            {s.players && s.players.length > 0 ? (
-                              <div className="mt-2 flex flex-wrap gap-1">
-                                {s.players.map((p) => (
-                                  <span
-                                    key={p.id}
-                                    className="text-xs rounded-full border px-2 py-0.5 text-gray-600"
-                                    title={p.email || undefined}
-                                  >
-                                    {p.name || p.email || "Jugador"}
-                                  </span>
-                                ))}
                               </div>
                             ) : null}
                           </div>
@@ -345,7 +354,9 @@ export default function PlanSemanalPage() {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium">Fecha y hora</label>
+                  <label className="text-sm font-medium">
+                    Fecha y hora
+                  </label>
                   <input
                     type="datetime-local"
                     value={dateLocal}
@@ -359,46 +370,21 @@ export default function PlanSemanalPage() {
               </div>
 
               <div className="space-y-3">
-                <label className="text-sm font-medium">Jugadores</label>
-                <div className="rounded-xl border p-2 max-h-64 overflow-auto">
-                  {loadingPlayers ? (
-                    <div className="text-sm text-gray-500 p-2">Cargando jugadores…</div>
-                  ) : allPlayers.length === 0 ? (
-                    <div className="text-sm text-gray-400 p-2">
-                      No hay jugadores cargados.
-                    </div>
-                  ) : (
-                    <ul className="space-y-1">
-                      {allPlayers.map((p) => {
-                        const checked = playerIds.includes(p.id);
-                        return (
-                          <li key={p.id} className="flex items-center gap-2">
-                            <input
-                              id={`p-${p.id}`}
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(e) => {
-                                const on = e.target.checked;
-                                setPlayerIds((prev) =>
-                                  on ? [...prev, p.id] : prev.filter((x) => x !== p.id)
-                                );
-                              }}
-                            />
-                            <label htmlFor={`p-${p.id}`} className="text-sm cursor-pointer">
-                              {p.name || p.email || "Jugador"}
-                              {p.email ? <span className="text-xs text-gray-400"> · {p.email}</span> : null}
-                            </label>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
+                <label className="text-sm font-medium">Tipo</label>
+                <select
+                  value={type}
+                  onChange={(e) => setType(e.target.value as SessionType)}
+                  className="mt-1 w-full rounded-xl border px-3 py-2"
+                >
+                  <option value="GENERAL">General</option>
+                  <option value="FUERZA">Fuerza</option>
+                  <option value="TACTICA">Táctica</option>
+                  <option value="AEROBICO">Aeróbico</option>
+                  <option value="RECUPERACION">Recuperación</option>
+                </select>
+                <div className="text-xs text-gray-500">
+                  Usa el tipo para clasificar y filtrar sesiones como en Notion.
                 </div>
-                {playerIds.length > 0 && (
-                  <div className="text-xs text-gray-600">
-                    {playerIds.length} jugador{playerIds.length > 1 ? "es" : ""} seleccionado{playerIds.length > 1 ? "s" : ""}
-                  </div>
-                )}
               </div>
             </div>
 
