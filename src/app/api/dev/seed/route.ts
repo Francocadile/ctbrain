@@ -1,36 +1,21 @@
 // src/app/api/dev/seed/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient, Role } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { hash } from "bcryptjs";
 
-// ✅ 4 niveles hacia arriba hasta src/, luego lib/prisma
-import prismaSingleton from "../../../../lib/prisma";
-
-const prisma =
-  (prismaSingleton as unknown as PrismaClient) || new PrismaClient();
-
-/**
- * Semilla rápida vía GET (solo para entornos de desarrollo).
- * Crea/actualiza 2 usuarios demo con contraseñas hasheadas.
- */
 export async function GET() {
   try {
-    const seedUsers: Array<{
-      name: string;
-      email: string;
-      role: Role;
-      passwordPlain: string;
-    }> = [
+    const seedUsers = [
       {
         name: "Super Admin",
         email: "admin@ctbrain.local",
-        role: "ADMIN" as Role,
+        role: "ADMIN" as const,
         passwordPlain: "admin123",
       },
       {
         name: "Jugador Demo",
         email: "jugador@ctbrain.local",
-        role: "JUGADOR" as Role,
+        role: "JUGADOR" as const,
         passwordPlain: "demo123",
       },
     ];
@@ -44,10 +29,13 @@ export async function GET() {
       });
     }
 
-    return NextResponse.json({ ok: true, created: seedUsers.length });
-  } catch (err) {
+    return NextResponse.json({ ok: true, createdOrUpdated: seedUsers.length });
+  } catch (err: any) {
     console.error("Seed ERROR:", err);
-    return NextResponse.json({ ok: false }, { status: 500 });
+    // devolvemos el mensaje para poder verlo desde el navegador
+    return NextResponse.json(
+      { ok: false, error: String(err?.message ?? err) },
+      { status: 500 }
+    );
   }
 }
-
