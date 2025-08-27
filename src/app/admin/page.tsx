@@ -1,17 +1,32 @@
-import Link from "next/link";
+// src/app/admin/page.tsx
+import RoleGate from "@/components/auth/RoleGate";
 
-export default function AdminPage() {
+export default async function AdminPage() {
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-2xl font-semibold">Panel <b>ADMIN</b></h2>
-        <p className="text-white/70">Accesos rápidos</p>
-      </div>
-      <div className="flex flex-wrap gap-3">
-        <Link href="/admin/users" className="rounded-2xl bg-white/10 px-3 py-1.5 hover:bg-white/20">
-          👤 Gestión de usuarios
-        </Link>
-      </div>
-    </div>
+    <RoleGate allow={["ADMIN"]}>
+      <main className="min-h-[60vh] px-6 py-10">
+        <h1 className="text-2xl font-bold">Panel — Admin</h1>
+        <p className="mt-2 text-sm text-gray-600">
+          Solo usuarios con rol <b>ADMIN</b> pueden ver esta página.
+        </p>
+
+        <section className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="rounded-xl border bg-white p-5 shadow-sm">
+            <h3 className="font-semibold">Usuarios</h3>
+            <p className="text-sm text-gray-500">
+              Alta/baja/modificación, asignación de roles.
+            </p>
+          </div>
+          <div className="rounded-xl border bg-white p-5 shadow-sm">
+            <h3 className="font-semibold">Permisos</h3>
+            <p className="text-sm text-gray-500">Definir accesos por módulo.</p>
+          </div>
+          <div className="rounded-xl border bg-white p-5 shadow-sm">
+            <h3 className="font-semibold">Configuración</h3>
+            <p className="text-sm text-gray-500">Parámetros generales.</p>
+          </div>
+        </section>
+      </main>
+    </RoleGate>
   );
 }
