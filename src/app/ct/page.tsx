@@ -1,16 +1,34 @@
-"use client";
+// src/app/ct/page.tsx
+import RoleGate from "@/components/auth/RoleGate";
 
-import { useSession } from "next-auth/react";
-
-export default function CtPage() {
-  const { data: session } = useSession();
+export default async function CtPage() {
   return (
-    <div className="space-y-4">
-      <h2 className="text-2xl font-semibold">Panel — Cuerpo Técnico</h2>
-      <p className="text-white/70">Hola {session?.user?.name || session?.user?.email}.</p>
-      <div className="rounded-xl border border-white/10 p-4">
-        <p className="text-sm text-white/70">Contenido del CT (próximamente).</p>
-      </div>
-    </div>
+    <RoleGate allow={["CT"]}>
+      <main className="min-h-[60vh] px-6 py-10">
+        <h1 className="text-2xl font-bold">Panel — Cuerpo Técnico</h1>
+        <p className="mt-2 text-sm text-gray-600">
+          Solo usuarios con rol <b>CT</b> pueden ver esta página.
+        </p>
+
+        <section className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="rounded-xl border bg-white p-5 shadow-sm">
+            <h3 className="font-semibold">Plan Semanal</h3>
+            <p className="text-sm text-gray-500">
+              Microciclo, cargas, tareas.
+            </p>
+          </div>
+          <div className="rounded-xl border bg-white p-5 shadow-sm">
+            <h3 className="font-semibold">Ejercicios</h3>
+            <p className="text-sm text-gray-500">
+              Biblioteca tipo TacticalPad.
+            </p>
+          </div>
+          <div className="rounded-xl border bg-white p-5 shadow-sm">
+            <h3 className="font-semibold">Dashboards</h3>
+            <p className="text-sm text-gray-500">KPIs por jugador y global.</p>
+          </div>
+        </section>
+      </main>
+    </RoleGate>
   );
 }
