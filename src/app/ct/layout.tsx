@@ -39,7 +39,8 @@ export default async function CtLayout({ children }: { children: React.ReactNode
         <aside className="h-max rounded-2xl border bg-white p-4">
           <nav className="space-y-1 text-sm">
             <Section title="Planificación" />
-            <NavItem href="/ct">Plan Semanal</NavItem>
+            {/* 👇 Ajuste clave: ruta correcta al plan semanal */}
+            <NavItem href="/ct/plan-semanal">Plan Semanal</NavItem>
             <NavItem href="/ct/ejercicios" disabled>Ejercicios</NavItem>
             <NavItem href="/ct/dashboards" disabled>Dashboards</NavItem>
 
