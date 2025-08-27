@@ -1,5 +1,6 @@
 // src/lib/api/sessions.ts
 export type Role = "ADMIN" | "CT" | "MEDICO" | "JUGADOR" | "DIRECTIVO";
+export type SessionType = "GENERAL" | "FUERZA" | "TACTICA" | "AEROBICO" | "RECUPERACION";
 
 export type UserLite = {
   id: string;
@@ -13,11 +14,12 @@ export type SessionDTO = {
   title: string;
   description: string | null;
   date: string;        // ISO
+  type: SessionType;
   createdAt?: string;  // ISO
   updatedAt?: string;  // ISO
   createdBy?: string;  // userId
   user?: UserLite | null;
-  players?: UserLite[]; // M2M
+  players?: UserLite[]; // reservado para futuro M2M
 };
 
 type ApiListResponse<T> = { data: T[] };
@@ -55,7 +57,7 @@ export async function getSession(id: string): Promise<SessionDTO> {
 // ---- Mutaciones ----
 export async function createSession(input: {
   title: string; description?: string | null; date: string; // ISO
-  playerIds?: string[];
+  type?: SessionType;
 }): Promise<SessionDTO> {
   const res = await fetch("/api/sessions", {
     method: "POST",
@@ -70,7 +72,7 @@ export async function createSession(input: {
 
 export async function updateSession(id: string, input: {
   title?: string; description?: string | null; date?: string; // ISO
-  playerIds?: string[];
+  type?: SessionType;
 }): Promise<SessionDTO> {
   const res = await fetch(`/api/sessions/${id}`, {
     method: "PUT",
@@ -91,14 +93,6 @@ export async function deleteSession(id: string): Promise<void> {
   }
 }
 
-// ---- Jugadores ----
-export async function listPlayers(): Promise<UserLite[]> {
-  const res = await fetch("/api/players", { cache: "no-store" });
-  const json = await res.json();
-  if (!res.ok) throw new Error(isApiError(json) ? json.error : "Error al listar jugadores");
-  return (json as ApiListResponse<UserLite>).data;
-}
-
 // ---- Util semana (lunes-based, UTC) ----
 export function getMonday(date: Date) {
   const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
@@ -111,3 +105,4 @@ export function getMonday(date: Date) {
 export function toYYYYMMDDUTC(date: Date) {
   return date.toISOString().slice(0, 10);
 }
+
