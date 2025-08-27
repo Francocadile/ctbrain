@@ -1,53 +1,43 @@
-// src/app/api/users/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient, Role } from "@prisma/client";
 import { z } from "zod";
-import { hash } from "bcryptjs";
+import bcrypt from "bcryptjs";
+import { prisma } from "@/lib/prisma";
 
-// ❗ ruta relativa (sin "@/")
-import prismaSingleton from "../../../lib/prisma";
-
-const prisma = (prismaSingleton as unknown as PrismaClient) || new PrismaClient();
-
-const createUserSchema = z.object({
-  email: z.string().email(),
-  name: z.string().min(1),
-  role: z.nativeEnum(Role).default("JUGADOR"),
-  password: z.string().min(6),
+const UserCreateSchema = z.object({
+  name: z.string().min(1, "Nombre requerido"),
+  email: z.string().email("Email inválido"),
+  password: z.string().min(6, "Mínimo 6 caracteres"),
+  role: z.enum(["ADMIN", "DIRECTIVO", "JUGADOR"]).optional().default("JUGADOR"),
 });
 
-// GET /api/users  -> lista simple
-export async function GET() {
-  const users = await prisma.user.findMany({
-    select: { id: true, email: true, name: true, role: true, createdAt: true },
-    orderBy: { createdAt: "desc" },
-  });
-  return NextResponse.json(users);
-}
-
-// POST /api/users -> crear usuario con password hasheado
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const parsed = createUserSchema.parse(body);
+    const data = await req.json();
+    const parsed = UserCreateSchema.parse(data);
 
-    const passwordHash = await hash(parsed.password, 10);
+    const existing = await prisma.user.findUnique({ where: { email: parsed.email } });
+    if (existing) {
+      return NextResponse.json({ error: "El email ya existe" }, { status: 409 });
+    }
+
+    const hashed = await bcrypt.hash(parsed.password, 10);
 
     const user = await prisma.user.create({
       data: {
-        email: parsed.email,
         name: parsed.name,
+        email: parsed.email,
+        password: hashed,
         role: parsed.role,
-        password: passwordHash,
       },
-      select: { id: true, email: true, name: true, role: true, createdAt: true },
+      select: { id: true, name: true, email: true, role: true },
     });
 
-    return NextResponse.json(user, { status: 201 });
+    return NextResponse.json({ user }, { status: 201 });
   } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message || "Error creating user" },
-      { status: 400 }
-    );
+    if (err?.name === "ZodError") {
+      return NextResponse.json({ error: err.flatten() }, { status: 400 });
+    }
+    console.error("POST /api/users error:", err);
+    return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
 }
