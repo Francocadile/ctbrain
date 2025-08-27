@@ -9,9 +9,7 @@ async function getSessionSafe() {
   try {
     // En tu proyecto actual, getServerSession funciona sin pasar options explícitas
     // porque NextAuth ya está configurado en las rutas de API.
-    // Si en el futuro movemos a auth() v5, cambiaremos este helper.
-    // @ts-expect-error tipos flexibles
-    return await getServerSession();
+    return (await getServerSession()) as any;
   } catch {
     return null;
   }
@@ -20,9 +18,7 @@ async function getSessionSafe() {
 function requireCT(session: any) {
   if (!session?.user) return false;
   const role =
-    (session.user as any).role ||
-    (session.user as any)?.role?.name ||
-    (session.user as any)?.roleId;
+    session.user.role || session.user?.role?.name || (session.user as any)?.roleId;
   return role === "CT" || role === "ADMIN";
 }
 
@@ -65,7 +61,7 @@ export async function GET() {
 // POST /api/sessions -> crea sesión (solo CT/ADMIN)
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession();
+    const session = (await getServerSession()) as any;
     if (!session?.user) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 });
     }
@@ -84,7 +80,7 @@ export async function POST(req: Request) {
 
     const { title, description, date, playerIds = [] } = parsed.data;
 
-    const creatorEmail: string | undefined = (session.user as any).email;
+    const creatorEmail: string | undefined = session.user.email;
     if (!creatorEmail) {
       return NextResponse.json({ error: "Usuario sin email" }, { status: 400 });
     }
