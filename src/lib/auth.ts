@@ -1,14 +1,10 @@
 // src/lib/auth.ts
-import type { NextAuthOptions } from "next-auth";
-import NextAuth from "next-auth";
+import { NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
-type RoleString = "ADMIN" | "CT" | "MEDICO" | "JUGADOR" | "DIRECTIVO";
-
-// Busca usuario por email (ajusta select a tu esquema real)
 async function findUserByEmail(email: string) {
   return prisma.user.findUnique({
     where: { email },
@@ -29,7 +25,6 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
-
         const user = await findUserByEmail(credentials.email);
         if (!user || !user.password) return null;
 
@@ -38,43 +33,29 @@ export const authOptions: NextAuthOptions = {
 
         return {
           id: String(user.id),
-          email: user.email ?? undefined,
-          name: user.name ?? undefined,
-          role: (user.role as unknown as RoleString) ?? undefined,
-        } as {
-          id: string;
-          email?: string;
-          name?: string;
-          role?: RoleString;
+          email: user.email,
+          name: user.name,
+          role: user.role as any,
         };
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user) {
-        const role = (user as { role?: RoleString }).role;
-        if (role) (token as Record<string, unknown>).role = role;
-      }
+      if (user) (token as any).role = (user as any).role ?? (token as any).role;
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        (session.user as Record<string, unknown>).role = (token as Record<
-          string,
-          unknown
-        >).role as RoleString | undefined;
-        (session.user as Record<string, unknown>).id = token.sub as
-          | string
-          | undefined;
+        (session.user as any).role = (token as any).role;
+        (session.user as any).id = token.sub;
       }
       return session;
     },
+    async redirect({ baseUrl }) {
+      // Siempre enviamos a /redirect; allí decidimos el panel por rol
+      return `${baseUrl}/redirect`;
+    },
   },
-  pages: {
-    signIn: "/login",
-  },
+  pages: { signIn: "/login" },
 };
-
-// Export opcional por si necesitás crear handlers aquí
-export const authHandler = NextAuth(authOptions);
