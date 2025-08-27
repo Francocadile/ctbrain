@@ -9,7 +9,6 @@ export async function GET() {
     if (!session?.user) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 });
     }
-    // Jugadores solamente
     const players = await prisma.user.findMany({
       where: { role: "JUGADOR" },
       select: { id: true, name: true, email: true, role: true },
