@@ -6,9 +6,11 @@ import {
   createSession,
   deleteSession,
   updateSession,
+  listPlayers,
   getMonday,
   toYYYYMMDDUTC,
   type SessionDTO,
+  type UserLite,
 } from "@/lib/api/sessions";
 
 // Helpers de fecha
@@ -17,10 +19,8 @@ function addDaysUTC(date: Date, days: number) {
   x.setUTCDate(x.getUTCDate() + days);
   return x;
 }
-
 function formatHuman(dateISO: string) {
   const d = new Date(dateISO);
-  // Formato breve (ej: "Mar 27, 09:30")
   return d.toLocaleString(undefined, {
     weekday: "short",
     day: "2-digit",
@@ -29,9 +29,7 @@ function formatHuman(dateISO: string) {
     minute: "2-digit",
   });
 }
-
 function toLocalInputValue(dateISO?: string) {
-  // Para <input type="datetime-local">: "YYYY-MM-DDTHH:mm"
   const d = dateISO ? new Date(dateISO) : new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   const yyyy = d.getFullYear();
@@ -58,6 +56,11 @@ export default function PlanSemanalPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState<string | null>("");
   const [dateLocal, setDateLocal] = useState(toLocalInputValue());
+
+  // Players
+  const [allPlayers, setAllPlayers] = useState<UserLite[]>([]);
+  const [playerIds, setPlayerIds] = useState<string[]>([]);
+  const [loadingPlayers, setLoadingPlayers] = useState(false);
 
   // Cargar datos de la semana
   async function loadWeek(d: Date) {
@@ -97,21 +100,39 @@ export default function PlanSemanalPage() {
   }, [weekStart]);
 
   // Abrir modal crear
-  function openCreate() {
+  async function openCreate() {
     setEditing(null);
     setTitle("");
     setDescription("");
     setDateLocal(toLocalInputValue());
+    setPlayerIds([]);
     setFormOpen(true);
+    await ensurePlayersLoaded();
   }
 
   // Abrir modal editar
-  function openEdit(s: SessionDTO) {
+  async function openEdit(s: SessionDTO) {
     setEditing(s);
     setTitle(s.title || "");
     setDescription(s.description ?? "");
     setDateLocal(toLocalInputValue(s.date));
+    setPlayerIds((s.players ?? []).map((p) => p.id));
     setFormOpen(true);
+    await ensurePlayersLoaded();
+  }
+
+  async function ensurePlayersLoaded() {
+    if (allPlayers.length > 0) return;
+    setLoadingPlayers(true);
+    try {
+      const list = await listPlayers();
+      setAllPlayers(list);
+    } catch (e) {
+      console.error(e);
+      alert("No se pudieron cargar los jugadores");
+    } finally {
+      setLoadingPlayers(false);
+    }
   }
 
   // Guardar (crear o editar)
@@ -123,13 +144,14 @@ export default function PlanSemanalPage() {
           title: title.trim(),
           description: (description ?? "") || null,
           date: iso,
+          playerIds,
         });
       } else {
         await updateSession(editing.id, {
           title: title.trim() || undefined,
-          description:
-            description === "" ? null : (description ?? undefined),
+          description: description === "" ? null : (description ?? undefined),
           date: iso,
+          playerIds,
         });
       }
       setFormOpen(false);
@@ -228,8 +250,8 @@ export default function PlanSemanalPage() {
                         className="rounded-xl border p-2 hover:bg-gray-50"
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="font-medium">{s.title}</div>
+                          <div className="min-w-0">
+                            <div className="font-medium truncate">{s.title}</div>
                             {s.description ? (
                               <div className="text-sm text-gray-600">
                                 {s.description}
@@ -243,8 +265,22 @@ export default function PlanSemanalPage() {
                                 by {s.user.name || s.user.email || "CT"}
                               </div>
                             ) : null}
+                            {/* Chips de jugadores */}
+                            {s.players && s.players.length > 0 ? (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {s.players.map((p) => (
+                                  <span
+                                    key={p.id}
+                                    className="text-xs rounded-full border px-2 py-0.5 text-gray-600"
+                                    title={p.email || undefined}
+                                  >
+                                    {p.name || p.email || "Jugador"}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 shrink-0">
                             <button
                               onClick={() => openEdit(s)}
                               className="text-xs px-2 py-1 rounded-lg border hover:bg-gray-50"
@@ -272,7 +308,7 @@ export default function PlanSemanalPage() {
       {/* Modal simple */}
       {formOpen && (
         <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5 space-y-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">
                 {editing ? "Editar sesión" : "Nueva sesión"}
@@ -285,41 +321,84 @@ export default function PlanSemanalPage() {
               </button>
             </div>
 
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm font-medium">Título</label>
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="mt-1 w-full rounded-xl border px-3 py-2"
-                  placeholder="Ej: Fuerza + Aceleraciones"
-                />
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <div>
+                  <label className="text-sm font-medium">Título</label>
+                  <input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="mt-1 w-full rounded-xl border px-3 py-2"
+                    placeholder="Ej: Fuerza + Aceleraciones"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">Descripción</label>
+                  <textarea
+                    value={description ?? ""}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="mt-1 w-full rounded-xl border px-3 py-2"
+                    rows={4}
+                    placeholder="Objetivos, bloques, notas…"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium">Fecha y hora</label>
+                  <input
+                    type="datetime-local"
+                    value={dateLocal}
+                    onChange={(e) => setDateLocal(e.target.value)}
+                    className="mt-1 w-full rounded-xl border px-3 py-2"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Se guarda en UTC (tu hora local se convierte a ISO).
+                  </p>
+                </div>
               </div>
 
-              <div>
-                <label className="text-sm font-medium">Descripción</label>
-                <textarea
-                  value={description ?? ""}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="mt-1 w-full rounded-xl border px-3 py-2"
-                  rows={3}
-                  placeholder="Objetivos, bloques, notas…"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">
-                  Fecha y hora
-                </label>
-                <input
-                  type="datetime-local"
-                  value={dateLocal}
-                  onChange={(e) => setDateLocal(e.target.value)}
-                  className="mt-1 w-full rounded-xl border px-3 py-2"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Se guarda en UTC (tu hora local se convierte a ISO).
-                </p>
+              <div className="space-y-3">
+                <label className="text-sm font-medium">Jugadores</label>
+                <div className="rounded-xl border p-2 max-h-64 overflow-auto">
+                  {loadingPlayers ? (
+                    <div className="text-sm text-gray-500 p-2">Cargando jugadores…</div>
+                  ) : allPlayers.length === 0 ? (
+                    <div className="text-sm text-gray-400 p-2">
+                      No hay jugadores cargados.
+                    </div>
+                  ) : (
+                    <ul className="space-y-1">
+                      {allPlayers.map((p) => {
+                        const checked = playerIds.includes(p.id);
+                        return (
+                          <li key={p.id} className="flex items-center gap-2">
+                            <input
+                              id={`p-${p.id}`}
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                const on = e.target.checked;
+                                setPlayerIds((prev) =>
+                                  on ? [...prev, p.id] : prev.filter((x) => x !== p.id)
+                                );
+                              }}
+                            />
+                            <label htmlFor={`p-${p.id}`} className="text-sm cursor-pointer">
+                              {p.name || p.email || "Jugador"}
+                              {p.email ? <span className="text-xs text-gray-400"> · {p.email}</span> : null}
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+                {playerIds.length > 0 && (
+                  <div className="text-xs text-gray-600">
+                    {playerIds.length} jugador{playerIds.length > 1 ? "es" : ""} seleccionado{playerIds.length > 1 ? "s" : ""}
+                  </div>
+                )}
               </div>
             </div>
 
