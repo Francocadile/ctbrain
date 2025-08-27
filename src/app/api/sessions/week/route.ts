@@ -18,15 +18,15 @@ function addDaysUTC(d: Date, days: number) {
   return x;
 }
 
-// --- Select unificado ---
+// --- Select unificado según schema actual ---
 const sessionSelect = {
   id: true,
   title: true,
   description: true,
   date: true,
+  type: true,
   createdBy: true, // string (userId)
   user: { select: { id: true, name: true, email: true, role: true } },
-  players: { select: { id: true, name: true, email: true, role: true } }, // NUEVO
 } as const;
 
 export async function GET(req: Request) {
@@ -37,7 +37,8 @@ export async function GET(req: Request) {
     }
 
     const url = new URL(req.url);
-    const startParam = url.searchParams.get("start"); // YYYY-MM-DD
+    // Opcional: start=YYYY-MM-DD (UTC)
+    const startParam = url.searchParams.get("start"); // ej: 2025-08-25
     const base = startParam ? new Date(`${startParam}T00:00:00.000Z`) : new Date();
     const weekStart = getMonday(base);                 // lunes 00:00 UTC
     const weekEndExclusive = addDaysUTC(weekStart, 7); // próximo lunes (exclusivo)
@@ -62,6 +63,7 @@ export async function GET(req: Request) {
         title: string;
         description: string | null;
         date: string; // ISO
+        type: "GENERAL" | "FUERZA" | "TACTICA" | "AEROBICO" | "RECUPERACION";
         createdBy: { id: string; name: string | null; email: string | null } | null;
         players: Array<{ id: string; name: string | null; email: string | null; role: string }>;
       }>
@@ -78,20 +80,23 @@ export async function GET(req: Request) {
     items.forEach((s) => {
       const key = new Date(s.date).toISOString().slice(0, 10);
       if (!days[key]) days[key] = [];
+
       days[key].push({
         id: s.id,
         title: s.title,
         description: s.description ?? null,
         date: new Date(s.date).toISOString(),
+        type: s.type as any,
+        // createdBy: lo devolvemos desde la relación 'user'
         createdBy: s.user
-          ? { id: s.user.id, name: s.user.name ?? null, email: s.user.email ?? null }
+          ? {
+              id: s.user.id,
+              name: s.user.name ?? null,
+              email: s.user.email ?? null,
+            }
           : null,
-        players: (s.players ?? []).map((p) => ({
-          id: p.id,
-          name: p.name ?? null,
-          email: p.email ?? null,
-          role: p.role,
-        })),
+        // Si más adelante sumamos M2M, acá mapearíamos s.players
+        players: [],
       });
     });
 
