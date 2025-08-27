@@ -6,7 +6,7 @@ import { z } from "zod";
 
 type RouteParams = { params: { id: string } };
 
-// Helpers de sesión (mantengo tu lógica)
+// Helpers
 async function getSessionSafe() {
   try {
     return (await getServerSession()) as any;
@@ -14,7 +14,6 @@ async function getSessionSafe() {
     return null;
   }
 }
-
 function isAdmin(session: any) {
   const role =
     session?.user?.role ||
@@ -22,7 +21,6 @@ function isAdmin(session: any) {
     (session?.user as any)?.roleId;
   return role === "ADMIN";
 }
-
 function isCT(session: any) {
   const role =
     session?.user?.role ||
@@ -31,17 +29,15 @@ function isCT(session: any) {
   return role === "CT";
 }
 
-// Validación de payload
+// Validación
 const updateSchema = z.object({
   title: z.string().min(2).optional(),
   description: z.string().optional().nullable(),
-  // aceptamos ISO string y lo convertimos a Date
   date: z.string().datetime().optional(),
-  // players se elimina por ahora (no existe relación aún)
-  // playerIds: z.array(z.string()).optional(),
+  playerIds: z.array(z.string()).optional(), // NUEVO
 });
 
-// Select unificado para devolver siempre la misma forma
+// Select
 const sessionSelect = {
   id: true,
   title: true,
@@ -49,13 +45,12 @@ const sessionSelect = {
   date: true,
   createdAt: true,
   updatedAt: true,
-  // en tu schema actual el campo es 'createdBy' (string)
   createdBy: true,
-  // relación correcta con User se llama 'user'
-  user: { select: { id: true, name: true, email: true, role: true } },
+  user: { select: { id: true, name: true, email: true, role: true} },
+  players: { select: { id: true, name: true, email: true, role: true } }, // NUEVO
 } as const;
 
-// GET /api/sessions/[id] -> detalle
+// GET detalle
 export async function GET(_req: Request, { params }: RouteParams) {
   try {
     const session = await getSessionSafe();
@@ -63,27 +58,21 @@ export async function GET(_req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
     const { id } = params;
-
     const item = await prisma.session.findUnique({
       where: { id },
       select: sessionSelect,
     });
-
     if (!item)
-      return NextResponse.json(
-        { error: "Sesión no encontrada" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Sesión no encontrada" }, { status: 404 });
 
-    // mantenemos estructura { data: ... } como en tu versión vieja
     return NextResponse.json({ data: item });
   } catch (err) {
-    console.error("GET /api/sessions/[id] error:", err);
+    console.error("GET /sessions/[id] error:", err);
     return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
 }
 
-// PUT /api/sessions/[id] -> editar (CT creador o ADMIN)
+// PUT editar (CT creador o ADMIN)
 export async function PUT(req: Request, { params }: RouteParams) {
   try {
     const session = await getServerSession();
@@ -92,16 +81,12 @@ export async function PUT(req: Request, { params }: RouteParams) {
 
     const { id } = params;
 
-    // Validar que exista y quién la creó
     const existing = await prisma.session.findUnique({
       where: { id },
-      select: { id: true, createdBy: true }, // createdBy = string (userId)
+      select: { id: true, createdBy: true },
     });
     if (!existing)
-      return NextResponse.json(
-        { error: "Sesión no encontrada" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Sesión no encontrada" }, { status: 404 });
 
     const currentEmail: string | undefined = (session.user as any).email;
     if (!currentEmail)
@@ -112,10 +97,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
       select: { id: true, role: true },
     });
     if (!current)
-      return NextResponse.json(
-        { error: "Usuario no encontrado" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
 
     const canEdit =
       isAdmin(session) || (isCT(session) && current.id === existing.createdBy);
@@ -131,12 +113,13 @@ export async function PUT(req: Request, { params }: RouteParams) {
       );
     }
 
-    const { title, description, date } = parsed.data;
+    const { title, description, date, playerIds } = parsed.data;
 
     const data: any = {};
     if (title !== undefined) data.title = title;
     if (description !== undefined) data.description = description;
     if (date !== undefined) data.date = new Date(date);
+    if (Array.isArray(playerIds)) data.players = { set: playerIds.map((pid) => ({ id: pid })) };
 
     const updated = await prisma.session.update({
       where: { id },
@@ -146,12 +129,12 @@ export async function PUT(req: Request, { params }: RouteParams) {
 
     return NextResponse.json({ data: updated });
   } catch (err) {
-    console.error("PUT /api/sessions/[id] error:", err);
+    console.error("PUT /sessions/[id] error:", err);
     return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
 }
 
-// DELETE /api/sessions/[id] -> borrar (CT creador o ADMIN)
+// DELETE (CT creador o ADMIN)
 export async function DELETE(_req: Request, { params }: RouteParams) {
   try {
     const session = await getServerSession();
@@ -165,10 +148,7 @@ export async function DELETE(_req: Request, { params }: RouteParams) {
       select: { id: true, createdBy: true },
     });
     if (!existing)
-      return NextResponse.json(
-        { error: "Sesión no encontrada" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Sesión no encontrada" }, { status: 404 });
 
     const currentEmail: string | undefined = (session.user as any).email;
     if (!currentEmail)
@@ -179,10 +159,7 @@ export async function DELETE(_req: Request, { params }: RouteParams) {
       select: { id: true, role: true },
     });
     if (!current)
-      return NextResponse.json(
-        { error: "Usuario no encontrado" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
 
     const canDelete =
       isAdmin(session) || (isCT(session) && current.id === existing.createdBy);
@@ -192,7 +169,7 @@ export async function DELETE(_req: Request, { params }: RouteParams) {
     await prisma.session.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("DELETE /api/sessions/[id] error:", err);
+    console.error("DELETE /sessions/[id] error:", err);
     return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
 }
