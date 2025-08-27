@@ -73,7 +73,6 @@ export default function CTSessionsPage() {
       if (!res.ok) throw new Error(json?.error || "No se pudieron cargar jugadores");
       setPlayers(json.data as User[]);
     } catch (e: any) {
-      // no bloqueamos la vista si falla
       console.error(e);
     }
   };
@@ -210,7 +209,11 @@ export default function CTSessionsPage() {
             <li key={s.id} className="rounded-xl border p-4 shadow-sm">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h3 className="font-semibold">{s.title}</h3>
+                  <h3 className="font-semibold">
+                    <a href={`/ct/sessions/${s.id}`} className="hover:underline">
+                      {s.title}
+                    </a>
+                  </h3>
                   {s.description ? (
                     <p className="text-sm text-gray-600 mt-1">{s.description}</p>
                   ) : null}
