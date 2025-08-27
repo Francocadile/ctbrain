@@ -1,14 +1,17 @@
-// app/page.tsx
+// src/app/page.tsx
 import Link from "next/link";
+import type { Route } from "next";
+
+type NavLink = { href: Route; label: string };
 
 export default function Home() {
-  const links = [
-    { href: "/login", label: "Ir a Login" },
-    { href: "/admin", label: "Admin" },
-    { href: "/ct", label: "Cuerpo Técnico" },
-    { href: "/medico", label: "Médico" },
-    { href: "/jugador", label: "Jugador" },
-    { href: "/directivo", label: "Directivo" },
+  const links: NavLink[] = [
+    { href: "/login" as Route, label: "Ir a Login" },
+    { href: "/admin" as Route, label: "Admin" },
+    { href: "/ct" as Route, label: "Cuerpo Técnico" },
+    { href: "/medico" as Route, label: "Médico" },
+    { href: "/jugador" as Route, label: "Jugador" },
+    { href: "/directivo" as Route, label: "Directivo" },
   ];
 
   return (
