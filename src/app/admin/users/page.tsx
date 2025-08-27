@@ -1,13 +1,14 @@
 // src/app/admin/users/page.tsx
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 import RoleGate from "@/components/auth/RoleGate";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
 
-/* -------------------------------------------
-   DATA
---------------------------------------------*/
+/* DATA */
 async function getUsers() {
   return prisma.user.findMany({
     orderBy: { createdAt: "desc" },
@@ -15,9 +16,7 @@ async function getUsers() {
   });
 }
 
-/* -------------------------------------------
-   SERVER ACTIONS (locales: no exports)
---------------------------------------------*/
+/* SERVER ACTIONS (locales) */
 async function createUser(formData: FormData) {
   "use server";
   const name = String(formData.get("name") ?? "").trim();
@@ -25,41 +24,15 @@ async function createUser(formData: FormData) {
   const password = String(formData.get("password") ?? "");
   const role = String(formData.get("role") ?? "") as Role;
 
-  if (!name || !email || !password) {
-    throw new Error("Completa nombre, email y contraseña.");
-  }
-  if (!["ADMIN", "CT", "MEDICO", "JUGADOR", "DIRECTIVO"].includes(role)) {
+  if (!name || !email || !password) throw new Error("Completa nombre, email y contraseña.");
+  if (!["ADMIN", "CT", "MEDICO", "JUGADOR", "DIRECTIVO"].includes(role))
     throw new Error("Rol inválido.");
-  }
 
   const exists = await prisma.user.findUnique({ where: { email } });
   if (exists) throw new Error("Ese email ya está registrado.");
 
   const hashed = await bcrypt.hash(password, 10);
-
-  await prisma.user.create({
-    data: { name, email, password: hashed, role },
-  });
-
-  revalidatePath("/admin/users");
-}
-
-async function updateUser(formData: FormData) {
-  "use server";
-  const id = String(formData.get("id") ?? "");
-  const name = String(formData.get("name") ?? "").trim();
-  const role = String(formData.get("role") ?? "") as Role;
-
-  if (!id) throw new Error("ID requerido.");
-  if (!name) throw new Error("Nombre requerido.");
-  if (!["ADMIN", "CT", "MEDICO", "JUGADOR", "DIRECTIVO"].includes(role)) {
-    throw new Error("Rol inválido.");
-  }
-
-  await prisma.user.update({
-    where: { id },
-    data: { name, role },
-  });
+  await prisma.user.create({ data: { name, email, password: hashed, role } });
 
   revalidatePath("/admin/users");
 }
@@ -68,14 +41,11 @@ async function deleteUser(formData: FormData) {
   "use server";
   const id = String(formData.get("id") ?? "");
   if (!id) throw new Error("ID requerido.");
-
   await prisma.user.delete({ where: { id } });
   revalidatePath("/admin/users");
 }
 
-/* -------------------------------------------
-   PAGE
---------------------------------------------*/
+/* PAGE */
 export default async function AdminUsersPage() {
   const users = await getUsers();
 
@@ -86,7 +56,7 @@ export default async function AdminUsersPage() {
           <div>
             <h1 className="text-2xl font-bold">Usuarios</h1>
             <p className="mt-1 text-sm text-gray-600">
-              Alta, edición y baja de cuentas. (Roles: ADMIN, CT, MEDICO, JUGADOR, DIRECTIVO)
+              Alta y baja de cuentas. (Roles: ADMIN, CT, MEDICO, JUGADOR, DIRECTIVO)
             </p>
           </div>
         </header>
@@ -94,59 +64,28 @@ export default async function AdminUsersPage() {
         {/* Crear usuario */}
         <section className="rounded-2xl border bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold">Crear usuario</h2>
-          <form
-            action={createUser}
-            className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-5"
-          >
-            <input
-              name="name"
-              placeholder="Nombre"
-              className="rounded-lg border px-3 py-2 md:col-span-1"
-              required
-            />
-            <input
-              type="email"
-              name="email"
-              placeholder="Email"
-              className="rounded-lg border px-3 py-2 md:col-span-2"
-              required
-            />
-            <input
-              type="password"
-              name="password"
-              placeholder="Contraseña (mín. 6)"
-              className="rounded-lg border px-3 py-2 md:col-span-1"
-              required
-              minLength={6}
-            />
-            <select
-              name="role"
-              className="rounded-lg border px-3 py-2 md:col-span-1"
-              defaultValue="JUGADOR"
-              required
-            >
+          <form action={createUser} className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-5">
+            <input name="name" placeholder="Nombre" className="rounded-lg border px-3 py-2 md:col-span-1" required />
+            <input type="email" name="email" placeholder="Email" className="rounded-lg border px-3 py-2 md:col-span-2" required />
+            <input type="password" name="password" placeholder="Contraseña (mín. 6)" className="rounded-lg border px-3 py-2 md:col-span-1" required minLength={6} />
+            <select name="role" className="rounded-lg border px-3 py-2 md:col-span-1" defaultValue="JUGADOR" required>
               <option value="ADMIN">ADMIN</option>
               <option value="CT">CT</option>
               <option value="MEDICO">MEDICO</option>
               <option value="JUGADOR">JUGADOR</option>
               <option value="DIRECTIVO">DIRECTIVO</option>
             </select>
-
             <div className="md:col-span-5">
-              <button
-                type="submit"
-                className="rounded-lg border bg-black px-4 py-2 text-sm font-medium text-white hover:bg-black/90"
-              >
+              <button type="submit" className="rounded-lg border bg-black px-4 py-2 text-sm font-medium text-white hover:bg-black/90">
                 Crear usuario
               </button>
             </div>
           </form>
         </section>
 
-        {/* Tabla de usuarios (edición inline + eliminar) */}
+        {/* Tabla de usuarios */}
         <section className="rounded-2xl border bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold">Listado</h2>
-
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-full text-left text-sm">
               <thead>
@@ -161,92 +100,24 @@ export default async function AdminUsersPage() {
               <tbody>
                 {users.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-6 text-gray-500" colSpan={5}>
-                      No hay usuarios todavía.
-                    </td>
+                    <td className="px-3 py-6 text-gray-500" colSpan={5}>No hay usuarios todavía.</td>
                   </tr>
                 ) : (
                   users.map((u) => (
-                    <tr key={u.id} className="border-b last:border-b-0 align-middle">
-                      {/* Nombre (editable) */}
-                      <td className="px-3 py-2">
-                        <form action={updateUser} className="flex items-center gap-2">
-                          <input type="hidden" name="id" value={u.id} />
-                          <input
-                            name="name"
-                            defaultValue={u.name ?? ""}
-                            className="w-44 rounded-lg border px-2 py-1"
-                            required
-                          />
-                          {/* Campo rol va en la siguiente celda, pero necesita pertenecer al mismo form.
-                              Lo duplicamos lógico: el select real está en la celda siguiente y comparte el form via formAttr */}
-                        </form>
-                      </td>
-
-                      {/* Email (solo lectura) */}
+                    <tr key={u.id} className="border-b last:border-b-0">
+                      <td className="px-3 py-2 font-medium">{u.name}</td>
                       <td className="px-3 py-2">{u.email}</td>
-
-                      {/* Rol (editable) */}
                       <td className="px-3 py-2">
-                        {/* Usamos el mismo form del nombre referenciándolo con id */}
-                        <form id={`form-${u.id}`} action={updateUser} className="hidden" />
-                        <select
-                          name="role"
-                          defaultValue={u.role}
-                          className="rounded-lg border px-2 py-1"
-                          form={`form-${u.id}`}
-                        >
-                          <option value="ADMIN">ADMIN</option>
-                          <option value="CT">CT</option>
-                          <option value="MEDICO">MEDICO</option>
-                          <option value="JUGADOR">JUGADOR</option>
-                          <option value="DIRECTIVO">DIRECTIVO</option>
-                        </select>
+                        <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-medium">{u.role}</span>
                       </td>
-
-                      {/* Creado */}
-                      <td className="px-3 py-2 text-gray-500">
-                        {new Date(u.createdAt).toLocaleString("es-AR")}
-                      </td>
-
-                      {/* Acciones */}
+                      <td className="px-3 py-2 text-gray-500">{new Date(u.createdAt).toLocaleString("es-AR")}</td>
                       <td className="px-3 py-2">
-                        <div className="flex justify-end gap-2">
-                          {/* Guardar cambios (nombre/rol) */}
-                          <form action={updateUser} className="hidden" id={`save-${u.id}`}>
-                            <input type="hidden" name="id" value={u.id} />
-                            <input type="hidden" name="name" value={u.name ?? ""} />
-                            <input type="hidden" name="role" value={u.role} />
-                          </form>
-
-                          {/* Para enviar correctamente name y role actuales:
-                              - Tomamos name desde el input de la 1ª celda usando 'form' attr
-                              - El select de rol ya tiene form por id */}
-                          <button
-                            type="submit"
-                            form={`form-${u.id}`}
-                            className="rounded-lg border px-3 py-1.5 text-xs font-medium hover:bg-gray-50"
-                            onClick={(e) => {
-                              // Nada que hacer: el form referenciado envía name/role porque:
-                              // - role está en este select (form=form-${u.id})
-                              // - name lo añadimos usando JS mínimo si quisiéramos. Para evitar client JS,
-                              //   incorporamos un pequeño truco: duplicamos el form del nombre con el mismo action.
-                            }}
-                          >
-                            Guardar
+                        <form action={deleteUser} className="flex justify-end">
+                          <input type="hidden" name="id" value={u.id} />
+                          <button type="submit" className="rounded-lg border px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">
+                            Eliminar
                           </button>
-
-                          {/* Eliminar */}
-                          <form action={deleteUser}>
-                            <input type="hidden" name="id" value={u.id} />
-                            <button
-                              type="submit"
-                              className="rounded-lg border px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
-                            >
-                              Eliminar
-                            </button>
-                          </form>
-                        </div>
+                        </form>
                       </td>
                     </tr>
                   ))
@@ -254,10 +125,6 @@ export default async function AdminUsersPage() {
               </tbody>
             </table>
           </div>
-
-          <p className="mt-3 text-xs text-gray-500">
-            * Edición inline: modificá nombre/rol y presioná <b>Guardar</b>. Las acciones se ejecutan en servidor.
-          </p>
         </section>
       </div>
     </RoleGate>
