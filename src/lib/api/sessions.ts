@@ -17,7 +17,7 @@ export type SessionDTO = {
   updatedAt?: string;  // ISO
   createdBy?: string;  // userId
   user?: UserLite | null;
-  players?: UserLite[]; // reservado para futuro M2M
+  players?: UserLite[]; // M2M
 };
 
 type ApiListResponse<T> = { data: T[] };
@@ -55,6 +55,7 @@ export async function getSession(id: string): Promise<SessionDTO> {
 // ---- Mutaciones ----
 export async function createSession(input: {
   title: string; description?: string | null; date: string; // ISO
+  playerIds?: string[];
 }): Promise<SessionDTO> {
   const res = await fetch("/api/sessions", {
     method: "POST",
@@ -69,6 +70,7 @@ export async function createSession(input: {
 
 export async function updateSession(id: string, input: {
   title?: string; description?: string | null; date?: string; // ISO
+  playerIds?: string[];
 }): Promise<SessionDTO> {
   const res = await fetch(`/api/sessions/${id}`, {
     method: "PUT",
@@ -87,6 +89,14 @@ export async function deleteSession(id: string): Promise<void> {
     const json = await res.json().catch(() => ({}));
     throw new Error(isApiError(json) ? json.error : "Error al borrar la sesión");
   }
+}
+
+// ---- Jugadores ----
+export async function listPlayers(): Promise<UserLite[]> {
+  const res = await fetch("/api/players", { cache: "no-store" });
+  const json = await res.json();
+  if (!res.ok) throw new Error(isApiError(json) ? json.error : "Error al listar jugadores");
+  return (json as ApiListResponse<UserLite>).data;
 }
 
 // ---- Util semana (lunes-based, UTC) ----
