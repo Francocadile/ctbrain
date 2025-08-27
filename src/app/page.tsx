@@ -1,37 +1,50 @@
+// app/page.tsx
 import Link from "next/link";
 
-export default function HomePage() {
+export default function Home() {
+  const links = [
+    { href: "/login", label: "Ir a Login" },
+    { href: "/admin", label: "Admin" },
+    { href: "/ct", label: "Cuerpo Técnico" },
+    { href: "/medico", label: "Médico" },
+    { href: "/jugador", label: "Jugador" },
+    { href: "/directivo", label: "Directivo" },
+  ];
+
   return (
-    <div className="container-aura p-6 space-y-4">
-      <h2 className="text-2xl font-semibold">CTBrain – Fase 1 (Auth + Roles)</h2>
-      <p className="text-white/80">
-        Usá <b>/login</b> para iniciar sesión. Tras el login te llevamos a tu panel según rol.
-      </p>
-      <div className="flex flex-wrap gap-3 text-sm">
-        <Link href="/login" className="rounded-2xl bg-brand-500 px-3 py-1.5 hover:bg-brand-600">
-          Ir a Login
-        </Link>
-        <Link href="/admin" className="rounded-2xl bg-white/10 px-3 py-1.5 hover:bg-white/20">
-          /admin
-        </Link>
-        <Link href="/ct" className="rounded-2xl bg-white/10 px-3 py-1.5 hover:bg-white/20">
-          /ct
-        </Link>
-        <Link href="/medico" className="rounded-2xl bg-white/10 px-3 py-1.5 hover:bg-white/20">
-          /medico
-        </Link>
-        <Link href="/jugador" className="rounded-2xl bg-white/10 px-3 py-1.5 hover:bg-white/20">
-          /jugador
-        </Link>
-        <Link href="/directivo" className="rounded-2xl bg-white/10 px-3 py-1.5 hover:bg-white/20">
-          /directivo
-        </Link>
+    <main className="min-h-screen bg-gray-50">
+      <div className="mx-auto max-w-5xl px-6 py-12">
+        <header className="mb-10">
+          <h1 className="text-3xl font-extrabold tracking-tight">
+            CTBrain — Fase 1 (Auth + Roles)
+          </h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Portada provisional para navegar mientras cerramos autenticación y
+            permisos por rol. Próximo paso: proteger rutas y armar el dashboard maestro.
+          </p>
+        </header>
+
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {links.map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className="rounded-2xl border bg-white p-6 shadow-sm transition hover:shadow-md"
+            >
+              <div className="text-lg font-semibold">{l.label}</div>
+              <div className="mt-1 text-sm text-gray-500">{l.href}</div>
+            </Link>
+          ))}
+        </section>
+
+        <footer className="mt-16 text-xs text-gray-500">
+          <p>
+            Roadmap inmediato: (1) Guard de rol en páginas de servidor, (2) Layout
+            con Sidebar/Topbar, (3) Dashboard maestro con tarjetas base.
+          </p>
+        </footer>
       </div>
-      <div className="pt-2 text-xs text-white/50">
-        Usuarios seed: <code>admin@ctbrain.app</code>, <code>ct@ctbrain.app</code>,{" "}
-        <code>medico@ctbrain.app</code>, <code>jugador@ctbrain.app</code>,{" "}
-        <code>directivo@ctbrain.app</code> (contraseña: <code>123456</code>).
-      </div>
-    </div>
+    </main>
   );
 }
+
