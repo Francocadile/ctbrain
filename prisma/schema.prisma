@@ -1,4 +1,4 @@
-// schema.prisma
+// prisma/schema.prisma
 
 generator client {
   provider = "prisma-client-js"
@@ -15,8 +15,12 @@ model User {
   email     String?   @unique
   password  String?
   role      Role      @default(JUGADOR)
+
+  // Sesiones creadas por este usuario (CT)
   sessions  Session[] @relation("SessionCreatedBy")
-  attending Session[] @relation("SessionPlayers", references: [id])
+
+  // Sesiones a las que asiste (N:N implícita con Session.players)
+  attending Session[] @relation("SessionPlayers")
 }
 
 model Session {
@@ -24,9 +28,12 @@ model Session {
   title       String
   description String?
   date        DateTime
+
+  // Creador (CT)
   createdBy   User     @relation("SessionCreatedBy", fields: [createdById], references: [id])
   createdById String
 
+  // Jugadores asignados (N:N implícita con User.attending)
   players     User[]   @relation("SessionPlayers")
 
   createdAt   DateTime @default(now())
@@ -40,4 +47,3 @@ enum Role {
   JUGADOR
   DIRECTIVO
 }
-
