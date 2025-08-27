@@ -1,43 +1,46 @@
+// src/app/api/users/route.ts
 import { NextResponse } from "next/server";
-import { z } from "zod";
-import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
+import prisma from "@/lib/prisma";
+import { getServerSession } from "next-auth";
 
-const UserCreateSchema = z.object({
-  name: z.string().min(1, "Nombre requerido"),
-  email: z.string().email("Email inválido"),
-  password: z.string().min(6, "Mínimo 6 caracteres"),
-  role: z.enum(["ADMIN", "DIRECTIVO", "JUGADOR"]).optional().default("JUGADOR"),
-});
+function getRole(session: any) {
+  return session?.user?.role || session?.user?.role?.name || (session?.user as any)?.roleId;
+}
 
-export async function POST(req: Request) {
+// GET /api/users?role=JUGADOR
+// Devuelve lista de usuarios (por defecto solo JUGADOR para este uso).
+// Protegido: CT y ADMIN pueden listar; un JUGADOR no debería listar a todos.
+export async function GET(req: Request) {
   try {
-    const data = await req.json();
-    const parsed = UserCreateSchema.parse(data);
-
-    const existing = await prisma.user.findUnique({ where: { email: parsed.email } });
-    if (existing) {
-      return NextResponse.json({ error: "El email ya existe" }, { status: 409 });
+    const session = (await getServerSession()) as any;
+    const role = getRole(session);
+    if (!session?.user) {
+      return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+    }
+    if (role !== "CT" && role !== "ADMIN") {
+      return NextResponse.json({ error: "No autorizado" }, { status: 403 });
     }
 
-    const hashed = await bcrypt.hash(parsed.password, 10);
+    const url = new URL(req.url);
+    const roleQuery = url.searchParams.get("role") as
+      | "ADMIN"
+      | "CT"
+      | "MEDICO"
+      | "JUGADOR"
+      | "DIRECTIVO"
+      | null;
 
-    const user = await prisma.user.create({
-      data: {
-        name: parsed.name,
-        email: parsed.email,
-        password: hashed,
-        role: parsed.role,
-      },
+    const where = roleQuery ? { role: roleQuery } : { role: "JUGADOR" as const };
+
+    const users = await prisma.user.findMany({
+      where,
+      orderBy: { name: "asc" },
       select: { id: true, name: true, email: true, role: true },
     });
 
-    return NextResponse.json({ user }, { status: 201 });
-  } catch (err: any) {
-    if (err?.name === "ZodError") {
-      return NextResponse.json({ error: err.flatten() }, { status: 400 });
-    }
-    console.error("POST /api/users error:", err);
+    return NextResponse.json({ data: users });
+  } catch (err) {
+    console.error("GET /api/users error:", err);
     return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
 }
