@@ -38,6 +38,14 @@ function toLocalInputValue(dateISO?: string) {
   const mi = pad(d.getMinutes());
   return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
 }
+// Combina un YYYY-MM-DD (UTC) con la hora/minuto de un ISO existente
+function mergeDayWithTime(targetYmd: string, fromIso: string) {
+  const t = new Date(fromIso);
+  const hh = String(t.getUTCHours()).padStart(2, "0");
+  const mi = String(t.getUTCMinutes()).padStart(2, "0");
+  // construimos en UTC para mantener hora exacta
+  return new Date(`${targetYmd}T${hh}:${mi}:00.000Z`).toISOString();
+}
 
 const TYPE_LABEL: Record<SessionType, string> = {
   GENERAL: "General",
@@ -55,6 +63,13 @@ function typeBadgeCls(t: SessionType) {
     default: return "bg-gray-100 text-gray-700";
   }
 }
+
+// --- Tipos para DnD payload ---
+type DragPayload = {
+  id: string;
+  fromDay: string; // YYYY-MM-DD
+  iso: string;     // fecha original ISO (para conservar hora)
+};
 
 export default function PlanSemanalPage() {
   // Semana base (lunes)
@@ -76,6 +91,9 @@ export default function PlanSemanalPage() {
   const [description, setDescription] = useState<string | null>("");
   const [dateLocal, setDateLocal] = useState(toLocalInputValue());
   const [type, setType] = useState<SessionType>("GENERAL");
+
+  // Estado visual para drop targets
+  const [overDay, setOverDay] = useState<string | null>(null);
 
   // Cargar datos de la semana
   async function loadWeek(d: Date) {
@@ -174,6 +192,72 @@ export default function PlanSemanalPage() {
     }
   }
 
+  // ------------------------------
+  // Drag & Drop (HTML5)
+  // ------------------------------
+  function onDragStart(ev: React.DragEvent<HTMLLIElement>, s: SessionDTO, dayKey: string) {
+    const payload: DragPayload = { id: s.id, fromDay: dayKey, iso: s.date };
+    ev.dataTransfer.setData("application/json", JSON.stringify(payload));
+    ev.dataTransfer.effectAllowed = "move";
+  }
+
+  function onDragOver(ev: React.DragEvent<HTMLDivElement>, targetDay: string) {
+    ev.preventDefault(); // necesario para permitir drop
+    ev.dataTransfer.dropEffect = "move";
+    setOverDay(targetDay);
+  }
+
+  function onDragLeave(_ev: React.DragEvent<HTMLDivElement>, targetDay: string) {
+    // quitar highlight si realmente se sale
+    if (overDay === targetDay) setOverDay(null);
+  }
+
+  async function onDrop(ev: React.DragEvent<HTMLDivElement>, targetDay: string) {
+    ev.preventDefault();
+    setOverDay(null);
+
+    let payload: DragPayload | null = null;
+    try {
+      payload = JSON.parse(ev.dataTransfer.getData("application/json"));
+    } catch {
+      return;
+    }
+    if (!payload) return;
+
+    const { id, fromDay, iso } = payload;
+    if (fromDay === targetDay) return; // no-op si mismo día
+
+    // 1) Optimistic UI: mover en memoria
+    setDays((prev) => {
+      const copy: typeof prev = { ...prev };
+      const fromList = (copy[fromDay] || []).filter((x) => x.id !== id);
+      const moved = (copy[fromDay] || []).find((x) => x.id === id);
+      const toList = [...(copy[targetDay] || [])];
+
+      if (!moved) return prev;
+
+      const newIso = mergeDayWithTime(targetDay, iso);
+      const updated: SessionDTO = { ...moved, date: newIso };
+
+      copy[fromDay] = fromList;
+      copy[targetDay] = [...toList, updated].sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+      return copy;
+    });
+
+    // 2) Persistir en backend
+    try {
+      const newIso = mergeDayWithTime(targetDay, iso);
+      await updateSession(id, { date: newIso });
+    } catch (e) {
+      // 3) Si falla, revertimos recargando semana
+      console.error(e);
+      alert("No se pudo actualizar la fecha. Se recargará la semana.");
+      await loadWeek(base);
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -242,9 +326,12 @@ export default function PlanSemanalPage() {
             return (
               <div
                 key={key}
-                className={`rounded-2xl border p-3 bg-white ${
+                className={`rounded-2xl border p-3 bg-white transition-shadow ${
                   isToday ? "ring-2 ring-amber-400" : ""
-                }`}
+                } ${overDay === key ? "shadow-[0_0_0_3px_rgba(59,130,246,0.4)]" : ""}`}
+                onDragOver={(e) => onDragOver(e, key)}
+                onDragLeave={(e) => onDragLeave(e, key)}
+                onDrop={(e) => onDrop(e, key)}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="font-semibold">
@@ -265,7 +352,10 @@ export default function PlanSemanalPage() {
                     {list.map((s) => (
                       <li
                         key={s.id}
-                        className="rounded-xl border p-2 hover:bg-gray-50"
+                        draggable
+                        onDragStart={(e) => onDragStart(e, s, key)}
+                        className="rounded-xl border p-2 hover:bg-gray-50 cursor-grab active:cursor-grabbing"
+                        title="Arrastrá para mover a otro día"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
