@@ -20,25 +20,21 @@ model User {
 
   // Sesiones creadas por este usuario (CT/ADMIN)
   sessions  Session[]
-
-  // M2M: sesiones donde participa como jugador
-  attendingSessions Session[] @relation("SessionPlayers")
 }
 
 model Session {
-  id          String   @id @default(cuid())
+  id          String       @id @default(cuid())
   title       String
   description String?
   date        DateTime
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
-  // Creador
   createdBy   String
-  user        User     @relation(fields: [createdBy], references: [id])
+  user        User         @relation(fields: [createdBy], references: [id])
 
-  // M2M jugadores
-  players     User[]   @relation("SessionPlayers")
+  // Etiqueta de tipo de sesión (estilo Notion)
+  type        SessionType  @default(GENERAL)
 }
 
 enum Role {
@@ -47,4 +43,12 @@ enum Role {
   MEDICO
   JUGADOR
   DIRECTIVO
+}
+
+enum SessionType {
+  GENERAL
+  FUERZA
+  TACTICA
+  AEROBICO
+  RECUPERACION
 }
