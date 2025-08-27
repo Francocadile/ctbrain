@@ -34,7 +34,7 @@ const updateSchema = z.object({
   title: z.string().min(2).optional(),
   description: z.string().optional().nullable(),
   date: z.string().datetime().optional(),
-  playerIds: z.array(z.string()).optional(), // NUEVO
+  type: z.enum(["GENERAL", "FUERZA", "TACTICA", "AEROBICO", "RECUPERACION"]).optional(),
 });
 
 // Select
@@ -43,11 +43,11 @@ const sessionSelect = {
   title: true,
   description: true,
   date: true,
+  type: true,
   createdAt: true,
   updatedAt: true,
   createdBy: true,
-  user: { select: { id: true, name: true, email: true, role: true} },
-  players: { select: { id: true, name: true, email: true, role: true } }, // NUEVO
+  user: { select: { id: true, name: true, email: true, role: true } },
 } as const;
 
 // GET detalle
@@ -113,13 +113,13 @@ export async function PUT(req: Request, { params }: RouteParams) {
       );
     }
 
-    const { title, description, date, playerIds } = parsed.data;
+    const { title, description, date, type } = parsed.data;
 
     const data: any = {};
     if (title !== undefined) data.title = title;
     if (description !== undefined) data.description = description;
     if (date !== undefined) data.date = new Date(date);
-    if (Array.isArray(playerIds)) data.players = { set: playerIds.map((pid) => ({ id: pid })) };
+    if (type !== undefined) data.type = type;
 
     const updated = await prisma.session.update({
       where: { id },
