@@ -12,14 +12,13 @@ function getMonday(d: Date) {
   monday.setUTCHours(0, 0, 0, 0);
   return monday;
 }
-
 function addDaysUTC(d: Date, days: number) {
   const x = new Date(d);
   x.setUTCDate(x.getUTCDate() + days);
   return x;
 }
 
-// --- Select unificado según schema actual ---
+// --- Select unificado ---
 const sessionSelect = {
   id: true,
   title: true,
@@ -27,6 +26,7 @@ const sessionSelect = {
   date: true,
   createdBy: true, // string (userId)
   user: { select: { id: true, name: true, email: true, role: true } },
+  players: { select: { id: true, name: true, email: true, role: true } }, // NUEVO
 } as const;
 
 export async function GET(req: Request) {
@@ -37,8 +37,7 @@ export async function GET(req: Request) {
     }
 
     const url = new URL(req.url);
-    // Opcional: start=YYYY-MM-DD (UTC)
-    const startParam = url.searchParams.get("start"); // ej: 2025-08-25
+    const startParam = url.searchParams.get("start"); // YYYY-MM-DD
     const base = startParam ? new Date(`${startParam}T00:00:00.000Z`) : new Date();
     const weekStart = getMonday(base);                 // lunes 00:00 UTC
     const weekEndExclusive = addDaysUTC(weekStart, 7); // próximo lunes (exclusivo)
@@ -79,22 +78,20 @@ export async function GET(req: Request) {
     items.forEach((s) => {
       const key = new Date(s.date).toISOString().slice(0, 10);
       if (!days[key]) days[key] = [];
-
       days[key].push({
         id: s.id,
         title: s.title,
         description: s.description ?? null,
         date: new Date(s.date).toISOString(),
-        // createdBy: lo devolvemos desde la relación 'user'
         createdBy: s.user
-          ? {
-              id: s.user.id,
-              name: s.user.name ?? null,
-              email: s.user.email ?? null,
-            }
+          ? { id: s.user.id, name: s.user.name ?? null, email: s.user.email ?? null }
           : null,
-        // hasta definir el M2M players en el schema, devolvemos vacío
-        players: [],
+        players: (s.players ?? []).map((p) => ({
+          id: p.id,
+          name: p.name ?? null,
+          email: p.email ?? null,
+          role: p.role,
+        })),
       });
     });
 
