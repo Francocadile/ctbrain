@@ -18,7 +18,7 @@ model User {
 
   // timestamps
   createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  updatedAt DateTime  @updatedAt @default(now()) // <-- clave para migrar con datos existentes
 
   // Sesiones creadas por este usuario (CT)
   sessions  Session[] @relation("SessionCreatedBy")
@@ -41,7 +41,7 @@ model Session {
   players     User[]   @relation("SessionPlayers")
 
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  updatedAt   DateTime @updatedAt @default(now())
 }
 
 enum Role {
@@ -51,4 +51,3 @@ enum Role {
   JUGADOR
   DIRECTIVO
 }
-
