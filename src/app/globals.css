@@ -2,4 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
-/* tus estilos globales aquí */
+/* Opcional: estilos base mínimos */
+:root {
+  color-scheme: light dark;
+}
+html, body, #__next {
+  height: 100%;
+}
