@@ -31,20 +31,20 @@ const createSessionSchema = z.object({
   title: z.string().min(2, "Título muy corto"),
   description: z.string().optional().nullable(),
   date: z.string().datetime({ message: "Fecha inválida (usar ISO, ej: 2025-08-27T12:00:00Z)" }),
-  playerIds: z.array(z.string()).optional(), // NUEVO
+  type: z.enum(["GENERAL", "FUERZA", "TACTICA", "AEROBICO", "RECUPERACION"]).optional(),
 });
 
-// --- Select unificado (misma forma en GET/POST) ---
+// --- Select unificado ---
 const sessionSelect = {
   id: true,
   title: true,
   description: true,
   date: true,
+  type: true,
   createdAt: true,
   updatedAt: true,
   createdBy: true, // string userId
   user: { select: { id: true, name: true, email: true, role: true } },
-  players: { select: { id: true, name: true, email: true, role: true } }, // NUEVO
 } as const;
 
 // GET /api/sessions -> lista sesiones
@@ -91,7 +91,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { title, description, date, playerIds = [] } = parsed.data;
+    const { title, description, date, type } = parsed.data;
 
     const creatorEmail: string | undefined = session.user.email;
     if (!creatorEmail) {
@@ -111,10 +111,8 @@ export async function POST(req: Request) {
         title,
         description: description ?? null,
         date: new Date(date),
+        type: type ?? "GENERAL",
         createdBy: creator.id, // string userId
-        ...(playerIds.length
-          ? { players: { connect: playerIds.map((id) => ({ id })) } }
-          : {}),
       },
       select: sessionSelect,
     });
