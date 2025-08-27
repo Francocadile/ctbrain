@@ -1,66 +1,42 @@
-// src/middleware.ts
-import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
 
-// Rutas privadas por rol
-const roleRoutes: Record<string, RegExp[]> = {
-  ADMIN: [/^\/admin(?:\/|$)/],
-  CT: [/^\/ct(?:\/|$)/],
-  MEDICO: [/^\/medico(?:\/|$)/],
-  JUGADOR: [/^\/jugador(?:\/|$)/],
-  DIRECTIVO: [/^\/directivo(?:\/|$)/],
-};
+const CT_PATHS = [/^\/ct(?:\/|$)/, /^\/api\/sessions(?:\/|$)/, /^\/api\/users(?:\/|$)/];
 
-export default withAuth(
-  function middleware(req) {
-    const { nextUrl, nextauth } = req as any;
-    const token = nextauth?.token as { role?: string } | null;
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  // Solo vigilamos rutas de CT y nuestras APIs
+  const needsCT = CT_PATHS.some((r) => r.test(pathname));
+  if (!needsCT) return NextResponse.next();
 
-    // Si no hay token y no estamos en /login, redirigimos a /login
-    if (!token) {
-      if (!nextUrl.pathname.startsWith("/login")) {
-        const url = new URL("/login", nextUrl.origin);
-        url.searchParams.set("callbackUrl", nextUrl.pathname + nextUrl.search);
-        return NextResponse.redirect(url);
-      }
-      return NextResponse.next();
-    }
-
-    const role = token.role || "JUGADOR";
-
-    // Verificación de acceso por rol
-    for (const [r, patterns] of Object.entries(roleRoutes)) {
-      for (const p of patterns) {
-        if (p.test(nextUrl.pathname)) {
-          // Si la ruta es de un rol específico y no coincide el rol del token, 403
-          if (r !== role) {
-            return NextResponse.json(
-              { error: "No autorizado" },
-              { status: 403 }
-            );
-          }
-        }
-      }
-    }
-
-    return NextResponse.next();
-  },
-  {
-    callbacks: {
-      // Indica a withAuth que esta request necesita auth si coincide el matcher (abajo)
-      authorized: () => true,
-    },
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  if (!token) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("callbackUrl", pathname);
+    return NextResponse.redirect(url);
   }
-);
 
-// Define qué rutas pasan por el middleware
+  const role = (token as any).role;
+  const isAdminOrCT = role === "CT" || role === "ADMIN";
+  if (!isAdminOrCT) {
+    // Redirige al home del rol del usuario
+    const url = req.nextUrl.clone();
+    url.pathname =
+      role === "MEDICO" ? "/medico" :
+      role === "JUGADOR" ? "/player" :
+      role === "DIRECTIVO" ? "/directivo" : "/";
+    return NextResponse.redirect(url);
+  }
+
+  return NextResponse.next();
+}
+
 export const config = {
   matcher: [
-    // Áreas protegidas por login
-    "/admin/:path*",
     "/ct/:path*",
-    "/medico/:path*",
-    "/jugador/:path*",
-    "/directivo/:path*",
+    "/api/sessions/:path*",
+    "/api/users/:path*",
   ],
 };
