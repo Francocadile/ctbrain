@@ -17,7 +17,6 @@ export default async function RoleGate({
 
   if (!session) redirect("/login");
   if (!role || !allow.includes(role)) {
-    // Redirigir a su home por rol
     const map: Record<Role, string> = {
       ADMIN: "/admin",
       CT: "/ct",
@@ -30,3 +29,4 @@ export default async function RoleGate({
 
   return <>{children}</>;
 }
+
