@@ -16,6 +16,10 @@ model User {
   password  String?
   role      Role      @default(JUGADOR)
 
+  // timestamps
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
   // Sesiones creadas por este usuario (CT)
   sessions  Session[] @relation("SessionCreatedBy")
 
@@ -47,3 +51,4 @@ enum Role {
   JUGADOR
   DIRECTIVO
 }
+
