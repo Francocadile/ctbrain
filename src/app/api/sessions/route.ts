@@ -2,50 +2,45 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
+import { getServerSession } from "next-auth";
 
-// === Auth helper compatible con tu setup ===
-// Intenta usar el helper `auth` (NextAuth v5). Si no existe, cae a getServerSession (+ options).
+// Lee la sesión con next-auth sin imports locales
 async function getSessionSafe() {
   try {
-    const { auth } = await import("@/auth"); // si tu proyecto expone `auth` en "@/auth"
-    return auth();
+    // En tu proyecto actual, getServerSession funciona sin pasar options explícitas
+    // porque NextAuth ya está configurado en las rutas de API.
+    // Si en el futuro movemos a auth() v5, cambiaremos este helper.
+    // @ts-expect-error tipos flexibles
+    return await getServerSession();
   } catch {
-    const { getServerSession } = await import("next-auth");
-    try {
-      const { authOptions } = await import("@/lib/authOptions"); // si usás options clásicas
-      // @ts-expect-error - tipos flexibles por compatibilidad
-      return getServerSession(authOptions);
-    } catch {
-      // Último intento sin options (si las inyectás en runtime)
-      // @ts-expect-error
-      return getServerSession();
-    }
+    return null;
   }
 }
 
 function requireCT(session: any) {
   if (!session?.user) return false;
-  // Permitimos ADMIN y CT para operar sesiones (ADMIN por mantenimiento)
-  const role = session.user.role || session.user?.role?.name || session.user?.roleId;
+  const role =
+    (session.user as any).role ||
+    (session.user as any)?.role?.name ||
+    (session.user as any)?.roleId;
   return role === "CT" || role === "ADMIN";
 }
 
-// === Validación de entrada ===
 const createSessionSchema = z.object({
   title: z.string().min(2, "Título muy corto"),
   description: z.string().optional(),
-  date: z.coerce.date(), // acepta string ISO y lo convierte a Date
-  playerIds: z.array(z.string()).optional(), // IDs de User (JUGADOR)
+  date: z.coerce.date(),
+  playerIds: z.array(z.string()).optional(),
 });
 
-// GET /api/sessions  -> lista sesiones (últimas primero)
+// GET /api/sessions -> lista sesiones
 export async function GET() {
   try {
     const session = await getSessionSafe();
     if (!session?.user) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 });
     }
-    // Listado visible para CT y ADMIN por ahora
+
     const sessions = await prisma.session.findMany({
       orderBy: { date: "desc" },
       select: {
@@ -59,6 +54,7 @@ export async function GET() {
         players: { select: { id: true, name: true, email: true, role: true } },
       },
     });
+
     return NextResponse.json({ data: sessions });
   } catch (err: any) {
     console.error("GET /api/sessions error:", err);
@@ -69,7 +65,7 @@ export async function GET() {
 // POST /api/sessions -> crea sesión (solo CT/ADMIN)
 export async function POST(req: Request) {
   try {
-    const session = await getSessionSafe();
+    const session = await getServerSession();
     if (!session?.user) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 });
     }
@@ -88,8 +84,7 @@ export async function POST(req: Request) {
 
     const { title, description, date, playerIds = [] } = parsed.data;
 
-    // Busco al creador por email de la sesión actual
-    const creatorEmail: string | undefined = session.user.email;
+    const creatorEmail: string | undefined = (session.user as any).email;
     if (!creatorEmail) {
       return NextResponse.json({ error: "Usuario sin email" }, { status: 400 });
     }
@@ -98,16 +93,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Creador no encontrado" }, { status: 404 });
     }
 
-    // Crea la sesión y conecta jugadores (si llegan)
     const created = await prisma.session.create({
       data: {
         title,
         description,
         date,
         createdById: creator.id,
-        players: playerIds.length
-          ? { connect: playerIds.map((id) => ({ id })) }
-          : undefined,
+        players: playerIds.length ? { connect: playerIds.map((id) => ({ id })) } : undefined,
       },
       select: {
         id: true,
