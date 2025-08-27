@@ -4,11 +4,9 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 
-// Lee la sesión con next-auth sin imports locales
+// --- Helpers de sesión/roles ---
 async function getSessionSafe() {
   try {
-    // En tu proyecto actual, getServerSession funciona sin pasar options explícitas
-    // porque NextAuth ya está configurado en las rutas de API.
     return (await getServerSession()) as any;
   } catch {
     return null;
@@ -18,43 +16,59 @@ async function getSessionSafe() {
 function requireCT(session: any) {
   if (!session?.user) return false;
   const role =
-    session.user.role || session.user?.role?.name || (session.user as any)?.roleId;
+    session.user.role ||
+    session.user?.role?.name ||
+    (session.user as any)?.roleId;
   return role === "CT" || role === "ADMIN";
 }
 
+function isAuthed(session: any) {
+  return !!session?.user;
+}
+
+// --- Validaciones ---
 const createSessionSchema = z.object({
   title: z.string().min(2, "Título muy corto"),
-  description: z.string().optional(),
-  date: z.coerce.date(),
-  playerIds: z.array(z.string()).optional(),
+  description: z.string().optional().nullable(),
+  // Recibimos ISO string y lo convertimos a Date en el handler
+  date: z.string().datetime({ message: "Fecha inválida (usar ISO, ej: 2025-08-27T12:00:00Z)" }),
 });
+
+// --- Select unificado (misma forma en GET/POST) ---
+const sessionSelect = {
+  id: true,
+  title: true,
+  description: true,
+  date: true,
+  createdAt: true,
+  updatedAt: true,
+  // en tu schema actual 'createdBy' es string (userId)
+  createdBy: true,
+  // relación con User se llama 'user'
+  user: { select: { id: true, name: true, email: true, role: true } },
+} as const;
 
 // GET /api/sessions -> lista sesiones
 export async function GET() {
   try {
     const session = await getSessionSafe();
-    if (!session?.user) {
+    if (!isAuthed(session)) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 });
     }
 
     const sessions = await prisma.session.findMany({
-      orderBy: { date: "desc" },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        date: true,
-        createdAt: true,
-        updatedAt: true,
-        createdBy: { select: { id: true, name: true, email: true } },
-        players: { select: { id: true, name: true, email: true, role: true } },
-      },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      select: sessionSelect,
+      take: 50,
     });
 
     return NextResponse.json({ data: sessions });
   } catch (err: any) {
     console.error("GET /api/sessions error:", err);
-    return NextResponse.json({ error: "Error al listar sesiones" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Error al listar sesiones" },
+      { status: 500 }
+    );
   }
 }
 
@@ -62,7 +76,7 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const session = (await getServerSession()) as any;
-    if (!session?.user) {
+    if (!isAuthed(session)) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 });
     }
     if (!requireCT(session)) {
@@ -78,13 +92,17 @@ export async function POST(req: Request) {
       );
     }
 
-    const { title, description, date, playerIds = [] } = parsed.data;
+    const { title, description, date } = parsed.data;
 
     const creatorEmail: string | undefined = session.user.email;
     if (!creatorEmail) {
       return NextResponse.json({ error: "Usuario sin email" }, { status: 400 });
     }
-    const creator = await prisma.user.findUnique({ where: { email: creatorEmail } });
+
+    const creator = await prisma.user.findUnique({
+      where: { email: creatorEmail },
+      select: { id: true },
+    });
     if (!creator) {
       return NextResponse.json({ error: "Creador no encontrado" }, { status: 404 });
     }
@@ -92,26 +110,19 @@ export async function POST(req: Request) {
     const created = await prisma.session.create({
       data: {
         title,
-        description,
-        date,
-        createdById: creator.id,
-        players: playerIds.length ? { connect: playerIds.map((id) => ({ id })) } : undefined,
+        description: description ?? null,
+        date: new Date(date),
+        createdBy: creator.id, // string userId
       },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        date: true,
-        createdAt: true,
-        updatedAt: true,
-        createdBy: { select: { id: true, name: true, email: true } },
-        players: { select: { id: true, name: true, email: true, role: true } },
-      },
+      select: sessionSelect,
     });
 
     return NextResponse.json({ data: created }, { status: 201 });
   } catch (err: any) {
     console.error("POST /api/sessions error:", err);
-    return NextResponse.json({ error: "Error al crear la sesión" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Error al crear la sesión" },
+      { status: 500 }
+    );
   }
 }
