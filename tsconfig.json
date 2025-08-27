@@ -6,9 +6,7 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"]
-    },
+    "paths": { "@/*": ["src/*"] },
     "allowJs": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
@@ -20,3 +18,4 @@
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
   "exclude": ["node_modules"]
 }
+
