@@ -20,15 +20,13 @@ export default function LoginPage() {
     const email = (form.elements.namedItem("email") as HTMLInputElement).value;
     const password = (form.elements.namedItem("password") as HTMLInputElement).value;
 
-    const res = await signIn("credentials", {
+    await signIn("credentials", {
       email,
       password,
       redirect: true,
-      // Después vamos a hacer un /redirect server-side para mandar según rol.
-      callbackUrl: "/",
+      callbackUrl: "/redirect", // 👈 redirige al handler que manda según rol
     });
 
-    // Nota: con redirect:true NextAuth navega; este punto se alcanza solo si hay error de red.
     setLoadingLogin(false);
   }
 
