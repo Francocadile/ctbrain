@@ -43,8 +43,11 @@ function mergeDayWithTime(targetYmd: string, fromIso: string) {
   const t = new Date(fromIso);
   const hh = String(t.getUTCHours()).padStart(2, "0");
   const mi = String(t.getUTCMinutes()).padStart(2, "0");
-  // construimos en UTC para mantener hora exacta
   return new Date(`${targetYmd}T${hh}:${mi}:00.000Z`).toISOString();
+}
+// Construye un ISO a las 09:00Z de un día (para “crear rápido”)
+function makeIsoAt0900(targetYmd: string) {
+  return new Date(`${targetYmd}T09:00:00.000Z`).toISOString();
 }
 
 const TYPE_LABEL: Record<SessionType, string> = {
@@ -84,13 +87,14 @@ export default function PlanSemanalPage() {
   // Filtro por tipo
   const [filterType, setFilterType] = useState<SessionType | "ALL">("ALL");
 
-  // Crear / editar
+  // Crear / editar (modal)
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<SessionDTO | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState<string | null>("");
   const [dateLocal, setDateLocal] = useState(toLocalInputValue());
   const [type, setType] = useState<SessionType>("GENERAL");
+  const titleInvalid = title.trim().length < 2;
 
   // Estado visual para drop targets
   const [overDay, setOverDay] = useState<string | null>(null);
@@ -132,12 +136,24 @@ export default function PlanSemanalPage() {
     );
   }, [weekStart]);
 
-  // Abrir modal crear
+  // ---- Acciones rápidas Notion-like ----
+  // Abrir modal crear vacío
   function openCreate() {
     setEditing(null);
     setTitle("");
     setDescription("");
     setDateLocal(toLocalInputValue());
+    setType("GENERAL");
+    setFormOpen(true);
+  }
+  // Crear directo para un día (abre modal con fecha pre-set en 09:00)
+  function openCreateForDay(dayKey: string) {
+    setEditing(null);
+    setTitle("");
+    setDescription("");
+    // Ponemos 09:00 localmente en el input para que se vea claro
+    const presetIso = makeIsoAt0900(dayKey);
+    setDateLocal(toLocalInputValue(presetIso));
     setType("GENERAL");
     setFormOpen(true);
   }
@@ -152,68 +168,126 @@ export default function PlanSemanalPage() {
     setFormOpen(true);
   }
 
-  // Guardar (crear o editar)
+  // Guardar (crear o editar) con un poco de optimistic en crear
   async function saveSession() {
     try {
       const iso = new Date(dateLocal).toISOString();
+
       if (!editing) {
-        await createSession({
+        // Optimistic: insertamos en su día
+        const dayKey = new Date(iso).toISOString().slice(0, 10);
+        const optimisticId = `optim-${Date.now()}`;
+        const optimistic: SessionDTO = {
+          id: optimisticId,
           title: title.trim(),
           description: (description ?? "") || null,
           date: iso,
           type,
+          user: undefined,
+          players: [],
+        };
+        setDays((prev) => {
+          const copy = { ...prev };
+          copy[dayKey] = [...(copy[dayKey] || []), optimistic].sort(
+            (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+          );
+          return copy;
         });
+
+        try {
+          const created = await createSession({
+            title: optimistic.title,
+            description: optimistic.description,
+            date: iso,
+            type,
+          });
+          // Reemplazar el optimistic por el real
+          setDays((prev) => {
+            const copy = { ...prev };
+            copy[dayKey] = (copy[dayKey] || [])
+              .map((x) => (x.id === optimisticId ? created : x))
+              .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            return copy;
+          });
+        } catch (e) {
+          // Revertir
+          setDays((prev) => {
+            const copy = { ...prev };
+            copy[dayKey] = (copy[dayKey] || []).filter((x) => x.id !== optimisticId);
+            return copy;
+          });
+          throw e;
+        }
       } else {
         await updateSession(editing.id, {
           title: title.trim() || undefined,
-          description:
-            description === "" ? null : (description ?? undefined),
+          description: description === "" ? null : (description ?? undefined),
           date: iso,
           type,
         });
+        await loadWeek(base);
       }
+
       setFormOpen(false);
-      await loadWeek(base);
     } catch (e: any) {
       console.error(e);
       alert(e?.message || "Error al guardar la sesión");
     }
   }
 
-  // Borrar
+  // Borrar (optimistic)
   async function remove(id: string) {
     if (!confirm("¿Eliminar esta sesión?")) return;
+    // Encontrar el día de la tarjeta
+    let dayFound = "";
+    Object.keys(days).some((k) => {
+      if ((days[k] || []).some((s) => s.id === id)) {
+        dayFound = k;
+        return true;
+      }
+      return false;
+    });
+
+    // Optimistic remove
+    setDays((prev) => {
+      if (!dayFound) return prev;
+      const copy = { ...prev };
+      copy[dayFound] = (copy[dayFound] || []).filter((s) => s.id !== id);
+      return copy;
+    });
+
     try {
       await deleteSession(id);
-      await loadWeek(base);
     } catch (e: any) {
       console.error(e);
-      alert(e?.message || "Error al borrar la sesión");
+      alert(e?.message || "Error al borrar la sesión. Se recargará la semana.");
+      await loadWeek(base);
     }
   }
 
   // ------------------------------
-  // Drag & Drop (HTML5)
+  // Drag & Drop (HTML5) con Alt para DUPLICAR
   // ------------------------------
   function onDragStart(ev: React.DragEvent<HTMLLIElement>, s: SessionDTO, dayKey: string) {
     const payload: DragPayload = { id: s.id, fromDay: dayKey, iso: s.date };
     ev.dataTransfer.setData("application/json", JSON.stringify(payload));
-    ev.dataTransfer.effectAllowed = "move";
+    ev.dataTransfer.effectAllowed = "copyMove";
   }
 
   function onDragOver(ev: React.DragEvent<HTMLDivElement>, targetDay: string) {
     ev.preventDefault(); // necesario para permitir drop
-    ev.dataTransfer.dropEffect = "move";
+    // Si mantiene Alt/Ctrl mostramos copy, sino move
+    ev.dataTransfer.dropEffect = (ev.altKey || ev.ctrlKey) ? "copy" : "move";
     setOverDay(targetDay);
   }
 
   function onDragLeave(_ev: React.DragEvent<HTMLDivElement>, targetDay: string) {
-    // quitar highlight si realmente se sale
     if (overDay === targetDay) setOverDay(null);
   }
 
   async function onDrop(ev: React.DragEvent<HTMLDivElement>, targetDay: string) {
     ev.preventDefault();
+    const duplicate = ev.altKey || ev.ctrlKey; // Alt/Ctrl = duplicar
     setOverDay(null);
 
     let payload: DragPayload | null = null;
@@ -225,36 +299,83 @@ export default function PlanSemanalPage() {
     if (!payload) return;
 
     const { id, fromDay, iso } = payload;
-    if (fromDay === targetDay) return; // no-op si mismo día
+    if (!duplicate && fromDay === targetDay) return; // no-op si mismo día y no es duplicado
 
-    // 1) Optimistic UI: mover en memoria
-    setDays((prev) => {
-      const copy: typeof prev = { ...prev };
-      const fromList = (copy[fromDay] || []).filter((x) => x.id !== id);
-      const moved = (copy[fromDay] || []).find((x) => x.id === id);
-      const toList = [...(copy[targetDay] || [])];
+    const newIso = mergeDayWithTime(targetDay, iso);
 
-      if (!moved) return prev;
+    if (duplicate) {
+      // DUPLICAR (crear nuevo registro con mismo título/desc/tipo si los conocemos en memoria)
+      const source = (days[fromDay] || []).find((x) => x.id === id);
+      if (!source) return;
 
-      const newIso = mergeDayWithTime(targetDay, iso);
-      const updated: SessionDTO = { ...moved, date: newIso };
+      // Optimistic create en target
+      const optimisticId = `dup-${Date.now()}`;
+      const optimistic: SessionDTO = {
+        id: optimisticId,
+        title: source.title,
+        description: source.description,
+        date: newIso,
+        type: source.type,
+        user: source.user,
+        players: source.players || [],
+      };
+      setDays((prev) => {
+        const copy = { ...prev };
+        copy[targetDay] = [...(copy[targetDay] || []), optimistic].sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        return copy;
+      });
 
-      copy[fromDay] = fromList;
-      copy[targetDay] = [...toList, updated].sort(
-        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-      );
-      return copy;
-    });
+      try {
+        const created = await createSession({
+          title: source.title,
+          description: source.description,
+          date: newIso,
+          type: source.type as SessionType,
+        });
+        setDays((prev) => {
+          const copy = { ...prev };
+          copy[targetDay] = (copy[targetDay] || [])
+            .map((x) => (x.id === optimisticId ? created : x))
+            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+          return copy;
+        });
+      } catch (e) {
+        // Revertir
+        setDays((prev) => {
+          const copy = { ...prev };
+          copy[targetDay] = (copy[targetDay] || []).filter((x) => x.id !== optimisticId);
+          return copy;
+        });
+        console.error(e);
+        alert("No se pudo duplicar la sesión.");
+      }
+    } else {
+      // MOVER (optimistic + persistencia)
+      setDays((prev) => {
+        const copy: typeof prev = { ...prev };
+        const fromList = (copy[fromDay] || []).filter((x) => x.id !== id);
+        const moved = (copy[fromDay] || []).find((x) => x.id === id);
+        const toList = [...(copy[targetDay] || [])];
 
-    // 2) Persistir en backend
-    try {
-      const newIso = mergeDayWithTime(targetDay, iso);
-      await updateSession(id, { date: newIso });
-    } catch (e) {
-      // 3) Si falla, revertimos recargando semana
-      console.error(e);
-      alert("No se pudo actualizar la fecha. Se recargará la semana.");
-      await loadWeek(base);
+        if (!moved) return prev;
+
+        const updated: SessionDTO = { ...moved, date: newIso };
+        copy[fromDay] = fromList;
+        copy[targetDay] = [...toList, updated].sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+        return copy;
+      });
+
+      try {
+        await updateSession(id, { date: newIso });
+      } catch (e) {
+        console.error(e);
+        alert("No se pudo mover la sesión. Se recargará la semana.");
+        await loadWeek(base);
+      }
     }
   }
 
@@ -265,6 +386,9 @@ export default function PlanSemanalPage() {
           <h1 className="text-2xl font-bold">Plan semanal</h1>
           <p className="text-sm text-gray-500">
             Semana {weekStart || "—"} → {weekEnd || "—"}
+          </p>
+          <p className="mt-1 text-xs text-gray-400">
+            Tip: <kbd className="rounded border px-1">Alt</kbd> / <kbd className="rounded border px-1">Ctrl</kbd> mientras arrastrás = <b>duplicar</b>.
           </p>
         </div>
 
@@ -340,7 +464,16 @@ export default function PlanSemanalPage() {
                       { weekday: "short", day: "2-digit", month: "short" }
                     )}
                   </div>
-                  <span className="text-xs text-gray-400">{key}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400">{key}</span>
+                    <button
+                      onClick={() => openCreateForDay(key)}
+                      className="text-xs px-2 py-1 rounded-lg border hover:bg-gray-50"
+                      title="Crear sesión rápida para este día (09:00)"
+                    >
+                      + Añadir
+                    </button>
+                  </div>
                 </div>
 
                 {list.length === 0 ? (
@@ -355,7 +488,7 @@ export default function PlanSemanalPage() {
                         draggable
                         onDragStart={(e) => onDragStart(e, s, key)}
                         className="rounded-xl border p-2 hover:bg-gray-50 cursor-grab active:cursor-grabbing"
-                        title="Arrastrá para mover a otro día"
+                        title="Arrastrá para mover o duplicar (Alt/Ctrl)"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
@@ -383,12 +516,14 @@ export default function PlanSemanalPage() {
                             <button
                               onClick={() => openEdit(s)}
                               className="text-xs px-2 py-1 rounded-lg border hover:bg-gray-50"
+                              title="Editar"
                             >
                               Editar
                             </button>
                             <button
                               onClick={() => remove(s.id)}
                               className="text-xs px-2 py-1 rounded-lg border hover:bg-gray-50"
+                              title="Borrar"
                             >
                               Borrar
                             </button>
@@ -427,9 +562,14 @@ export default function PlanSemanalPage() {
                   <input
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="mt-1 w-full rounded-xl border px-3 py-2"
+                    className={`mt-1 w-full rounded-xl border px-3 py-2 ${titleInvalid ? "border-red-300" : ""}`}
                     placeholder="Ej: Fuerza + Aceleraciones"
                   />
+                  {titleInvalid && (
+                    <p className="text-xs text-red-500 mt-1">
+                      El título debe tener al menos 2 caracteres.
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -472,8 +612,9 @@ export default function PlanSemanalPage() {
                   <option value="AEROBICO">Aeróbico</option>
                   <option value="RECUPERACION">Recuperación</option>
                 </select>
+
                 <div className="text-xs text-gray-500">
-                  Usa el tipo para clasificar y filtrar sesiones como en Notion.
+                  Tip: si solo cambiás el <b>día</b>, arrastrá la tarjeta; si querés <b>duplicar</b>, arrastrá con <kbd className="rounded border px-1">Alt</kbd>/<kbd className="rounded border px-1">Ctrl</kbd>.
                 </div>
               </div>
             </div>
@@ -487,7 +628,9 @@ export default function PlanSemanalPage() {
               </button>
               <button
                 onClick={saveSession}
-                className="px-4 py-2 rounded-xl bg-black text-white hover:opacity-90"
+                disabled={titleInvalid}
+                className={`px-4 py-2 rounded-xl text-white hover:opacity-90 ${titleInvalid ? "bg-gray-400 cursor-not-allowed" : "bg-black"}`}
+                title={titleInvalid ? "El título es demasiado corto" : "Guardar"}
               >
                 Guardar
               </button>
