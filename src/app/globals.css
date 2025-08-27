@@ -1,9 +1,5 @@
-/* src/app/globals.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* tu CSS a medida debajo (opcional) */
-:root {
-  color-scheme: light dark;
-}
+/* tus estilos globales aquí */
