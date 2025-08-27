@@ -1,60 +1,72 @@
 // src/lib/auth.ts
 import type { NextAuthOptions } from "next-auth";
-import CredentialsProvider from "next-auth/providers/credentials";
+import NextAuth from "next-auth";
+import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import { prisma } from "./prisma";
-import { compare } from "bcryptjs";
+import { prisma } from "@/lib/prisma";
+import bcrypt from "bcryptjs";
+
+// Busca usuario por email (ajusta select a tu esquema real)
+async function findUserByEmail(email: string) {
+  return prisma.user.findUnique({
+    where: { email },
+    select: { id: true, email: true, name: true, password: true, role: true },
+  });
+}
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
-  pages: { signIn: "/login" },
+  secret: process.env.NEXTAUTH_SECRET,
   providers: [
-    CredentialsProvider({
-      name: "Credentials",
+    Credentials({
+      name: "credentials",
       credentials: {
-        email: { label: "Email", type: "text" },
-        password: { label: "Password", type: "password" },
+        email: { label: "Email", type: "email" },
+        password: { label: "Contraseña", type: "password" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
-        });
-
+        const user = await findUserByEmail(credentials.email);
         if (!user || !user.password) return null;
 
-        const ok = await compare(credentials.password, user.password);
+        const ok = await bcrypt.compare(credentials.password, user.password);
         if (!ok) return null;
 
         return {
-          id: user.id,
-          email: user.email,
+          id: String(user.id),
+          email: user.email!,
           name: user.name ?? undefined,
-          image: user.image ?? undefined,
-          role: user.role, // lo pasamos al JWT en callback
-        } as any;
+          // @ts-expect-error role viene de DB
+          role: user.role,
+        };
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        // ya tenemos module augmentation para JWT.role
-        (token as any).role = (user as any).role ?? "JUGADOR";
+        // @ts-expect-error role custom
+        token.role = (user as any).role ?? (token as any).role;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        // evitamos ts-expect-error usando assertions
-        (session.user as any).id = token.sub!;
-        (session.user as any).role = (token as any).role ?? "JUGADOR";
+        // @ts-expect-error role custom
+        session.user.role = (token as any).role;
+        // sub = id del usuario en JWT
+        // @ts-expect-error id custom
+        session.user.id = token.sub;
       }
       return session;
     },
   },
-  secret: process.env.NEXTAUTH_SECRET,
+  pages: {
+    signIn: "/login",
+  },
 };
 
+// Export opcional por si necesitás crear handlers aquí
+export const authHandler = NextAuth(authOptions);
