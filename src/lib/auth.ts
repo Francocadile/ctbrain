@@ -6,6 +6,8 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
+type RoleString = "ADMIN" | "CT" | "MEDICO" | "JUGADOR" | "DIRECTIVO";
+
 // Busca usuario por email (ajusta select a tu esquema real)
 async function findUserByEmail(email: string) {
   return prisma.user.findUnique({
@@ -36,10 +38,14 @@ export const authOptions: NextAuthOptions = {
 
         return {
           id: String(user.id),
-          email: user.email!,
+          email: user.email ?? undefined,
           name: user.name ?? undefined,
-          // @ts-expect-error role viene de DB
-          role: user.role,
+          role: (user.role as unknown as RoleString) ?? undefined,
+        } as {
+          id: string;
+          email?: string;
+          name?: string;
+          role?: RoleString;
         };
       },
     }),
@@ -47,18 +53,20 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        // @ts-expect-error role custom
-        token.role = (user as any).role ?? (token as any).role;
+        const role = (user as { role?: RoleString }).role;
+        if (role) (token as Record<string, unknown>).role = role;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
-        // @ts-expect-error role custom
-        session.user.role = (token as any).role;
-        // sub = id del usuario en JWT
-        // @ts-expect-error id custom
-        session.user.id = token.sub;
+        (session.user as Record<string, unknown>).role = (token as Record<
+          string,
+          unknown
+        >).role as RoleString | undefined;
+        (session.user as Record<string, unknown>).id = token.sub as
+          | string
+          | undefined;
       }
       return session;
     },
