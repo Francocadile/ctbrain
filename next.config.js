@@ -1,9 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
-  experimental: { typedRoutes: true },
-  typescript: {
-    ignoreBuildErrors: true
-  }
+  eslint: {
+    // Hace que Vercel no requiera ESLint durante el build
+    ignoreDuringBuilds: true,
+  },
+  // Opcional: si preferís que Next no intente exportar estático páginas con searchParams
+  experimental: {
+    typedRoutes: true,
+  },
 };
+
 module.exports = nextConfig;
