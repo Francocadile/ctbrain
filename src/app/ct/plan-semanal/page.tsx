@@ -200,8 +200,8 @@ export default function PlanSemanalPage() {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); const txt = ref.current?.innerText ?? ""; stageCell(dayYmd, turn, row, txt); }
     };
 
-    // 🔁 Link actualizado: siempre a la sesión agrupada por día+turno, con foco en el bloque
-    const sessionHref = `/ct/sesiones/${dayYmd}/${turn}?focus=${encodeURIComponent(row)}`;
+    // link a sesión agrupada por día+turno (by-day), con foco en el bloque
+    const sessionHref = `/ct/sesiones/by-day/${dayYmd}/${turn}?focus=${encodeURIComponent(row)}`;
 
     return (
       <div className="space-y-1">
@@ -244,9 +244,9 @@ export default function PlanSemanalPage() {
             <p className="mt-1 text-[10px] text-gray-400">Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd> + <kbd className="rounded border px-1">Enter</kbd> para “marcar” una celda sin guardar aún.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">◀ Semana anterior</button>
-            <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Hoy</button>
-            <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Semana siguiente ▶</button>
+            <button onClick={() => confirmDiscardIfNeeded(()=>setBase((d)=>addDaysUTC(d,-7)))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">◀ Semana anterior</button>
+            <button onClick={() => confirmDiscardIfNeeded(()=>setBase(getMonday(new Date())))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Hoy</button>
+            <button onClick={() => confirmDiscardIfNeeded(()=>setBase((d)=>addDaysUTC(d,7)))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Semana siguiente ▶</button>
             <div className="w-px h-6 bg-gray-200 mx-1" />
             <button onClick={saveAll} disabled={pendingCount === 0 || savingAll}
               className={`px-3 py-1.5 rounded-xl text-xs ${pendingCount === 0 || savingAll ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
