@@ -42,7 +42,12 @@ export default function PlanSemanalPage() {
   const [daysMap, setDaysMap] = useState<Record<string, SessionDTO[]>>({});
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
+
+  // Cambios pendientes por celda
   const [pending, setPending] = useState<Record<string, string>>({});
+  // 🔧 NUEVO: modo edición de VIDEO por celda (clave = day::turn::row)
+  const [videoEditing, setVideoEditing] = useState<Record<string, boolean>>({});
+
   const [savingAll, setSavingAll] = useState(false);
 
   async function loadWeek(d: Date) {
@@ -55,6 +60,8 @@ export default function PlanSemanalPage() {
       setWeekStart(res.weekStart);
       setWeekEnd(res.weekEnd);
       setPending({});
+      // Al recargar semana, salimos de edición de VIDEO
+      setVideoEditing({});
     } catch (e) {
       console.error(e);
       alert("No se pudo cargar la semana.");
@@ -134,60 +141,138 @@ export default function PlanSemanalPage() {
     const ok = confirm("¿Descartar todos los cambios sin guardar?");
     if (!ok) return;
     setPending({});
+    setVideoEditing({});
     loadWeek(base);
   }
 
-  function MetaInput({ dayYmd, turn, row }: { dayYmd: string; turn: TurnKey; row: (typeof META_ROWS)[number]; }) {
+  /* =======================
+     MetaInput (LUGAR/HORA/VIDEO)
+     ======================= */
+  function MetaInput({
+    dayYmd,
+    turn,
+    row,
+  }: {
+    dayYmd: string;
+    turn: TurnKey;
+    row: (typeof META_ROWS)[number];
+  }) {
     const existing = findCell(dayYmd, turn, row);
     const original = (existing?.title ?? "").trim();
+
     const k = cellKey(dayYmd, turn, row);
     const pendingValue = pending[k];
     const value = pendingValue !== undefined ? pendingValue : original;
 
+    // LUGAR
     if (row === "LUGAR") {
       return (
-        <select className="h-8 w-full rounded-md border px-2 text-xs" value={value || ""} onChange={(e) => stageCell(dayYmd, turn, row, e.target.value)}>
+        <select
+          className="h-8 w-full rounded-md border px-2 text-xs"
+          value={value || ""}
+          onChange={(e) => stageCell(dayYmd, turn, row, e.target.value)}
+        >
           <option value="">— Lugar —</option>
-          {LUGARES.map((l) => (<option key={l} value={l}>{l}</option>))}
+          {LUGARES.map((l) => (
+            <option key={l} value={l}>
+              {l}
+            </option>
+          ))}
         </select>
       );
     }
+
+    // HORA (HH:mm)
     if (row === "HORA") {
       const hhmm = /^[0-9]{2}:[0-9]{2}$/.test(value || "") ? value : "";
       return (
-        <input type="time" className="h-8 w-full rounded-md border px-2 text-xs" value={hhmm} onChange={(e) => stageCell(dayYmd, turn, row, e.target.value)} />
+        <input
+          type="time"
+          className="h-8 w-full rounded-md border px-2 text-xs"
+          value={hhmm}
+          onChange={(e) => stageCell(dayYmd, turn, row, e.target.value)}
+        />
       );
     }
-    const parsed = parseVideoValue(value || "");
-    const [editingVideo, setEditingVideo] = useState(false);
 
-    if (!editingVideo && (parsed.label || parsed.url)) {
+    // VIDEO — usa estado LIFTED (videoEditing[k])
+    const parsed = parseVideoValue(value || "");
+    const isEditing = !!videoEditing[k];
+
+    if (!isEditing && (parsed.label || parsed.url)) {
       return (
         <div className="flex items-center justify-between gap-1">
           {parsed.url ? (
-            <a href={parsed.url} target="_blank" rel="noreferrer" className="text-[12px] underline text-emerald-700 truncate" title={parsed.label || "Video"}>
+            <a
+              href={parsed.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[12px] underline text-emerald-700 truncate"
+              title={parsed.label || "Video"}
+            >
               {parsed.label || "Video"}
             </a>
           ) : (
             <span className="text-[12px] text-gray-500 truncate">{parsed.label}</span>
           )}
           <div className="flex items-center gap-1">
-            <button type="button" className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50" onClick={() => setEditingVideo(true)} title="Editar">✏️</button>
-            <button type="button" className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50" onClick={() => stageCell(dayYmd, turn, row, "")} title="Borrar">❌</button>
+            <button
+              type="button"
+              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+              onClick={() => setVideoEditing((m) => ({ ...m, [k]: true }))}
+              title="Editar"
+            >
+              ✏️
+            </button>
+            <button
+              type="button"
+              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+              onClick={() => stageCell(dayYmd, turn, row, "")}
+              title="Borrar"
+            >
+              ❌
+            </button>
           </div>
         </div>
       );
     }
+
+    // Modo edición (o vacío): inputs controlados por pending
     return (
       <div className="flex items-center gap-1.5">
-        <input className="h-8 w-[45%] rounded-md border px-2 text-xs" placeholder="Título" defaultValue={parsed.label}
-          onChange={(e) => stageCell(dayYmd, turn, row, joinVideoValue(e.target.value, parsed.url))} />
-        <input type="url" className="h-8 w-[55%] rounded-md border px-2 text-xs" placeholder="https://…" defaultValue={parsed.url}
-          onChange={(e) => stageCell(dayYmd, turn, row, joinVideoValue(parsed.label, e.target.value))} />
+        <input
+          className="h-8 w-[45%] rounded-md border px-2 text-xs"
+          placeholder="Título"
+          value={parseVideoValue(value).label}
+          onChange={(e) =>
+            stageCell(dayYmd, turn, row, joinVideoValue(e.target.value, parseVideoValue(value).url))
+          }
+        />
+        <input
+          type="url"
+          className="h-8 w-[55%] rounded-md border px-2 text-xs"
+          placeholder="https://…"
+          value={parseVideoValue(value).url}
+          onChange={(e) =>
+            stageCell(dayYmd, turn, row, joinVideoValue(parseVideoValue(value).label, e.target.value))
+          }
+        />
+        {/* Botón para salir de edición */}
+        <button
+          type="button"
+          className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50"
+          onClick={() => setVideoEditing((m) => ({ ...m, [k]: false }))}
+          title="Listo"
+        >
+          ✓
+        </button>
       </div>
     );
   }
 
+  /* =======================
+     Celda de contenido grande
+     ======================= */
   function EditableCell({ dayYmd, turn, row }: { dayYmd: string; turn: TurnKey; row: string; }) {
     const existing = findCell(dayYmd, turn, row);
     const ref = useRef<HTMLDivElement | null>(null);
@@ -200,7 +285,6 @@ export default function PlanSemanalPage() {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); const txt = ref.current?.innerText ?? ""; stageCell(dayYmd, turn, row, txt); }
     };
 
-    // ✅ Link corregido a /ct/sessions/by-day/...
     const sessionHref = `/ct/sessions/by-day/${dayYmd}/${turn}?focus=${encodeURIComponent(row)}`;
 
     return (
