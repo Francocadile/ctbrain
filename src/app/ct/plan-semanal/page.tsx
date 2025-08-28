@@ -12,22 +12,17 @@ import {
 } from "@/lib/api/sessions";
 
 /**
- * --- DISEÑO DE LA GRILLA ---
- * Secciones y filas (como en tu planilla):
- *   - Meta            : LUGAR / HORA / LINK       (encabezado arriba)
- *   - TURNO MAÑANA    : PRE ENTREN0 / FÍSICO / TÉCNICO–TÁCTICO
- *   - TURNO TARDE     : PRE ENTREN0 / FÍSICO / TÉCNICO–TÁCTICO
+ * Grilla editable tipo planilla:
+ * - Meta: LUGAR / HORA / LINK
+ * - TURNO MAÑANA: PRE ENTREN0 / FÍSICO / TÉCNICO–TÁCTICO
+ * - TURNO TARDE : PRE ENTREN0 / FÍSICO / TÉCNICO–TÁCTICO
  *
- * Cada celda es editable (contentEditable). Al salir del foco (blur) o Ctrl+Enter:
- *   - Si hay texto y no existía sesión -> crea una (POST)
- *   - Si hay texto y existía sesión    -> actualiza título (PUT)
- *   - Si NO hay texto y existía sesión -> borra (DELETE)
- *
- * Identificador de celda = "[GRID:<turno>:<row>]" guardado en description.
- * Fecha/hora guardada en UTC:
- *   - meta:       07:00
- *   - mañana:     09:00
- *   - tarde:      15:00
+ * Cada celda es contentEditable:
+ *   - texto nuevo -> crea/update sesión
+ *   - texto vacío -> borra sesión
+ * Identificador de celda en description: [GRID:<turno>:<row>]
+ * Horarios fijos (UTC) para ordenar:
+ *   - meta 07:00, mañana 09:00, tarde 15:00
  */
 
 type TurnKey = "meta" | "morning" | "afternoon";
@@ -57,9 +52,7 @@ function humanDay(dateISO: string) {
 }
 function computeISOForSlot(dayYmd: string, turn: TurnKey) {
   const base = new Date(`${dayYmd}T00:00:00.000Z`);
-  const h =
-    turn === "meta" ? 7 :
-    turn === "morning" ? 9 : 15;
+  const h = turn === "meta" ? 7 : turn === "morning" ? 9 : 15;
   base.setUTCHours(h, 0, 0, 0);
   return base.toISOString();
 }
@@ -126,9 +119,7 @@ export default function PlanSemanalPage() {
   const orderedDays = useMemo(() => {
     if (!weekStart) return [];
     const start = new Date(`${weekStart}T00:00:00.000Z`);
-    return Array.from({ length: 7 }).map((_, i) =>
-      toYYYYMMDDUTC(addDaysUTC(start, i))
-    );
+    return Array.from({ length: 7 }).map((_, i) => toYYYYMMDDUTC(addDaysUTC(start, i)));
   }, [weekStart]);
 
   // --- Buscar/actualizar/borrar celdas ---
@@ -162,7 +153,6 @@ export default function PlanSemanalPage() {
       } else {
         await updateSession(existing.id, {
           title: text.trim(),
-          // preservo marker al principio
           description: existing.description?.startsWith(marker)
             ? existing.description
             : `${marker} | ${dayYmd}`,
@@ -179,7 +169,7 @@ export default function PlanSemanalPage() {
 
   const debouncedSave = useDebouncedCallback(saveCell, 450);
 
-  // Estilo de celda editable
+  // Estilo de celda editable (placeholder simulado con data-attribute)
   function EditableCell({
     dayYmd,
     turn,
@@ -213,8 +203,8 @@ export default function PlanSemanalPage() {
         suppressContentEditableWarning
         onBlur={onBlur}
         onKeyDown={onKeyDown}
-        className="min-h-[84px] w-full rounded-xl border p-3 outline-none focus:ring-2 focus:ring-emerald-400 whitespace-pre-wrap"
-        placeholder={placeholder}
+        className="min-h-[88px] w-full rounded-xl border p-3 outline-none focus:ring-2 focus:ring-emerald-400 whitespace-pre-wrap"
+        data-placeholder={placeholder}
         // mostrar valor actual
         dangerouslySetInnerHTML={{ __html: (current?.title ?? "").replace(/\n/g, "<br/>") }}
       />
@@ -223,6 +213,16 @@ export default function PlanSemanalPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-6">
+      {/* Placeholder CSS para contentEditable */}
+      <style jsx>{`
+        [contenteditable][data-placeholder]:empty:before {
+          content: attr(data-placeholder);
+          color: #9ca3af; /* text-gray-400 */
+          pointer-events: none;
+          display: block;
+        }
+      `}</style>
+
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Plan semanal — Editor en tabla</h1>
@@ -230,7 +230,8 @@ export default function PlanSemanalPage() {
             Semana {weekStart || "—"} → {weekEnd || "—"}
           </p>
           <p className="mt-1 text-xs text-gray-400">
-            Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd> + <kbd className="rounded border px-1">Enter</kbd> para guardar al instante.
+            Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd>{" "}
+            + <kbd className="rounded border px-1">Enter</kbd> para guardar al instante.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -262,14 +263,16 @@ export default function PlanSemanalPage() {
             <div className="bg-gray-50 border-b px-3 py-2 font-semibold text-gray-600"> </div>
             {orderedDays.map((ymd) => (
               <div key={ymd} className="bg-gray-50 border-b px-4 py-2">
-                <div className="text-sm font-semibold uppercase tracking-wide">{humanDay(`${ymd}T00:00:00Z`)}</div>
+                <div className="text-sm font-semibold uppercase tracking-wide">
+                  {humanDay(`${ymd}T00:00:00Z`)}
+                </div>
                 <div className="text-xs text-gray-400">{ymd}</div>
               </div>
             ))}
           </div>
 
-          {/* Sección META (LUGAR/HORA/LINK) */}
-          {SECTIONS.map((sec, sIdx) => (
+          {/* Secciones */}
+          {SECTIONS.map((sec) => (
             <div key={sec.key} className="border-t">
               {sec.title ? (
                 <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-4 py-2 border-b uppercase tracking-wide">
@@ -306,7 +309,6 @@ export default function PlanSemanalPage() {
         </div>
       )}
 
-      {/* Buscador simple (resalta solo visualmente listando matches) */}
       {query && (
         <div className="text-xs text-gray-500">
           Buscando “{query}” en la semana…
