@@ -158,7 +158,7 @@ export default function PlanSemanalPage() {
           description: (description ?? "") || null,
           date: iso,
         });
-        const created = createdRes.data; // <— fijate el .data
+        const created = createdRes.data; // respuesta { data: SessionDTO }
         const k = created.date.slice(0, 10);
         setDays((prev) => ({
           ...prev,
@@ -170,7 +170,7 @@ export default function PlanSemanalPage() {
           description: description === "" ? null : (description ?? undefined),
           date: iso,
         });
-        const updated = updatedRes.data; // <— fijate el .data
+        const updated = updatedRes.data; // respuesta { data: SessionDTO }
         const oldKey = editing.date.slice(0, 10);
         const newKey = updated.date.slice(0, 10);
         setDays((prev) => {
@@ -302,7 +302,7 @@ export default function PlanSemanalPage() {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <div className="font-medium">
-                              {highlight(s.title, query)}
+                              {highlight(s.title ?? "", query)}
                             </div>
                             {s.description ? (
                               <div className="text-sm text-gray-600">
