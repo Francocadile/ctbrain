@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   getSessionsWeek,
   createSession,
@@ -10,91 +11,95 @@ import {
   toYYYYMMDDUTC,
   type SessionDTO,
 } from "@/lib/api/sessions";
-import { useSearchParams } from "next/navigation";
 
-/** Utilidades de fecha en UTC */
+// === Lugares pre-cargados (editable luego desde admin) ===
+const LUGARES = [
+  "Complejo Deportivo",
+  "Cancha Auxiliar 1",
+  "Cancha Auxiliar 2",
+  "Gimnasio",
+  "Sala de Video",
+];
+
+type TurnKey = "morning" | "afternoon";
+const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO"] as const;
+const META_ROWS = ["LUGAR", "HORA", "VIDEO"] as const;
+
+// ---- Helpers de fecha ----
 function addDaysUTC(date: Date, days: number) {
   const x = new Date(date);
   x.setUTCDate(x.getUTCDate() + days);
   return x;
 }
-function formatHuman(dateISO: string) {
-  const d = new Date(dateISO);
-  return d.toLocaleString(undefined, {
+function humanDayUTC(ymd: string) {
+  const d = new Date(`${ymd}T00:00:00.000Z`);
+  return d.toLocaleDateString(undefined, {
     weekday: "short",
     day: "2-digit",
     month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
+    timeZone: "UTC",
   });
 }
-function toLocalInputValue(dateISO?: string) {
-  const d = dateISO ? new Date(dateISO) : new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const yyyy = d.getFullYear();
-  const mm = pad(d.getMonth() + 1);
-  const dd = pad(d.getDate());
-  const hh = pad(d.getHours());
-  const mi = pad(d.getMinutes());
-  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+function computeISOForSlot(dayYmd: string, turn: TurnKey) {
+  const base = new Date(`${dayYmd}T00:00:00.000Z`);
+  const h = turn === "morning" ? 9 : 15;
+  base.setUTCHours(h, 0, 0, 0);
+  return base.toISOString();
 }
 
-/** Resaltado simple (case-insensitive) para búsqueda local */
-function highlight(text: string, query: string) {
-  if (!query) return text;
-  const idx = text.toLowerCase().indexOf(query.toLowerCase());
-  if (idx === -1) return text;
-  const before = text.slice(0, idx);
-  const match = text.slice(idx, idx + query.length);
-  const after = text.slice(idx + query.length);
-  return (
-    <>
-      {before}
-      <mark className="bg-yellow-200 px-0.5 rounded">{match}</mark>
-      {after}
-    </>
-  );
+// ---- Marca de celda en description ----
+function cellMarker(turn: TurnKey, row: string) {
+  return `[GRID:${turn}:${row}]`;
+}
+function isCellOf(s: SessionDTO, turn: TurnKey, row: string) {
+  return typeof s.description === "string" && s.description.startsWith(cellMarker(turn, row));
+}
+
+// ---- Debounce simple ----
+function useDebouncedCallback<T extends (...args: any[]) => any>(fn: T, delay = 400) {
+  const ref = useRef<number | undefined>(undefined);
+  return (...args: Parameters<T>) => {
+    if (ref.current) window.clearTimeout(ref.current);
+    ref.current = window.setTimeout(() => fn(...args), delay);
+  };
+}
+
+// ---- Parse/format para VIDEO "titulo|url" ----
+function parseVideoValue(v: string | null | undefined): { label: string; url: string } {
+  const raw = (v || "").trim();
+  if (!raw) return { label: "", url: "" };
+  const [label, url] = raw.split("|").map((s) => s.trim());
+  if (!url && label?.startsWith("http")) return { label: "Video", url: label };
+  return { label: label || "", url: url || "" };
+}
+function joinVideoValue(label: string, url: string) {
+  const l = (label || "").trim();
+  const u = (url || "").trim();
+  if (!l && !u) return "";
+  if (!l && u) return u; // compat
+  return `${l}|${u}`;
 }
 
 export default function PlanSemanalPage() {
-  // Flag para ocultar encabezado grande (pero SIEMPRE mantenemos la barra de semana)
-  const search = useSearchParams();
-  const hideHeader = search.get("hideHeader") === "1";
+  const qs = useSearchParams();
+  const hideHeader = qs.get("hideHeader") === "1";
 
-  /** Semana base (lunes) */
+  // Semana base (lunes)
   const [base, setBase] = useState<Date>(() => getMonday(new Date()));
 
-  /** Datos de la semana */
+  // Datos de la semana
   const [loading, setLoading] = useState(false);
-  const [days, setDays] = useState<Record<string, SessionDTO[]>>({});
+  const [daysMap, setDaysMap] = useState<Record<string, SessionDTO[]>>({});
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
-  /** Crear / editar (CON BOTÓN GUARDAR — sin autoguardado) */
-  const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<SessionDTO | null>(null);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState<string | null>("");
-  const [dateLocal, setDateLocal] = useState(toLocalInputValue());
-
-  /** Búsqueda local */
-  const [query, setQuery] = useState("");
-
-  /** Cargar datos de la semana (Lun→Dom) */
   async function loadWeek(d: Date) {
     setLoading(true);
     try {
       const monday = getMonday(d);
       const startYYYYMMDD = toYYYYMMDDUTC(monday);
       const res = await getSessionsWeek({ start: startYYYYMMDD });
-      // Normalizamos 7 días (incluye Domingo)
-      const start = new Date(`${res.weekStart}T00:00:00.000Z`);
-      const normalized: Record<string, SessionDTO[]> = {};
-      for (let i = 0; i < 7; i++) {
-        const key = toYYYYMMDDUTC(addDaysUTC(start, i));
-        normalized[key] = res.days[key] || [];
-      }
-      setDays(normalized);
+      setDaysMap(res.days);
       setWeekStart(res.weekStart);
       setWeekEnd(res.weekEnd);
     } catch (e) {
@@ -110,307 +115,388 @@ export default function PlanSemanalPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [base]);
 
-  /** Navegación de semanas — SIEMPRE disponible */
+  // Navegación de semanas
   const goPrevWeek = () => setBase((d) => addDaysUTC(d, -7));
   const goNextWeek = () => setBase((d) => addDaysUTC(d, 7));
   const goTodayWeek = () => setBase(getMonday(new Date()));
 
-  /** Días de la semana (YYYY-MM-DD) en orden Lun→Dom */
+  // Días Lunes→Domingo
   const orderedDays = useMemo(() => {
     if (!weekStart) return [];
     const start = new Date(`${weekStart}T00:00:00.000Z`);
-    return Array.from({ length: 7 }).map((_, i) =>
-      toYYYYMMDDUTC(addDaysUTC(start, i))
-    );
+    return Array.from({ length: 7 }).map((_, i) => toYYYYMMDDUTC(addDaysUTC(start, i)));
   }, [weekStart]);
 
-  /** Abrir modal crear */
-  function openCreate(dayKey?: string) {
-    setEditing(null);
-    setTitle("");
-    setDescription("");
-    if (dayKey) {
-      const d = new Date(`${dayKey}T09:00:00.000Z`);
-      setDateLocal(toLocalInputValue(d.toISOString()));
-    } else {
-      setDateLocal(toLocalInputValue());
-    }
-    setFormOpen(true);
+  // --- Buscar/actualizar/borrar celdas ---
+  function findCell(dayYmd: string, turn: TurnKey, row: string): SessionDTO | undefined {
+    const list = daysMap[dayYmd] || [];
+    return list.find((s) => isCellOf(s, turn, row));
   }
 
-  /** Abrir modal editar */
-  function openEdit(s: SessionDTO) {
-    setEditing(s);
-    setTitle(s.title || "");
-    setDescription(s.description ?? "");
-    setDateLocal(toLocalInputValue(s.date));
-    setFormOpen(true);
-  }
+  async function saveCell(dayYmd: string, turn: TurnKey, row: string, text: string) {
+    const existing = findCell(dayYmd, turn, row);
+    const iso = computeISOForSlot(dayYmd, turn);
+    const marker = cellMarker(turn, row);
 
-  /** Guardar (crear o editar) — NO refresca toda la página */
-  async function saveSession() {
     try {
-      const iso = new Date(dateLocal).toISOString();
+      if (!text.trim()) {
+        if (existing) {
+          await deleteSession(existing.id);
+          await loadWeek(base);
+        }
+        return;
+      }
 
-      if (!editing) {
-        const createdRes = await createSession({
-          title: title.trim(),
-          description: (description ?? "") || null,
+      if (!existing) {
+        await createSession({
+          title: text.trim(),
+          description: `${marker} | ${dayYmd}`,
           date: iso,
+          type: "GENERAL",
         });
-        const created = createdRes.data; // respuesta { data: SessionDTO }
-        const k = created.date.slice(0, 10);
-        setDays((prev) => ({
-          ...prev,
-          [k]: [...(prev[k] || []), created],
-        }));
       } else {
-        const updatedRes = await updateSession(editing.id, {
-          title: title.trim() || undefined,
-          description: description === "" ? null : (description ?? undefined),
+        await updateSession(existing.id, {
+          title: text.trim(),
+          description: existing.description?.startsWith(marker)
+            ? existing.description
+            : `${marker} | ${dayYmd}`,
           date: iso,
-        });
-        const updated = updatedRes.data; // respuesta { data: SessionDTO }
-        const oldKey = editing.date.slice(0, 10);
-        const newKey = updated.date.slice(0, 10);
-        setDays((prev) => {
-          const next = { ...prev };
-          next[oldKey] = (next[oldKey] || []).filter((x) => x.id !== editing.id);
-          next[newKey] = [...(next[newKey] || []), updated];
-          return next;
         });
       }
 
-      setFormOpen(false);
+      await loadWeek(base);
     } catch (e: any) {
       console.error(e);
-      alert(e?.message || "Error al guardar la sesión");
+      alert(e?.message || "Error al guardar");
     }
   }
 
-  /** Borrar (con confirmación) — actualiza sólo memoria */
-  async function remove(id: string) {
-    if (!confirm("¿Eliminar esta sesión?")) return;
-    try {
-      await deleteSession(id);
-      setDays((prev) => {
-        const next: typeof prev = {};
-        for (const k of Object.keys(prev)) {
-          next[k] = prev[k].filter((s) => s.id !== id);
-        }
-        return next;
-      });
-    } catch (e: any) {
-      console.error(e);
-      alert(e?.message || "Error al borrar la sesión");
-    }
-  }
+  const debouncedSave = useDebouncedCallback(saveCell, 450);
 
-  /** Filtrado por búsqueda (solo frontend) */
-  function matches(s: SessionDTO) {
-    if (!query) return true;
-    const q = query.toLowerCase();
+  // ==== Meta inputs (LUGAR/HORA/VIDEO) por turno ====
+  function MetaInput({
+    dayYmd,
+    turn,
+    row,
+  }: {
+    dayYmd: string;
+    turn: TurnKey;
+    row: (typeof META_ROWS)[number];
+  }) {
+    const current = findCell(dayYmd, turn, row);
+    const value = (current?.title ?? "").trim();
+
+    async function setImmediate(next: string) {
+      await saveCell(dayYmd, turn, row, next);
+    }
+
+    if (row === "LUGAR") {
+      return (
+        <select
+          className="h-8 w-full rounded-md border px-2 text-xs"
+          value={value || ""}
+          onChange={(e) => setImmediate(e.target.value)}
+        >
+          <option value="">— Lugar —</option>
+          {LUGARES.map((l) => (
+            <option key={l} value={l}>
+              {l}
+            </option>
+          ))}
+        </select>
+      );
+    }
+
+    if (row === "HORA") {
+      const hhmm = /^[0-9]{2}:[0-9]{2}$/.test(value) ? value : "";
+      return (
+        <input
+          type="time"
+          className="h-8 w-full rounded-md border px-2 text-xs"
+          value={hhmm}
+          onChange={(e) => setImmediate(e.target.value)}
+        />
+      );
+    }
+
+    // === VIDEO: mostrar sólo link "Sesión 1" y permitir editar con ✏️ ===
+    const { label, url } = parseVideoValue(value);
+    const [editing, setEditing] = useState(false);
+
+    if (!editing && (label || url)) {
+      return (
+        <div className="flex items-center justify-between gap-1">
+          {url ? (
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[12px] underline text-emerald-700 truncate"
+              title={label || "Video"}
+            >
+              {label || "Video"}
+            </a>
+          ) : (
+            <span className="text-[12px] text-gray-500 truncate">{label}</span>
+          )}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+              onClick={() => setEditing(true)}
+              title="Editar"
+            >
+              ✏️
+            </button>
+            <button
+              type="button"
+              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+              onClick={() => setImmediate("")}
+              title="Borrar"
+            >
+              ❌
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Modo edición o vacío
     return (
-      (s.title?.toLowerCase().includes(q) ?? false) ||
-      (s.description?.toLowerCase().includes(q) ?? false)
+      <div className="flex items-center gap-1.5">
+        <input
+          className="h-8 w-[45%] rounded-md border px-2 text-xs"
+          placeholder="Título"
+          defaultValue={label}
+          onBlur={(e) => setImmediate(joinVideoValue(e.target.value, url))}
+        />
+        <input
+          type="url"
+          className="h-8 w-[55%] rounded-md border px-2 text-xs"
+          placeholder="https://…"
+          defaultValue={url}
+          onBlur={(e) => setImmediate(joinVideoValue(label, e.target.value))}
+        />
+      </div>
+    );
+  }
+
+  // ==== Celda editable grande ====
+  function EditableCell({
+    dayYmd,
+    turn,
+    row,
+  }: {
+    dayYmd: string;
+    turn: TurnKey;
+    row: string;
+  }) {
+    const current = findCell(dayYmd, turn, row);
+    const ref = useRef<HTMLDivElement | null>(null);
+
+    const onBlur = () => {
+      const txt = ref.current?.innerText ?? "";
+      debouncedSave(dayYmd, turn, row, txt);
+    };
+    const onKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        const txt = ref.current?.innerText ?? "";
+        saveCell(dayYmd, turn, row, txt);
+      }
+    };
+
+    const titulo = current?.title ?? "";
+    const sessionId = current?.id;
+
+    return (
+      <div className="space-y-1">
+        {sessionId ? (
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-gray-500">
+              {row} —{" "}
+              {new Date(`${dayYmd}T00:00:00Z`).toLocaleDateString(undefined, {
+                day: "2-digit",
+                month: "2-digit",
+                timeZone: "UTC",
+              })}{" "}
+              {turn === "morning" ? "Mañana" : "Tarde"}
+            </span>
+            <a
+              href={`/ct/sesiones/${sessionId}`}
+              className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50"
+              title="Abrir ejercicio"
+            >
+              Abrir ejercicio
+            </a>
+          </div>
+        ) : (
+          <div className="h-3" />
+        )}
+
+        <div
+          ref={ref}
+          contentEditable
+          suppressContentEditableWarning
+          onBlur={onBlur}
+          onKeyDown={onKeyDown}
+          className="min-h-[90px] w-full rounded-xl border p-2 text-[13px] leading-5 outline-none focus:ring-2 focus:ring-emerald-400 whitespace-pre-wrap"
+          data-placeholder="Escribir…"
+          dangerouslySetInnerHTML={{ __html: titulo.replace(/\n/g, "<br/>") }}
+        />
+      </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-      {/* Encabezado (titulo opcional) + barra de semana SIEMPRE visible */}
-      <header className="space-y-2">
-        {!hideHeader && (
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg md:text-xl font-semibold">
-              Plan semanal — Editor en tabla
-            </h1>
-          </div>
-        )}
+    <div className="p-3 md:p-4 space-y-3">
+      {/* placeholder visual para contentEditable */}
+      <style jsx>{`
+        [contenteditable][data-placeholder]:empty:before {
+          content: attr(data-placeholder);
+          color: #9ca3af;
+          pointer-events: none;
+          display: block;
+        }
+      `}</style>
 
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div className="text-xs md:text-sm text-gray-500">
-            Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)
+      {/* Header: solo si NO pediste ocultarlo */}
+      {!hideHeader && (
+        <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-lg md:text-xl font-bold">Plan semanal — Editor en tabla</h1>
+            <p className="text-xs md:text-sm text-gray-500">
+              Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)
+            </p>
+            <p className="mt-1 text-[10px] text-gray-400">
+              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd>{" "}
+              + <kbd className="rounded border px-1">Enter</kbd> para guardar al instante.
+            </p>
           </div>
-
           <div className="flex flex-wrap items-center gap-2">
-            {/* Búsqueda */}
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar sesiones… (título o descripción)"
-              className="px-3 py-2 rounded-xl border min-w-[240px]"
-            />
-            <div className="w-px h-6 bg-gray-200 mx-1" />
-            <button onClick={goPrevWeek} className="px-3 py-2 rounded-xl border hover:bg-gray-50 text-sm">
+            <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
               ◀ Semana anterior
             </button>
-            <button onClick={goTodayWeek} className="px-3 py-2 rounded-xl border hover:bg-gray-50 text-sm">
+            <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
               Hoy
             </button>
-            <button onClick={goNextWeek} className="px-3 py-2 rounded-xl border hover:bg-gray-50 text-sm">
+            <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
               Semana siguiente ▶
             </button>
-            <button onClick={() => openCreate()} className="ml-1 px-4 py-2 rounded-xl bg-black text-white hover:opacity-90 text-sm">
-              + Nueva sesión
-            </button>
           </div>
-        </div>
-      </header>
+        </header>
+      )}
 
       {loading ? (
         <div className="text-gray-500">Cargando semana…</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-7 gap-3 md:gap-4">
-          {orderedDays.map((key) => {
-            const listAll = days[key] || [];
-            const list = listAll.filter(matches);
-            const isToday = new Date().toISOString().slice(0, 10) === key;
+        <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
+          {/* Cabecera de días */}
+          <div
+            className="grid text-xs"
+            style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
+          >
+            <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600"></div>
+            {orderedDays.map((ymd) => (
+              <div key={ymd} className="bg-gray-50 border-b px-2 py-1.5">
+                <div className="text-[11px] font-semibold uppercase tracking-wide">
+                  {humanDayUTC(ymd)}
+                </div>
+                <div className="text-[10px] text-gray-400">{ymd}</div>
+              </div>
+            ))}
+          </div>
 
-            return (
+          {/* META MAÑANA */}
+          <div className="border-t">
+            <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
+              TURNO MAÑANA · Meta
+            </div>
+            {META_ROWS.map((rowName) => (
               <div
-                key={key}
-                className={`rounded-2xl border p-3 bg-white ${isToday ? "ring-2 ring-emerald-400" : ""}`}
+                key={`morning-meta-${rowName}`}
+                className="grid items-center"
+                style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
               >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="font-semibold text-sm">
-                    {new Date(`${key}T00:00:00Z`).toLocaleDateString(
-                      undefined,
-                      { weekday: "short", day: "2-digit", month: "short" }
-                    )}
-                  </div>
-                  <span className="text-[11px] text-gray-400">{key}</span>
+                <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">
+                  {rowName}
                 </div>
-
-                <div className="mb-2">
-                  <button
-                    onClick={() => openCreate(key)}
-                    className="w-full text-xs px-2 py-1 rounded-lg border hover:bg-gray-50"
-                  >
-                    + Agregar en este día
-                  </button>
-                </div>
-
-                {list.length === 0 ? (
-                  <div className="text-sm text-gray-400">
-                    {query ? "Sin coincidencias" : "Sin sesiones"}
+                {orderedDays.map((ymd) => (
+                  <div key={`${ymd}-morning-${rowName}`} className="p-1">
+                    <MetaInput dayYmd={ymd} turn="morning" row={rowName} />
                   </div>
-                ) : (
-                  <ul className="space-y-2">
-                    {list.map((s) => (
-                      <li key={s.id} className="rounded-xl border p-2 hover:bg-gray-50">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="font-medium">
-                              {highlight(s.title ?? "", query)}
-                            </div>
-                            {s.description ? (
-                              <div className="text-sm text-gray-600">
-                                {typeof s.description === "string"
-                                  ? highlight(s.description, query)
-                                  : s.description}
-                              </div>
-                            ) : null}
-                            <div className="text-xs text-gray-500 mt-1">
-                              {formatHuman(s.date)}
-                            </div>
-                            {s.user ? (
-                              <div className="text-xs text-gray-400">
-                                by {s.user.name || s.user.email || "CT"}
-                              </div>
-                            ) : null}
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              onClick={() => openEdit(s)}
-                              className="text-xs px-2 py-1 rounded-lg border hover:bg-gray-50"
-                            >
-                              Editar
-                            </button>
-                            <button
-                              onClick={() => remove(s.id)}
-                              className="text-xs px-2 py-1 rounded-lg border hover:bg-gray-50"
-                            >
-                              Borrar
-                            </button>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+                ))}
               </div>
-            );
-          })}
-        </div>
-      )}
+            ))}
+          </div>
 
-      {/* Modal de creación/edición — Guarda SOLO con botón */}
-      {formOpen && (
-        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">
-                {editing ? "Editar sesión" : "Nueva sesión"}
-              </h2>
-              <button
-                onClick={() => setFormOpen(false)}
-                className="text-gray-500 hover:text-black"
-              >
-                ✕
-              </button>
+          {/* BLOQUES MAÑANA */}
+          <div className="border-t">
+            <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
+              TURNO MAÑANA
             </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm font-medium">Título</label>
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="mt-1 w-full rounded-xl border px-3 py-2"
-                  placeholder="Ej: Fuerza + Aceleraciones"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Descripción</label>
-                <textarea
-                  value={description ?? ""}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="mt-1 w-full rounded-xl border px-3 py-2"
-                  rows={3}
-                  placeholder="Objetivos, bloques, notas…"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Fecha y hora</label>
-                <input
-                  type="datetime-local"
-                  value={dateLocal}
-                  onChange={(e) => setDateLocal(e.target.value)}
-                  className="mt-1 w-full rounded-xl border px-3 py-2"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Se guarda en UTC (tu hora local se convierte a ISO).
-                </p>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setFormOpen(false)}
-                className="px-4 py-2 rounded-xl border hover:bg-gray-50"
+            {CONTENT_ROWS.map((rowName) => (
+              <div
+                key={`morning-${rowName}`}
+                className="grid items-stretch"
+                style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
               >
-                Cancelar
-              </button>
-              <button
-                onClick={saveSession}
-                className="px-4 py-2 rounded-xl bg-black text-white hover:opacity-90"
-              >
-                Guardar
-              </button>
+                <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600">
+                  {rowName}
+                </div>
+                {orderedDays.map((ymd) => (
+                  <div key={`${ymd}-morning-${rowName}`} className="p-1">
+                    <EditableCell dayYmd={ymd} turn="morning" row={rowName} />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          {/* META TARDE */}
+          <div className="border-t">
+            <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
+              TURNO TARDE · Meta
             </div>
+            {META_ROWS.map((rowName) => (
+              <div
+                key={`afternoon-meta-${rowName}`}
+                className="grid items-center"
+                style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
+              >
+                <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">
+                  {rowName}
+                </div>
+                {orderedDays.map((ymd) => (
+                  <div key={`${ymd}-afternoon-${rowName}`} className="p-1">
+                    <MetaInput dayYmd={ymd} turn="afternoon" row={rowName} />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          {/* BLOQUES TARDE */}
+          <div className="border-t">
+            <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
+              TURNO TARDE
+            </div>
+            {CONTENT_ROWS.map((rowName) => (
+              <div
+                key={`afternoon-${rowName}`}
+                className="grid items-stretch"
+                style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
+              >
+                <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600">
+                  {rowName}
+                </div>
+                {orderedDays.map((ymd) => (
+                  <div key={`${ymd}-afternoon-${rowName}`} className="p-1">
+                    <EditableCell dayYmd={ymd} turn="afternoon" row={rowName} />
+                  </div>
+                ))}
+              </div>
+            ))}
           </div>
         </div>
       )}
