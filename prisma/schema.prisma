@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -27,6 +29,7 @@ model User {
   id        String    @id @default(cuid())
   email     String    @unique
   name      String?
+  password  String?   // necesario para /admin/users (bcrypt)
   role      Role      @default(JUGADOR)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
