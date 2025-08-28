@@ -200,8 +200,8 @@ export default function PlanSemanalPage() {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); const txt = ref.current?.innerText ?? ""; stageCell(dayYmd, turn, row, txt); }
     };
 
-    // link a sesión agrupada por día+turno (by-day), con foco en el bloque
-    const sessionHref = `/ct/sesiones/by-day/${dayYmd}/${turn}?focus=${encodeURIComponent(row)}`;
+    // ✅ Link corregido a /ct/sessions/by-day/...
+    const sessionHref = `/ct/sessions/by-day/${dayYmd}/${turn}?focus=${encodeURIComponent(row)}`;
 
     return (
       <div className="space-y-1">
