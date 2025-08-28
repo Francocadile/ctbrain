@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   getSessionsWeek,
   createSession,
@@ -20,7 +21,6 @@ const LUGARES = [
   "Sala de Video",
 ];
 
-// Bloques visibles
 type TurnKey = "morning" | "afternoon";
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO"] as const;
 const META_ROWS = ["LUGAR", "HORA", "VIDEO"] as const;
@@ -31,7 +31,6 @@ function addDaysUTC(date: Date, days: number) {
   x.setUTCDate(x.getUTCDate() + days);
   return x;
 }
-// Mostrar día en UTC para no correrse a domingo
 function humanDayUTC(ymd: string) {
   const d = new Date(`${ymd}T00:00:00.000Z`);
   return d.toLocaleDateString(undefined, {
@@ -77,11 +76,14 @@ function joinVideoValue(label: string, url: string) {
   const l = (label || "").trim();
   const u = (url || "").trim();
   if (!l && !u) return "";
-  if (!l && u) return u; // compat: sólo url
+  if (!l && u) return u; // compat
   return `${l}|${u}`;
 }
 
 export default function PlanSemanalPage() {
+  const qs = useSearchParams();
+  const hideHeader = qs.get("hideHeader") === "1";
+
   // Semana base (lunes)
   const [base, setBase] = useState<Date>(() => getMonday(new Date()));
 
@@ -91,7 +93,6 @@ export default function PlanSemanalPage() {
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
-  // Cargar datos de la semana
   async function loadWeek(d: Date) {
     setLoading(true);
     try {
@@ -119,7 +120,7 @@ export default function PlanSemanalPage() {
   const goNextWeek = () => setBase((d) => addDaysUTC(d, 7));
   const goTodayWeek = () => setBase(getMonday(new Date()));
 
-  // Días Lunes→Domingo (según weekStart del backend)
+  // Días Lunes→Domingo
   const orderedDays = useMemo(() => {
     if (!weekStart) return [];
     const start = new Date(`${weekStart}T00:00:00.000Z`);
@@ -176,7 +177,7 @@ export default function PlanSemanalPage() {
   function MetaInput({
     dayYmd,
     turn,
-    row, // "LUGAR" | "HORA" | "VIDEO"
+    row,
   }: {
     dayYmd: string;
     turn: TurnKey;
@@ -218,34 +219,64 @@ export default function PlanSemanalPage() {
       );
     }
 
-    // VIDEO: título + url
+    // === VIDEO: mostrar sólo link "Sesión 1" y permitir editar con ✏️ ===
     const { label, url } = parseVideoValue(value);
+    const [editing, setEditing] = useState(false);
+
+    if (!editing && (label || url)) {
+      return (
+        <div className="flex items-center justify-between gap-1">
+          {url ? (
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[12px] underline text-emerald-700 truncate"
+              title={label || "Video"}
+            >
+              {label || "Video"}
+            </a>
+          ) : (
+            <span className="text-[12px] text-gray-500 truncate">{label}</span>
+          )}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+              onClick={() => setEditing(true)}
+              title="Editar"
+            >
+              ✏️
+            </button>
+            <button
+              type="button"
+              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+              onClick={() => setImmediate("")}
+              title="Borrar"
+            >
+              ❌
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Modo edición o vacío
     return (
       <div className="flex items-center gap-1.5">
         <input
-          className="h-8 w-[40%] rounded-md border px-2 text-xs"
+          className="h-8 w-[45%] rounded-md border px-2 text-xs"
           placeholder="Título"
           defaultValue={label}
           onBlur={(e) => setImmediate(joinVideoValue(e.target.value, url))}
         />
         <input
           type="url"
-          className="h-8 w-[60%] rounded-md border px-2 text-xs"
+          className="h-8 w-[55%] rounded-md border px-2 text-xs"
           placeholder="https://…"
           defaultValue={url}
           onBlur={(e) => setImmediate(joinVideoValue(label, e.target.value))}
         />
-        {url ? (
-          <a
-            href={url}
-            target="_blank"
-            rel="noreferrer"
-            className="text-[11px] underline text-emerald-700 whitespace-nowrap"
-            title="Abrir video"
-          >
-            {label || "Ver video"}
-          </a>
-        ) : null}
       </div>
     );
   }
@@ -317,10 +348,9 @@ export default function PlanSemanalPage() {
     );
   }
 
-  // === Render ===
   return (
     <div className="p-3 md:p-4 space-y-3">
-      {/* Placeholder CSS para contentEditable */}
+      {/* placeholder visual para contentEditable */}
       <style jsx>{`
         [contenteditable][data-placeholder]:empty:before {
           content: attr(data-placeholder);
@@ -330,29 +360,32 @@ export default function PlanSemanalPage() {
         }
       `}</style>
 
-      <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-lg md:text-xl font-bold">Plan semanal — Editor en tabla</h1>
-          <p className="text-xs md:text-sm text-gray-500">
-            Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)
-          </p>
-          <p className="mt-1 text-[10px] text-gray-400">
-            Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd>{" "}
-            + <kbd className="rounded border px-1">Enter</kbd> para guardar al instante.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-            ◀ Semana anterior
-          </button>
-          <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-            Hoy
-          </button>
-          <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-            Semana siguiente ▶
-          </button>
-        </div>
-      </header>
+      {/* Header: solo si NO pediste ocultarlo */}
+      {!hideHeader && (
+        <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-lg md:text-xl font-bold">Plan semanal — Editor en tabla</h1>
+            <p className="text-xs md:text-sm text-gray-500">
+              Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)
+            </p>
+            <p className="mt-1 text-[10px] text-gray-400">
+              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd>{" "}
+              + <kbd className="rounded border px-1">Enter</kbd> para guardar al instante.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+              ◀ Semana anterior
+            </button>
+            <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+              Hoy
+            </button>
+            <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+              Semana siguiente ▶
+            </button>
+          </div>
+        </header>
+      )}
 
       {loading ? (
         <div className="text-gray-500">Cargando semana…</div>
@@ -374,7 +407,7 @@ export default function PlanSemanalPage() {
             ))}
           </div>
 
-          {/* META MAÑANA (compacto) */}
+          {/* META MAÑANA */}
           <div className="border-t">
             <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
               TURNO MAÑANA · Meta
@@ -420,7 +453,7 @@ export default function PlanSemanalPage() {
             ))}
           </div>
 
-          {/* META TARDE (compacto) */}
+          {/* META TARDE */}
           <div className="border-t">
             <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
               TURNO TARDE · Meta
