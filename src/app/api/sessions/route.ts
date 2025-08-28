@@ -12,7 +12,6 @@ async function getSessionSafe() {
     return null;
   }
 }
-
 function requireCT(session: any) {
   if (!session?.user) return false;
   const role =
@@ -21,7 +20,6 @@ function requireCT(session: any) {
     (session.user as any)?.roleId;
   return role === "CT" || role === "ADMIN";
 }
-
 function isAuthed(session: any) {
   return !!session?.user;
 }
@@ -34,6 +32,25 @@ const createSessionSchema = z.object({
   type: z.enum(["GENERAL", "FUERZA", "TACTICA", "AEROBICO", "RECUPERACION"]).optional(),
 });
 
+// --- Respuesta para vista semanal ---
+function toYYYYMMDDUTC(d: Date) {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function getMondayUTC(d: Date) {
+  const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const day = x.getUTCDay() || 7; // 1..7 (lunes=1)
+  if (day !== 1) x.setUTCDate(x.getUTCDate() - (day - 1));
+  return x;
+}
+function addDaysUTC(d: Date, n: number) {
+  const x = new Date(d);
+  x.setUTCDate(x.getUTCDate() + n);
+  return x;
+}
+
 // --- Select unificado ---
 const sessionSelect = {
   id: true,
@@ -43,24 +60,64 @@ const sessionSelect = {
   type: true,
   createdAt: true,
   updatedAt: true,
-  createdBy: true, // string userId
+  createdBy: true,
   user: { select: { id: true, name: true, email: true, role: true } },
 } as const;
 
-// GET /api/sessions -> lista sesiones
-export async function GET() {
+// GET /api/sessions
+// - Si viene ?start=YYYY-MM-DD -> devuelve semana { days, weekStart, weekEnd }
+// - Si no, lista últimas 50 (fallback)
+export async function GET(req: Request) {
   try {
     const session = await getSessionSafe();
     if (!isAuthed(session)) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 });
     }
 
+    const url = new URL(req.url);
+    const start = url.searchParams.get("start");
+
+    if (start) {
+      // Vista semanal
+      const startDate = new Date(`${start}T00:00:00.000Z`);
+      if (Number.isNaN(startDate.valueOf())) {
+        return NextResponse.json({ error: "start inválido (YYYY-MM-DD)" }, { status: 400 });
+      }
+      const monday = getMondayUTC(startDate);
+      const sunday = addDaysUTC(monday, 6);
+
+      const items = await prisma.session.findMany({
+        where: {
+          date: { gte: monday, lte: sunday },
+        },
+        orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+        select: sessionSelect,
+      });
+
+      const days: Record<string, typeof items> = {};
+      for (let i = 0; i < 7; i++) {
+        const key = toYYYYMMDDUTC(addDaysUTC(monday, i));
+        days[key] = [];
+      }
+      for (const s of items) {
+        const k = toYYYYMMDDUTC(new Date(s.date));
+        if (!days[k]) days[k] = [];
+        days[k].push(s);
+      }
+
+      return NextResponse.json({
+        days,
+        weekStart: toYYYYMMDDUTC(monday),
+        weekEnd: toYYYYMMDDUTC(sunday),
+      });
+    }
+
+    // Fallback: últimas 50
     const sessions = await prisma.session.findMany({
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       select: sessionSelect,
       take: 50,
     });
-
     return NextResponse.json({ data: sessions });
   } catch (err: any) {
     console.error("GET /api/sessions error:", err);
@@ -112,7 +169,7 @@ export async function POST(req: Request) {
         description: description ?? null,
         date: new Date(date),
         type: type ?? "GENERAL",
-        createdBy: creator.id, // string userId
+        createdBy: creator.id,
       },
       select: sessionSelect,
     });
