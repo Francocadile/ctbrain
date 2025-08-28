@@ -1,4 +1,3 @@
-// ---------- PRISMA SCHEMA (CTBrain) ----------
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,10 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ------- MODELOS EXISTENTES (ejemplo mínimo) -------
-// Asegurate de mantener tu User/Role tal como ya lo tenés.
-// Si ya existen, dejalos. Si tus nombres difieren, adaptá los @relation.
-
 enum Role {
   ADMIN
   CT
@@ -20,49 +15,53 @@ enum Role {
   DIRECTIVO
 }
 
-// Si YA TENÉS este modelo, mantené tu versión (no dupliques).
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
+  id        String    @id @default(cuid())
+  email     String    @unique
   name      String?
-  role      Role     @default(JUGADOR)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  role      Role      @default(JUGADOR)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
-  // Relación con Session (creadas por un CT/Admin)
-  sessionsCreated Session[] @relation("SessionsCreatedBy")
+  // Relación inversa: sesiones creadas por este usuario (CT/Admin)
+  sessions  Session[]
 }
 
-// ------- NUEVO: Enum de tipos de sesión -------
+/**
+ * NOTA ENUM:
+ * Incluye TUS valores (GENERAL, FUERZA, TACTICA, AEROBICO, RECUPERACION)
+ * y también los que pudiste haber creado en la migración previa
+ * (PARTIDO, TACTICO, EVALUACION, LIBRE), para evitar desincronizaciones
+ * con el tipo ya existente en la DB.
+ */
 enum SessionType {
+  GENERAL
+  FUERZA
+  TACTICA
+  AEROBICO
+  RECUPERACION
+  // Compatibilidad con migración previa
   PARTIDO
   TACTICO
-  FUERZA
-  RECUPERACION
   EVALUACION
   LIBRE
 }
 
-// ------- NUEVO: Modelo Session -------
 model Session {
-  id          String      @id @default(cuid())
-  date        DateTime    // Día base de la sesión (UTC)
-  start       DateTime?   // Inicio (UTC)
-  end         DateTime?   // Fin (UTC)
+  id          String       @id @default(cuid())
   title       String
-  type        SessionType
-  notes       String?     @db.Text
-  rpe         Int?        // 0-10
-  load        Int?        // Carga interna (arbitraria)
-  microcycle  Int?        // Semana ISO (opcional si lo usás)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  description String?      @db.Text
+  date        DateTime
+  type        SessionType  @default(GENERAL)
 
-  // Quién la creó (CT/Admin). Ajustá si tu User se llama distinto.
-  createdById String
-  createdBy   User        @relation("SessionsCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  // Creador (userId)
+  createdBy   String
+  user        User         @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 
   @@index([date])
   @@index([type])
-  @@index([createdById])
+  @@index([createdBy])
 }
