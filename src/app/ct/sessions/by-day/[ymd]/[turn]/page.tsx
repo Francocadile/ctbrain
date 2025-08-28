@@ -45,6 +45,16 @@ export default function SessionTurnoPage() {
     "TÉCNICO–TÁCTICO": useRef<HTMLDivElement | null>(null),
   } as const;
 
+  // Helper para enfocar/flash un bloque (lo usamos al cargar y en el botón)
+  function focusBlock(row: typeof CONTENT_ROWS[number]) {
+    const ref = blockRefs[row]?.current;
+    if (!ref) return;
+    ref.scrollIntoView({ behavior: "smooth", block: "start" });
+    ref.classList.add("ring-2", "ring-emerald-400");
+    const t = setTimeout(() => ref.classList.remove("ring-2", "ring-emerald-400"), 1200);
+    return () => clearTimeout(t);
+  }
+
   useEffect(() => {
     async function load() {
       if (!ymd) return;
@@ -83,15 +93,13 @@ export default function SessionTurnoPage() {
     });
   }, [daySessions, turn]);
 
+  // Enfocar el bloque si vino ?focus=
   useEffect(() => {
     const key = (focus || "") as typeof CONTENT_ROWS[number];
-    const ref = key && blockRefs[key as keyof typeof blockRefs]?.current;
-    if (ref) {
-      ref.scrollIntoView({ behavior: "smooth", block: "start" });
-      ref.classList.add("ring-2", "ring-emerald-400");
-      const t = setTimeout(() => ref.classList.remove("ring-2", "ring-emerald-400"), 1200);
-      return () => clearTimeout(t);
+    if (CONTENT_ROWS.includes(key as any)) {
+      focusBlock(key);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus]);
 
   return (
@@ -137,12 +145,15 @@ export default function SessionTurnoPage() {
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">{row}</h2>
               {id ? (
-                <a
-                  href={`/ct/sessions/by-day/${ymd}/${turn}?focus=${encodeURIComponent(row)}`}
+                // 👇 ahora es un botón que scrollea y resalta, sin navegar
+                <button
+                  type="button"
+                  onClick={() => focusBlock(row)}
                   className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50"
+                  title="Enfocar bloque"
                 >
                   Abrir (enfocar)
-                </a>
+                </button>
               ) : null}
             </div>
             <div className="min-h-[120px] whitespace-pre-wrap leading-6 text-[13px]">
