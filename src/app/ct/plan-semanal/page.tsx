@@ -45,7 +45,7 @@ function highlight(text: string, query: string) {
   const idx = text.toLowerCase().indexOf(query.toLowerCase());
   if (idx === -1) return text;
   const before = text.slice(0, idx);
-  const match = text.slice(idx + 0, idx + query.length);
+  const match = text.slice(idx, idx + query.length);
   const after = text.slice(idx + query.length);
   return (
     <>
@@ -87,11 +87,11 @@ export default function PlanSemanalPage() {
       const monday = getMonday(d);
       const startYYYYMMDD = toYYYYMMDDUTC(monday);
       const res = await getSessionsWeek({ start: startYYYYMMDD });
-      // API ya devuelve days (YYYY-MM-DD) y weekStart/weekEnd — nos aseguramos que existan las 7 llaves
+      // Normalizamos 7 días (incluye Domingo)
       const start = new Date(`${res.weekStart}T00:00:00.000Z`);
       const normalized: Record<string, SessionDTO[]> = {};
       for (let i = 0; i < 7; i++) {
-        const key = toYYYYMMDDUTC(addDaysUTC(start, i)); // incluye domingo (i=6)
+        const key = toYYYYMMDDUTC(addDaysUTC(start, i));
         normalized[key] = res.days[key] || [];
       }
       setDays(normalized);
@@ -121,7 +121,7 @@ export default function PlanSemanalPage() {
     const start = new Date(`${weekStart}T00:00:00.000Z`);
     return Array.from({ length: 7 }).map((_, i) =>
       toYYYYMMDDUTC(addDaysUTC(start, i))
-    ); // garantiza domingo
+    );
   }, [weekStart]);
 
   /** Abrir modal crear */
@@ -129,7 +129,6 @@ export default function PlanSemanalPage() {
     setEditing(null);
     setTitle("");
     setDescription("");
-    // Si viene día, seteo la hora local a 09:00 de ese día para comodidad
     if (dayKey) {
       const d = new Date(`${dayKey}T09:00:00.000Z`);
       setDateLocal(toLocalInputValue(d.toISOString()));
@@ -152,35 +151,36 @@ export default function PlanSemanalPage() {
   async function saveSession() {
     try {
       const iso = new Date(dateLocal).toISOString();
+
       if (!editing) {
-        const created = await createSession({
+        const createdRes = await createSession({
           title: title.trim(),
           description: (description ?? "") || null,
           date: iso,
         });
-        // Actualizo en memoria sin refetch completo
+        const created = createdRes.data; // <— fijate el .data
         const k = created.date.slice(0, 10);
         setDays((prev) => ({
           ...prev,
           [k]: [...(prev[k] || []), created],
         }));
       } else {
-        const updated = await updateSession(editing.id, {
+        const updatedRes = await updateSession(editing.id, {
           title: title.trim() || undefined,
           description: description === "" ? null : (description ?? undefined),
           date: iso,
         });
+        const updated = updatedRes.data; // <— fijate el .data
         const oldKey = editing.date.slice(0, 10);
         const newKey = updated.date.slice(0, 10);
         setDays((prev) => {
           const next = { ...prev };
-          // remuevo del día viejo
           next[oldKey] = (next[oldKey] || []).filter((x) => x.id !== editing.id);
-          // agrego al día nuevo
           next[newKey] = [...(next[newKey] || []), updated];
           return next;
         });
       }
+
       setFormOpen(false);
     } catch (e: any) {
       console.error(e);
@@ -262,7 +262,7 @@ export default function PlanSemanalPage() {
         <div className="text-gray-500">Cargando semana…</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-7 gap-3 md:gap-4">
-          {orderedDays.map((key, idx) => {
+          {orderedDays.map((key) => {
             const listAll = days[key] || [];
             const list = listAll.filter(matches);
             const isToday = new Date().toISOString().slice(0, 10) === key;
