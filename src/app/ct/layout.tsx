@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Route } from "next"; // 👈 para typedRoutes
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
@@ -9,7 +10,7 @@ function NavItem({
   children,
   soon,
 }: {
-  href?: string;
+  href?: Route; // 👈 tipado correcto para <Link/>
   children: React.ReactNode;
   soon?: boolean;
 }) {
@@ -60,9 +61,10 @@ export default async function CTLayout({ children }: { children: React.ReactNode
                 INICIO
               </div>
               <ul className="space-y-0.5 mb-2">
-                {/* No tocar: Dashboard / Inicio rápido existente */}
                 <li>
-                  <NavItem href="/ct">Dashboard / Inicio rápido</NavItem>
+                  <NavItem href={"/ct"}>
+                    Dashboard / Inicio rápido
+                  </NavItem>
                 </li>
               </ul>
 
@@ -72,87 +74,52 @@ export default async function CTLayout({ children }: { children: React.ReactNode
               </div>
               <ul className="space-y-0.5 mb-2">
                 <li>
-                  {/* Editor semanal (activo) */}
-                  <NavItem href="/ct/plan-semanal">Plan semanal (Editor)</NavItem>
+                  <NavItem href={"/ct/plan-semanal"}>
+                    Plan semanal (Editor)
+                  </NavItem>
                 </li>
                 <li>
-                  {/* Almacén de sesiones/ejercicios (dejar PRONTO si aún no existe) */}
-                  <NavItem href={undefined} soon>
+                  <NavItem soon>
                     Sesiones y Ejercicios (almacén)
                   </NavItem>
                 </li>
                 <li>
-                  {/* Plan de partido + Rivales + videos */}
-                  <NavItem href={undefined} soon>
-                    PLAN DE PARTIDO (Rivales & Videos)
+                  <NavItem soon>
+                    Plan de partido (Rivales & Videos)
                   </NavItem>
                 </li>
                 <li>
-                  {/* Videos propios */}
-                  <NavItem href={undefined} soon>
+                  <NavItem soon>
                     Videos propios (colectivo / individual)
                   </NavItem>
                 </li>
                 <li>
-                  {/* Calendario general / competencia */}
-                  <NavItem href={undefined} soon>
+                  <NavItem soon>
                     Calendario general / Competencia
                   </NavItem>
                 </li>
               </ul>
 
-              {/* MONITOREO DE CARGAS Y RENDIMIENTO */}
+              {/* MONITOREO */}
               <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
                 MONITOREO
               </div>
               <ul className="space-y-0.5 mb-2">
-                <li>
-                  <NavItem href={undefined} soon>
-                    Carga semanal (planificado vs ejecutado)
-                  </NavItem>
-                </li>
-                <li>
-                  <NavItem href={undefined} soon>
-                    Rendimiento (colectivo / individual)
-                  </NavItem>
-                </li>
-                <li>
-                  <NavItem href={undefined} soon>
-                    Wellness
-                  </NavItem>
-                </li>
-                <li>
-                  <NavItem href={undefined} soon>
-                    RPE
-                  </NavItem>
-                </li>
-                <li>
-                  <NavItem href={undefined} soon>
-                    Lesionados
-                  </NavItem>
-                </li>
+                <li><NavItem soon>Carga semanal (planificado vs ejecutado)</NavItem></li>
+                <li><NavItem soon>Rendimiento (colectivo / individual)</NavItem></li>
+                <li><NavItem soon>Wellness</NavItem></li>
+                <li><NavItem soon>RPE</NavItem></li>
+                <li><NavItem soon>Lesionados</NavItem></li>
               </ul>
 
-              {/* PERSONAS Y RECURSOS */}
+              {/* PERSONAS & RECURSOS */}
               <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
                 PERSONAS & RECURSOS
               </div>
               <ul className="space-y-0.5 mb-2">
-                <li>
-                  <NavItem href={undefined} soon>
-                    Jugadores (ficha integral)
-                  </NavItem>
-                </li>
-                <li>
-                  <NavItem href={undefined} soon>
-                    Biblioteca / Recursos compartidos
-                  </NavItem>
-                </li>
-                <li>
-                  <NavItem href={undefined} soon>
-                    Notas / Bitácora del CT
-                  </NavItem>
-                </li>
+                <li><NavItem soon>Jugadores (ficha integral)</NavItem></li>
+                <li><NavItem soon>Biblioteca / Recursos compartidos</NavItem></li>
+                <li><NavItem soon>Notas / Bitácora del CT</NavItem></li>
               </ul>
 
               {/* SALIR */}
@@ -161,10 +128,7 @@ export default async function CTLayout({ children }: { children: React.ReactNode
               </div>
               <ul>
                 <li>
-                  <a
-                    href="/api/auth/signout"
-                    className="block px-2 py-1 rounded hover:bg-gray-50"
-                  >
+                  <a href="/api/auth/signout" className="block px-2 py-1 rounded hover:bg-gray-50">
                     Cerrar sesión
                   </a>
                 </li>
@@ -172,7 +136,7 @@ export default async function CTLayout({ children }: { children: React.ReactNode
             </nav>
           </aside>
 
-          {/* Main */}
+          {/* Main content */}
           <main>{children}</main>
         </div>
       </div>
