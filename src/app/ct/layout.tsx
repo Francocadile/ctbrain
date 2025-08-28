@@ -1,3 +1,4 @@
+// src/app/ct/layout.tsx
 import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
@@ -26,20 +27,48 @@ export default async function CTLayout({ children }: { children: React.ReactNode
             <nav className="text-[13px]">
               <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">PLANIFICACIÓN</div>
               <ul className="space-y-0.5">
-                <li><Link href="/ct/plan-semanal" className="block px-2 py-1 rounded hover:bg-gray-50">Plan semanal</Link></li>
-                <li><span className="block px-2 py-1 rounded text-gray-400 cursor-not-allowed">Ejercicios <small>PRONTO</small></span></li>
-                <li><span className="block px-2 py-1 rounded text-gray-400 cursor-not-allowed">Dashboards <small>PRONTO</small></span></li>
+                {/* Ir directo al editor en tabla y ocultar encabezado */}
+                <li>
+                  <Link
+                    href="/ct/plan-semanal?hideHeader=1"
+                    className="block px-2 py-1 rounded hover:bg-gray-50"
+                  >
+                    Plan semanal
+                  </Link>
+                </li>
+                <li>
+                  <span className="block px-2 py-1 rounded text-gray-400 cursor-not-allowed">
+                    Ejercicios <small>PRONTO</small>
+                  </span>
+                </li>
+                <li>
+                  <span className="block px-2 py-1 rounded text-gray-400 cursor-not-allowed">
+                    Dashboards <small>PRONTO</small>
+                  </span>
+                </li>
               </ul>
 
               <div className="px-2 py-2 text-[10px] font-semibold text-gray-500">OPERATIVO</div>
               <ul className="space-y-0.5">
-                <li><span className="block px-2 py-1 rounded text-gray-400 cursor-not-allowed">Cargas <small>PRONTO</small></span></li>
-                <li><span className="block px-2 py-1 rounded text-gray-400 cursor-not-allowed">Reportes <small>PRONTO</small></span></li>
+                <li>
+                  <span className="block px-2 py-1 rounded text-gray-400 cursor-not-allowed">
+                    Cargas <small>PRONTO</small>
+                  </span>
+                </li>
+                <li>
+                  <span className="block px-2 py-1 rounded text-gray-400 cursor-not-allowed">
+                    Reportes <small>PRONTO</small>
+                  </span>
+                </li>
               </ul>
 
               <div className="px-2 py-2 text-[10px] font-semibold text-gray-500">SALIR</div>
               <ul>
-                <li><a href="/api/auth/signout" className="block px-2 py-1 rounded hover:bg-gray-50">Cerrar sesión</a></li>
+                <li>
+                  <a href="/api/auth/signout" className="block px-2 py-1 rounded hover:bg-gray-50">
+                    Cerrar sesión
+                  </a>
+                </li>
               </ul>
             </nav>
           </aside>
