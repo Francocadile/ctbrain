@@ -5,7 +5,7 @@
   "engines": { "node": "22.x" },
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && prisma migrate deploy && next build",
+    "build": "next build",
     "start": "next start",
     "postinstall": "prisma generate",
     "prepare": "echo \"skipping husky on CI\""
@@ -30,5 +30,3 @@
     "prisma": "5.19.1"
   }
 }
-
-
