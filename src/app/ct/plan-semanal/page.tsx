@@ -160,6 +160,7 @@ export default function PlanSemanalPage() {
     if (!confirm("¿Eliminar esta sesión?")) return;
     try {
       await deleteSession(id);
+      setFormOpen(false); // si venimos desde el modal, cerrarlo
       await loadWeek(base);
     } catch (e: any) {
       console.error(e);
@@ -273,7 +274,8 @@ export default function PlanSemanalPage() {
                             </button>
                             <button
                               onClick={() => remove(s.id)}
-                              className="text-xs px-2 py-1 rounded-lg border hover:bg-gray-50"
+                              className="text-xs px-2 py-1 rounded-lg border text-red-600 hover:bg-red-50"
+                              title="Eliminar sesión"
                             >
                               Borrar
                             </button>
@@ -341,19 +343,32 @@ export default function PlanSemanalPage() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setFormOpen(false)}
-                className="px-4 py-2 rounded-xl border hover:bg-gray-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={saveSession}
-                className="px-4 py-2 rounded-xl bg-black text-white hover:opacity-90"
-              >
-                Guardar
-              </button>
+            <div className="flex justify-between gap-2 pt-2">
+              {/* Eliminar SOLO cuando estamos editando */}
+              {editing ? (
+                <button
+                  onClick={() => remove(editing.id)}
+                  className="px-4 py-2 rounded-xl border border-red-300 text-red-700 hover:bg-red-50"
+                  title="Eliminar sesión"
+                >
+                  Eliminar
+                </button>
+              ) : <span />}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setFormOpen(false)}
+                  className="px-4 py-2 rounded-xl border hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={saveSession}
+                  className="px-4 py-2 rounded-xl bg-black text-white hover:opacity-90"
+                >
+                  Guardar
+                </button>
+              </div>
             </div>
           </div>
         </div>
