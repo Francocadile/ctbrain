@@ -94,8 +94,8 @@ export default function DashboardSemanaPage() {
     const existing = findCell(dayYmd, turn, row);
     const text = (existing?.title ?? "").trim();
 
-    // 🔁 Link actualizado: a sesión por día+turno con foco en bloque
-    const sessionHref = `/ct/sesiones/${dayYmd}/${turn}?focus=${encodeURIComponent(row)}`;
+    // link a sesión por día+turno (by-day) con foco en bloque
+    const sessionHref = `/ct/sesiones/by-day/${dayYmd}/${turn}?focus=${encodeURIComponent(row)}`;
 
     return (
       <div className="space-y-1">
