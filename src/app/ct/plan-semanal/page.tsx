@@ -360,8 +360,9 @@ export default function PlanSemanalPage() {
         }
       `}</style>
 
-      {/* Header: solo si NO pediste ocultarlo */}
-      {!hideHeader && (
+      {/* Header / Navegación de semana */}
+      {!hideHeader ? (
+        // --- Header completo (como ya lo tenías) ---
         <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-lg md:text-xl font-bold">Plan semanal — Editor en tabla</h1>
@@ -385,6 +386,19 @@ export default function PlanSemanalPage() {
             </button>
           </div>
         </header>
+      ) : (
+        // --- Barra compacta SIEMPRE visible cuando el header está oculto ---
+        <div className="sticky top-12 z-20 flex items-center justify-end gap-2 pb-1">
+          <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+            ◀
+          </button>
+          <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+            Hoy
+          </button>
+          <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+            ▶
+          </button>
+        </div>
       )}
 
       {loading ? (
