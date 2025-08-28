@@ -1,36 +1,34 @@
--- Asegura que el enum de DB tenga todos los valores que usamos en Prisma.
--- Si "SessionType" ya existe, añadimos valores faltantes sin romper los existentes.
+-- Enums
+DO $$ BEGIN
+  CREATE TYPE "SessionType" AS ENUM ('GENERAL','FUERZA','TACTICA','AEROBICO','RECUPERACION');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type t WHERE t.typname = 'SessionType') THEN
-    CREATE TYPE "SessionType" AS ENUM (
-      'GENERAL','FUERZA','TACTICA','AEROBICO','RECUPERACION',
-      'PARTIDO','TACTICO','EVALUACION','LIBRE'
-    );
-  END IF;
-END$$;
+-- Tabla Session
+CREATE TABLE IF NOT EXISTS "Session" (
+  "id" TEXT PRIMARY KEY,
+  "title" TEXT NOT NULL,
+  "description" TEXT,
+  "date" TIMESTAMP(3) NOT NULL,
+  "type" "SessionType" NOT NULL DEFAULT 'GENERAL',
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+  "createdBy" TEXT NOT NULL
+);
 
--- Agregar valores que falten (si el TYPE ya existía)
-DO $$
-DECLARE
-  v TEXT;
-BEGIN
-  FOREACH v IN ARRAY ARRAY['GENERAL','FUERZA','TACTICA','AEROBICO','RECUPERACION','PARTIDO','TACTICO','EVALUACION','LIBRE']
-  LOOP
-    BEGIN
-      EXECUTE format('ALTER TYPE "SessionType" ADD VALUE IF NOT EXISTS %L', v);
-    EXCEPTION WHEN others THEN
-      -- ignorar errores si ya existe o si el valor está en otra posición
-      NULL;
-    END;
-  END LOOP;
-END$$;
+-- Índices
+CREATE INDEX IF NOT EXISTS "Session_date_idx" ON "Session" ("date");
+CREATE INDEX IF NOT EXISTS "Session_type_idx" ON "Session" ("type");
+CREATE INDEX IF NOT EXISTS "Session_createdBy_idx" ON "Session" ("createdBy");
 
--- Asegurar columnas/tabla Session (si venías de un esquema anterior distinto)
--- (Estas operaciones son idempotentes cuando la estructura ya existe)
+-- FK
+ALTER TABLE "Session"
+ADD CONSTRAINT IF NOT EXISTS "Session_createdBy_fkey"
+FOREIGN KEY ("createdBy") REFERENCES "User"("id")
+ON DELETE CASCADE ON UPDATE CASCADE;
 
--- Trigger updatedAt para Session (si usás Neon/Postgres)
+-- Trigger updatedAt
 CREATE OR REPLACE FUNCTION trigger_set_timestamp()
 RETURNS TRIGGER AS $$
 BEGIN
