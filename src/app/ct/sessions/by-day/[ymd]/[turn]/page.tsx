@@ -14,7 +14,9 @@ type TurnKey = "morning" | "afternoon";
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO"] as const;
 const META_ROWS = ["LUGAR", "HORA", "VIDEO"] as const;
 
-function cellMarker(turn: TurnKey, row: string) { return `[GRID:${turn}:${row}]`; }
+function cellMarker(turn: TurnKey, row: string) {
+  return `[GRID:${turn}:${row}]`;
+}
 function isCellOf(s: SessionDTO, turn: TurnKey, row: string) {
   return typeof s.description === "string" && s.description.startsWith(cellMarker(turn, row));
 }
@@ -27,7 +29,12 @@ function parseVideoValue(v: string | null | undefined): { label: string; url: st
 }
 function humanDate(ymd: string) {
   const d = new Date(`${ymd}T00:00:00.000Z`);
-  return d.toLocaleDateString(undefined, { weekday: "long", day: "2-digit", month: "long", timeZone: "UTC" });
+  return d.toLocaleDateString(undefined, {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    timeZone: "UTC",
+  });
 }
 
 export default function SessionTurnoPage() {
@@ -83,6 +90,7 @@ export default function SessionTurnoPage() {
     });
   }, [daySessions, turn]);
 
+  // enfocar el bloque indicado por ?focus=
   useEffect(() => {
     const key = (focus || "") as typeof CONTENT_ROWS[number];
     const ref = key && blockRefs[key as keyof typeof blockRefs]?.current;
@@ -106,8 +114,12 @@ export default function SessionTurnoPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">← Dashboard</a>
-          <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">✏️ Editor</a>
+          <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+            ← Dashboard
+          </a>
+          <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+            ✏️ Editor
+          </a>
         </div>
       </header>
 
@@ -117,15 +129,29 @@ export default function SessionTurnoPage() {
           Meta de la sesión
         </div>
         <div className="grid md:grid-cols-3 gap-2 p-3 text-sm">
-          <div><div className="text-[11px] text-gray-500">Lugar</div><div className="font-medium">{meta.lugar || <span className="text-gray-400">—</span>}</div></div>
-          <div><div className="text-[11px] text-gray-500">Hora</div><div className="font-medium">{meta.hora || <span className="text-gray-400">—</span>}</div></div>
+          <div>
+            <div className="text-[11px] text-gray-500">Lugar</div>
+            <div className="font-medium">{meta.lugar || <span className="text-gray-400">—</span>}</div>
+          </div>
+          <div>
+            <div className="text-[11px] text-gray-500">Hora</div>
+            <div className="font-medium">{meta.hora || <span className="text-gray-400">—</span>}</div>
+          </div>
           <div>
             <div className="text-[11px] text-gray-500">Video</div>
             {meta.video.url ? (
-              <a href={meta.video.url} target="_blank" rel="noreferrer" className="underline text-emerald-700" title={meta.video.label || "Video"}>
+              <a
+                href={meta.video.url}
+                target="_blank"
+                rel="noreferrer"
+                className="underline text-emerald-700"
+                title={meta.video.label || "Video"}
+              >
                 {meta.video.label || "Video"}
               </a>
-            ) : (<span className="text-gray-400">—</span>)}
+            ) : (
+              <span className="text-gray-400">—</span>
+            )}
           </div>
         </div>
       </section>
