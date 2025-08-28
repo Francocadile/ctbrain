@@ -138,3 +138,5 @@ export async function POST(req: Request) {
     if (err instanceof Response) return err;
     console.error("POST /api/sessions error:", err);
     return NextResponse.json({ error: "Error al crear la sesión" }, { status: 500 });
+  }
+}
