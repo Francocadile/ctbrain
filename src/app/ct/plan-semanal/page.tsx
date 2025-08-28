@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getSessionsWeek,
   createSession,
@@ -11,48 +11,74 @@ import {
   type SessionDTO,
 } from "@/lib/api/sessions";
 
-// Helpers de fecha
+/**
+ * --- DISEÑO DE LA GRILLA ---
+ * Secciones y filas (como en tu planilla):
+ *   - Meta            : LUGAR / HORA / LINK       (encabezado arriba)
+ *   - TURNO MAÑANA    : PRE ENTREN0 / FÍSICO / TÉCNICO–TÁCTICO
+ *   - TURNO TARDE     : PRE ENTREN0 / FÍSICO / TÉCNICO–TÁCTICO
+ *
+ * Cada celda es editable (contentEditable). Al salir del foco (blur) o Ctrl+Enter:
+ *   - Si hay texto y no existía sesión -> crea una (POST)
+ *   - Si hay texto y existía sesión    -> actualiza título (PUT)
+ *   - Si NO hay texto y existía sesión -> borra (DELETE)
+ *
+ * Identificador de celda = "[GRID:<turno>:<row>]" guardado en description.
+ * Fecha/hora guardada en UTC:
+ *   - meta:       07:00
+ *   - mañana:     09:00
+ *   - tarde:      15:00
+ */
+
+type TurnKey = "meta" | "morning" | "afternoon";
+const SECTIONS: Array<{
+  key: TurnKey;
+  title: string;
+  rows: string[];
+}> = [
+  { key: "meta", title: "", rows: ["LUGAR", "HORA", "LINK"] },
+  { key: "morning", title: "TURNO MAÑANA", rows: ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO"] },
+  { key: "afternoon", title: "TURNO TARDE", rows: ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO"] },
+];
+
+// ---- Helpers de fecha ----
 function addDaysUTC(date: Date, days: number) {
   const x = new Date(date);
   x.setUTCDate(x.getUTCDate() + days);
   return x;
 }
-function formatHuman(dateISO: string) {
+function humanDay(dateISO: string) {
   const d = new Date(dateISO);
-  return d.toLocaleString(undefined, {
-    weekday: "short",
+  return d.toLocaleDateString(undefined, {
+    weekday: "long",
     day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
+    month: "2-digit",
   });
 }
-function toLocalInputValue(dateISO?: string) {
-  const d = dateISO ? new Date(dateISO) : new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const yyyy = d.getFullYear();
-  const mm = pad(d.getMonth() + 1);
-  const dd = pad(d.getDate());
-  const hh = pad(d.getHours());
-  const mi = pad(d.getMinutes());
-  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+function computeISOForSlot(dayYmd: string, turn: TurnKey) {
+  const base = new Date(`${dayYmd}T00:00:00.000Z`);
+  const h =
+    turn === "meta" ? 7 :
+    turn === "morning" ? 9 : 15;
+  base.setUTCHours(h, 0, 0, 0);
+  return base.toISOString();
 }
 
-// Resaltado simple (case-insensitive)
-function highlight(text: string, query: string) {
-  if (!query) return text;
-  const idx = text.toLowerCase().indexOf(query.toLowerCase());
-  if (idx === -1) return text;
-  const before = text.slice(0, idx);
-  const match = text.slice(idx, idx + query.length);
-  const after = text.slice(idx + query.length);
-  return (
-    <>
-      {before}
-      <mark className="bg-yellow-200 px-0.5 rounded">{match}</mark>
-      {after}
-    </>
-  );
+// ---- Marca de celda en description ----
+function cellMarker(turn: TurnKey, row: string) {
+  return `[GRID:${turn}:${row}]`;
+}
+function isCellOf(s: SessionDTO, turn: TurnKey, row: string) {
+  return typeof s.description === "string" && s.description.startsWith(cellMarker(turn, row));
+}
+
+// ---- Debounce simple ----
+function useDebouncedCallback<T extends (...args: any[]) => any>(fn: T, delay = 400) {
+  const ref = useRef<number | undefined>(undefined);
+  return (...args: Parameters<T>) => {
+    if (ref.current) window.clearTimeout(ref.current);
+    ref.current = window.setTimeout(() => fn(...args), delay);
+  };
 }
 
 export default function PlanSemanalPage() {
@@ -61,18 +87,11 @@ export default function PlanSemanalPage() {
 
   // Datos de la semana
   const [loading, setLoading] = useState(false);
-  const [days, setDays] = useState<Record<string, SessionDTO[]>>({});
+  const [daysMap, setDaysMap] = useState<Record<string, SessionDTO[]>>({});
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
-  // Crear / editar
-  const [formOpen, setFormOpen] = useState(false);
-  const [editing, setEditing] = useState<SessionDTO | null>(null);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState<string | null>("");
-  const [dateLocal, setDateLocal] = useState(toLocalInputValue());
-
-  // Búsqueda
+  // Búsqueda (opcional)
   const [query, setQuery] = useState("");
 
   // Cargar datos de la semana
@@ -82,7 +101,7 @@ export default function PlanSemanalPage() {
       const monday = getMonday(d);
       const startYYYYMMDD = toYYYYMMDDUTC(monday);
       const res = await getSessionsWeek({ start: startYYYYMMDD });
-      setDays(res.days);
+      setDaysMap(res.days);
       setWeekStart(res.weekStart);
       setWeekEnd(res.weekEnd);
     } catch (e) {
@@ -112,91 +131,113 @@ export default function PlanSemanalPage() {
     );
   }, [weekStart]);
 
-  // Abrir modal crear
-  function openCreate() {
-    setEditing(null);
-    setTitle("");
-    setDescription("");
-    setDateLocal(toLocalInputValue());
-    setFormOpen(true);
+  // --- Buscar/actualizar/borrar celdas ---
+  function findCell(dayYmd: string, turn: TurnKey, row: string): SessionDTO | undefined {
+    const list = daysMap[dayYmd] || [];
+    return list.find((s) => isCellOf(s, turn, row));
   }
 
-  // Abrir modal editar
-  function openEdit(s: SessionDTO) {
-    setEditing(s);
-    setTitle(s.title || "");
-    setDescription(s.description ?? "");
-    setDateLocal(toLocalInputValue(s.date));
-    setFormOpen(true);
-  }
+  async function saveCell(dayYmd: string, turn: TurnKey, row: string, text: string) {
+    const existing = findCell(dayYmd, turn, row);
+    const iso = computeISOForSlot(dayYmd, turn);
+    const marker = cellMarker(turn, row);
 
-  // Guardar (crear o editar)
-  async function saveSession() {
     try {
-      const iso = new Date(dateLocal).toISOString();
-      if (!editing) {
+      if (!text.trim()) {
+        // vacío -> borrar si existía
+        if (existing) {
+          await deleteSession(existing.id);
+          await loadWeek(base);
+        }
+        return;
+      }
+
+      if (!existing) {
         await createSession({
-          title: title.trim(),
-          description: (description ?? "") || null,
+          title: text.trim(),
+          description: `${marker} | ${dayYmd}`,
           date: iso,
+          type: "GENERAL",
         });
       } else {
-        await updateSession(editing.id, {
-          title: title.trim() || undefined,
-          description: description === "" ? null : (description ?? undefined),
+        await updateSession(existing.id, {
+          title: text.trim(),
+          // preservo marker al principio
+          description: existing.description?.startsWith(marker)
+            ? existing.description
+            : `${marker} | ${dayYmd}`,
           date: iso,
         });
       }
-      setFormOpen(false);
+
       await loadWeek(base);
     } catch (e: any) {
       console.error(e);
-      alert(e?.message || "Error al guardar la sesión");
+      alert(e?.message || "Error al guardar la celda");
     }
   }
 
-  // Borrar
-  async function remove(id: string) {
-    if (!confirm("¿Eliminar esta sesión?")) return;
-    try {
-      await deleteSession(id);
-      setFormOpen(false); // si venimos desde el modal, cerrarlo
-      await loadWeek(base);
-    } catch (e: any) {
-      console.error(e);
-      alert(e?.message || "Error al borrar la sesión");
-    }
-  }
+  const debouncedSave = useDebouncedCallback(saveCell, 450);
 
-  // Filtrado por búsqueda (solo frontend)
-  function matches(s: SessionDTO) {
-    if (!query) return true;
-    const q = query.toLowerCase();
+  // Estilo de celda editable
+  function EditableCell({
+    dayYmd,
+    turn,
+    row,
+    placeholder,
+  }: {
+    dayYmd: string;
+    turn: TurnKey;
+    row: string;
+    placeholder?: string;
+  }) {
+    const current = findCell(dayYmd, turn, row);
+    const ref = useRef<HTMLDivElement | null>(null);
+
+    const onBlur = () => {
+      const txt = ref.current?.innerText ?? "";
+      debouncedSave(dayYmd, turn, row, txt);
+    };
+    const onKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        const txt = ref.current?.innerText ?? "";
+        saveCell(dayYmd, turn, row, txt);
+      }
+    };
+
     return (
-      (s.title?.toLowerCase().includes(q) ?? false) ||
-      (s.description?.toLowerCase().includes(q) ?? false)
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        onBlur={onBlur}
+        onKeyDown={onKeyDown}
+        className="min-h-[84px] w-full rounded-xl border p-3 outline-none focus:ring-2 focus:ring-emerald-400 whitespace-pre-wrap"
+        placeholder={placeholder}
+        // mostrar valor actual
+        dangerouslySetInnerHTML={{ __html: (current?.title ?? "").replace(/\n/g, "<br/>") }}
+      />
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-6">
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Plan semanal</h1>
+          <h1 className="text-2xl font-bold">Plan semanal — Editor en tabla</h1>
           <p className="text-sm text-gray-500">
             Semana {weekStart || "—"} → {weekEnd || "—"}
           </p>
           <p className="mt-1 text-xs text-gray-400">
-            Tip: <kbd className="rounded border px-1">Alt</kbd>/<kbd className="rounded border px-1">Ctrl</kbd> mientras arrastrás = <b>duplicar</b>.
+            Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd> + <kbd className="rounded border px-1">Enter</kbd> para guardar al instante.
           </p>
         </div>
-
         <div className="flex flex-wrap items-center gap-2">
-          {/* Búsqueda */}
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar sesiones… (título o descripción)"
+            placeholder="Buscar texto en la semana…"
             className="px-3 py-2 rounded-xl border min-w-[260px]"
           />
           <div className="w-px h-6 bg-gray-200 mx-1" />
@@ -209,168 +250,66 @@ export default function PlanSemanalPage() {
           <button onClick={goNextWeek} className="px-3 py-2 rounded-xl border hover:bg-gray-50">
             Semana siguiente ▶
           </button>
-          <button onClick={openCreate} className="ml-1 px-4 py-2 rounded-xl bg-black text-white hover:opacity-90">
-            + Nueva sesión
-          </button>
         </div>
       </header>
 
       {loading ? (
         <div className="text-gray-500">Cargando semana…</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
-          {orderedDays.map((key) => {
-            const listAll = days[key] || [];
-            const list = listAll.filter(matches);
-            const isToday = new Date().toISOString().slice(0, 10) === key;
-
-            return (
-              <div key={key} className={`rounded-2xl border p-3 bg-white ${isToday ? "ring-2 ring-amber-400" : ""}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="font-semibold">
-                    {new Date(`${key}T00:00:00Z`).toLocaleDateString(
-                      undefined,
-                      { weekday: "short", day: "2-digit", month: "short" }
-                    )}
-                  </div>
-                  <span className="text-xs text-gray-400">{key}</span>
-                </div>
-
-                {list.length === 0 ? (
-                  <div className="text-sm text-gray-400">
-                    {query ? "Sin coincidencias" : "Sin sesiones"}
-                  </div>
-                ) : (
-                  <ul className="space-y-2">
-                    {list.map((s) => (
-                      <li key={s.id} className="rounded-xl border p-2 hover:bg-gray-50">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="font-medium">
-                              {highlight(s.title, query)}
-                            </div>
-                            {s.description ? (
-                              <div className="text-sm text-gray-600">
-                                {typeof s.description === "string"
-                                  ? highlight(s.description, query)
-                                  : s.description}
-                              </div>
-                            ) : null}
-                            <div className="text-xs text-gray-500 mt-1">
-                              {formatHuman(s.date)}
-                            </div>
-                            {s.user ? (
-                              <div className="text-xs text-gray-400">
-                                by {s.user.name || s.user.email || "CT"}
-                              </div>
-                            ) : null}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => openEdit(s)}
-                              className="text-xs px-2 py-1 rounded-lg border hover:bg-gray-50"
-                            >
-                              Editar
-                            </button>
-                            <button
-                              onClick={() => remove(s.id)}
-                              className="text-xs px-2 py-1 rounded-lg border text-red-600 hover:bg-red-50"
-                              title="Eliminar sesión"
-                            >
-                              Borrar
-                            </button>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+        <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
+          {/* Cabecera de días */}
+          <div className="grid" style={{ gridTemplateColumns: `180px repeat(7, minmax(220px, 1fr))` }}>
+            <div className="bg-gray-50 border-b px-3 py-2 font-semibold text-gray-600"> </div>
+            {orderedDays.map((ymd) => (
+              <div key={ymd} className="bg-gray-50 border-b px-4 py-2">
+                <div className="text-sm font-semibold uppercase tracking-wide">{humanDay(`${ymd}T00:00:00Z`)}</div>
+                <div className="text-xs text-gray-400">{ymd}</div>
               </div>
-            );
-          })}
+            ))}
+          </div>
+
+          {/* Sección META (LUGAR/HORA/LINK) */}
+          {SECTIONS.map((sec, sIdx) => (
+            <div key={sec.key} className="border-t">
+              {sec.title ? (
+                <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-4 py-2 border-b uppercase tracking-wide">
+                  {sec.title}
+                </div>
+              ) : null}
+
+              {sec.rows.map((rowName) => (
+                <div
+                  key={`${sec.key}-${rowName}`}
+                  className="grid items-stretch"
+                  style={{ gridTemplateColumns: `180px repeat(7, minmax(220px, 1fr))` }}
+                >
+                  {/* etiqueta fila */}
+                  <div className="bg-gray-50/60 border-r px-3 py-3 text-sm font-medium text-gray-600">
+                    {rowName}
+                  </div>
+
+                  {/* celdas por día */}
+                  {orderedDays.map((ymd) => (
+                    <div key={`${ymd}-${sec.key}-${rowName}`} className="p-2">
+                      <EditableCell
+                        dayYmd={ymd}
+                        turn={sec.key}
+                        row={rowName}
+                        placeholder="Escribir…"
+                      />
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Modal simple */}
-      {formOpen && (
-        <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">
-                {editing ? "Editar sesión" : "Nueva sesión"}
-              </h2>
-              <button
-                onClick={() => setFormOpen(false)}
-                className="text-gray-500 hover:text-black"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm font-medium">Título</label>
-                <input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="mt-1 w-full rounded-xl border px-3 py-2"
-                  placeholder="Ej: Fuerza + Aceleraciones"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Descripción</label>
-                <textarea
-                  value={description ?? ""}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className="mt-1 w-full rounded-xl border px-3 py-2"
-                  rows={3}
-                  placeholder="Objetivos, bloques, notas…"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Fecha y hora</label>
-                <input
-                  type="datetime-local"
-                  value={dateLocal}
-                  onChange={(e) => setDateLocal(e.target.value)}
-                  className="mt-1 w-full rounded-xl border px-3 py-2"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Se guarda en UTC (tu hora local se convierte a ISO).
-                </p>
-              </div>
-            </div>
-
-            <div className="flex justify-between gap-2 pt-2">
-              {/* Eliminar SOLO cuando estamos editando */}
-              {editing ? (
-                <button
-                  onClick={() => remove(editing.id)}
-                  className="px-4 py-2 rounded-xl border border-red-300 text-red-700 hover:bg-red-50"
-                  title="Eliminar sesión"
-                >
-                  Eliminar
-                </button>
-              ) : <span />}
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setFormOpen(false)}
-                  className="px-4 py-2 rounded-xl border hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={saveSession}
-                  className="px-4 py-2 rounded-xl bg-black text-white hover:opacity-90"
-                >
-                  Guardar
-                </button>
-              </div>
-            </div>
-          </div>
+      {/* Buscador simple (resalta solo visualmente listando matches) */}
+      {query && (
+        <div className="text-xs text-gray-500">
+          Buscando “{query}” en la semana…
         </div>
       )}
     </div>
