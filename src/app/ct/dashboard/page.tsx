@@ -30,7 +30,7 @@ function humanDayUTC(ymd: string) {
   });
 }
 
-// ---- Marca de celda en description ----
+// ---- Marca de celda ----
 function cellMarker(turn: TurnKey, row: string) {
   return `[GRID:${turn}:${row}]`;
 }
@@ -47,14 +47,16 @@ function parseVideoValue(v: string | null | undefined): { label: string; url: st
   return { label: label || "", url: url || "" };
 }
 
+// Bloquea edición en cualquier nodo de texto (defensa extra)
+function stopEdit(e: React.SyntheticEvent) {
+  e.preventDefault();
+}
+
 export default function DashboardSemanaPage() {
   const qs = useSearchParams();
   const hideHeader = qs.get("hideHeader") === "1";
 
-  // Semana base (lunes)
   const [base, setBase] = useState<Date>(() => getMonday(new Date()));
-
-  // Datos de la semana
   const [loading, setLoading] = useState(false);
   const [daysMap, setDaysMap] = useState<Record<string, SessionDTO[]>>({});
   const [weekStart, setWeekStart] = useState<string>("");
@@ -82,25 +84,21 @@ export default function DashboardSemanaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [base]);
 
-  // Navegación de semanas
   const goPrevWeek = () => setBase((d) => addDaysUTC(d, -7));
   const goNextWeek = () => setBase((d) => addDaysUTC(d, 7));
   const goTodayWeek = () => setBase(getMonday(new Date()));
 
-  // Días Lunes→Domingo
   const orderedDays = useMemo(() => {
     if (!weekStart) return [];
     const start = new Date(`${weekStart}T00:00:00.000Z`);
     return Array.from({ length: 7 }).map((_, i) => toYYYYMMDDUTC(addDaysUTC(start, i)));
   }, [weekStart]);
 
-  // --- Buscar celdas existentes ---
   function findCell(dayYmd: string, turn: TurnKey, row: string): SessionDTO | undefined {
     const list = daysMap[dayYmd] || [];
     return list.find((s) => isCellOf(s, turn, row));
   }
 
-  // ---- Celdas READONLY ----
   function ReadonlyMetaCell({
     dayYmd,
     turn,
@@ -113,7 +111,19 @@ export default function DashboardSemanaPage() {
     const existing = findCell(dayYmd, turn, row);
     const text = (existing?.title ?? "").trim();
 
-    if (!text) return <div className="h-8 text-[12px] text-gray-400 italic px-1.5 flex items-center">—</div>;
+    if (!text)
+      return (
+        <div
+          className="h-8 text-[12px] text-gray-400 italic px-1.5 flex items-center"
+          contentEditable={false}
+          data-readonly
+          onInput={stopEdit}
+          onPaste={stopEdit}
+          onDrop={stopEdit}
+        >
+          —
+        </div>
+      );
 
     if (row === "VIDEO") {
       const { label, url } = parseVideoValue(text);
@@ -130,11 +140,33 @@ export default function DashboardSemanaPage() {
           </a>
         );
       }
-      return <div className="h-8 text-[12px] px-1.5 flex items-center truncate">{label}</div>;
+      return (
+        <div
+          className="h-8 text-[12px] px-1.5 flex items-center truncate"
+          contentEditable={false}
+          data-readonly
+          onInput={stopEdit}
+          onPaste={stopEdit}
+          onDrop={stopEdit}
+        >
+          {label}
+        </div>
+      );
     }
 
     // LUGAR / HORA
-    return <div className="h-8 text-[12px] px-1.5 flex items-center truncate">{text}</div>;
+    return (
+      <div
+        className="h-8 text-[12px] px-1.5 flex items-center truncate"
+        contentEditable={false}
+        data-readonly
+        onInput={stopEdit}
+        onPaste={stopEdit}
+        onDrop={stopEdit}
+      >
+        {text}
+      </div>
+    );
   }
 
   function ReadonlyContentCell({
@@ -154,7 +186,14 @@ export default function DashboardSemanaPage() {
       <div className="space-y-1">
         {sessionId ? (
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-gray-500">
+            <span
+              className="text-[10px] text-gray-500"
+              contentEditable={false}
+              data-readonly
+              onInput={stopEdit}
+              onPaste={stopEdit}
+              onDrop={stopEdit}
+            >
               {row} —{" "}
               {new Date(`${dayYmd}T00:00:00Z`).toLocaleDateString(undefined, {
                 day: "2-digit",
@@ -176,8 +215,17 @@ export default function DashboardSemanaPage() {
         )}
 
         <div
-          className="min-h-[90px] w-full rounded-xl border p-2 text-[13px] leading-5 whitespace-pre-wrap bg-gray-50"
+          className="min-h[90px] min-h-[90px] w-full rounded-xl border p-2 text-[13px] leading-5 whitespace-pre-wrap bg-gray-50"
           title={text || ""}
+          contentEditable={false}
+          data-readonly
+          onInput={stopEdit}
+          onPaste={stopEdit}
+          onDrop={stopEdit}
+          onKeyDown={(e) => {
+            // Permite Tab para foco accesible, pero bloquea Enter/teclas que podrían insertar contenido
+            if (["Enter"].includes(e.key) && !e.ctrlKey && !e.metaKey) e.preventDefault();
+          }}
         >
           {text ? text : <span className="text-gray-400 italic">—</span>}
         </div>
@@ -186,13 +234,20 @@ export default function DashboardSemanaPage() {
   }
 
   return (
-    <div className="p-3 md:p-4 space-y-3">
+    <div
+      className="p-3 md:p-4 space-y-3"
+      onInput={stopEdit}
+      onPaste={stopEdit}
+      onDrop={stopEdit}
+    >
       {/* Header */}
       {!hideHeader && (
         <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-lg md:text-xl font-bold">Dashboard — Plan semanal (solo lectura)</h1>
-            <p className="text-xs md:text-sm text-gray-500">
+            <h1 className="text-lg md:text-xl font-bold" contentEditable={false} data-readonly>
+              Dashboard — Plan semanal (solo lectura)
+            </h1>
+            <p className="text-xs md:text-sm text-gray-500" contentEditable={false} data-readonly>
               Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)
             </p>
           </div>
@@ -218,21 +273,32 @@ export default function DashboardSemanaPage() {
           <div
             className="grid text-xs"
             style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
+            onInput={stopEdit}
           >
-            <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600"></div>
+            <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600" contentEditable={false} />
             {orderedDays.map((ymd) => (
               <div key={ymd} className="bg-gray-50 border-b px-2 py-1.5">
-                <div className="text-[11px] font-semibold uppercase tracking-wide">
+                <div
+                  className="text-[11px] font-semibold uppercase tracking-wide"
+                  contentEditable={false}
+                  data-readonly
+                >
                   {humanDayUTC(ymd)}
                 </div>
-                <div className="text-[10px] text-gray-400">{ymd}</div>
+                <div className="text-[10px] text-gray-400" contentEditable={false} data-readonly>
+                  {ymd}
+                </div>
               </div>
             ))}
           </div>
 
           {/* META MAÑANA */}
           <div className="border-t">
-            <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
+            <div
+              className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]"
+              contentEditable={false}
+              data-readonly
+            >
               TURNO MAÑANA · Meta
             </div>
             {META_ROWS.map((rowName) => (
@@ -241,7 +307,11 @@ export default function DashboardSemanaPage() {
                 className="grid items-center"
                 style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
               >
-                <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">
+                <div
+                  className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600"
+                  contentEditable={false}
+                  data-readonly
+                >
                   {rowName}
                 </div>
                 {orderedDays.map((ymd) => (
@@ -255,7 +325,11 @@ export default function DashboardSemanaPage() {
 
           {/* BLOQUES MAÑANA */}
           <div className="border-t">
-            <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
+            <div
+              className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]"
+              contentEditable={false}
+              data-readonly
+            >
               TURNO MAÑANA
             </div>
             {CONTENT_ROWS.map((rowName) => (
@@ -264,7 +338,11 @@ export default function DashboardSemanaPage() {
                 className="grid items-stretch"
                 style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
               >
-                <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600">
+                <div
+                  className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600"
+                  contentEditable={false}
+                  data-readonly
+                >
                   {rowName}
                 </div>
                 {orderedDays.map((ymd) => (
@@ -278,7 +356,11 @@ export default function DashboardSemanaPage() {
 
           {/* META TARDE */}
           <div className="border-t">
-            <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
+            <div
+              className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]"
+              contentEditable={false}
+              data-readonly
+            >
               TURNO TARDE · Meta
             </div>
             {META_ROWS.map((rowName) => (
@@ -287,7 +369,11 @@ export default function DashboardSemanaPage() {
                 className="grid items-center"
                 style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
               >
-                <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">
+                <div
+                  className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600"
+                  contentEditable={false}
+                  data-readonly
+                >
                   {rowName}
                 </div>
                 {orderedDays.map((ymd) => (
@@ -301,7 +387,11 @@ export default function DashboardSemanaPage() {
 
           {/* BLOQUES TARDE */}
           <div className="border-t">
-            <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
+            <div
+              className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]"
+              contentEditable={false}
+              data-readonly
+            >
               TURNO TARDE
             </div>
             {CONTENT_ROWS.map((rowName) => (
@@ -310,7 +400,11 @@ export default function DashboardSemanaPage() {
                 className="grid items-stretch"
                 style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
               >
-                <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600">
+                <div
+                  className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600"
+                  contentEditable={false}
+                  data-readonly
+                >
                   {rowName}
                 </div>
                 {orderedDays.map((ymd) => (
