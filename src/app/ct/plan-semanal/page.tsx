@@ -55,15 +55,6 @@ function isCellOf(s: SessionDTO, turn: TurnKey, row: string) {
   return typeof s.description === "string" && s.description.startsWith(cellMarker(turn, row));
 }
 
-// ---- Debounce simple ----
-function useDebouncedCallback<T extends (...args: any[]) => any>(fn: T, delay = 400) {
-  const ref = useRef<number | undefined>(undefined);
-  return (...args: Parameters<T>) => {
-    if (ref.current) window.clearTimeout(ref.current);
-    ref.current = window.setTimeout(() => fn(...args), delay);
-  };
-}
-
 // ---- Parse/format para VIDEO "titulo|url" ----
 function parseVideoValue(v: string | null | undefined): { label: string; url: string } {
   const raw = (v || "").trim();
@@ -80,6 +71,11 @@ function joinVideoValue(label: string, url: string) {
   return `${l}|${u}`;
 }
 
+// ---- Key único por celda (para cambios pendientes) ----
+function cellKey(dayYmd: string, turn: TurnKey, row: string) {
+  return `${dayYmd}::${turn}::${row}`;
+}
+
 export default function PlanSemanalPage() {
   const qs = useSearchParams();
   const hideHeader = qs.get("hideHeader") === "1";
@@ -93,6 +89,13 @@ export default function PlanSemanalPage() {
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
+  // Cambios pendientes (no guardados todavía)
+  //   key = `${dayYmd}::${turn}::${row}`  value = texto ("" => borrar)
+  const [pending, setPending] = useState<Record<string, string>>({});
+
+  // Flag guardando en lote
+  const [savingAll, setSavingAll] = useState(false);
+
   async function loadWeek(d: Date) {
     setLoading(true);
     try {
@@ -102,6 +105,7 @@ export default function PlanSemanalPage() {
       setDaysMap(res.days);
       setWeekStart(res.weekStart);
       setWeekEnd(res.weekEnd);
+      setPending({}); // limpiar pendientes al cargar
     } catch (e) {
       console.error(e);
       alert("No se pudo cargar la semana.");
@@ -115,10 +119,17 @@ export default function PlanSemanalPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [base]);
 
+  // Confirmar si hay cambios sin guardar al cambiar de semana
+  function confirmDiscardIfNeeded(action: () => void) {
+    if (Object.keys(pending).length === 0) return action();
+    const ok = confirm("Tenés cambios sin guardar. ¿Descartarlos?");
+    if (ok) action();
+  }
+
   // Navegación de semanas
-  const goPrevWeek = () => setBase((d) => addDaysUTC(d, -7));
-  const goNextWeek = () => setBase((d) => addDaysUTC(d, 7));
-  const goTodayWeek = () => setBase(getMonday(new Date()));
+  const goPrevWeek = () => confirmDiscardIfNeeded(() => setBase((d) => addDaysUTC(d, -7)));
+  const goNextWeek = () => confirmDiscardIfNeeded(() => setBase((d) => addDaysUTC(d, 7)));
+  const goTodayWeek = () => confirmDiscardIfNeeded(() => setBase(getMonday(new Date())));
 
   // Días Lunes→Domingo
   const orderedDays = useMemo(() => {
@@ -127,53 +138,88 @@ export default function PlanSemanalPage() {
     return Array.from({ length: 7 }).map((_, i) => toYYYYMMDDUTC(addDaysUTC(start, i)));
   }, [weekStart]);
 
-  // --- Buscar/actualizar/borrar celdas ---
+  // --- Buscar celdas existentes ---
   function findCell(dayYmd: string, turn: TurnKey, row: string): SessionDTO | undefined {
     const list = daysMap[dayYmd] || [];
     return list.find((s) => isCellOf(s, turn, row));
   }
 
-  async function saveCell(dayYmd: string, turn: TurnKey, row: string, text: string) {
-    const existing = findCell(dayYmd, turn, row);
-    const iso = computeISOForSlot(dayYmd, turn);
-    const marker = cellMarker(turn, row);
-
-    try {
-      if (!text.trim()) {
-        if (existing) {
-          await deleteSession(existing.id);
-          await loadWeek(base);
-        }
-        return;
-      }
-
-      if (!existing) {
-        await createSession({
-          title: text.trim(),
-          description: `${marker} | ${dayYmd}`,
-          date: iso,
-          type: "GENERAL",
-        });
+  // --- Stage (no guarda todavía) ---
+  function stageCell(dayYmd: string, turn: TurnKey, row: string, text: string) {
+    const k = cellKey(dayYmd, turn, row);
+    setPending((prev) => {
+      const next = { ...prev };
+      // si el texto coincide exactamente con lo que está en DB, quitamos el pending
+      const existing = findCell(dayYmd, turn, row);
+      const currentValue = existing?.title?.trim() ?? "";
+      if (text.trim() === currentValue) {
+        delete next[k];
       } else {
-        await updateSession(existing.id, {
-          title: text.trim(),
-          description: existing.description?.startsWith(marker)
-            ? existing.description
-            : `${marker} | ${dayYmd}`,
-          date: iso,
-        });
+        next[k] = text;
+      }
+      return next;
+    });
+  }
+
+  // --- Guardar todo en lote ---
+  async function saveAll() {
+    const entries = Object.entries(pending);
+    if (entries.length === 0) return;
+    setSavingAll(true);
+    try {
+      for (const [k, value] of entries) {
+        const [dayYmd, turn, row] = k.split("::") as [string, TurnKey, string];
+        const existing = findCell(dayYmd, turn, row);
+        const iso = computeISOForSlot(dayYmd, turn);
+        const marker = cellMarker(turn, row);
+
+        const text = (value ?? "").trim();
+
+        if (!text) {
+          // borrar si había algo
+          if (existing) await deleteSession(existing.id);
+          continue;
+        }
+
+        if (!existing) {
+          await createSession({
+            title: text,
+            description: `${marker} | ${dayYmd}`,
+            date: iso,
+            type: "GENERAL",
+          });
+        } else {
+          await updateSession(existing.id, {
+            title: text,
+            description: existing.description?.startsWith(marker)
+              ? existing.description
+              : `${marker} | ${dayYmd}`,
+            date: iso,
+          });
+        }
       }
 
+      // Un solo refetch al final
       await loadWeek(base);
     } catch (e: any) {
       console.error(e);
-      alert(e?.message || "Error al guardar");
+      alert(e?.message || "Error al guardar cambios");
+    } finally {
+      setSavingAll(false);
     }
   }
 
-  const debouncedSave = useDebouncedCallback(saveCell, 450);
+  // --- Descartar ---
+  function discardAll() {
+    if (Object.keys(pending).length === 0) return;
+    const ok = confirm("¿Descartar todos los cambios sin guardar?");
+    if (!ok) return;
+    setPending({});
+    // También reseteamos la vista recargando la semana
+    loadWeek(base);
+  }
 
-  // ==== Meta inputs (LUGAR/HORA/VIDEO) por turno ====
+  // ==== Meta inputs (LUGAR/HORA/VIDEO) por turno (controlado con pending) ====
   function MetaInput({
     dayYmd,
     turn,
@@ -183,19 +229,20 @@ export default function PlanSemanalPage() {
     turn: TurnKey;
     row: (typeof META_ROWS)[number];
   }) {
-    const current = findCell(dayYmd, turn, row);
-    const value = (current?.title ?? "").trim();
+    const existing = findCell(dayYmd, turn, row);
+    const original = (existing?.title ?? "").trim();
 
-    async function setImmediate(next: string) {
-      await saveCell(dayYmd, turn, row, next);
-    }
+    const k = cellKey(dayYmd, turn, row);
+    const pendingValue = pending[k];
+    const value = pendingValue !== undefined ? pendingValue : original;
 
+    // LUGAR
     if (row === "LUGAR") {
       return (
         <select
           className="h-8 w-full rounded-md border px-2 text-xs"
           value={value || ""}
-          onChange={(e) => setImmediate(e.target.value)}
+          onChange={(e) => stageCell(dayYmd, turn, row, e.target.value)}
         >
           <option value="">— Lugar —</option>
           {LUGARES.map((l) => (
@@ -207,43 +254,44 @@ export default function PlanSemanalPage() {
       );
     }
 
+    // HORA (HH:mm)
     if (row === "HORA") {
-      const hhmm = /^[0-9]{2}:[0-9]{2}$/.test(value) ? value : "";
+      const hhmm = /^[0-9]{2}:[0-9]{2}$/.test(value || "") ? value : "";
       return (
         <input
           type="time"
           className="h-8 w-full rounded-md border px-2 text-xs"
           value={hhmm}
-          onChange={(e) => setImmediate(e.target.value)}
+          onChange={(e) => stageCell(dayYmd, turn, row, e.target.value)}
         />
       );
     }
 
-    // === VIDEO: mostrar sólo link "Sesión 1" y permitir editar con ✏️ ===
-    const { label, url } = parseVideoValue(value);
-    const [editing, setEditing] = useState(false);
+    // VIDEO
+    const parsed = parseVideoValue(value || "");
+    const [editingVideo, setEditingVideo] = useState(false);
 
-    if (!editing && (label || url)) {
+    if (!editingVideo && (parsed.label || parsed.url)) {
       return (
         <div className="flex items-center justify-between gap-1">
-          {url ? (
+          {parsed.url ? (
             <a
-              href={url}
+              href={parsed.url}
               target="_blank"
               rel="noreferrer"
               className="text-[12px] underline text-emerald-700 truncate"
-              title={label || "Video"}
+              title={parsed.label || "Video"}
             >
-              {label || "Video"}
+              {parsed.label || "Video"}
             </a>
           ) : (
-            <span className="text-[12px] text-gray-500 truncate">{label}</span>
+            <span className="text-[12px] text-gray-500 truncate">{parsed.label}</span>
           )}
           <div className="flex items-center gap-1">
             <button
               type="button"
               className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
-              onClick={() => setEditing(true)}
+              onClick={() => setEditingVideo(true)}
               title="Editar"
             >
               ✏️
@@ -251,7 +299,7 @@ export default function PlanSemanalPage() {
             <button
               type="button"
               className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
-              onClick={() => setImmediate("")}
+              onClick={() => stageCell(dayYmd, turn, row, "")}
               title="Borrar"
             >
               ❌
@@ -261,27 +309,31 @@ export default function PlanSemanalPage() {
       );
     }
 
-    // Modo edición o vacío
+    // Modo edición o vacío (stage en onChange y se guarda al final)
     return (
       <div className="flex items-center gap-1.5">
         <input
           className="h-8 w-[45%] rounded-md border px-2 text-xs"
           placeholder="Título"
-          defaultValue={label}
-          onBlur={(e) => setImmediate(joinVideoValue(e.target.value, url))}
+          defaultValue={parsed.label}
+          onChange={(e) =>
+            stageCell(dayYmd, turn, row, joinVideoValue(e.target.value, parsed.url))
+          }
         />
         <input
           type="url"
           className="h-8 w-[55%] rounded-md border px-2 text-xs"
           placeholder="https://…"
-          defaultValue={url}
-          onBlur={(e) => setImmediate(joinVideoValue(label, e.target.value))}
+          defaultValue={parsed.url}
+          onChange={(e) =>
+            stageCell(dayYmd, turn, row, joinVideoValue(parsed.label, e.target.value))
+          }
         />
       </div>
     );
   }
 
-  // ==== Celda editable grande ====
+  // ==== Celda editable grande (stage en blur/⌘+Enter, NO guarda aún) ====
   function EditableCell({
     dayYmd,
     turn,
@@ -291,23 +343,27 @@ export default function PlanSemanalPage() {
     turn: TurnKey;
     row: string;
   }) {
-    const current = findCell(dayYmd, turn, row);
+    const existing = findCell(dayYmd, turn, row);
     const ref = useRef<HTMLDivElement | null>(null);
+
+    // si hay pending, mostrarlo en la caja; si no, mostrar lo de DB
+    const k = cellKey(dayYmd, turn, row);
+    const staged = pending[k];
+    const initialText = staged !== undefined ? staged : (existing?.title ?? "");
 
     const onBlur = () => {
       const txt = ref.current?.innerText ?? "";
-      debouncedSave(dayYmd, turn, row, txt);
+      stageCell(dayYmd, turn, row, txt);
     };
     const onKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
         const txt = ref.current?.innerText ?? "";
-        saveCell(dayYmd, turn, row, txt);
+        stageCell(dayYmd, turn, row, txt);
       }
     };
 
-    const titulo = current?.title ?? "";
-    const sessionId = current?.id;
+    const sessionId = existing?.id;
 
     return (
       <div className="space-y-1">
@@ -340,13 +396,18 @@ export default function PlanSemanalPage() {
           suppressContentEditableWarning
           onBlur={onBlur}
           onKeyDown={onKeyDown}
-          className="min-h-[90px] w-full rounded-xl border p-2 text-[13px] leading-5 outline-none focus:ring-2 focus:ring-emerald-400 whitespace-pre-wrap"
+          className={`min-h-[90px] w-full rounded-xl border p-2 text-[13px] leading-5 outline-none focus:ring-2 ${
+            staged !== undefined ? "border-emerald-400 ring-emerald-200" : "focus:ring-emerald-400"
+          } whitespace-pre-wrap`}
           data-placeholder="Escribir…"
-          dangerouslySetInnerHTML={{ __html: titulo.replace(/\n/g, "<br/>") }}
+          // Mostrar el texto inicial una sola vez
+          dangerouslySetInnerHTML={{ __html: (initialText || "").replace(/\n/g, "<br/>") }}
         />
       </div>
     );
   }
+
+  const pendingCount = Object.keys(pending).length;
 
   return (
     <div className="p-3 md:p-4 space-y-3">
@@ -360,9 +421,8 @@ export default function PlanSemanalPage() {
         }
       `}</style>
 
-      {/* Header / Navegación de semana */}
-      {!hideHeader ? (
-        // --- Header completo (como ya lo tenías) ---
+      {/* Header */}
+      {!hideHeader && (
         <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-lg md:text-xl font-bold">Plan semanal — Editor en tabla</h1>
@@ -371,7 +431,7 @@ export default function PlanSemanalPage() {
             </p>
             <p className="mt-1 text-[10px] text-gray-400">
               Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd>{" "}
-              + <kbd className="rounded border px-1">Enter</kbd> para guardar al instante.
+              + <kbd className="rounded border px-1">Enter</kbd> para “marcar” una celda sin guardar aún.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -384,21 +444,30 @@ export default function PlanSemanalPage() {
             <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
               Semana siguiente ▶
             </button>
+
+            <div className="w-px h-6 bg-gray-200 mx-1" />
+
+            <button
+              onClick={saveAll}
+              disabled={pendingCount === 0 || savingAll}
+              className={`px-3 py-1.5 rounded-xl text-xs ${
+                pendingCount === 0 || savingAll
+                  ? "bg-gray-200 text-gray-500"
+                  : "bg-black text-white hover:opacity-90"
+              }`}
+              title={pendingCount ? `${pendingCount} cambio(s) por guardar` : "Sin cambios"}
+            >
+              {savingAll ? "Guardando..." : `Guardar cambios${pendingCount ? ` (${pendingCount})` : ""}`}
+            </button>
+            <button
+              onClick={discardAll}
+              disabled={pendingCount === 0 || savingAll}
+              className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
+            >
+              Descartar
+            </button>
           </div>
         </header>
-      ) : (
-        // --- Barra compacta SIEMPRE visible cuando el header está oculto ---
-        <div className="sticky top-12 z-20 flex items-center justify-end gap-2 pb-1">
-          <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-            ◀
-          </button>
-          <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-            Hoy
-          </button>
-          <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-            ▶
-          </button>
-        </div>
       )}
 
       {loading ? (
