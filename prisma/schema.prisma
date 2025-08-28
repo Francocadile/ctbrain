@@ -15,6 +15,14 @@ enum Role {
   DIRECTIVO
 }
 
+enum SessionType {
+  GENERAL
+  FUERZA
+  TACTICA
+  AEROBICO
+  RECUPERACION
+}
+
 model User {
   id        String    @id @default(cuid())
   email     String    @unique
@@ -23,43 +31,20 @@ model User {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  // Relación inversa: sesiones creadas por este usuario (CT/Admin)
-  sessions  Session[]
-}
-
-/**
- * NOTA ENUM:
- * Incluye TUS valores (GENERAL, FUERZA, TACTICA, AEROBICO, RECUPERACION)
- * y también los que pudiste haber creado en la migración previa
- * (PARTIDO, TACTICO, EVALUACION, LIBRE), para evitar desincronizaciones
- * con el tipo ya existente en la DB.
- */
-enum SessionType {
-  GENERAL
-  FUERZA
-  TACTICA
-  AEROBICO
-  RECUPERACION
-  // Compatibilidad con migración previa
-  PARTIDO
-  TACTICO
-  EVALUACION
-  LIBRE
+  sessions  Session[] @relation("UserSessions")
 }
 
 model Session {
   id          String       @id @default(cuid())
   title       String
-  description String?      @db.Text
+  description String?
   date        DateTime
   type        SessionType  @default(GENERAL)
-
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  // Creador (userId)
   createdBy   String
-  user        User         @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  user        User         @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
 
   @@index([date])
   @@index([type])
