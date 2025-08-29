@@ -66,13 +66,15 @@ export default function SesionDetailEditorPage() {
       try {
         const res = await getSessionById(id);
         const sess: SessionDTO =
-          (res as any)?.data ? (res as any).data : (res as unknown as SessionDTO);
+          (res as any)?.data ? (res as any).data : ((res as unknown) as SessionDTO);
         setS(sess);
         const { prefix, exercises } = decodeExercises(sess?.description || "");
         setPrefix(prefix);
-        setExercises(exercises.length ? exercises : [
-          { title: "", space: "", players: "", duration: "", description: "", imageUrl: "" },
-        ]);
+        setExercises(
+          exercises.length
+            ? exercises
+            : [{ title: "", space: "", players: "", duration: "", description: "", imageUrl: "" }]
+        );
       } catch (e) {
         console.error(e);
         setS(null);
@@ -111,13 +113,17 @@ export default function SesionDetailEditorPage() {
     if (!s) return;
     setSaving(true);
     try {
-      const newDescription = encodeExercises(prefix || (s.description as string) || "", exercises);
+      const basePrefix =
+        prefix || (typeof s.description === "string" ? s.description : "");
+      const newDescription = encodeExercises(basePrefix, exercises);
+
       await updateSession(s.id, {
-        // mantenemos el title como está (contenido de la celda/encabezado)
-        title: s.title,
+        // ⛑️ si title viene null de la DB, usamos string vacío para cumplir el tipado
+        title: s.title ?? "",
         description: newDescription,
         date: s.date,
       });
+
       alert("Guardado");
     } catch (e: any) {
       console.error(e);
@@ -128,7 +134,12 @@ export default function SesionDetailEditorPage() {
   }
 
   if (loading) return <div className="p-6 text-gray-500">Cargando…</div>;
-  if (!s) return <div className="p-6"><h1 className="text-xl font-semibold">Sesión no encontrada</h1></div>;
+  if (!s)
+    return (
+      <div className="p-6">
+        <h1 className="text-xl font-semibold">Sesión no encontrada</h1>
+      </div>
+    );
 
   return (
     <div className="p-4 md:p-6 space-y-4">
