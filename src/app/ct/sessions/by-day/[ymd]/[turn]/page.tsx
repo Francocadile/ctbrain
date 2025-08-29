@@ -52,16 +52,6 @@ export default function SessionTurnoPage() {
     "TÉCNICO–TÁCTICO": useRef<HTMLDivElement | null>(null),
   } as const;
 
-  // Enfocar + flash verde
-  function focusBlock(row: typeof CONTENT_ROWS[number]) {
-    const ref = blockRefs[row]?.current;
-    if (!ref) return;
-    ref.scrollIntoView({ behavior: "smooth", block: "start" });
-    ref.classList.add("ring-2", "ring-emerald-400");
-    const t = setTimeout(() => ref.classList.remove("ring-2", "ring-emerald-400"), 1200);
-    return () => clearTimeout(t);
-  }
-
   useEffect(() => {
     async function load() {
       if (!ymd) return;
@@ -82,6 +72,13 @@ export default function SessionTurnoPage() {
     load();
   }, [ymd]);
 
+  useEffect(() => {
+    const key = (focus || "") as typeof CONTENT_ROWS[number];
+    const ref = key && (blockRefs as any)[key]?.current;
+    if (ref) ref.scrollIntoView({ behavior: "smooth", block: "start" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
+
   const meta = useMemo(() => {
     const get = (row: (typeof META_ROWS)[number]) =>
       (daySessions.find((s) => isCellOf(s, turn, row))?.title || "").trim();
@@ -99,15 +96,6 @@ export default function SessionTurnoPage() {
       return { row, text, id: s?.id || "" };
     });
   }, [daySessions, turn]);
-
-  // Enfocar si viene ?focus=
-  useEffect(() => {
-    const key = (focus || "") as typeof CONTENT_ROWS[number];
-    if ((CONTENT_ROWS as readonly string[]).includes(key)) {
-      focusBlock(key as any);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus]);
 
   return (
     <div className="p-4 space-y-4">
@@ -138,31 +126,19 @@ export default function SessionTurnoPage() {
         <div className="grid md:grid-cols-3 gap-2 p-3 text-sm">
           <div>
             <div className="text-[11px] text-gray-500">Lugar</div>
-            <div className="font-medium">
-              {meta.lugar || <span className="text-gray-400">—</span>}
-            </div>
+            <div className="font-medium">{meta.lugar || <span className="text-gray-400">—</span>}</div>
           </div>
           <div>
             <div className="text-[11px] text-gray-500">Hora</div>
-            <div className="font-medium">
-              {meta.hora || <span className="text-gray-400">—</span>}
-            </div>
+            <div className="font-medium">{meta.hora || <span className="text-gray-400">—</span>}</div>
           </div>
           <div>
             <div className="text-[11px] text-gray-500">Video</div>
             {meta.video.url ? (
-              <a
-                href={meta.video.url}
-                target="_blank"
-                rel="noreferrer"
-                className="underline text-emerald-700"
-                title={meta.video.label || "Video"}
-              >
+              <a href={meta.video.url} target="_blank" rel="noreferrer" className="underline text-emerald-700" title={meta.video.label || "Video"}>
                 {meta.video.label || "Video"}
               </a>
-            ) : (
-              <span className="text-gray-400">—</span>
-            )}
+            ) : (<span className="text-gray-400">—</span>)}
           </div>
         </div>
       </section>
@@ -171,31 +147,17 @@ export default function SessionTurnoPage() {
       <section className="space-y-3">
         {blocks.map(({ row, text, id }) => (
           <div key={row} ref={blockRefs[row]} className="rounded-2xl border bg-white shadow-sm p-3">
-            <div className="flex items-center justify-between mb-2 gap-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">
-                {row}
-              </h2>
-              <div className="flex items-center gap-2">
-                {/* Enfocar: no navega */}
-                <button
-                  type="button"
-                  onClick={() => focusBlock(row)}
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">{row}</h2>
+              {id ? (
+                <a
+                  href={`/ct/sessions/${id}`}
                   className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50"
-                  title="Enfocar bloque"
+                  title="Abrir ficha de ejercicio"
                 >
-                  Enfocar
-                </button>
-                {/* Abrir ficha: va a /ct/sessions/[id] cuando existe */}
-                {id ? (
-                  <a
-                    href={`/ct/sessions/${id}`}
-                    className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50"
-                    title="Abrir ficha de tarea"
-                  >
-                    Abrir ficha
-                  </a>
-                ) : null}
-              </div>
+                  Abrir ficha
+                </a>
+              ) : null}
             </div>
             <div className="min-h-[120px] whitespace-pre-wrap leading-6 text-[13px]">
               {text || <span className="text-gray-400 italic">—</span>}
