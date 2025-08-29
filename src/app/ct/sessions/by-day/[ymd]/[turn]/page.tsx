@@ -14,7 +14,9 @@ type TurnKey = "morning" | "afternoon";
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO"] as const;
 const META_ROWS = ["LUGAR", "HORA", "VIDEO"] as const;
 
-function cellMarker(turn: TurnKey, row: string) { return `[GRID:${turn}:${row}]`; }
+function cellMarker(turn: TurnKey, row: string) {
+  return `[GRID:${turn}:${row}]`;
+}
 function isCellOf(s: SessionDTO, turn: TurnKey, row: string) {
   return typeof s.description === "string" && s.description.startsWith(cellMarker(turn, row));
 }
@@ -27,7 +29,12 @@ function parseVideoValue(v: string | null | undefined): { label: string; url: st
 }
 function humanDate(ymd: string) {
   const d = new Date(`${ymd}T00:00:00.000Z`);
-  return d.toLocaleDateString(undefined, { weekday: "long", day: "2-digit", month: "long", timeZone: "UTC" });
+  return d.toLocaleDateString(undefined, {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    timeZone: "UTC",
+  });
 }
 
 export default function SessionTurnoPage() {
@@ -45,7 +52,7 @@ export default function SessionTurnoPage() {
     "TÉCNICO–TÁCTICO": useRef<HTMLDivElement | null>(null),
   } as const;
 
-  // Helper para enfocar/flash un bloque (lo usamos al cargar y en el botón)
+  // Enfocar + flash verde
   function focusBlock(row: typeof CONTENT_ROWS[number]) {
     const ref = blockRefs[row]?.current;
     if (!ref) return;
@@ -93,11 +100,11 @@ export default function SessionTurnoPage() {
     });
   }, [daySessions, turn]);
 
-  // Enfocar el bloque si vino ?focus=
+  // Enfocar si viene ?focus=
   useEffect(() => {
     const key = (focus || "") as typeof CONTENT_ROWS[number];
-    if (CONTENT_ROWS.includes(key as any)) {
-      focusBlock(key);
+    if ((CONTENT_ROWS as readonly string[]).includes(key)) {
+      focusBlock(key as any);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus]);
@@ -114,8 +121,12 @@ export default function SessionTurnoPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">← Dashboard</a>
-          <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">✏️ Editor</a>
+          <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+            ← Dashboard
+          </a>
+          <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+            ✏️ Editor
+          </a>
         </div>
       </header>
 
@@ -125,15 +136,33 @@ export default function SessionTurnoPage() {
           Meta de la sesión
         </div>
         <div className="grid md:grid-cols-3 gap-2 p-3 text-sm">
-          <div><div className="text-[11px] text-gray-500">Lugar</div><div className="font-medium">{meta.lugar || <span className="text-gray-400">—</span>}</div></div>
-          <div><div className="text-[11px] text-gray-500">Hora</div><div className="font-medium">{meta.hora || <span className="text-gray-400">—</span>}</div></div>
+          <div>
+            <div className="text-[11px] text-gray-500">Lugar</div>
+            <div className="font-medium">
+              {meta.lugar || <span className="text-gray-400">—</span>}
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] text-gray-500">Hora</div>
+            <div className="font-medium">
+              {meta.hora || <span className="text-gray-400">—</span>}
+            </div>
+          </div>
           <div>
             <div className="text-[11px] text-gray-500">Video</div>
             {meta.video.url ? (
-              <a href={meta.video.url} target="_blank" rel="noreferrer" className="underline text-emerald-700" title={meta.video.label || "Video"}>
+              <a
+                href={meta.video.url}
+                target="_blank"
+                rel="noreferrer"
+                className="underline text-emerald-700"
+                title={meta.video.label || "Video"}
+              >
                 {meta.video.label || "Video"}
               </a>
-            ) : (<span className="text-gray-400">—</span>)}
+            ) : (
+              <span className="text-gray-400">—</span>
+            )}
           </div>
         </div>
       </section>
@@ -142,19 +171,31 @@ export default function SessionTurnoPage() {
       <section className="space-y-3">
         {blocks.map(({ row, text, id }) => (
           <div key={row} ref={blockRefs[row]} className="rounded-2xl border bg-white shadow-sm p-3">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">{row}</h2>
-              {id ? (
-                // 👇 ahora es un botón que scrollea y resalta, sin navegar
+            <div className="flex items-center justify-between mb-2 gap-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">
+                {row}
+              </h2>
+              <div className="flex items-center gap-2">
+                {/* Enfocar: no navega */}
                 <button
                   type="button"
                   onClick={() => focusBlock(row)}
                   className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50"
                   title="Enfocar bloque"
                 >
-                  Abrir (enfocar)
+                  Enfocar
                 </button>
-              ) : null}
+                {/* Abrir ficha: va a /ct/sessions/[id] cuando existe */}
+                {id ? (
+                  <a
+                    href={`/ct/sessions/${id}`}
+                    className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50"
+                    title="Abrir ficha de tarea"
+                  >
+                    Abrir ficha
+                  </a>
+                ) : null}
+              </div>
             </div>
             <div className="min-h-[120px] whitespace-pre-wrap leading-6 text-[13px]">
               {text || <span className="text-gray-400 italic">—</span>}
