@@ -13,6 +13,17 @@ function parseMarker(description?: string) {
   return { turn, row, ymd };
 }
 
+// Normaliza lo que devuelva getSessionById (soporta {data} o el objeto directo)
+function normalizeSession(res: unknown): SessionDTO | null {
+  if (!res) return null;
+  const anyRes = res as any;
+  if (anyRes && typeof anyRes === "object") {
+    if ("data" in anyRes && anyRes.data) return anyRes.data as SessionDTO;
+    return anyRes as SessionDTO;
+  }
+  return null;
+}
+
 export default async function SesionDetailPage({
   params,
 }: {
@@ -20,17 +31,13 @@ export default async function SesionDetailPage({
 }) {
   const { id } = params;
 
-  // Server Component: fetch en el servidor al mismo host
-  const s: SessionDTO | null = await (async () => {
-    try {
-      const res = await getSessionById(id);
-      // tu helper devuelve { data } o el objeto directo; soportamos ambos
-      // @ts-expect-error – compat doble
-      return (res?.data as SessionDTO) ?? (res as unknown as SessionDTO) ?? null;
-    } catch {
-      return null;
-    }
-  })();
+  let s: SessionDTO | null = null;
+  try {
+    const res = await getSessionById(id);
+    s = normalizeSession(res);
+  } catch {
+    s = null;
+  }
 
   if (!s) {
     return (
