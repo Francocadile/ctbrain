@@ -8,15 +8,17 @@ import { getSessionById, updateSession, type SessionDTO } from "@/lib/api/sessio
 type TurnKey = "morning" | "afternoon";
 
 type Exercise = {
-  title: string;       // Título del ejercicio (se muestra en el header y campo)
-  space: string;       // Espacio
-  players: string;     // Nº de jugadores
-  duration: string;    // Duración
-  description: string; // Descripción
-  imageUrl: string;    // URL de imagen
+  title: string;       // Título del ejercicio (editable arriba)
+  kind?: string;       // Tipo de ejercicio (SSG, MSG, etc.)
+  space: string;
+  players: string;
+  duration: string;
+  description: string;
+  imageUrl: string;
 };
 
 const EX_TAG = "[EXERCISES]";
+const KIND_OPTIONS = ["Rueda de pases", "Circuito técnico", "SSG", "MSG", "LSG", "Otro…"];
 
 // ---------- helpers ----------
 function parseMarker(description?: string) {
@@ -53,20 +55,16 @@ export default function SesionDetailEditorPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState(false); // ← arranca bloqueado
+  const [editing, setEditing] = useState(true);
 
   const [s, setS] = useState<SessionDTO | null>(null);
   const [prefix, setPrefix] = useState<string>("");
   const [exercises, setExercises] = useState<Exercise[]>([]);
 
-  // Print styles
   const printCSS = `
-    @media print{
+    @media print {
       @page { size: A4 portrait; margin: 10mm; }
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .no-print, header a, header button:not(.allow-print) { display:none !important; }
-      .print-wrap { box-shadow:none !important; border:0 !important; }
-      .ex-card { break-inside: avoid; }
+      .no-print { display: none !important; }
     }
   `;
 
@@ -81,14 +79,11 @@ export default function SesionDetailEditorPage() {
 
         const d = decodeExercises(sess?.description || "");
         setPrefix(d.prefix);
-        const initialExercises =
-          d.exercises.length
-            ? d.exercises
-            : [{ title: "", space: "", players: "", duration: "", description: "", imageUrl: "" }];
-        setExercises(initialExercises);
-
-        const hasExisting = (d.exercises && d.exercises.length > 0) || (sess?.description || "").includes(EX_TAG);
-        setEditing(!hasExisting);
+        const initial = d.exercises.length
+          ? d.exercises
+          : [{ title: "", kind: "", space: "", players: "", duration: "", description: "", imageUrl: "" }];
+        setExercises(initial);
+        setEditing(true);
       } catch (e) {
         console.error(e);
         setS(null);
@@ -99,22 +94,35 @@ export default function SesionDetailEditorPage() {
     load();
   }, [id]);
 
-  const marker = useMemo(() => parseMarker(typeof s?.description === "string" ? s?.description : ""), [s?.description]);
+  const marker = useMemo(
+    () => parseMarker(typeof s?.description === "string" ? s?.description : ""),
+    [s?.description]
+  );
 
   function updateExercise(idx: number, patch: Partial<Exercise>) {
-    setExercises((prev) => { const next = [...prev]; next[idx] = { ...next[idx], ...patch }; return next; });
+    setExercises((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], ...patch };
+      return next;
+    });
   }
   function addExercise() {
-    setExercises((prev) => [...prev, { title: "", space: "", players: "", duration: "", description: "", imageUrl: "" }]);
+    setExercises((prev) => [...prev, { title: "", kind: "", space: "", players: "", duration: "", description: "", imageUrl: "" }]);
   }
-  function removeExercise(idx: number) { setExercises((prev) => prev.filter((_, i) => i !== idx)); }
+  function removeExercise(idx: number) {
+    setExercises((prev) => prev.filter((_, i) => i !== idx));
+  }
 
   async function saveAll() {
     if (!s) return;
     setSaving(true);
     try {
       const newDescription = encodeExercises(prefix || (s.description as string) || "", exercises);
-      await updateSession(s.id, { title: s.title ?? "", description: newDescription, date: s.date });
+      await updateSession(s.id, {
+        title: s.title ?? "",
+        description: newDescription,
+        date: s.date,
+      });
       setEditing(false);
       alert("Guardado");
     } catch (e: any) {
@@ -138,140 +146,136 @@ export default function SesionDetailEditorPage() {
       <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-lg md:text-xl font-bold">
-            Editor de ejercicio(s) — {marker.row || "Bloque"} · {marker.turn === "morning" ? "Mañana" : marker.turn === "afternoon" ? "Tarde" : "—"}
+            Editor de ejercicio(s) — {marker.row || "Bloque"} ·{" "}
+            {marker.turn === "morning" ? "Mañana" : marker.turn === "afternoon" ? "Tarde" : "—"}
           </h1>
-          <p className="text-xs md:text-sm text-gray-500">Día: {marker.ymd || "—"} · Tipo: {s.type}</p>
+          <p className="text-xs md:text-sm text-gray-500">
+            Día: {marker.ymd || "—"} · Tipo: {s.type}
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
           {marker.ymd && marker.turn && (
-            <a href={`/ct/sessions/by-day/${marker.ymd}/${marker.turn}?focus=${encodeURIComponent(marker.row || "")}`} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">← Volver a sesión</a>
+            <a
+              href={`/ct/sessions/by-day/${marker.ymd}/${marker.turn}?focus=${encodeURIComponent(marker.row || "")}`}
+              className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs no-print"
+            >
+              ← Volver a sesión
+            </a>
           )}
-          <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Dashboard</a>
-          <a href={`/ct/plan-semanal?turn=${marker.turn || "morning"}`} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">✏️ Editor semanal</a>
+          <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs no-print">Dashboard</a>
+          <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs no-print">✏️ Editor semanal</a>
 
           {editing ? (
-            <button onClick={saveAll} disabled={saving} className={`px-3 py-1.5 rounded-xl text-xs ${saving ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}>
+            <button onClick={saveAll} disabled={saving} className={`px-3 py-1.5 rounded-xl text-xs ${saving ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"} no-print`}>
               {saving ? "Guardando…" : "Guardar y bloquear"}
             </button>
           ) : (
-            <button onClick={() => setEditing(true)} className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50">
+            <button onClick={() => setEditing(true)} className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50 no-print">
               ✏️ Editar
             </button>
           )}
-          <button onClick={() => window.print()} className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50 no-print allow-print">
-            🖨 Imprimir
-          </button>
+
+          <button onClick={() => window.print()} className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50 no-print">🖨 Imprimir</button>
         </div>
       </header>
 
       {/* Lista de ejercicios */}
-      <div className="space-y-4 print-wrap">
-        {exercises.map((ex, idx) => (
-          <section key={idx} className="rounded-2xl border bg-white shadow-sm overflow-hidden ex-card">
-            <div className="flex items-center justify-between bg-gray-50 px-3 py-2 border-b">
-              {/* Header editable: Título del ejercicio */}
-              {editing ? (
-                <input
-                  className={`w-full max-w-[520px] rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                  placeholder={`Título del ejercicio #${idx + 1}`}
-                  value={ex.title}
-                  onChange={(e) => updateExercise(idx, { title: e.target.value })}
-                  disabled={!editing}
-                />
-              ) : (
-                <div className="text-[12px] font-semibold uppercase tracking-wide">
-                  {ex.title ? ex.title : `EJERCICIO #${idx + 1}`}
+      <div className="space-y-6">
+        {exercises.map((ex, idx) => {
+          const showOther = (ex.kind || "") === "Otro…";
+          return (
+            <section key={idx} className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between bg-gray-50 px-3 py-2 border-b">
+                <div className="text-[12px] font-semibold uppercase tracking-wide">EJERCICIO #{idx + 1}</div>
+                {editing && (
+                  <button type="button" onClick={() => removeExercise(idx)} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50">
+                    Eliminar
+                  </button>
+                )}
+              </div>
+
+              <div className="p-3 grid md:grid-cols-2 gap-3">
+                {/* Título del ejercicio (independiente) */}
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-[11px] text-gray-500">Título del ejercicio</label>
+                  <input
+                    className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
+                    value={ex.title}
+                    onChange={(e) => updateExercise(idx, { title: e.target.value })}
+                    placeholder="Ej: Activación 3 zonas"
+                    disabled={!editing}
+                  />
                 </div>
-              )}
-              {editing && (
-                <button type="button" onClick={() => removeExercise(idx)} className="ml-2 text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50">
-                  Eliminar
-                </button>
-              )}
-            </div>
 
-            <div className="p-3 grid md:grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <label className="text-[11px] text-gray-500">Título del ejercicio</label>
-                <input
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                  value={ex.title}
-                  onChange={(e) => updateExercise(idx, { title: e.target.value })}
-                  placeholder="Ej: Circuito de definición"
-                  disabled={!editing}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[11px] text-gray-500">Espacio</label>
-                <input
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                  value={ex.space}
-                  onChange={(e) => updateExercise(idx, { space: e.target.value })}
-                  placeholder="Mitad de cancha"
-                  disabled={!editing}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[11px] text-gray-500">N° de jugadores</label>
-                <input
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                  value={ex.players}
-                  onChange={(e) => updateExercise(idx, { players: e.target.value })}
-                  placeholder="22 jugadores"
-                  disabled={!editing}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[11px] text-gray-500">Duración</label>
-                <input
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                  value={ex.duration}
-                  onChange={(e) => updateExercise(idx, { duration: e.target.value })}
-                  placeholder="10 minutos"
-                  disabled={!editing}
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-[11px] text-gray-500">Descripción</label>
-                <textarea
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm min-h-[120px] ${roCls}`}
-                  value={ex.description}
-                  onChange={(e) => updateExercise(idx, { description: e.target.value })}
-                  placeholder="Consignas, series, repeticiones, variantes..."
-                  disabled={!editing}
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] text-gray-500">Imagen (URL)</label>
-                  {!editing && <span className="text-[10px] text-gray-400">Bloqueado</span>}
+                {/* Tipo de ejercicio (select + otro) */}
+                <div className="space-y-2">
+                  <label className="text-[11px] text-gray-500">Tipo de ejercicio</label>
+                  <select
+                    className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
+                    value={ex.kind || ""}
+                    onChange={(e) => updateExercise(idx, { kind: e.target.value })}
+                    disabled={!editing}
+                  >
+                    <option value="">— Seleccionar —</option>
+                    {KIND_OPTIONS.map((k) => <option key={k} value={k}>{k}</option>)}
+                  </select>
                 </div>
-                <input
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                  value={ex.imageUrl}
-                  onChange={(e) => updateExercise(idx, { imageUrl: e.target.value })}
-                  placeholder="https://..."
-                  disabled={!editing}
-                />
-                {ex.imageUrl ? (
-                  <div className="mt-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={ex.imageUrl} alt="Vista previa" className="max-h-80 rounded-lg border object-contain" />
+
+                {showOther && (
+                  <div className="space-y-2">
+                    <label className="text-[11px] text-gray-500">Otro (personalizado)</label>
+                    <input
+                      className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
+                      value={ex.kind === "Otro…" ? "" : (ex.kind || "")}
+                      onChange={(e) => updateExercise(idx, { kind: e.target.value || "Otro…" })}
+                      placeholder="Escribí el tipo"
+                      disabled={!editing}
+                    />
                   </div>
-                ) : null}
+                )}
+
+                {/* Resto de campos */}
+                <div className="space-y-2">
+                  <label className="text-[11px] text-gray-500">Espacio</label>
+                  <input className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`} value={ex.space} onChange={(e) => updateExercise(idx, { space: e.target.value })} placeholder="Mitad de cancha" disabled={!editing} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[11px] text-gray-500">N° de jugadores</label>
+                  <input className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`} value={ex.players} onChange={(e) => updateExercise(idx, { players: e.target.value })} placeholder="22 jugadores" disabled={!editing} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[11px] text-gray-500">Duración</label>
+                  <input className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`} value={ex.duration} onChange={(e) => updateExercise(idx, { duration: e.target.value })} placeholder="10 minutos" disabled={!editing} />
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-[11px] text-gray-500">Descripción</label>
+                  <textarea className={`w-full rounded-md border px-2 py-1.5 text-sm min-h-[120px] ${roCls}`} value={ex.description} onChange={(e) => updateExercise(idx, { description: e.target.value })} placeholder="Consignas, series, repeticiones, variantes..." disabled={!editing} />
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] text-gray-500">Imagen (URL)</label>
+                    {!editing && <span className="text-[10px] text-gray-400">Bloqueado</span>}
+                  </div>
+                  <input className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`} value={ex.imageUrl} onChange={(e) => updateExercise(idx, { imageUrl: e.target.value })} placeholder="https://..." disabled={!editing} />
+                  {ex.imageUrl ? (
+                    <div className="mt-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={ex.imageUrl} alt="Vista previa" className="max-h-80 rounded-lg border object-contain" />
+                    </div>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          </section>
-        ))}
+            </section>
+          );
+        })}
 
         {editing && (
-          <div>
+          <div className="no-print">
             <button type="button" onClick={addExercise} className="rounded-xl border px-3 py-1.5 text-xs hover:bg-gray-50">
               + Agregar ejercicio
             </button>
