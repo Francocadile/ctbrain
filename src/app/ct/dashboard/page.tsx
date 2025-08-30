@@ -39,19 +39,18 @@ export default function DashboardSemanaPage() {
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
-  // Solo imprimir la grilla central
+  // Imprimir solo la grilla, en horizontal
   const printCSS = `
     @media print {
-      @page { size: A4 portrait; margin: 10mm; }
+      @page { size: A4 landscape; margin: 8mm; }
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       body * { visibility: hidden !important; }
       .print-root, .print-root * { visibility: visible !important; }
-      .print-root { position: absolute; inset: 0; margin: 0; }
+      .print-root { position: absolute; inset: 0; margin: 0; box-shadow: none !important; border: 0 !important; border-radius: 0 !important; }
       .no-print { display: none !important; }
     }
   `;
 
-  // sync pestaña en URL
   useEffect(() => {
     const p = new URLSearchParams(qs.toString());
     p.set("turn", activeTurn);
@@ -127,7 +126,7 @@ export default function DashboardSemanaPage() {
     const turnLabel = turn === "morning" ? "MAÑANA" : "TARDE";
     return (
       <>
-        {/* Fila de acceso rápido a sesión */}
+        {/* Acceso rápido */}
         <div className="border-t">
           <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
             ACCESO RÁPIDO A SESIÓN — {turnLabel}
@@ -147,14 +146,14 @@ export default function DashboardSemanaPage() {
           </div>
         </div>
 
-        {/* META */}
+        {/* Meta */}
         <div className="border-t">
           <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
             TURNO {turnLabel} · Meta
           </div>
           {META_ROWS.map((rowName) => (
             <div key={`${turn}-meta-${rowName}`} className="grid items-center" style={{ gridTemplateColumns: `100px repeat(7, minmax(120px, 1fr))` }}>
-              <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600" contentEditable={false} data-readonly>{rowName}</div>
+              <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[10px] font-medium text-gray-600 truncate" title={rowName} contentEditable={false} data-readonly>{rowName}</div>
               {orderedDays.map((ymd) => (
                 <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
                   <ReadonlyMetaCell dayYmd={ymd} turn={turn} row={rowName} />
@@ -164,7 +163,7 @@ export default function DashboardSemanaPage() {
           ))}
         </div>
 
-        {/* BLOQUES (incluye COMPENSATORIO) */}
+        {/* Bloques (incluye COMPENSATORIO) */}
         <div className="border-t">
           <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
             TURNO {turnLabel}
@@ -175,7 +174,13 @@ export default function DashboardSemanaPage() {
               className="grid items-stretch"
               style={{ gridTemplateColumns: `100px repeat(7, minmax(120px, 1fr))` }}
             >
-              <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600 whitespace-pre-line">
+              {/* ⬇️ label compacto, no se mete en la celda */}
+              <div
+                className="bg-gray-50/60 border-r px-2 py-2 text-[10px] font-medium text-gray-600 truncate"
+                title={rowName}
+                contentEditable={false}
+                data-readonly
+              >
                 {rowName}
               </div>
               {orderedDays.map((ymd) => (
@@ -211,7 +216,7 @@ export default function DashboardSemanaPage() {
         </header>
       )}
 
-      {/* Pestañas */}
+      {/* Tabs */}
       <div className="flex items-center gap-2 no-print">
         <button className={`px-3 py-1.5 rounded-xl border text-xs ${activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={() => setActiveTurn("morning")}>Mañana</button>
         <button className={`px-3 py-1.5 rounded-xl border text-xs ${activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={() => setActiveTurn("afternoon")}>Tarde</button>
@@ -220,7 +225,7 @@ export default function DashboardSemanaPage() {
       {loading ? (
         <div className="text-gray-500">Cargando semana…</div>
       ) : (
-        // ⬇️ Solo esta caja se imprime (sidebar y header quedan ocultos)
+        // ⬇️ Solo esta caja se imprime
         <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm print-root">
           {/* Cabecera días */}
           <div className="grid text-xs" style={{ gridTemplateColumns: `100px repeat(7, minmax(120px, 1fr))` }}>
@@ -233,7 +238,7 @@ export default function DashboardSemanaPage() {
             ))}
           </div>
 
-          {/* Turno activo (incluye Acceso rápido + Meta + Bloques, con COMPENSATORIO) */}
+          {/* Turno activo */}
           <TurnSection turn={activeTurn} />
         </div>
       )}
