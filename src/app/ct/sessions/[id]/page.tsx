@@ -30,10 +30,15 @@ function loadKinds(): string[] {
   } catch {}
   return DEFAULT_KINDS;
 }
+function saveKindsList(list: string[]) {
+  const filtered = list.map(s=>s.trim()).filter(Boolean);
+  const onlyCustom = filtered.filter(k => !DEFAULT_KINDS.includes(k));
+  localStorage.setItem(KINDS_KEY, JSON.stringify(Array.from(new Set(onlyCustom))));
+}
 function saveKind(newKind: string) {
-  const base = loadKinds().filter(k => !DEFAULT_KINDS.includes(k));
-  const next = Array.from(new Set([...base, newKind.trim()])).filter(Boolean);
-  localStorage.setItem(KINDS_KEY, JSON.stringify(next));
+  const current = loadKinds();
+  const next = Array.from(new Set([...current, newKind.trim()])).filter(Boolean);
+  saveKindsList(next);
 }
 
 // ---------- helpers ----------
@@ -156,6 +161,20 @@ export default function SesionDetailEditorPage() {
 
   const roCls = editing ? "" : "bg-gray-50 text-gray-600 cursor-not-allowed";
 
+  // ======= Gestión de Tipos de ejercicio =======
+  function manageKinds() {
+    const current = loadKinds();
+    const edited = prompt(
+      "Gestionar tipos (una línea por tipo). Borrá líneas para eliminar, editá para renombrar:",
+      current.join("\n")
+    );
+    if (edited === null) return;
+    const list = edited.split("\n").map(s=>s.trim()).filter(Boolean);
+    const unique = Array.from(new Set(list));
+    saveKindsList(unique);
+    setKinds(loadKinds());
+  }
+
   return (
     <div className="p-4 md:p-6 space-y-4 print-root">
       <style jsx global>{printCSS}</style>
@@ -224,14 +243,15 @@ export default function SesionDetailEditorPage() {
                 />
               </div>
 
-              {/* Tipo de ejercicio (con Agregar…) */}
+              {/* Tipo de ejercicio (Agregar / Gestionar) */}
               <div className="space-y-2">
                 <label className="text-[11px] text-gray-500">Tipo de ejercicio</label>
                 <select
                   className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
                   value={ex.kind || ""}
                   onChange={(e) => {
-                    if (e.target.value === "__add__") {
+                    const v = e.target.value;
+                    if (v === "__add__") {
                       const n = prompt("Nuevo tipo de ejercicio:");
                       if (!n) return;
                       const name = n.trim();
@@ -239,8 +259,10 @@ export default function SesionDetailEditorPage() {
                       saveKind(name);
                       setKinds(loadKinds());
                       updateExercise(idx, { kind: name });
+                    } else if (v === "__manage__") {
+                      manageKinds();
                     } else {
-                      updateExercise(idx, { kind: e.target.value });
+                      updateExercise(idx, { kind: v });
                     }
                   }}
                   disabled={!editing}
@@ -248,10 +270,11 @@ export default function SesionDetailEditorPage() {
                   <option value="">— Seleccionar —</option>
                   {kinds.map((k) => <option key={k} value={k}>{k}</option>)}
                   <option value="__add__">➕ Agregar…</option>
+                  <option value="__manage__">⚙️ Gestionar…</option>
                 </select>
               </div>
 
-              {/* Espacio / N° jugadores / Duración / Descripción / Imagen */}
+              {/* Resto */}
               <div className="space-y-2">
                 <label className="text-[11px] text-gray-500">Espacio</label>
                 <input className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`} value={ex.space} onChange={(e) => updateExercise(idx, { space: e.target.value })} placeholder="Mitad de cancha" disabled={!editing} />
