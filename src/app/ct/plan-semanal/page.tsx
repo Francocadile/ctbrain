@@ -14,7 +14,7 @@ import {
 } from "@/lib/api/sessions";
 
 const DEFAULT_LUGARES = ["Complejo Deportivo","Cancha Auxiliar 1","Cancha Auxiliar 2","Gimnasio","Sala de Video"];
-const LS_LUGARES_KEY = "ctbrain_places";
+const PLACES_KEY = "ct_places";
 
 type TurnKey = "morning" | "afternoon";
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
@@ -39,6 +39,21 @@ function joinVideoValue(label: string, url: string) {
 }
 function cellKey(dayYmd: string, turn: TurnKey, row: string) { return `${dayYmd}::${turn}::${row}`; }
 
+function loadPlaces(): string[] {
+  try {
+    const raw = localStorage.getItem(PLACES_KEY);
+    if (!raw) return DEFAULT_LUGARES;
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) return Array.from(new Set([...DEFAULT_LUGARES, ...arr]));
+  } catch {}
+  return DEFAULT_LUGARES;
+}
+function savePlace(newPlace: string) {
+  const base = loadPlaces().filter(p => !DEFAULT_LUGARES.includes(p));
+  const next = Array.from(new Set([...base, newPlace.trim()])).filter(Boolean);
+  localStorage.setItem(PLACES_KEY, JSON.stringify(next));
+}
+
 export default function PlanSemanalPage() {
   const qs = useSearchParams();
   const hideHeader = qs.get("hideHeader") === "1";
@@ -49,8 +64,9 @@ export default function PlanSemanalPage() {
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
-  // Lugares dinámicos (persistidos)
-  const [lugares, setLugares] = useState<string[]>(DEFAULT_LUGARES);
+  // Lugares dinámicos
+  const [places, setPlaces] = useState<string[]>(DEFAULT_LUGARES);
+  useEffect(() => { setPlaces(loadPlaces()); }, []);
 
   // Cambios pendientes por celda (no guardados)
   const [pending, setPending] = useState<Record<string, string>>({});
@@ -58,25 +74,6 @@ export default function PlanSemanalPage() {
   const [videoEditing, setVideoEditing] = useState<Record<string, boolean>>({});
 
   const [savingAll, setSavingAll] = useState(false);
-
-  // cargar lugares desde localStorage
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(LS_LUGARES_KEY);
-      const arr = raw ? JSON.parse(raw) as string[] : [];
-      const merged = Array.from(new Set([...(arr||[]), ...DEFAULT_LUGARES]));
-      setLugares(merged);
-    } catch {}
-  }, []);
-  function addLugar(newLugar: string) {
-    const v = newLugar.trim();
-    if (!v) return;
-    setLugares((prev) => {
-      const merged = Array.from(new Set([v, ...prev]));
-      try { localStorage.setItem(LS_LUGARES_KEY, JSON.stringify(merged)); } catch {}
-      return merged;
-    });
-  }
 
   async function loadWeek(d: Date) {
     setLoading(true);
@@ -191,31 +188,38 @@ export default function PlanSemanalPage() {
     const pendingValue = pending[k];
     const value = pendingValue !== undefined ? pendingValue : original;
 
-    // LUGAR (con agregar y persistir)
+    // LUGAR (select con "Agregar…")
     if (row === "LUGAR") {
+      const [localPlaces, setLocalPlaces] = useState<string[]>(places);
+      useEffect(() => setLocalPlaces(places), [places]);
+
+      const addPlace = () => {
+        const n = prompt("Nuevo lugar:");
+        if (!n) return;
+        const name = n.trim();
+        if (!name) return;
+        savePlace(name);
+        const updated = loadPlaces();
+        setPlaces(updated);
+        setLocalPlaces(updated);
+        stageCell(dayYmd, turn, row, name);
+      };
+
       return (
-        <select
-          className="h-8 w-full rounded-md border px-2 text-xs"
-          value={value || ""}
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v === "__ADD__") {
-              const name = prompt("Nuevo lugar:");
-              if (name && name.trim()) {
-                addLugar(name.trim());
-                stageCell(dayYmd, turn, row, name.trim());
-              }
-              return;
-            }
-            stageCell(dayYmd, turn, row, v);
-          }}
-        >
-          <option value="">— Lugar —</option>
-          {lugares.map((l) => (
-            <option key={l} value={l}>{l}</option>
-          ))}
-          <option value="__ADD__">➕ Agregar lugar…</option>
-        </select>
+        <div className="flex gap-1">
+          <select
+            className="h-8 w-full rounded-md border px-2 text-xs"
+            value={value || ""}
+            onChange={(e) => {
+              if (e.target.value === "__add__") { addPlace(); return; }
+              stageCell(dayYmd, turn, row, e.target.value);
+            }}
+          >
+            <option value="">— Lugar —</option>
+            {localPlaces.map((l) => (<option key={l} value={l}>{l}</option>))}
+            <option value="__add__">➕ Agregar…</option>
+          </select>
+        </div>
       );
     }
 
@@ -236,6 +240,7 @@ export default function PlanSemanalPage() {
     const parsed = parseVideoValue(value || "");
     const isEditing = !!videoEditing[k];
 
+    // Estados locales
     const [localLabel, setLocalLabel] = useState(parsed.label);
     const [localUrl, setLocalUrl] = useState(parsed.url);
 
@@ -331,16 +336,12 @@ export default function PlanSemanalPage() {
       }
     };
 
-    // en editor: solo botón Editar ejercicio (sin texto adicional)
-    const sessionHref = existing?.id ? `/ct/sessions/${existing.id}` : undefined;
+    // En editor semanal solo botón "Editar ejercicio"
+    const sessionHref = existing?.id ? `/ct/sessions/${existing.id}` : "";
 
     return (
       <div className="space-y-1">
-        <div className="flex items-center justify-between">
-          <span className="text-[10px] text-gray-500">
-            {/* dejamos solo la leyenda compacta a la izquierda */}
-            {row.slice(0, 18)}
-          </span>
+        <div className="flex items-center justify-end">
           {sessionHref ? (
             <a href={sessionHref} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50" title="Editar ejercicio">
               Editar ejercicio
