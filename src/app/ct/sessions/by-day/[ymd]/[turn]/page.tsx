@@ -39,9 +39,10 @@ export default function SessionTurnoPage() {
   const printCSS = `
     @media print {
       @page { size: A4 landscape; margin: 10mm; }
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body * { visibility: hidden !important; }
+      .print-root, .print-root * { visibility: visible !important; }
       .no-print { display:none !important; }
-      .print-wrap { box-shadow:none !important; border:0 !important; border-radius:0 !important; }
+      .print-root { position:absolute; inset:0; margin:0; box-shadow:none !important; border:0 !important; border-radius:0 !important; }
     }
   `;
 
@@ -101,7 +102,7 @@ export default function SessionTurnoPage() {
     <div className="p-4 space-y-4">
       <style jsx global>{printCSS}</style>
 
-      <header className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+      <header className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between no-print">
         <div>
           <h1 className="text-lg md:text-xl font-bold">
             Sesión — {turn === "morning" ? "Mañana" : "Tarde"} · {humanDate(ymd)}
@@ -111,49 +112,52 @@ export default function SessionTurnoPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs no-print">← Dashboard</a>
-          <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs no-print">✏️ Editor</a>
-          <button onClick={() => window.print()} className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50 no-print">🖨 Imprimir</button>
+          <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">← Dashboard</a>
+          <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">✏️ Editor</a>
+          <button onClick={() => window.print()} className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50">🖨 Imprimir</button>
         </div>
       </header>
 
-      {/* Meta */}
-      <section className="rounded-2xl border bg-white shadow-sm overflow-hidden print-wrap">
-        <div className="bg-emerald-50 text-emerald-900 font-semibold px-3 py-2 border-b uppercase tracking-wide text-[12px]">
-          Meta de la sesión
-        </div>
-        <div className="grid md:grid-cols-3 gap-2 p-3 text-sm">
-          <div><div className="text-[11px] text-gray-500">Lugar</div><div className="font-medium">{meta.lugar || <span className="text-gray-400">—</span>}</div></div>
-          <div><div className="text-[11px] text-gray-500">Hora</div><div className="font-medium">{meta.hora || <span className="text-gray-400">—</span>}</div></div>
-          <div>
-            <div className="text-[11px] text-gray-500">Video</div>
-            {meta.video.url ? (
-              <a href={meta.video.url} target="_blank" rel="noreferrer" className="underline text-emerald-700" title={meta.video.label || "Video"}>
-                {meta.video.label || "Video"}
-              </a>
-            ) : (<span className="text-gray-400">—</span>)}
+      {/* Contenido imprimible */}
+      <div className="print-root space-y-4">
+        {/* Meta */}
+        <section className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+          <div className="bg-emerald-50 text-emerald-900 font-semibold px-3 py-2 border-b uppercase tracking-wide text-[12px]">
+            Meta de la sesión
           </div>
-        </div>
-      </section>
-
-      {/* Bloques */}
-      <section className="space-y-3">
-        {blocks.map(({ row, text, id }) => (
-          <div key={row} ref={blockRefs[row]} className="rounded-2xl border bg-white shadow-sm p-3 print-wrap">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">{row}</h2>
-              {id ? (
-                <a href={`/ct/sessions/${id}`} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50 no-print" title="Abrir ficha de ejercicio">
-                  Abrir ficha
+          <div className="grid md:grid-cols-3 gap-2 p-3 text-sm">
+            <div><div className="text-[11px] text-gray-500">Lugar</div><div className="font-medium">{meta.lugar || <span className="text-gray-400">—</span>}</div></div>
+            <div><div className="text-[11px] text-gray-500">Hora</div><div className="font-medium">{meta.hora || <span className="text-gray-400">—</span>}</div></div>
+            <div>
+              <div className="text-[11px] text-gray-500">Video</div>
+              {meta.video.url ? (
+                <a href={meta.video.url} target="_blank" rel="noreferrer" className="underline text-emerald-700" title={meta.video.label || "Video"}>
+                  {meta.video.label || "Video"}
                 </a>
-              ) : null}
-            </div>
-            <div className="min-h-[120px] whitespace-pre-wrap leading-6 text-[13px]">
-              {text || <span className="text-gray-400 italic">—</span>}
+              ) : (<span className="text-gray-400">—</span>)}
             </div>
           </div>
-        ))}
-      </section>
+        </section>
+
+        {/* Bloques */}
+        <section className="space-y-3">
+          {blocks.map(({ row, text, id }) => (
+            <div key={row} ref={blockRefs[row]} className="rounded-2xl border bg-white shadow-sm p-3">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">{row}</h2>
+                {id ? (
+                  <a href={`/ct/sessions/${id}`} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50" title="Abrir ficha de ejercicio">
+                    Abrir ficha
+                  </a>
+                ) : null}
+              </div>
+              <div className="min-h-[120px] whitespace-pre-wrap leading-6 text-[13px]">
+                {text || <span className="text-gray-400 italic">—</span>}
+              </div>
+            </div>
+          ))}
+        </section>
+      </div>
     </div>
   );
 }
