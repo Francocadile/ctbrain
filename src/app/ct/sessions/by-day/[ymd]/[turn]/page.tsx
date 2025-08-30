@@ -112,7 +112,7 @@ export default function SessionTurnoPage() {
           <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
             ← Dashboard
           </a>
-          <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+          <a href={`/ct/plan-semanal?turn=${turn}`} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
             ✏️ Editor
           </a>
         </div>
