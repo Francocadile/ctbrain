@@ -50,12 +50,24 @@ export default function PlanSemanalPage() {
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
+  // Cambios pendientes por celda (no guardados)
   const [pending, setPending] = useState<Record<string, string>>({});
+  // Estado de edición SOLO para VIDEO por celda (key = day::turn::row)
   const [videoEditing, setVideoEditing] = useState<Record<string, boolean>>({});
 
   const [savingAll, setSavingAll] = useState(false);
 
-  // Sync ?turn= en URL
+  // Print styles
+  const printCSS = `
+    @media print{
+      @page { size: A4 portrait; margin: 10mm; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .no-print, header button, header a { display:none !important; }
+      .print-wrap { box-shadow:none !important; border:0 !important; }
+    }
+  `;
+
+  // Sync URL query when tab changes
   useEffect(() => {
     const p = new URLSearchParams(qs.toString());
     p.set("turn", activeTurn);
@@ -157,7 +169,18 @@ export default function PlanSemanalPage() {
     loadWeek(base);
   }
 
-  function MetaInput({ dayYmd, turn, row }: { dayYmd: string; turn: TurnKey; row: (typeof META_ROWS)[number]; }) {
+  // =======================
+  // MetaInput (LUGAR/HORA/VIDEO)
+  // =======================
+  function MetaInput({
+    dayYmd,
+    turn,
+    row,
+  }: {
+    dayYmd: string;
+    turn: TurnKey;
+    row: (typeof META_ROWS)[number];
+  }) {
     const existing = findCell(dayYmd, turn, row);
     const original = (existing?.title ?? "").trim();
 
@@ -165,6 +188,7 @@ export default function PlanSemanalPage() {
     const pendingValue = pending[k];
     const value = pendingValue !== undefined ? pendingValue : original;
 
+    // LUGAR
     if (row === "LUGAR") {
       return (
         <select
@@ -173,10 +197,14 @@ export default function PlanSemanalPage() {
           onChange={(e) => stageCell(dayYmd, turn, row, e.target.value)}
         >
           <option value="">— Lugar —</option>
-          {LUGARES.map((l) => (<option key={l} value={l}>{l}</option>))}
+          {LUGARES.map((l) => (
+            <option key={l} value={l}>{l}</option>
+          ))}
         </select>
       );
     }
+
+    // HORA (HH:mm)
     if (row === "HORA") {
       const hhmm = /^[0-9]{2}:[0-9]{2}$/.test(value || "") ? value : "";
       return (
@@ -189,39 +217,92 @@ export default function PlanSemanalPage() {
       );
     }
 
+    // VIDEO — usar edición local y sólo “stagear” al confirmar
     const parsed = parseVideoValue(value || "");
     const isEditing = !!videoEditing[k];
+
+    // Estados locales
     const [localLabel, setLocalLabel] = useState(parsed.label);
     const [localUrl, setLocalUrl] = useState(parsed.url);
-    useEffect(() => { setLocalLabel(parsed.label); setLocalUrl(parsed.url); /* eslint-disable-next-line */ }, [k, isEditing]);
+
+    useEffect(() => {
+      setLocalLabel(parsed.label);
+      setLocalUrl(parsed.url);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [k, isEditing]);
 
     if (!isEditing && (parsed.label || parsed.url)) {
       return (
         <div className="flex items-center justify-between gap-1">
           {parsed.url ? (
-            <a href={parsed.url} target="_blank" rel="noreferrer" className="text-[11px] underline text-emerald-700 truncate" title={parsed.label || "Video"}>
+            <a
+              href={parsed.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[12px] underline text-emerald-700 truncate"
+              title={parsed.label || "Video"}
+            >
               {parsed.label || "Video"}
             </a>
           ) : (
-            <span className="text-[11px] text-gray-500 truncate">{parsed.label}</span>
+            <span className="text-[12px] text-gray-500 truncate">{parsed.label}</span>
           )}
           <div className="flex items-center gap-1">
-            <button type="button" className="h-6 px-1.5 rounded border text-[10px] hover:bg-gray-50" onClick={() => setVideoEditing((m) => ({ ...m, [k]: true }))} title="Editar">✏️</button>
-            <button type="button" className="h-6 px-1.5 rounded border text-[10px] hover:bg-gray-50" onClick={() => stageCell(dayYmd, turn, row, "")} title="Borrar">❌</button>
+            <button
+              type="button"
+              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+              onClick={() => setVideoEditing((m) => ({ ...m, [k]: true }))}
+              title="Editar"
+            >
+              ✏️
+            </button>
+            <button
+              type="button"
+              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+              onClick={() => stageCell(dayYmd, turn, row, "")}
+              title="Borrar"
+            >
+              ❌
+            </button>
           </div>
         </div>
       );
     }
 
+    // Modo edición (o vacío)
     return (
       <div className="flex items-center gap-1.5">
-        <input className="h-8 w-[45%] rounded-md border px-2 text-[11px]" placeholder="Título" value={localLabel} onChange={(e) => setLocalLabel(e.target.value)} />
-        <input type="url" className="h-8 w-[55%] rounded-md border px-2 text-[11px]" placeholder="https://…" value={localUrl} onChange={(e) => setLocalUrl(e.target.value)} />
-        <button type="button" className="h-8 px-2 rounded border text-[10px] hover:bg-gray-50" onClick={() => { stageCell(dayYmd, turn, row, joinVideoValue(localLabel, localUrl)); setVideoEditing((m) => ({ ...m, [k]: false })); }} title="Listo">✓</button>
+        <input
+          className="h-8 w-[45%] rounded-md border px-2 text-[11px]"
+          placeholder="Título"
+          value={localLabel}
+          onChange={(e) => setLocalLabel(e.target.value)}
+        />
+        <input
+          type="url"
+          className="h-8 w-[55%] rounded-md border px-2 text-[11px]"
+          placeholder="https://…"
+          value={localUrl}
+          onChange={(e) => setLocalUrl(e.target.value)}
+        />
+        <button
+          type="button"
+          className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50"
+          onClick={() => {
+            stageCell(dayYmd, turn, row, joinVideoValue(localLabel, localUrl));
+            setVideoEditing((m) => ({ ...m, [k]: false }));
+          }}
+          title="Listo"
+        >
+          ✓
+        </button>
       </div>
     );
   }
 
+  // =======================
+  // Celda de contenido grande (con “Editar ejercicio” directo)
+  // =======================
   function EditableCell({ dayYmd, turn, row }: { dayYmd: string; turn: TurnKey; row: string; }) {
     const existing = findCell(dayYmd, turn, row);
     const ref = useRef<HTMLDivElement | null>(null);
@@ -231,7 +312,9 @@ export default function PlanSemanalPage() {
 
     const onBlur = () => { const txt = ref.current?.innerText ?? ""; stageCell(dayYmd, turn, row, txt); };
     const onKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); const txt = ref.current?.innerText ?? ""; stageCell(dayYmd, turn, row, txt); }
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault(); const txt = ref.current?.innerText ?? ""; stageCell(dayYmd, turn, row, txt);
+      }
     };
 
     const editHref = existing?.id ? `/ct/sessions/${existing.id}` : "";
@@ -242,10 +325,20 @@ export default function PlanSemanalPage() {
           <span className="text-[10px] text-gray-500">
             {row} — {new Date(`${dayYmd}T00:00:00Z`).toLocaleDateString(undefined,{day:"2-digit",month:"2-digit",timeZone:"UTC"})} {turn === "morning" ? "Mañana" : "Tarde"}
           </span>
+
           {editHref ? (
-            <a href={editHref} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50" title="Editar ejercicio">Editar ejercicio</a>
+            <a href={editHref} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50" title="Editar ejercicio">
+              Editar ejercicio
+            </a>
           ) : (
-            <button type="button" className="text-[11px] rounded-lg border px-2 py-0.5 opacity-50 cursor-not-allowed" title="Guardá la celda para habilitar el editor" disabled>Editar ejercicio</button>
+            <button
+              type="button"
+              className="text-[11px] rounded-lg border px-2 py-0.5 opacity-50 cursor-not-allowed"
+              title="Guardá la celda para habilitar el editor"
+              disabled
+            >
+              Editar ejercicio
+            </button>
           )}
         </div>
 
@@ -255,7 +348,9 @@ export default function PlanSemanalPage() {
           suppressContentEditableWarning
           onBlur={onBlur}
           onKeyDown={onKeyDown}
-          className={`min-h-[90px] w-full rounded-xl border p-2 text-[13px] leading-5 outline-none focus:ring-2 ${staged !== undefined ? "border-emerald-400 ring-emerald-200" : "focus:ring-emerald-400"} whitespace-pre-wrap`}
+          className={`min-h-[90px] w-full rounded-xl border p-2 text-[13px] leading-5 outline-none focus:ring-2 ${
+            staged !== undefined ? "border-emerald-400 ring-emerald-200" : "focus:ring-emerald-400"
+          } whitespace-pre-wrap`}
           data-placeholder="Escribir…"
           dangerouslySetInnerHTML={{ __html: (initialText || "").replace(/\n/g, "<br/>") }}
         />
@@ -265,6 +360,7 @@ export default function PlanSemanalPage() {
 
   const pendingCount = Object.keys(pending).length;
 
+  // ====== Render de un turno (tabs) ======
   function TurnSection({ turn }: { turn: TurnKey }) {
     return (
       <>
@@ -274,8 +370,8 @@ export default function PlanSemanalPage() {
             {turn === "morning" ? "TURNO MAÑANA · Meta" : "TURNO TARDE · Meta"}
           </div>
           {META_ROWS.map((rowName) => (
-            <div key={`${turn}-meta-${rowName}`} className="grid items-center" style={{ gridTemplateColumns: `96px repeat(7, minmax(120px, 1fr))` }}>
-              <div className="bg-gray-50/60 border-r px-2 py-1 text-[11px] font-medium text-gray-600">{rowName}</div>
+            <div key={`${turn}-meta-${rowName}`} className="grid items-center" style={{ gridTemplateColumns: `90px repeat(7, minmax(110px, 1fr))` }}>
+              <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">{rowName}</div>
               {orderedDays.map((ymd) => (
                 <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
                   <MetaInput dayYmd={ymd} turn={turn} row={rowName} />
@@ -291,7 +387,7 @@ export default function PlanSemanalPage() {
             {turn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
           </div>
           {CONTENT_ROWS.map((rowName) => (
-            <div key={`${turn}-${rowName}`} className="grid items-stretch" style={{ gridTemplateColumns: `96px repeat(7, minmax(120px, 1fr))` }}>
+            <div key={`${turn}-${rowName}`} className="grid items-stretch" style={{ gridTemplateColumns: `90px repeat(7, minmax(110px, 1fr))` }}>
               <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600">{rowName}</div>
               {orderedDays.map((ymd) => (
                 <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
@@ -308,40 +404,66 @@ export default function PlanSemanalPage() {
   return (
     <div className="p-3 md:p-4 space-y-3">
       <style jsx>{`[contenteditable][data-placeholder]:empty:before{content:attr(data-placeholder);color:#9ca3af;pointer-events:none;display:block;}`}</style>
+      <style jsx global>{printCSS}</style>
 
       {!hideHeader && (
         <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-lg md:text-xl font-bold">Plan semanal — Editor en tabla</h1>
             <p className="text-xs md:text-sm text-gray-500">Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)</p>
-            <p className="mt-1 text-[10px] text-gray-400">Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd> + <kbd className="rounded border px-1">Enter</kbd> marca una celda.</p>
+            <p className="mt-1 text-[10px] text-gray-400">
+              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd> + <kbd className="rounded border px-1">Enter</kbd> para “marcar” una celda sin guardar aún.
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">◀ Semana anterior</button>
             <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Hoy</button>
             <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Semana siguiente ▶</button>
             <div className="w-px h-6 bg-gray-200 mx-1" />
-            <button onClick={saveAll} disabled={Object.keys(pending).length === 0 || savingAll} className={`px-3 py-1.5 rounded-xl text-xs ${Object.keys(pending).length === 0 || savingAll ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}>
-              {savingAll ? "Guardando..." : `Guardar (${Object.keys(pending).length || 0})`}
+            <button
+              onClick={saveAll}
+              disabled={pendingCount === 0 || savingAll}
+              className={`px-3 py-1.5 rounded-xl text-xs ${pendingCount === 0 || savingAll ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
+              title={pendingCount ? `${pendingCount} cambio(s) por guardar` : "Sin cambios"}
+            >
+              {savingAll ? "Guardando..." : `Guardar cambios${pendingCount ? ` (${pendingCount})` : ""}`}
             </button>
-            <button onClick={discardAll} disabled={Object.keys(pending).length === 0 || savingAll} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Descartar</button>
-            <button onClick={() => window.print()} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">🖨️ Imprimir</button>
+            <button
+              onClick={discardAll}
+              disabled={pendingCount === 0 || savingAll}
+              className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
+            >
+              Descartar
+            </button>
+            <button onClick={() => window.print()} className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50 no-print">
+              🖨 Imprimir
+            </button>
           </div>
         </header>
       )}
 
       {/* TABS de turno */}
       <div className="flex items-center gap-2">
-        <button className={`px-3 py-1.5 rounded-xl border text-xs ${activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={() => setActiveTurn("morning")}>Mañana</button>
-        <button className={`px-3 py-1.5 rounded-xl border text-xs ${activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={() => setActiveTurn("afternoon")}>Tarde</button>
+        <button
+          className={`px-3 py-1.5 rounded-xl border text-xs ${activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"}`}
+          onClick={() => setActiveTurn("morning")}
+        >
+          Mañana
+        </button>
+        <button
+          className={`px-3 py-1.5 rounded-xl border text-xs ${activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"}`}
+          onClick={() => setActiveTurn("afternoon")}
+        >
+          Tarde
+        </button>
       </div>
 
       {loading ? (
         <div className="text-gray-500">Cargando semana…</div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm print-wrap">
           {/* Cabecera días */}
-          <div className="grid text-xs" style={{ gridTemplateColumns: `96px repeat(7, minmax(120px, 1fr))` }}>
+          <div className="grid text-xs" style={{ gridTemplateColumns: `90px repeat(7, minmax(110px, 1fr))` }}>
             <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600"></div>
             {orderedDays.map((ymd) => (
               <div key={ymd} className="bg-gray-50 border-b px-2 py-1.5">
@@ -355,19 +477,6 @@ export default function PlanSemanalPage() {
           <TurnSection turn={activeTurn} />
         </div>
       )}
-
-      {/* Print styles */}
-      <style jsx global>{`
-        @page { size: A4 portrait; margin: 12mm; }
-        @media print {
-          * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .rounded-2xl, .rounded-xl { border-radius: 0 !important; }
-          .shadow-sm { box-shadow: none !important; }
-          header .border, button, .w-px, .no-print { display: none !important; }
-          a[href]:after { content: ""; }
-          body { background: white; }
-        }
-      `}</style>
     </div>
   );
 }
