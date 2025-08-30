@@ -57,7 +57,7 @@ export default function SesionDetailEditorPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState(true); // ← modo edición ON al abrir
+  const [editing, setEditing] = useState(false); // ← por defecto bloqueado
 
   const [s, setS] = useState<SessionDTO | null>(null);
   const [prefix, setPrefix] = useState<string>("");
@@ -74,13 +74,16 @@ export default function SesionDetailEditorPage() {
 
         const d = decodeExercises(sess?.description || "");
         setPrefix(d.prefix);
-        setExercises(
+        const initialExercises =
           d.exercises.length
             ? d.exercises
-            : [{ title: "", space: "", players: "", duration: "", description: "", imageUrl: "" }]
-        );
+            : [{ title: "", space: "", players: "", duration: "", description: "", imageUrl: "" }];
+        setExercises(initialExercises);
 
-        setEditing(true); // siempre empezamos pudiendo editar; se bloquea tras Guardar
+        // 🔒 Si ya hay ejercicios o existe el tag, arrancamos en modo lectura.
+        //    Si no hay nada, permitimos editar para cargar por primera vez.
+        const hasExisting = (d.exercises && d.exercises.length > 0) || (sess?.description || "").includes(EX_TAG);
+        setEditing(!hasExisting);
       } catch (e) {
         console.error(e);
         setS(null);
@@ -159,7 +162,7 @@ export default function SesionDetailEditorPage() {
             </a>
           )}
           <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Dashboard</a>
-          <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">✏️ Editor semanal</a>
+          <a href={`/ct/plan-semanal?turn=${marker.turn || "morning"}`} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">✏️ Editor semanal</a>
 
           {editing ? (
             <button
