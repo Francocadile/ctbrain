@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   getSessionsWeek,
   createSession,
@@ -13,7 +13,9 @@ import {
   type SessionDTO,
 } from "@/lib/api/sessions";
 
-const LUGARES = ["Complejo Deportivo","Cancha Auxiliar 1","Cancha Auxiliar 2","Gimnasio","Sala de Video"];
+const DEFAULT_LUGARES = ["Complejo Deportivo","Cancha Auxiliar 1","Cancha Auxiliar 2","Gimnasio","Sala de Video"];
+const LS_LUGARES_KEY = "ctbrain_places";
+
 type TurnKey = "morning" | "afternoon";
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 const META_ROWS = ["LUGAR", "HORA", "VIDEO"] as const;
@@ -39,10 +41,7 @@ function cellKey(dayYmd: string, turn: TurnKey, row: string) { return `${dayYmd}
 
 export default function PlanSemanalPage() {
   const qs = useSearchParams();
-  const router = useRouter();
   const hideHeader = qs.get("hideHeader") === "1";
-  const initialTurn = (qs.get("turn") === "afternoon" ? "afternoon" : "morning") as TurnKey;
-  const [activeTurn, setActiveTurn] = useState<TurnKey>(initialTurn);
 
   const [base, setBase] = useState<Date>(() => getMonday(new Date()));
   const [loading, setLoading] = useState(false);
@@ -50,27 +49,34 @@ export default function PlanSemanalPage() {
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
+  // Lugares dinámicos (persistidos)
+  const [lugares, setLugares] = useState<string[]>(DEFAULT_LUGARES);
+
+  // Cambios pendientes por celda (no guardados)
   const [pending, setPending] = useState<Record<string, string>>({});
+  // Estado de edición SOLO para VIDEO por celda (key = day::turn::row)
   const [videoEditing, setVideoEditing] = useState<Record<string, boolean>>({});
+
   const [savingAll, setSavingAll] = useState(false);
 
-  // print
-  const printCSS = `
-    @media print{
-      @page { size: A4 portrait; margin: 10mm; }
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .no-print { display:none !important; }
-      .print-wrap { box-shadow:none !important; border:0 !important; }
-    }
-  `;
-
-  // sync tab in url
+  // cargar lugares desde localStorage
   useEffect(() => {
-    const p = new URLSearchParams(qs.toString());
-    p.set("turn", activeTurn);
-    router.replace(`?${p.toString()}`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTurn]);
+    try {
+      const raw = localStorage.getItem(LS_LUGARES_KEY);
+      const arr = raw ? JSON.parse(raw) as string[] : [];
+      const merged = Array.from(new Set([...(arr||[]), ...DEFAULT_LUGARES]));
+      setLugares(merged);
+    } catch {}
+  }, []);
+  function addLugar(newLugar: string) {
+    const v = newLugar.trim();
+    if (!v) return;
+    setLugares((prev) => {
+      const merged = Array.from(new Set([v, ...prev]));
+      try { localStorage.setItem(LS_LUGARES_KEY, JSON.stringify(merged)); } catch {}
+      return merged;
+    });
+  }
 
   async function loadWeek(d: Date) {
     setLoading(true);
@@ -167,13 +173,17 @@ export default function PlanSemanalPage() {
   }
 
   // =======================
-  // MetaInput
+  // MetaInput (LUGAR/HORA/VIDEO)
   // =======================
   function MetaInput({
     dayYmd,
     turn,
     row,
-  }: { dayYmd: string; turn: TurnKey; row: (typeof META_ROWS)[number]; }) {
+  }: {
+    dayYmd: string;
+    turn: TurnKey;
+    row: (typeof META_ROWS)[number];
+  }) {
     const existing = findCell(dayYmd, turn, row);
     const original = (existing?.title ?? "").trim();
 
@@ -181,65 +191,131 @@ export default function PlanSemanalPage() {
     const pendingValue = pending[k];
     const value = pendingValue !== undefined ? pendingValue : original;
 
+    // LUGAR (con agregar y persistir)
     if (row === "LUGAR") {
       return (
         <select
-          className="h-8 w-full rounded-md border px-2 text-[11px]"
+          className="h-8 w-full rounded-md border px-2 text-xs"
           value={value || ""}
-          onChange={(e) => stageCell(dayYmd, turn, row, e.target.value)}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "__ADD__") {
+              const name = prompt("Nuevo lugar:");
+              if (name && name.trim()) {
+                addLugar(name.trim());
+                stageCell(dayYmd, turn, row, name.trim());
+              }
+              return;
+            }
+            stageCell(dayYmd, turn, row, v);
+          }}
         >
           <option value="">— Lugar —</option>
-          {LUGARES.map((l) => (<option key={l} value={l}>{l}</option>))}
+          {lugares.map((l) => (
+            <option key={l} value={l}>{l}</option>
+          ))}
+          <option value="__ADD__">➕ Agregar lugar…</option>
         </select>
       );
     }
+
+    // HORA (HH:mm)
     if (row === "HORA") {
       const hhmm = /^[0-9]{2}:[0-9]{2}$/.test(value || "") ? value : "";
       return (
         <input
           type="time"
-          className="h-8 w-full rounded-md border px-2 text-[11px]"
+          className="h-8 w-full rounded-md border px-2 text-xs"
           value={hhmm}
           onChange={(e) => stageCell(dayYmd, turn, row, e.target.value)}
         />
       );
     }
 
+    // VIDEO — usar edición local y sólo “stagear” al confirmar
     const parsed = parseVideoValue(value || "");
     const isEditing = !!videoEditing[k];
+
     const [localLabel, setLocalLabel] = useState(parsed.label);
     const [localUrl, setLocalUrl] = useState(parsed.url);
-    useEffect(() => { setLocalLabel(parsed.label); setLocalUrl(parsed.url); /* eslint-disable-next-line */ }, [k, isEditing]);
+
+    useEffect(() => {
+      setLocalLabel(parsed.label);
+      setLocalUrl(parsed.url);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [k, isEditing]);
 
     if (!isEditing && (parsed.label || parsed.url)) {
       return (
         <div className="flex items-center justify-between gap-1">
           {parsed.url ? (
-            <a href={parsed.url} target="_blank" rel="noreferrer" className="text-[12px] underline text-emerald-700 truncate" title={parsed.label || "Video"}>
+            <a
+              href={parsed.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[12px] underline text-emerald-700 truncate"
+              title={parsed.label || "Video"}
+            >
               {parsed.label || "Video"}
             </a>
           ) : (
             <span className="text-[12px] text-gray-500 truncate">{parsed.label}</span>
           )}
           <div className="flex items-center gap-1">
-            <button type="button" className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50" onClick={() => setVideoEditing((m) => ({ ...m, [k]: true }))} title="Editar">✏️</button>
-            <button type="button" className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50" onClick={() => stageCell(dayYmd, turn, row, "")} title="Borrar">❌</button>
+            <button
+              type="button"
+              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+              onClick={() => setVideoEditing((m) => ({ ...m, [k]: true }))}
+              title="Editar"
+            >
+              ✏️
+            </button>
+            <button
+              type="button"
+              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+              onClick={() => stageCell(dayYmd, turn, row, "")}
+              title="Borrar"
+            >
+              ❌
+            </button>
           </div>
         </div>
       );
     }
 
+    // Modo edición (o vacío)
     return (
       <div className="flex items-center gap-1.5">
-        <input className="h-8 w-[45%] rounded-md border px-2 text-[11px]" placeholder="Título" value={localLabel} onChange={(e) => setLocalLabel(e.target.value)} />
-        <input type="url" className="h-8 w-[55%] rounded-md border px-2 text-[11px]" placeholder="https://…" value={localUrl} onChange={(e) => setLocalUrl(e.target.value)} />
-        <button type="button" className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50" onClick={() => { stageCell(dayYmd, turn, row, joinVideoValue(localLabel, localUrl)); setVideoEditing((m) => ({ ...m, [k]: false })); }} title="Listo">✓</button>
+        <input
+          className="h-8 w-[45%] rounded-md border px-2 text-xs"
+          placeholder="Título"
+          value={localLabel}
+          onChange={(e) => setLocalLabel(e.target.value)}
+        />
+        <input
+          type="url"
+          className="h-8 w-[55%] rounded-md border px-2 text-xs"
+          placeholder="https://…"
+          value={localUrl}
+          onChange={(e) => setLocalUrl(e.target.value)}
+        />
+        <button
+          type="button"
+          className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50"
+          onClick={() => {
+            stageCell(dayYmd, turn, row, joinVideoValue(localLabel, localUrl));
+            setVideoEditing((m) => ({ ...m, [k]: false }));
+          }}
+          title="Listo"
+        >
+          ✓
+        </button>
       </div>
     );
   }
 
   // =======================
-  // Celda de contenido — SOLO botón “Editar ejercicio”
+  // Celda de contenido grande
   // =======================
   function EditableCell({ dayYmd, turn, row }: { dayYmd: string; turn: TurnKey; row: string; }) {
     const existing = findCell(dayYmd, turn, row);
@@ -255,20 +331,21 @@ export default function PlanSemanalPage() {
       }
     };
 
-    const editHref = existing?.id ? `/ct/sessions/${existing.id}` : "";
+    // en editor: solo botón Editar ejercicio (sin texto adicional)
+    const sessionHref = existing?.id ? `/ct/sessions/${existing.id}` : undefined;
 
     return (
       <div className="space-y-1">
-        <div className="flex items-center justify-end">
-          {editHref ? (
-            <a href={editHref} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50" title="Editar ejercicio">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] text-gray-500">
+            {/* dejamos solo la leyenda compacta a la izquierda */}
+            {row.slice(0, 18)}
+          </span>
+          {sessionHref ? (
+            <a href={sessionHref} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50" title="Editar ejercicio">
               Editar ejercicio
             </a>
-          ) : (
-            <button type="button" className="text-[11px] rounded-lg border px-2 py-0.5 opacity-50 cursor-not-allowed" title="Guardá la celda para habilitar el editor" disabled>
-              Editar ejercicio
-            </button>
-          )}
+          ) : null}
         </div>
 
         <div
@@ -289,83 +366,49 @@ export default function PlanSemanalPage() {
 
   const pendingCount = Object.keys(pending).length;
 
-  function TurnSection({ turn }: { turn: TurnKey }) {
-    return (
-      <>
-        {/* META */}
-        <div className="border-t">
-          <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
-            {turn === "morning" ? "TURNO MAÑANA · Meta" : "TURNO TARDE · Meta"}
-          </div>
-          {META_ROWS.map((rowName) => (
-            <div key={`${turn}-meta-${rowName}`} className="grid items-center" style={{ gridTemplateColumns: `100px repeat(7, minmax(120px, 1fr))` }}>
-              <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">{rowName}</div>
-              {orderedDays.map((ymd) => (
-                <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
-                  <MetaInput dayYmd={ymd} turn={turn} row={rowName} />
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-
-        {/* BLOQUES (incluye COMPENSATORIO) */}
-        <div className="border-t">
-          <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
-            {turn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
-          </div>
-          {CONTENT_ROWS.map((rowName) => (
-            <div key={`${turn}-${rowName}`} className="grid items-stretch" style={{ gridTemplateColumns: `100px repeat(7, minmax(120px, 1fr))` }}>
-              <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600">{rowName}</div>
-              {orderedDays.map((ymd) => (
-                <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
-                  <EditableCell dayYmd={ymd} turn={turn} row={rowName} />
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      </>
-    );
-  }
-
   return (
     <div className="p-3 md:p-4 space-y-3">
       <style jsx>{`[contenteditable][data-placeholder]:empty:before{content:attr(data-placeholder);color:#9ca3af;pointer-events:none;display:block;}`}</style>
-      <style jsx global>{printCSS}</style>
 
       {!hideHeader && (
         <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-lg md:text-xl font-bold">Plan semanal — Editor en tabla</h1>
             <p className="text-xs md:text-sm text-gray-500">Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)</p>
+            <p className="mt-1 text-[10px] text-gray-400">
+              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd> + <kbd className="rounded border px-1">Enter</kbd> para “marcar” una celda sin guardar aún.
+            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button onClick={() => confirmDiscardIfNeeded(() => setBase((d)=>addDaysUTC(d,-7)))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">◀ Semana anterior</button>
-            <button onClick={() => confirmDiscardIfNeeded(() => setBase(getMonday(new Date())))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Hoy</button>
-            <button onClick={() => confirmDiscardIfNeeded(() => setBase((d)=>addDaysUTC(d,7)))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Semana siguiente ▶</button>
+            <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">◀ Semana anterior</button>
+            <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Hoy</button>
+            <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Semana siguiente ▶</button>
             <div className="w-px h-6 bg-gray-200 mx-1" />
-            <button onClick={saveAll} disabled={pendingCount === 0 || savingAll} className={`px-3 py-1.5 rounded-xl text-xs ${pendingCount === 0 || savingAll ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}>
+            <button
+              onClick={saveAll}
+              disabled={pendingCount === 0 || savingAll}
+              className={`px-3 py-1.5 rounded-xl text-xs ${pendingCount === 0 || savingAll ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
+              title={pendingCount ? `${pendingCount} cambio(s) por guardar` : "Sin cambios"}
+            >
               {savingAll ? "Guardando..." : `Guardar cambios${pendingCount ? ` (${pendingCount})` : ""}`}
             </button>
-            <button onClick={discardAll} disabled={pendingCount === 0 || savingAll} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Descartar</button>
-            <button onClick={() => window.print()} className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50 no-print">🖨 Imprimir</button>
+            <button
+              onClick={discardAll}
+              disabled={pendingCount === 0 || savingAll}
+              className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
+            >
+              Descartar
+            </button>
           </div>
         </header>
       )}
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2">
-        <button className={`px-3 py-1.5 rounded-xl border text-xs ${activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={() => setActiveTurn("morning")}>Mañana</button>
-        <button className={`px-3 py-1.5 rounded-xl border text-xs ${activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={() => setActiveTurn("afternoon")}>Tarde</button>
-      </div>
-
       {loading ? (
         <div className="text-gray-500">Cargando semana…</div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm print-wrap">
+        <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
           {/* Cabecera días */}
-          <div className="grid text-xs" style={{ gridTemplateColumns: `100px repeat(7, minmax(120px, 1fr))` }}>
+          <div className="grid text-xs" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
             <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600"></div>
             {orderedDays.map((ymd) => (
               <div key={ymd} className="bg-gray-50 border-b px-2 py-1.5">
@@ -375,8 +418,65 @@ export default function PlanSemanalPage() {
             ))}
           </div>
 
-          {/* Turno activo */}
-          <TurnSection turn={activeTurn} />
+          {/* META MAÑANA */}
+          <div className="border-t">
+            <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">TURNO MAÑANA · Meta</div>
+            {META_ROWS.map((rowName) => (
+              <div key={`morning-meta-${rowName}`} className="grid items-center" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+                <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">{rowName}</div>
+                {orderedDays.map((ymd) => (
+                  <div key={`${ymd}-morning-${rowName}`} className="p-1">
+                    <MetaInput dayYmd={ymd} turn="morning" row={rowName} />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          {/* BLOQUES MAÑANA */}
+          <div className="border-t">
+            <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">TURNO MAÑANA</div>
+            {CONTENT_ROWS.map((rowName) => (
+              <div key={`morning-${rowName}`} className="grid items-stretch" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+                <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600 whitespace-pre-line">{rowName}</div>
+                {orderedDays.map((ymd) => (
+                  <div key={`${ymd}-morning-${rowName}`} className="p-1">
+                    <EditableCell dayYmd={ymd} turn="morning" row={rowName} />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          {/* META TARDE */}
+          <div className="border-t">
+            <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">TURNO TARDE · Meta</div>
+            {META_ROWS.map((rowName) => (
+              <div key={`afternoon-meta-${rowName}`} className="grid items-center" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+                <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">{rowName}</div>
+                {orderedDays.map((ymd) => (
+                  <div key={`${ymd}-afternoon-${rowName}`} className="p-1">
+                    <MetaInput dayYmd={ymd} turn="afternoon" row={rowName} />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          {/* BLOQUES TARDE */}
+          <div className="border-t">
+            <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">TURNO TARDE</div>
+            {CONTENT_ROWS.map((rowName) => (
+              <div key={`afternoon-${rowName}`} className="grid items-stretch" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+                <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600 whitespace-pre-line">{rowName}</div>
+                {orderedDays.map((ymd) => (
+                  <div key={`${ymd}-afternoon-${rowName}`} className="p-1">
+                    <EditableCell dayYmd={ymd} turn="afternoon" row={rowName} />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
