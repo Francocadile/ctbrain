@@ -94,23 +94,37 @@ export default function DashboardSemanaPage() {
     const existing = findCell(dayYmd, turn, row);
     const text = (existing?.title ?? "").trim();
 
-    // ✅ Link corregido a /ct/sessions/by-day/...
-    const sessionHref = `/ct/sessions/by-day/${dayYmd}/${turn}?focus=${encodeURIComponent(row)}`;
-
     return (
       <div className="space-y-1">
         <div className="flex items-center justify-between">
           <span className="text-[10px] text-gray-500" contentEditable={false} data-readonly onInput={stopEdit} onPaste={stopEdit} onDrop={stopEdit}>
             {row} — {new Date(`${dayYmd}T00:00:00Z`).toLocaleDateString(undefined,{day:"2-digit",month:"2-digit",timeZone:"UTC"})} {turn === "morning" ? "Mañana" : "Tarde"}
           </span>
-          <a href={sessionHref} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50" title="Abrir ejercicio">
-            Abrir ejercicio
-          </a>
+          {/* Sin botón aquí: el CTA único está en la fila "Sesión" */}
         </div>
 
         <div className="min-h[90px] min-h-[90px] w-full rounded-xl border p-2 text-[13px] leading-5 whitespace-pre-wrap bg-gray-50" title={text || ""} contentEditable={false} data-readonly onInput={stopEdit} onPaste={stopEdit} onDrop={stopEdit}>
           {text ? text : <span className="text-gray-400 italic">—</span>}
         </div>
+      </div>
+    );
+  }
+
+  function SessionCTA({ turn }: { turn: TurnKey }) {
+    return (
+      <div className="grid items-center" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+        <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">Sesión</div>
+        {orderedDays.map((ymd) => (
+          <div key={`${ymd}-${turn}-cta`} className="p-1">
+            <a
+              href={`/ct/sessions/by-day/${ymd}/${turn}`}
+              className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50 inline-block"
+              title="Ver sesión"
+            >
+              Ver sesión
+            </a>
+          </div>
+        ))}
       </div>
     );
   }
@@ -145,6 +159,14 @@ export default function DashboardSemanaPage() {
             ))}
           </div>
 
+          {/* CTA única por día/turno */}
+          <div className="border-t">
+            <div className="bg-emerald-100/50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]" contentEditable={false} data-readonly>
+              ACCESO RÁPIDO A SESIÓN — Mañana
+            </div>
+            <SessionCTA turn="morning" />
+          </div>
+
           {/* META MAÑANA */}
           <div className="border-t">
             <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]" contentEditable={false} data-readonly>
@@ -177,6 +199,14 @@ export default function DashboardSemanaPage() {
                 ))}
               </div>
             ))}
+          </div>
+
+          {/* CTA única por día/turno TARDE */}
+          <div className="border-t">
+            <div className="bg-emerald-100/50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]" contentEditable={false} data-readonly>
+              ACCESO RÁPIDO A SESIÓN — Tarde
+            </div>
+            <SessionCTA turn="afternoon" />
           </div>
 
           {/* META TARDE */}
