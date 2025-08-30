@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   getSessionsWeek,
   getMonday,
@@ -28,13 +28,24 @@ function stopEdit(e: React.SyntheticEvent) { e.preventDefault(); }
 
 export default function DashboardSemanaPage() {
   const qs = useSearchParams();
+  const router = useRouter();
   const hideHeader = qs.get("hideHeader") === "1";
+  const initialTurn = (qs.get("turn") === "afternoon" ? "afternoon" : "morning") as TurnKey;
+  const [activeTurn, setActiveTurn] = useState<TurnKey>(initialTurn);
 
   const [base, setBase] = useState<Date>(() => getMonday(new Date()));
   const [loading, setLoading] = useState(false);
   const [daysMap, setDaysMap] = useState<Record<string, SessionDTO[]>>({});
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
+
+  // Sync ?turn= en la URL al cambiar de pestaña
+  useEffect(() => {
+    const p = new URLSearchParams(qs.toString());
+    p.set("turn", activeTurn);
+    router.replace(`?${p.toString()}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTurn]);
 
   async function loadWeek(d: Date) {
     setLoading(true);
@@ -100,7 +111,7 @@ export default function DashboardSemanaPage() {
           <span className="text-[10px] text-gray-500" contentEditable={false} data-readonly onInput={stopEdit} onPaste={stopEdit} onDrop={stopEdit}>
             {row} — {new Date(`${dayYmd}T00:00:00Z`).toLocaleDateString(undefined,{day:"2-digit",month:"2-digit",timeZone:"UTC"})} {turn === "morning" ? "Mañana" : "Tarde"}
           </span>
-          {/* Sin botón aquí: el CTA único está en la fila "Sesión" */}
+          {/* CTA por bloque removida en dashboard */}
         </div>
 
         <div className="min-h[90px] min-h-[90px] w-full rounded-xl border p-2 text-[13px] leading-5 whitespace-pre-wrap bg-gray-50" title={text || ""} contentEditable={false} data-readonly onInput={stopEdit} onPaste={stopEdit} onDrop={stopEdit}>
@@ -129,6 +140,55 @@ export default function DashboardSemanaPage() {
     );
   }
 
+  // ====== Render de un turno (pestaña activa) ======
+  function TurnSection({ turn }: { turn: TurnKey }) {
+    return (
+      <>
+        {/* CTA única por día/turno */}
+        <div className="border-t">
+          <div className="bg-emerald-100/50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]" contentEditable={false} data-readonly>
+            ACCESO RÁPIDO A SESIÓN — {turn === "morning" ? "Mañana" : "Tarde"}
+          </div>
+          <SessionCTA turn={turn} />
+        </div>
+
+        {/* META */}
+        <div className="border-t">
+          <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]" contentEditable={false} data-readonly>
+            {turn === "morning" ? "TURNO MAÑANA · Meta" : "TURNO TARDE · Meta"}
+          </div>
+          {META_ROWS.map((rowName) => (
+            <div key={`${turn}-meta-${rowName}`} className="grid items-center" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+              <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600" contentEditable={false} data-readonly>{rowName}</div>
+              {orderedDays.map((ymd) => (
+                <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
+                  <ReadonlyMetaCell dayYmd={ymd} turn={turn} row={rowName} />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+
+        {/* BLOQUES */}
+        <div className="border-t">
+          <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]" contentEditable={false} data-readonly>
+            {turn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
+          </div>
+          {CONTENT_ROWS.map((rowName) => (
+            <div key={`${turn}-${rowName}`} className="grid items-stretch" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+              <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600" contentEditable={false} data-readonly>{rowName}</div>
+              {orderedDays.map((ymd) => (
+                <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
+                  <ReadonlyContentCell dayYmd={ymd} turn={turn} row={rowName} />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  }
+
   return (
     <div className="p-3 md:p-4 space-y-3" onInput={stopEdit} onPaste={stopEdit} onDrop={stopEdit}>
       {!hideHeader && (
@@ -138,17 +198,34 @@ export default function DashboardSemanaPage() {
             <p className="text-xs md:text-sm text-gray-500" contentEditable={false} data-readonly>Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button onClick={() => setBase((d)=>addDaysUTC(d,-7))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">◀ Semana anterior</button>
-            <button onClick={() => setBase(getMonday(new Date()))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Hoy</button>
-            <button onClick={() => setBase((d)=>addDaysUTC(d,7))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Semana siguiente ▶</button>
+            <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">◀ Semana anterior</button>
+            <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Hoy</button>
+            <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Semana siguiente ▶</button>
           </div>
         </header>
       )}
+
+      {/* Pestañas de turno */}
+      <div className="flex items-center gap-2">
+        <button
+          className={`px-3 py-1.5 rounded-xl border text-xs ${activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"}`}
+          onClick={() => setActiveTurn("morning")}
+        >
+          Mañana
+        </button>
+        <button
+          className={`px-3 py-1.5 rounded-xl border text-xs ${activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"}`}
+          onClick={() => setActiveTurn("afternoon")}
+        >
+          Tarde
+        </button>
+      </div>
 
       {loading ? (
         <div className="text-gray-500">Cargando semana…</div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
+          {/* Cabecera días */}
           <div className="grid text-xs" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
             <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600" contentEditable={false} />
             {orderedDays.map((ymd) => (
@@ -159,89 +236,8 @@ export default function DashboardSemanaPage() {
             ))}
           </div>
 
-          {/* CTA única por día/turno */}
-          <div className="border-t">
-            <div className="bg-emerald-100/50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]" contentEditable={false} data-readonly>
-              ACCESO RÁPIDO A SESIÓN — Mañana
-            </div>
-            <SessionCTA turn="morning" />
-          </div>
-
-          {/* META MAÑANA */}
-          <div className="border-t">
-            <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]" contentEditable={false} data-readonly>
-              TURNO MAÑANA · Meta
-            </div>
-            {META_ROWS.map((rowName) => (
-              <div key={`morning-meta-${rowName}`} className="grid items-center" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
-                <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600" contentEditable={false} data-readonly>{rowName}</div>
-                {orderedDays.map((ymd) => (
-                  <div key={`${ymd}-morning-${rowName}`} className="p-1">
-                    <ReadonlyMetaCell dayYmd={ymd} turn="morning" row={rowName} />
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-
-          {/* BLOQUES MAÑANA */}
-          <div className="border-t">
-            <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]" contentEditable={false} data-readonly>
-              TURNO MAÑANA
-            </div>
-            {CONTENT_ROWS.map((rowName) => (
-              <div key={`morning-${rowName}`} className="grid items-stretch" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
-                <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600" contentEditable={false} data-readonly>{rowName}</div>
-                {orderedDays.map((ymd) => (
-                  <div key={`${ymd}-morning-${rowName}`} className="p-1">
-                    <ReadonlyContentCell dayYmd={ymd} turn="morning" row={rowName} />
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-
-          {/* CTA única por día/turno TARDE */}
-          <div className="border-t">
-            <div className="bg-emerald-100/50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]" contentEditable={false} data-readonly>
-              ACCESO RÁPIDO A SESIÓN — Tarde
-            </div>
-            <SessionCTA turn="afternoon" />
-          </div>
-
-          {/* META TARDE */}
-          <div className="border-t">
-            <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]" contentEditable={false} data-readonly>
-              TURNO TARDE · Meta
-            </div>
-            {META_ROWS.map((rowName) => (
-              <div key={`afternoon-meta-${rowName}`} className="grid items-center" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
-                <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600" contentEditable={false} data-readonly>{rowName}</div>
-                {orderedDays.map((ymd) => (
-                  <div key={`${ymd}-afternoon-${rowName}`} className="p-1">
-                    <ReadonlyMetaCell dayYmd={ymd} turn="afternoon" row={rowName} />
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-
-          {/* BLOQUES TARDE */}
-          <div className="border-t">
-            <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]" contentEditable={false} data-readonly>
-              TURNO TARDE
-            </div>
-            {CONTENT_ROWS.map((rowName) => (
-              <div key={`afternoon-${rowName}`} className="grid items-stretch" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
-                <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600" contentEditable={false} data-readonly>{rowName}</div>
-                {orderedDays.map((ymd) => (
-                  <div key={`${ymd}-afternoon-${rowName}`} className="p-1">
-                    <ReadonlyContentCell dayYmd={ymd} turn="afternoon" row={rowName} />
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
+          {/* Render solo el turno activo */}
+          <TurnSection turn={activeTurn} />
         </div>
       )}
     </div>
