@@ -11,30 +11,20 @@ import {
 } from "@/lib/api/sessions";
 
 type TurnKey = "morning" | "afternoon";
-const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO"] as const;
+const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 const META_ROWS = ["LUGAR", "HORA", "VIDEO"] as const;
 
-function cellMarker(turn: TurnKey, row: string) {
-  return `[GRID:${turn}:${row}]`;
-}
-function isCellOf(s: SessionDTO, turn: TurnKey, row: string) {
-  return typeof s.description === "string" && s.description.startsWith(cellMarker(turn, row));
-}
+function cellMarker(turn: TurnKey, row: string) { return `[GRID:${turn}:${row}]`; }
+function isCellOf(s: SessionDTO, turn: TurnKey, row: string) { return typeof s.description === "string" && s.description.startsWith(cellMarker(turn, row)); }
 function parseVideoValue(v: string | null | undefined): { label: string; url: string } {
-  const raw = (v || "").trim();
-  if (!raw) return { label: "", url: "" };
+  const raw = (v || "").trim(); if (!raw) return { label: "", url: "" };
   const [label, url] = raw.split("|").map((s) => s.trim());
   if (!url && label?.startsWith("http")) return { label: "Video", url: label };
   return { label: label || "", url: url || "" };
 }
 function humanDate(ymd: string) {
   const d = new Date(`${ymd}T00:00:00.000Z`);
-  return d.toLocaleDateString(undefined, {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-    timeZone: "UTC",
-  });
+  return d.toLocaleDateString(undefined, { weekday: "long", day: "2-digit", month: "long", timeZone: "UTC" });
 }
 
 export default function SessionTurnoPage() {
@@ -46,10 +36,20 @@ export default function SessionTurnoPage() {
   const [daySessions, setDaySessions] = useState<SessionDTO[]>([]);
   const [weekStart, setWeekStart] = useState<string>("");
 
+  const printCSS = `
+    @media print {
+      @page { size: A4 landscape; margin: 10mm; }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .no-print { display:none !important; }
+      .print-wrap { box-shadow:none !important; border:0 !important; border-radius:0 !important; }
+    }
+  `;
+
   const blockRefs = {
     "PRE ENTREN0": useRef<HTMLDivElement | null>(null),
     "FÍSICO": useRef<HTMLDivElement | null>(null),
     "TÉCNICO–TÁCTICO": useRef<HTMLDivElement | null>(null),
+    "COMPENSATORIO": useRef<HTMLDivElement | null>(null),
   } as const;
 
   useEffect(() => {
@@ -99,6 +99,8 @@ export default function SessionTurnoPage() {
 
   return (
     <div className="p-4 space-y-4">
+      <style jsx global>{printCSS}</style>
+
       <header className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-lg md:text-xl font-bold">
@@ -109,29 +111,20 @@ export default function SessionTurnoPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-            ← Dashboard
-          </a>
-          <a href={`/ct/plan-semanal?turn=${turn}`} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-            ✏️ Editor
-          </a>
+          <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs no-print">← Dashboard</a>
+          <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs no-print">✏️ Editor</a>
+          <button onClick={() => window.print()} className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50 no-print">🖨 Imprimir</button>
         </div>
       </header>
 
       {/* Meta */}
-      <section className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+      <section className="rounded-2xl border bg-white shadow-sm overflow-hidden print-wrap">
         <div className="bg-emerald-50 text-emerald-900 font-semibold px-3 py-2 border-b uppercase tracking-wide text-[12px]">
           Meta de la sesión
         </div>
         <div className="grid md:grid-cols-3 gap-2 p-3 text-sm">
-          <div>
-            <div className="text-[11px] text-gray-500">Lugar</div>
-            <div className="font-medium">{meta.lugar || <span className="text-gray-400">—</span>}</div>
-          </div>
-          <div>
-            <div className="text-[11px] text-gray-500">Hora</div>
-            <div className="font-medium">{meta.hora || <span className="text-gray-400">—</span>}</div>
-          </div>
+          <div><div className="text-[11px] text-gray-500">Lugar</div><div className="font-medium">{meta.lugar || <span className="text-gray-400">—</span>}</div></div>
+          <div><div className="text-[11px] text-gray-500">Hora</div><div className="font-medium">{meta.hora || <span className="text-gray-400">—</span>}</div></div>
           <div>
             <div className="text-[11px] text-gray-500">Video</div>
             {meta.video.url ? (
@@ -146,15 +139,11 @@ export default function SessionTurnoPage() {
       {/* Bloques */}
       <section className="space-y-3">
         {blocks.map(({ row, text, id }) => (
-          <div key={row} ref={blockRefs[row]} className="rounded-2xl border bg-white shadow-sm p-3">
+          <div key={row} ref={blockRefs[row]} className="rounded-2xl border bg-white shadow-sm p-3 print-wrap">
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">{row}</h2>
               {id ? (
-                <a
-                  href={`/ct/sessions/${id}`}
-                  className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50"
-                  title="Abrir ficha de ejercicio"
-                >
+                <a href={`/ct/sessions/${id}`} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50 no-print" title="Abrir ficha de ejercicio">
                   Abrir ficha
                 </a>
               ) : null}
