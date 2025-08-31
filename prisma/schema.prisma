@@ -35,6 +35,10 @@ model User {
   updatedAt DateTime  @updatedAt
 
   sessions  Session[] @relation("UserSessions")
+
+  // Relaciones nuevas (no obligatorias para datos existentes)
+  wellness  WellnessEntry[]
+  rpes      RPEEntry[]
 }
 
 model Session {
@@ -49,7 +53,50 @@ model Session {
   createdBy   String
   user        User         @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
 
+  // Relación opcional con RPEEntry (no rompe nada)
+  rpes        RPEEntry[]
+
   @@index([date])
   @@index([type])
   @@index([createdBy])
+}
+
+// ===== NUEVOS MODELOS MVP =====
+
+model WellnessEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  date      DateTime // 00:00:00 UTC del día
+  sleep     Int      // 1–10
+  soreness  Int      // 1–10
+  stress    Int      // 1–10
+  mood      Int      // 1–10
+  notes     String?
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([date, userId])
+}
+
+model RPEEntry {
+  id         String   @id @default(cuid())
+  userId     String
+  date       DateTime        // 00:00:00 UTC de la sesión o del día
+  sessionId  String?         // opcional: puede linkear a Session
+  rpe        Int             // 0–10
+  duration   Int?            // minutos
+  load       Int?            // rpe*duración (precalc opcional)
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session    Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([date, userId])
+  @@index([sessionId])
 }
