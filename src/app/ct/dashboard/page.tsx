@@ -35,7 +35,6 @@ function humanDayUTC(ymd: string) { const d = new Date(`${ymd}T00:00:00.000Z`); 
 function cellMarker(turn: TurnKey, row: string) { return `[GRID:${turn}:${row}]`; }
 function isCellOf(s: SessionDTO, turn: TurnKey, row: string) { return typeof s.description === "string" && s.description.startsWith(cellMarker(turn, row)); }
 function parseVideoValue(v?: string | null) { const raw=(v||"").trim(); if(!raw) return {label:"",url:""}; const [l,u]=raw.split("|").map(s=>s.trim()); if(!u && l?.startsWith("http")) return {label:"Video",url:l}; return {label:l||"",url:u||""}; }
-const stopEdit = (e: React.SyntheticEvent) => e.preventDefault();
 
 // ===== Layout compacto y prolijo =====
 const COL_LABEL_W   = 110; // ancho columna izquierda
@@ -148,7 +147,8 @@ export default function DashboardSemanaPage() {
              style={{ height: DAY_HEADER_H }}>
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-wide">{humanDayUTC(ymd)}</div>
-            <div className="text-[10px] text-gray-400">{ymd}</div>
+            {/* fecha más chica y sin salto */}
+            <div className="text-[9px] leading-3 text-gray-400 whitespace-nowrap">{ymd}</div>
           </div>
 
           {flag.kind === "LIBRE" ? (
@@ -168,31 +168,45 @@ export default function DashboardSemanaPage() {
   }
 
   return (
-    <div className="p-3 md:p-4 space-y-3" onInput={stopEdit} onPaste={stopEdit} onDrop={stopEdit} id="print-root">
-      {/* PRINT: ocultar sidebar/menú global y preservar colores */}
+    <div className="p-3 md:p-4 space-y-3" id="print-root">
+      {/* PRINT: sólo el contenido del dashboard */}
       <style jsx global>{`
         @page { size: A4 landscape; margin: 10mm; }
         @media print {
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          nav, aside, header[role="banner"], .sidebar, .app-sidebar, .print\\:hidden, .no-print { display: none !important; }
-          #print-root { padding: 0 !important; margin: 0 !important; }
+          /* esconder todo… */
+          body * { visibility: hidden !important; }
+          /* …menos el root del dashboard */
+          #print-root, #print-root * { visibility: visible !important; }
+          #print-root { position: absolute; inset: 0; margin: 0; padding: 0; }
+          /* por si algún layout usa contenedores globales */
+          nav, aside, header[role="banner"], .sidebar, .app-sidebar, .print\\:hidden, .no-print {
+            display: none !important;
+          }
+          a[href]:after { content: ""; }
         }
       `}</style>
 
       {!hideHeader && (
-        <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between print:hidden">
+        <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between no-print">
           <div>
             <h1 className="text-lg md:text-xl font-bold">Dashboard — Plan semanal (solo lectura)</h1>
             <p className="text-xs md:text-sm text-gray-500">Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1 mr-2">
-              <button className={`px-2.5 py-1.5 rounded-xl border text-xs ${activeTurn==="morning"?"bg-black text-white":"hover:bg-gray-50"}`} onClick={()=>{
-                const p=new URLSearchParams(qs.toString()); p.set("turn","morning"); history.replaceState(null,"",`?${p.toString()}`); setActiveTurn("morning");
-              }}>Mañana</button>
-              <button className={`px-2.5 py-1.5 rounded-xl border text-xs ${activeTurn==="afternoon"?"bg-black text-white":"hover:bg-gray-50"}`} onClick={()=>{
-                const p=new URLSearchParams(qs.toString()); p.set("turn","afternoon"); history.replaceState(null,"",`?${p.toString()}`); setActiveTurn("afternoon");
-              }}>Tarde</button>
+              <button
+                className={`px-2.5 py-1.5 rounded-xl border text-xs ${activeTurn==="morning"?"bg-black text-white":"hover:bg-gray-50"}`}
+                onClick={()=>{
+                  const p=new URLSearchParams(qs.toString()); p.set("turn","morning"); history.replaceState(null,"",`?${p.toString()}`); setActiveTurn("morning");
+                }}
+              >Mañana</button>
+              <button
+                className={`px-2.5 py-1.5 rounded-xl border text-xs ${activeTurn==="afternoon"?"bg-black text-white":"hover:bg-gray-50"}`}
+                onClick={()=>{
+                  const p=new URLSearchParams(qs.toString()); p.set("turn","afternoon"); history.replaceState(null,"",`?${p.toString()}`); setActiveTurn("afternoon");
+                }}
+              >Tarde</button>
             </div>
             <button onClick={()=>setBase((d)=>addDaysUTC(d,-7))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">◀ Semana anterior</button>
             <button onClick={()=>setBase(getMonday(new Date()))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Hoy</button>
