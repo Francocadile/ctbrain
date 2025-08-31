@@ -34,7 +34,6 @@ export async function GET(req: Request) {
     if (userId) where.userId = userId;
     if (sessionId) where.sessionId = sessionId;
 
-    // IMPORTANTE: el nombre del delegate es rPEEntry (por mayúsculas del modelo)
     const rows = await prisma.rPEEntry.findMany({
       where,
       orderBy: [{ date: "desc" }, { userId: "asc" }],
