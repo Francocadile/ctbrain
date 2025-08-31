@@ -1,4 +1,3 @@
-// src/app/ct/dashboard/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -14,7 +13,7 @@ type TurnKey = "morning" | "afternoon";
 const ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 const META_ROWS = ["LUGAR", "HORA", "VIDEO"] as const;
 
-// ===== Flags creados en el editor =====
+// ===== Flags (creados en el editor semanal) =====
 type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
 type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string };
 const DAYFLAG_TAG = "DAYFLAG";
@@ -24,9 +23,9 @@ const isDayFlag = (s: SessionDTO, turn: TurnKey) =>
 function parseDayFlagTitle(title?: string | null): DayFlag {
   const t = (title || "").trim();
   if (!t) return { kind: "NONE" };
-  const [kind, rival, logoUrl] = t.split("|").map(x => (x || "").trim());
+  const [kind, rival, logoUrl] = t.split("|").map((x) => (x || "").trim());
   if (kind === "PARTIDO") return { kind: "PARTIDO", rival, logoUrl };
-  if (kind === "LIBRE")   return { kind: "LIBRE" };
+  if (kind === "LIBRE") return { kind: "LIBRE" };
   return { kind: "NONE" };
 }
 
@@ -38,12 +37,12 @@ function isCellOf(s: SessionDTO, turn: TurnKey, row: string) { return typeof s.d
 function parseVideoValue(v?: string | null) { const raw=(v||"").trim(); if(!raw) return {label:"",url:""}; const [l,u]=raw.split("|").map(s=>s.trim()); if(!u && l?.startsWith("http")) return {label:"Video",url:l}; return {label:l||"",url:u||""}; }
 const stopEdit = (e: React.SyntheticEvent) => e.preventDefault();
 
-// ===== Layout compacto y alineado =====
-const COL_LABEL_W = 96;      // etiqueta filas
-const DAY_MIN_W   = 120;     // ancho mínimo por día
-const ROW_H       = 70;      // alto por fila (4 filas)
-const DAY_HEADER_H = 56;     // ← alto fijo del encabezado de cada día
-const GAP         = 8;
+// ===== Layout compacto y prolijo =====
+const COL_LABEL_W   = 110; // ancho columna izquierda
+const DAY_MIN_W     = 116; // ancho mín por día (caben 7 en 1366px)
+const ROW_H         = 64;  // alto de cada fila
+const DAY_HEADER_H  = 52;  // altura fija encabezado de día
+const CELL_GAP      = 6;
 
 export default function DashboardSemanaPage() {
   const qs = useSearchParams();
@@ -87,7 +86,7 @@ export default function DashboardSemanaPage() {
     return parseDayFlagTitle(f?.title);
   }
 
-  // ===== Meta (solo lectura) =====
+  // ===== META (solo lectura) =====
   function ReadonlyMetaCell({ ymd, row }: { ymd: string; row: (typeof META_ROWS)[number] }) {
     const s = findCell(ymd, activeTurn, row);
     const text = (s?.title || "").trim();
@@ -105,7 +104,6 @@ export default function DashboardSemanaPage() {
   function DayCard({ ymd }: { ymd: string }) {
     const flag = getDayFlag(ymd, activeTurn);
     const headerHref = `/ct/sessions/by-day/${ymd}/${activeTurn}`;
-    const showHeaderBtn = flag.kind !== "LIBRE"; // en Libre no hay sesión
     const librePill = activeTurn === "morning" ? "Mañana libre" : "Tarde libre";
 
     const NormalBody = () => (
@@ -114,7 +112,8 @@ export default function DashboardSemanaPage() {
           const s = findCell(ymd, activeTurn, row);
           const txt = (s?.title || "").trim();
           return (
-            <div key={row} className="rounded-md border bg-gray-50 p-2 text-[12px] leading-5 whitespace-pre-wrap overflow-hidden">
+            <div key={row}
+                 className="rounded-md border bg-gray-50 px-2 py-1.5 text-[12px] leading-[18px] whitespace-pre-wrap overflow-hidden">
               {txt || <span className="text-gray-400 italic">—</span>}
             </div>
           );
@@ -122,51 +121,46 @@ export default function DashboardSemanaPage() {
       </div>
     );
 
-    const SinglePanel = (content: React.ReactNode) => (
-      <div className="rounded-md border bg-gray-50 p-2 flex items-center justify-center"
-           style={{ height: ROW_H * 4 + GAP * 3 }}>
-        {content}
+    const SinglePanel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+      <div className="rounded-md border bg-gray-50 flex items-center justify-center"
+           style={{ height: ROW_H * 4 + CELL_GAP * 3 }}>
+        <div className="p-2 text-center">{children}</div>
       </div>
     );
 
     const PartidoPanel = () => (
-      <div className="flex flex-col items-center justify-center gap-2 text-center">
+      <div className="flex flex-col items-center justify-center gap-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {flag.logoUrl ? (
-          <img src={flag.logoUrl} alt="Logo rival" className="max-h-[140px] object-contain" />
+          <img src={flag.logoUrl} alt="Logo rival" className="max-h-[120px] object-contain" />
         ) : null}
-        <div className="text-[13px] font-semibold">PARTIDO</div>
+        <div className="text-[13px] font-semibold tracking-wide">PARTIDO</div>
         {flag.rival ? <div className="text-[12px]">vs <b>{flag.rival}</b></div> : null}
       </div>
     );
 
-    const LibrePanel = () => (
-      <div className="text-gray-700 font-semibold tracking-wide">LIBRE</div>
-    );
+    const LibrePanel = () => (<div className="text-gray-700 font-semibold tracking-wide text-[14px]">LIBRE</div>);
 
     return (
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        {/* Header del día: altura fija para alinear con columna izquierda */}
-        <div className="flex items-center justify-between px-2.5 py-1 border-b bg-gray-50"
+        {/* header del día con altura fija */}
+        <div className="flex items-center justify-between px-2 py-1 border-b bg-gray-50"
              style={{ height: DAY_HEADER_H }}>
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-wide">{humanDayUTC(ymd)}</div>
             <div className="text-[10px] text-gray-400">{ymd}</div>
           </div>
 
-          {/* Si es LIBRE, mostramos la pill; si no, "Ver sesión" */}
           {flag.kind === "LIBRE" ? (
-            <span className="text-[10px] rounded border bg-gray-100 px-2 py-0.5">
-              {librePill}
-            </span>
+            <span className="text-[10px] rounded border bg-gray-100 px-2 py-0.5">{librePill}</span>
           ) : (
             <a href={headerHref} className="text-[10px] rounded border px-2 py-0.5 hover:bg-gray-100">Ver sesión</a>
           )}
         </div>
 
         <div className="p-2">
-          {flag.kind === "PARTIDO" && SinglePanel(<PartidoPanel />)}
-          {flag.kind === "LIBRE"   && SinglePanel(<LibrePanel />)}
+          {flag.kind === "PARTIDO" && <SinglePanel><PartidoPanel /></SinglePanel>}
+          {flag.kind === "LIBRE"   && <SinglePanel><LibrePanel /></SinglePanel>}
           {flag.kind === "NONE"    && <NormalBody />}
         </div>
       </div>
@@ -174,14 +168,14 @@ export default function DashboardSemanaPage() {
   }
 
   return (
-    <div className="p-3 md:p-4 space-y-3" onInput={stopEdit} onPaste={stopEdit} onDrop={stopEdit}>
-      {/* Print: ocultar menú/aside/header y conservar colores; horizontal */}
+    <div className="p-3 md:p-4 space-y-3" onInput={stopEdit} onPaste={stopEdit} onDrop={stopEdit} id="print-root">
+      {/* PRINT: ocultar sidebar/menú global y preservar colores */}
       <style jsx global>{`
         @page { size: A4 landscape; margin: 10mm; }
         @media print {
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          nav, aside, header[role="banner"], .print\\:hidden, .sidebar, .app-sidebar { display:none !important; }
-          .container, main { padding: 0 !important; }
+          nav, aside, header[role="banner"], .sidebar, .app-sidebar, .print\\:hidden, .no-print { display: none !important; }
+          #print-root { padding: 0 !important; margin: 0 !important; }
         }
       `}</style>
 
@@ -220,7 +214,6 @@ export default function DashboardSemanaPage() {
               </div>
               <div className="mt-2 grid gap-[6px]"
                    style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}>
-                {/* labels */}
                 <div className="bg-gray-50/60 border rounded-md px-2 py-1 text-[10px] font-medium text-gray-600">LUGAR</div>
                 {orderedDays.map((ymd)=>(
                   <div key={`lugar-${ymd}`} className="rounded-md border px-1 py-0.5"><ReadonlyMetaCell ymd={ymd} row="LUGAR" /></div>
@@ -241,21 +234,19 @@ export default function DashboardSemanaPage() {
               {activeTurn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
             </div>
 
-            {/* Layout: etiquetas + 7 tarjetas */}
+            {/* Layout principal: etiquetas + 7 tarjetas */}
             <div className="grid gap-3"
                  style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}>
-              {/* Columna etiquetas: header spacer + 4 filas */}
+              {/* Columna etiquetas: espaciador header + 4 filas */}
               <div className="grid gap-[6px]" style={{ gridTemplateRows: `${DAY_HEADER_H}px repeat(4, ${ROW_H}px)` }}>
-                {/* Espaciador para alinear con los headers de cada día */}
                 <div />
                 {ROWS.map((r)=>(
                   <div key={r} className="bg-gray-50/60 border rounded-md px-2 text-[10px] font-medium text-gray-600 flex items-center">
-                    <span className="whitespace-pre-line">{r}</span>
+                    <span className="leading-[14px] whitespace-pre-line">{r}</span>
                   </div>
                 ))}
               </div>
 
-              {/* Tarjetas por día */}
               {orderedDays.map((ymd)=>(
                 <DayCard key={`card-${ymd}`} ymd={ymd} />
               ))}
