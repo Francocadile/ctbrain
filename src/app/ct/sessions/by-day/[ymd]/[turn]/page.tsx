@@ -1,78 +1,162 @@
-// prisma/schema.prisma
+// src/app/ct/sessions/by-day/[ymd]/[turn]/page.tsx
+"use client";
 
-generator client {
-  provider = "prisma-client-js"
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
+import {
+  getSessionsWeek,
+  getMonday,
+  toYYYYMMDDUTC,
+  type SessionDTO,
+} from "@/lib/api/sessions";
+
+type TurnKey = "morning" | "afternoon";
+const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
+const META_ROWS = ["LUGAR", "HORA", "VIDEO"] as const;
+
+function cellMarker(turn: TurnKey, row: string) { return `[GRID:${turn}:${row}]`; }
+function isCellOf(s: SessionDTO, turn: TurnKey, row: string) { return typeof s.description === "string" && s.description.startsWith(cellMarker(turn, row)); }
+function parseVideoValue(v: string | null | undefined): { label: string; url: string } {
+  const raw = (v || "").trim(); if (!raw) return { label: "", url: "" };
+  const [label, url] = raw.split("|").map((s) => s.trim());
+  if (!url && label?.startsWith("http")) return { label: "Video", url: label };
+  return { label: label || "", url: url || "" };
+}
+function humanDate(ymd: string) {
+  const d = new Date(`${ymd}T00:00:00.000Z`);
+  return d.toLocaleDateString(undefined, { weekday: "long", day: "2-digit", month: "long", timeZone: "UTC" });
 }
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
+export default function SessionTurnoPage() {
+  const { ymd, turn } = useParams<{ ymd: string; turn: TurnKey }>();
+  const qs = useSearchParams();
+  const focus = qs.get("focus") || "";
 
-enum Role {
-  ADMIN
-  CT
-  MEDICO
-  JUGADOR
-  DIRECTIVO
-}
+  const [loading, setLoading] = useState(false);
+  const [daySessions, setDaySessions] = useState<SessionDTO[]>([]);
+  const [weekStart, setWeekStart] = useState<string>("");
 
-enum SessionType {
-  GENERAL
-  FUERZA
-  TACTICA
-  AEROBICO
-  RECUPERACION
-}
+  const printCSS = `
+    @page { size: A4 landscape; margin: 10mm; }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body * { visibility: hidden !important; }
+      .print-root, .print-root * { visibility: visible !important; }
+      .print-root { position: absolute; inset: 0; margin: 0; }
+      .no-print { display: none !important; }
+      a[href]:after { content: ""; }
+    }
+  `;
 
-model User {
-  id        String    @id @default(cuid())
-  email     String    @unique
-  name      String?
-  password  String?   // necesario para /admin/users (bcrypt)
-  role      Role      @default(JUGADOR)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  const blockRefs = {
+    "PRE ENTREN0": useRef<HTMLDivElement | null>(null),
+    "FÍSICO": useRef<HTMLDivElement | null>(null),
+    "TÉCNICO–TÁCTICO": useRef<HTMLDivElement | null>(null),
+    "COMPENSATORIO": useRef<HTMLDivElement | null>(null),
+  } as const;
 
-  sessions  Session[] @relation("UserSessions")
-}
+  useEffect(() => {
+    async function load() {
+      if (!ymd) return;
+      setLoading(true);
+      try {
+        const date = new Date(`${ymd}T00:00:00.000Z`);
+        const monday = getMonday(date);
+        const res = await getSessionsWeek({ start: toYYYYMMDDUTC(monday) });
+        setWeekStart(res.weekStart);
+        setDaySessions(res.days?.[ymd] || []);
+      } catch (e) {
+        console.error(e);
+        alert("No se pudo cargar la sesión.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [ymd]);
 
-model Session {
-  id          String       @id @default(cuid())
-  title       String
-  description String?
-  date        DateTime
-  type        SessionType  @default(GENERAL)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  useEffect(() => {
+    const key = (focus || "") as typeof CONTENT_ROWS[number];
+    const ref = key && (blockRefs as any)[key]?.current;
+    if (ref) ref.scrollIntoView({ behavior: "smooth", block: "start" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
 
-  createdBy   String
-  user        User         @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
+  const meta = useMemo(() => {
+    const get = (row: (typeof META_ROWS)[number]) =>
+      (daySessions.find((s) => isCellOf(s, turn, row))?.title || "").trim();
+    const lugar = get("LUGAR");
+    const hora = get("HORA");
+    const videoRaw = get("VIDEO");
+    const video = parseVideoValue(videoRaw);
+    return { lugar, hora, video };
+  }, [daySessions, turn]);
 
-  @@index([date])
-  @@index([type])
-  @@index([createdBy])
-}
+  const blocks = useMemo(() => {
+    return CONTENT_ROWS.map((row) => {
+      const s = daySessions.find((it) => isCellOf(it, turn, row));
+      const text = (s?.title || "").trim();
+      return { row, text, id: s?.id || "" };
+    });
+  }, [daySessions, turn]);
 
-/* ===== Nuevos (opcionales para persistir settings) ===== */
-model Place {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
+  return (
+    <div className="p-4 space-y-4 print-root">
+      <style jsx global>{printCSS}</style>
 
-model ExerciseKind {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
+      <header className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-lg md:text-xl font-bold">
+            Sesión — {turn === "morning" ? "Mañana" : "Tarde"} · {humanDate(ymd)}
+          </h1>
+          <p className="text-xs md:text-sm text-gray-500">
+            Semana base: {weekStart || "—"} · Día: {ymd}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 no-print">
+          <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">← Dashboard</a>
+          <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">✏️ Editor</a>
+          <button onClick={() => window.print()} className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50">🖨 Imprimir</button>
+        </div>
+      </header>
 
-model Rival {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  logoUrl   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+      {/* Meta */}
+      <section className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+        <div className="bg-emerald-50 text-emerald-900 font-semibold px-3 py-2 border-b uppercase tracking-wide text-[12px]">
+          Meta de la sesión
+        </div>
+        <div className="grid md:grid-cols-3 gap-2 p-3 text-sm">
+          <div><div className="text-[11px] text-gray-500">Lugar</div><div className="font-medium">{meta.lugar || <span className="text-gray-400">—</span>}</div></div>
+          <div><div className="text-[11px] text-gray-500">Hora</div><div className="font-medium">{meta.hora || <span className="text-gray-400">—</span>}</div></div>
+          <div>
+            <div className="text-[11px] text-gray-500">Video</div>
+            {meta.video.url ? (
+              <a href={meta.video.url} target="_blank" rel="noreferrer" className="underline text-emerald-700" title={meta.video.label || "Video"}>
+                {meta.video.label || "Video"}
+              </a>
+            ) : (<span className="text-gray-400">—</span>)}
+          </div>
+        </div>
+      </section>
+
+      {/* Bloques */}
+      <section className="space-y-3">
+        {blocks.map(({ row, text, id }) => (
+          <div key={row} ref={blockRefs[row]} className="rounded-2xl border bg-white shadow-sm p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">{row}</h2>
+              {id ? (
+                <a href={`/ct/sessions/${id}`} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50 no-print" title="Abrir ficha de ejercicio">
+                  Abrir ficha
+                </a>
+              ) : null}
+            </div>
+            <div className="min-h-[120px] whitespace-pre-wrap leading-6 text-[13px]">
+              {text || <span className="text-gray-400 italic">—</span>}
+            </div>
+          </div>
+        ))}
+      </section>
+    </div>
+  );
 }
