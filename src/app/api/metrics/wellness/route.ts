@@ -12,7 +12,7 @@ function toUTCStart(ymd: string) {
 
 /**
  * GET /api/metrics/wellness?from=YYYY-MM-DD&to=YYYY-MM-DD&userId=...
- * - Devuelve lista (orden: date desc, user asc)
+ * Devuelve filas (orden date desc, user asc)
  */
 export async function GET(req: Request) {
   try {
@@ -46,29 +46,39 @@ export async function GET(req: Request) {
 
 /**
  * POST /api/metrics/wellness
- * Body: { userId, date(YYYY-MM-DD), sleep, soreness, stress, mood, notes? }
- * - Upsert por (userId, date)
+ * Body:
+ * {
+ *   userId, date(YYYY-MM-DD),
+ *   sleepQuality(1-5), sleepHours(number),
+ *   fatigue(1-5), soreness(1-5), stress(1-5), mood(1-5),
+ *   notes?
+ * }
+ * Upsert por (userId,date)
  */
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const userId = String(body?.userId || "");
-    const date = String(body?.date || "");
+    const b = await req.json();
+    const userId = String(b?.userId || "");
+    const date = String(b?.date || "");
     if (!userId || !date) {
       return new NextResponse("userId y date requeridos", { status: 400 });
     }
 
     const dateIso = toUTCStart(date);
-    const sleep = Math.max(1, Math.min(10, Number(body?.sleep ?? 0)));
-    const soreness = Math.max(1, Math.min(10, Number(body?.soreness ?? 0)));
-    const stress = Math.max(1, Math.min(10, Number(body?.stress ?? 0)));
-    const mood = Math.max(1, Math.min(10, Number(body?.mood ?? 0)));
-    const notes = (body?.notes ?? null) as string | null;
+    const clamp15 = (v: any) => Math.max(1, Math.min(5, Number(v ?? 0)));
+
+    const sleepQuality = clamp15(b?.sleepQuality);
+    const sleepHours = Number(b?.sleepHours ?? 0);
+    const fatigue = clamp15(b?.fatigue);
+    const soreness = clamp15(b?.soreness);
+    const stress = clamp15(b?.stress);
+    const mood = clamp15(b?.mood);
+    const notes = (b?.notes ?? null) as string | null;
 
     const data = await prisma.wellnessEntry.upsert({
       where: { userId_date: { userId, date: dateIso } },
-      update: { sleep, soreness, stress, mood, notes },
-      create: { userId, date: dateIso, sleep, soreness, stress, mood, notes },
+      update: { sleepQuality, sleepHours, fatigue, soreness, stress, mood, notes },
+      create: { userId, date: dateIso, sleepQuality, sleepHours, fatigue, soreness, stress, mood, notes },
     });
 
     return NextResponse.json(data);
