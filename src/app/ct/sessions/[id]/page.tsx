@@ -1,3 +1,4 @@
+// src/app/ct/sessions/[id]/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -177,7 +178,7 @@ export default function SesionDetailEditorPage() {
   const roCls = editing ? "" : "bg-gray-50 text-gray-600 cursor-not-allowed";
 
   return (
-    <div className="p-4 md:p-6 space-y-4 print:!p-2">
+    <div id="print-root" className="p-4 md:p-6 space-y-4 print:!p-2">
       {/* Header */}
       <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between print:hidden">
         <div>
@@ -362,9 +363,18 @@ export default function SesionDetailEditorPage() {
       {/* estilos de impresión */}
       <style jsx global>{`
         @media print {
+          @page { size: A4 portrait; margin: 10mm; }
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          nav, aside, header[role="banner"], .print\\:hidden { display:none !important; }
-          .print\\:!p-2 { padding: 8px !important; }
+
+          /* Oculta TODO por defecto y muestra solo #print-root */
+          body * { visibility: hidden !important; }
+          #print-root, #print-root * { visibility: visible !important; }
+          #print-root { position: absolute; inset: 0; margin: 0 !important; padding: 0 !important; }
+
+          /* Oculta menús/sidebars del layout general */
+          nav, aside, header[role="banner"], .sidebar, .app-sidebar, .print\\:hidden { display: none !important; }
+
+          /* Evita URLs automáticas en <a> impresas */
           a[href]:after { content: ""; }
         }
       `}</style>
