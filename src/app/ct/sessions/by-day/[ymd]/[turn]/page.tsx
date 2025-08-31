@@ -1,4 +1,3 @@
-// src/app/ct/sessions/by-day/[ymd]/[turn]/page.tsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -15,9 +14,7 @@ const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSA
 const META_ROWS = ["LUGAR", "HORA", "VIDEO"] as const;
 
 function cellMarker(turn: TurnKey, row: string) { return `[GRID:${turn}:${row}]`; }
-function isCellOf(s: SessionDTO, turn: TurnKey, row: string) {
-  return typeof s.description === "string" && s.description.startsWith(cellMarker(turn, row));
-}
+function isCellOf(s: SessionDTO, turn: TurnKey, row: string) { return typeof s.description === "string" && s.description.startsWith(cellMarker(turn, row)); }
 function parseVideoValue(v: string | null | undefined): { label: string; url: string } {
   const raw = (v || "").trim(); if (!raw) return { label: "", url: "" };
   const [label, url] = raw.split("|").map((s) => s.trim());
@@ -38,19 +35,15 @@ export default function SessionTurnoPage() {
   const [daySessions, setDaySessions] = useState<SessionDTO[]>([]);
   const [weekStart, setWeekStart] = useState<string>("");
 
-  // --- impresión: sólo #print-root, retrato, colores exactos, corta bien ---
   const printCSS = `
-    @page { size: A4 portrait; margin: 12mm; }
+    @page { size: A4 landscape; margin: 10mm; }
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      /* oculta todo menos el root que imprimimos */
       body * { visibility: hidden !important; }
-      #print-root, #print-root * { visibility: visible !important; }
-      #print-root { position: absolute; inset: 0; margin: 0; padding: 0; }
-      /* oculta barras/menu si existieran dentro del árbol */
-      .no-print, nav, aside, header[role="banner"], .sidebar, .app-sidebar { display: none !important; }
-      img, .avoid-break { break-inside: avoid; page-break-inside: avoid; }
-      a[href]:after { content: ""; } /* limpia URLs impresas por el navegador */
+      .print-root, .print-root * { visibility: visible !important; }
+      .print-root { position: absolute; inset: 0; margin: 0; }
+      .no-print { display: none !important; }
+      a[href]:after { content: ""; }
     }
   `;
 
@@ -107,11 +100,11 @@ export default function SessionTurnoPage() {
   }, [daySessions, turn]);
 
   return (
-    <div className="p-4 space-y-4" id="print-root">
+    <div className="p-4 space-y-4 print-root">
       <style jsx global>{printCSS}</style>
 
       <header className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-        <div className="avoid-break">
+        <div>
           <h1 className="text-lg md:text-xl font-bold">
             Sesión — {turn === "morning" ? "Mañana" : "Tarde"} · {humanDate(ymd)}
           </h1>
@@ -127,7 +120,7 @@ export default function SessionTurnoPage() {
       </header>
 
       {/* Meta */}
-      <section className="rounded-2xl border bg-white shadow-sm overflow-hidden avoid-break">
+      <section className="rounded-2xl border bg-white shadow-sm overflow-hidden">
         <div className="bg-emerald-50 text-emerald-900 font-semibold px-3 py-2 border-b uppercase tracking-wide text-[12px]">
           Meta de la sesión
         </div>
