@@ -180,7 +180,9 @@ export default function RPEPage() {
           <div className="rounded-xl border p-3">
             <div className="text-[11px] text-gray-500">Monotonía</div>
             <div className="text-lg font-bold">{acute.monotony ? acute.monotony.toFixed(2) : "—"}</div>
-            <div className="mt-1"><Badge tone={toneForMonotony(acute.monotony || 0)}>>2 = riesgo por baja variabilidad</Badge></div>
+            <div className="mt-1">
+              <Badge tone={toneForMonotony(acute.monotony || 0)}>&gt;2 = riesgo por baja variabilidad</Badge>
+            </div>
           </div>
           <div className="rounded-xl border p-3">
             <div className="text-[11px] text-gray-500">Strain</div>
@@ -195,7 +197,7 @@ export default function RPEPage() {
                 <div className="text-lg font-bold">{acwr ? acwr.toFixed(2) : "—"}</div>
               </div>
               <Badge tone={toneForACWR(acwr || 0)}>
-                Zona segura 0.8–1.3 · >1.5 riesgo
+                Zona segura 0.8–1.3 · &gt;1.5 riesgo
               </Badge>
             </div>
             {chronicWeeks.length ? (
