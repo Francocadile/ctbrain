@@ -8,13 +8,13 @@ import { getSessionById, updateSession, type SessionDTO } from "@/lib/api/sessio
 type TurnKey = "morning" | "afternoon";
 
 type Exercise = {
-  title: string;       // Título del ejercicio (encabezado grande)
-  kind: string;        // Tipo (desplegable persistente)
-  space: string;       // Espacio
-  players: string;     // Nº de jugadores
-  duration: string;    // Duración
-  description: string; // Descripción
-  imageUrl: string;    // URL de imagen
+  title: string;
+  kind: string;
+  space: string;
+  players: string;
+  duration: string;
+  description: string;
+  imageUrl: string;
 };
 
 const EX_TAG = "[EXERCISES]";
@@ -58,7 +58,6 @@ function decodeExercises(desc: string | null | undefined): { prefix: string; exe
     const json = atob(b64);
     const arr = JSON.parse(json) as Partial<Exercise>[];
     if (Array.isArray(arr)) {
-      // asegurar campos por compatibilidad
       const fixed = arr.map((e) => ({
         title: e.title ?? "",
         kind: e.kind ?? "",
@@ -92,6 +91,20 @@ export default function SesionDetailEditorPage() {
   const [prefix, setPrefix] = useState<string>("");
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [kinds, setKinds] = useState<string[]>(DEFAULT_KINDS);
+
+  // --- impresión: sólo #print-root, retrato, sin menú/aside ---
+  const printCSS = `
+    @page { size: A4 portrait; margin: 12mm; }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body * { visibility: hidden !important; }
+      #print-root, #print-root * { visibility: visible !important; }
+      #print-root { position: absolute; inset: 0; margin: 0; padding: 0; }
+      .no-print, nav, aside, header[role="banner"], .sidebar, .app-sidebar { display: none !important; }
+      img, .avoid-break { break-inside: avoid; page-break-inside: avoid; }
+      a[href]:after { content: ""; }
+    }
+  `;
 
   useEffect(() => { setKinds(loadKinds()); }, []);
 
@@ -190,10 +203,12 @@ export default function SesionDetailEditorPage() {
   const roCls = editing ? "" : "bg-gray-50 text-gray-600 cursor-not-allowed";
 
   return (
-    <div className="p-4 md:p-6 space-y-4 print:!p-2">
+    <div className="p-4 md:p-6 space-y-4" id="print-root">
+      <style jsx global>{printCSS}</style>
+
       {/* Header */}
-      <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between print:hidden">
-        <div>
+      <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between no-print">
+        <div className="avoid-break">
           <h1 className="text-lg md:text-xl font-bold">
             Editor de ejercicio(s) — {marker.row || "Bloque"} ·{" "}
             {marker.turn === "morning" ? "Mañana" : marker.turn === "afternoon" ? "Tarde" : "—"}
@@ -244,7 +259,7 @@ export default function SesionDetailEditorPage() {
       {/* Lista de ejercicios */}
       <div className="space-y-4">
         {exercises.map((ex, idx) => (
-          <section key={idx} className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+          <section key={idx} className="rounded-2xl border bg-white shadow-sm overflow-hidden avoid-break">
             <div className="flex items-center justify-between bg-gray-50 px-3 py-2 border-b">
               <input
                 className={`text-[12px] font-semibold uppercase tracking-wide w-full max-w-[360px] ${roCls}`}
@@ -351,7 +366,7 @@ export default function SesionDetailEditorPage() {
                 {ex.imageUrl ? (
                   <div className="mt-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={ex.imageUrl} alt="Vista previa" className="max-h-80 rounded-lg border object-contain" />
+                    <img src={ex.imageUrl} alt="Vista previa" className="max-h-80 rounded-lg border object-contain avoid-break" />
                   </div>
                 ) : null}
               </div>
@@ -360,7 +375,7 @@ export default function SesionDetailEditorPage() {
         ))}
 
         {editing && (
-          <div className="print:hidden">
+          <div className="no-print">
             <button
               type="button"
               onClick={addExercise}
@@ -371,15 +386,6 @@ export default function SesionDetailEditorPage() {
           </div>
         )}
       </div>
-
-      {/* estilos de impresión: ocultar menú lateral/header de app */}
-      <style jsx global>{`
-        @media print {
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          nav, aside, header[role="banner"], .print\\:hidden { display:none !important; }
-          .print\\:!p-2 { padding: 8px !important; }
-        }
-      `}</style>
     </div>
   );
 }
