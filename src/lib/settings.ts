@@ -2,8 +2,10 @@
 // Fuente única de verdad para "lugares", "tipos de ejercicio" y "rivales".
 // Intenta usar API -> fallback a localStorage -> fallback a defaults.
 
+export type Rival = { id: string; name: string; logoUrl: string | null };
+
 const PLACES_KEY = "ct_places";
-const KINDS_KEY  = "ct_exercise_kinds";
+const KINDS_KEY = "ct_exercise_kinds";
 
 export const DEFAULT_PLACES = [
   "Complejo Deportivo",
@@ -20,8 +22,6 @@ export const DEFAULT_KINDS = [
   "MSG",
   "LSG",
 ];
-
-export type Rival = { id: string; name: string; logoUrl: string | null };
 
 // ----------------- utils -----------------
 async function safeFetch<T = any>(url: string, init?: RequestInit, timeoutMs = 6000): Promise<T | null> {
@@ -47,19 +47,21 @@ function readLSArray(key: string): string[] {
     return [];
   }
 }
+
 function writeLSArray(key: string, list: string[]) {
   if (typeof window === "undefined") return;
   const uniq = Array.from(new Set(list.map((s) => String(s).trim()).filter(Boolean)));
   localStorage.setItem(key, JSON.stringify(uniq));
 }
 
-// ----------------- Places -----------------
+// =====================================================
+// PLACES (LUGARES)
+// =====================================================
 export async function getPlaces(): Promise<string[]> {
   // 1) API
   const api = await safeFetch<string[]>("/api/ct/settings/places");
   if (api && Array.isArray(api) && api.length) {
-    // cachear en LS para offline
-    writeLSArray(PLACES_KEY, api);
+    writeLSArray(PLACES_KEY, api); // cache en LS
     return api;
   }
   // 2) localStorage
@@ -103,7 +105,14 @@ export async function replaceAllPlaces(items: string[]): Promise<string[]> {
   return readLSArray(PLACES_KEY);
 }
 
-// ----------------- Kinds -----------------
+// Aliases para que tus páginas actuales compilen sin cambios:
+export const listPlaces = getPlaces;
+export const addPlace = upsertPlace;
+export const replacePlaces = replaceAllPlaces;
+
+// =====================================================
+// KINDS (TIPOS DE EJERCICIO)
+// =====================================================
 export async function getKinds(): Promise<string[]> {
   const api = await safeFetch<string[]>("/api/ct/settings/kinds");
   if (api && Array.isArray(api) && api.length) {
@@ -147,7 +156,14 @@ export async function replaceAllKinds(items: string[]): Promise<string[]> {
   return readLSArray(KINDS_KEY);
 }
 
-// ----------------- Rivals -----------------
+// Aliases para que tus páginas actuales compilen sin cambios:
+export const listKinds = getKinds;
+export const addKind = upsertKind;
+export const replaceKinds = replaceAllKinds;
+
+// =====================================================
+// RIVALS (RIVALES)
+// =====================================================
 export async function getRivals(): Promise<Rival[]> {
   // si el backend no tiene el modelo, la ruta devuelve []
   const api = await safeFetch<Rival[]>("/api/ct/rivals");
