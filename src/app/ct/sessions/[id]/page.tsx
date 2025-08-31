@@ -1,4 +1,3 @@
-// src/app/ct/sessions/[id]/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -39,19 +38,13 @@ function saveKinds(all: string[]) {
 function parseMarker(description?: string) {
   const text = (description || "").trimStart();
   const m = text.match(/^\[GRID:(morning|afternoon):(.+?)\]\s*\|\s*(\d{4}-\d{2}-\d{2})/i);
-  return {
-    turn: (m?.[1] || "") as TurnKey | "",
-    row: m?.[2] || "",
-    ymd: m?.[3] || "",
-  };
+  return { turn: (m?.[1] || "") as TurnKey | "", row: m?.[2] || "", ymd: m?.[3] || "" };
 }
-
 function decodeExercises(desc: string | null | undefined): { prefix: string; exercises: Exercise[] } {
   const text = (desc || "").trimEnd();
   const idx = text.lastIndexOf(EX_TAG);
   if (idx === -1) return { prefix: text, exercises: [] };
   const prefix = text.slice(0, idx).trimEnd();
-
   const rest = text.slice(idx + EX_TAG.length).trim();
   const b64 = rest.split(/\s+/)[0] || "";
   try {
@@ -72,7 +65,6 @@ function decodeExercises(desc: string | null | undefined): { prefix: string; exe
   } catch {}
   return { prefix: text, exercises: [] };
 }
-
 function encodeExercises(prefix: string, exercises: Exercise[]) {
   const b64 = btoa(JSON.stringify(exercises));
   const safePrefix = (prefix || "").trimEnd();
@@ -91,20 +83,6 @@ export default function SesionDetailEditorPage() {
   const [prefix, setPrefix] = useState<string>("");
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [kinds, setKinds] = useState<string[]>(DEFAULT_KINDS);
-
-  // --- impresión: sólo #print-root, retrato, sin menú/aside ---
-  const printCSS = `
-    @page { size: A4 portrait; margin: 12mm; }
-    @media print {
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      body * { visibility: hidden !important; }
-      #print-root, #print-root * { visibility: visible !important; }
-      #print-root { position: absolute; inset: 0; margin: 0; padding: 0; }
-      .no-print, nav, aside, header[role="banner"], .sidebar, .app-sidebar { display: none !important; }
-      img, .avoid-break { break-inside: avoid; page-break-inside: avoid; }
-      a[href]:after { content: ""; }
-    }
-  `;
 
   useEffect(() => { setKinds(loadKinds()); }, []);
 
@@ -148,12 +126,8 @@ export default function SesionDetailEditorPage() {
       return next;
     });
   }
-  function addExercise() {
-    setExercises((prev) => [...prev, { title: "", kind: "", space: "", players: "", duration: "", description: "", imageUrl: "" }]);
-  }
-  function removeExercise(idx: number) {
-    setExercises((prev) => prev.filter((_, i) => i !== idx));
-  }
+  function addExercise() { setExercises((prev) => [...prev, { title: "", kind: "", space: "", players: "", duration: "", description: "", imageUrl: "" }]); }
+  function removeExercise(idx: number) { setExercises((prev) => prev.filter((_, i) => i !== idx)); }
 
   function addKind() {
     const n = prompt("Nuevo tipo de ejercicio:");
@@ -203,12 +177,10 @@ export default function SesionDetailEditorPage() {
   const roCls = editing ? "" : "bg-gray-50 text-gray-600 cursor-not-allowed";
 
   return (
-    <div className="p-4 md:p-6 space-y-4" id="print-root">
-      <style jsx global>{printCSS}</style>
-
+    <div className="p-4 md:p-6 space-y-4 print:!p-2">
       {/* Header */}
-      <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between no-print">
-        <div className="avoid-break">
+      <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between print:hidden">
+        <div>
           <h1 className="text-lg md:text-xl font-bold">
             Editor de ejercicio(s) — {marker.row || "Bloque"} ·{" "}
             {marker.turn === "morning" ? "Mañana" : marker.turn === "afternoon" ? "Tarde" : "—"}
@@ -259,7 +231,7 @@ export default function SesionDetailEditorPage() {
       {/* Lista de ejercicios */}
       <div className="space-y-4">
         {exercises.map((ex, idx) => (
-          <section key={idx} className="rounded-2xl border bg-white shadow-sm overflow-hidden avoid-break">
+          <section key={idx} className="rounded-2xl border bg-white shadow-sm overflow-hidden">
             <div className="flex items-center justify-between bg-gray-50 px-3 py-2 border-b">
               <input
                 className={`text-[12px] font-semibold uppercase tracking-wide w-full max-w-[360px] ${roCls}`}
@@ -366,7 +338,7 @@ export default function SesionDetailEditorPage() {
                 {ex.imageUrl ? (
                   <div className="mt-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={ex.imageUrl} alt="Vista previa" className="max-h-80 rounded-lg border object-contain avoid-break" />
+                    <img src={ex.imageUrl} alt="Vista previa" className="max-h-80 rounded-lg border object-contain" />
                   </div>
                 ) : null}
               </div>
@@ -375,7 +347,7 @@ export default function SesionDetailEditorPage() {
         ))}
 
         {editing && (
-          <div className="no-print">
+          <div className="print:hidden">
             <button
               type="button"
               onClick={addExercise}
@@ -386,6 +358,16 @@ export default function SesionDetailEditorPage() {
           </div>
         )}
       </div>
+
+      {/* estilos de impresión */}
+      <style jsx global>{`
+        @media print {
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          nav, aside, header[role="banner"], .print\\:hidden { display:none !important; }
+          .print\\:!p-2 { padding: 8px !important; }
+          a[href]:after { content: ""; }
+        }
+      `}</style>
     </div>
   );
 }
