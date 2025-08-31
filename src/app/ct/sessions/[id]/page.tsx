@@ -8,44 +8,42 @@ import { getSessionById, updateSession, type SessionDTO } from "@/lib/api/sessio
 type TurnKey = "morning" | "afternoon";
 
 type Exercise = {
-  title: string;       // Título visible arriba
-  kind?: string;       // Tipo de ejercicio (select)
-  space: string;
-  players: string;
-  duration: string;
-  description: string;
-  imageUrl: string;
+  title: string;       // Título del ejercicio (encabezado grande)
+  kind: string;        // Tipo (desplegable persistente)
+  space: string;       // Espacio
+  players: string;     // Nº de jugadores
+  duration: string;    // Duración
+  description: string; // Descripción
+  imageUrl: string;    // URL de imagen
 };
 
 const EX_TAG = "[EXERCISES]";
-const DEFAULT_KINDS = ["Rueda de pases", "Circuito técnico", "SSG", "MSG", "LSG"];
-const KINDS_KEY = "ct_kinds";
+const KIND_KEY = "ct_exercise_kinds";
+const DEFAULT_KINDS = ["Rueda de pases","Circuito técnico","SSG","MSG","LSG"];
 
 function loadKinds(): string[] {
   try {
-    const raw = localStorage.getItem(KINDS_KEY);
-    if (!raw) return DEFAULT_KINDS;
+    const raw = localStorage.getItem(KIND_KEY);
+    if (!raw) return [...DEFAULT_KINDS];
     const arr = JSON.parse(raw);
-    if (Array.isArray(arr)) return Array.from(new Set([...DEFAULT_KINDS, ...arr]));
+    if (Array.isArray(arr)) return arr;
   } catch {}
-  return DEFAULT_KINDS;
+  return [...DEFAULT_KINDS];
 }
-function saveKindsList(list: string[]) {
-  const filtered = list.map(s=>s.trim()).filter(Boolean);
-  const onlyCustom = filtered.filter(k => !DEFAULT_KINDS.includes(k));
-  localStorage.setItem(KINDS_KEY, JSON.stringify(Array.from(new Set(onlyCustom))));
-}
-function saveKind(newKind: string) {
-  const current = loadKinds();
-  const next = Array.from(new Set([...current, newKind.trim()])).filter(Boolean);
-  saveKindsList(next);
+function saveKinds(all: string[]) {
+  const list = Array.from(new Set(all.map(s=>s.trim()).filter(Boolean)));
+  localStorage.setItem(KIND_KEY, JSON.stringify(list));
 }
 
 // ---------- helpers ----------
 function parseMarker(description?: string) {
   const text = (description || "").trimStart();
   const m = text.match(/^\[GRID:(morning|afternoon):(.+?)\]\s*\|\s*(\d{4}-\d{2}-\d{2})/i);
-  return { turn: (m?.[1] || "") as TurnKey | "", row: m?.[2] || "", ymd: m?.[3] || "" };
+  return {
+    turn: (m?.[1] || "") as TurnKey | "",
+    row: m?.[2] || "",
+    ymd: m?.[3] || "",
+  };
 }
 
 function decodeExercises(desc: string | null | undefined): { prefix: string; exercises: Exercise[] } {
@@ -58,8 +56,20 @@ function decodeExercises(desc: string | null | undefined): { prefix: string; exe
   const b64 = rest.split(/\s+/)[0] || "";
   try {
     const json = atob(b64);
-    const arr = JSON.parse(json) as Exercise[];
-    if (Array.isArray(arr)) return { prefix, exercises: arr };
+    const arr = JSON.parse(json) as Partial<Exercise>[];
+    if (Array.isArray(arr)) {
+      // asegurar campos por compatibilidad
+      const fixed = arr.map((e) => ({
+        title: e.title ?? "",
+        kind: e.kind ?? "",
+        space: e.space ?? "",
+        players: e.players ?? "",
+        duration: e.duration ?? "",
+        description: e.description ?? "",
+        imageUrl: e.imageUrl ?? "",
+      }));
+      return { prefix, exercises: fixed };
+    }
   } catch {}
   return { prefix: text, exercises: [] };
 }
@@ -83,16 +93,6 @@ export default function SesionDetailEditorPage() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [kinds, setKinds] = useState<string[]>(DEFAULT_KINDS);
 
-  const printCSS = `
-    @media print {
-      @page { size: A4 portrait; margin: 10mm; }
-      body * { visibility: hidden !important; }
-      .print-root, .print-root * { visibility: visible !important; }
-      .print-root { position: absolute; inset: 0; margin: 0; }
-      .no-print { display: none !important; }
-    }
-  `;
-
   useEffect(() => { setKinds(loadKinds()); }, []);
 
   useEffect(() => {
@@ -106,10 +106,12 @@ export default function SesionDetailEditorPage() {
 
         const d = decodeExercises(sess?.description || "");
         setPrefix(d.prefix);
-        const initial = d.exercises.length
-          ? d.exercises
-          : [{ title: "", kind: "", space: "", players: "", duration: "", description: "", imageUrl: "" }];
-        setExercises(initial);
+        setExercises(
+          d.exercises.length
+            ? d.exercises
+            : [{ title: "", kind: "", space: "", players: "", duration: "", description: "", imageUrl: "" }]
+        );
+
         setEditing(true);
       } catch (e) {
         console.error(e);
@@ -140,12 +142,38 @@ export default function SesionDetailEditorPage() {
     setExercises((prev) => prev.filter((_, i) => i !== idx));
   }
 
+  function addKind() {
+    const n = prompt("Nuevo tipo de ejercicio:");
+    if (!n) return;
+    const name = n.trim();
+    if (!name) return;
+    const next = Array.from(new Set([...kinds, name]));
+    saveKinds(next);
+    setKinds(next);
+    return name;
+  }
+  function manageKinds() {
+    const edited = prompt(
+      "Gestionar tipos (una línea por opción). Borrá para eliminar, editá para renombrar:",
+      kinds.join("\n")
+    );
+    if (edited === null) return;
+    const list = edited.split("\n").map(s=>s.trim()).filter(Boolean);
+    const unique = Array.from(new Set(list));
+    saveKinds(unique);
+    setKinds(unique);
+  }
+
   async function saveAll() {
     if (!s) return;
     setSaving(true);
     try {
       const newDescription = encodeExercises(prefix || (s.description as string) || "", exercises);
-      await updateSession(s.id, { title: s.title ?? "", description: newDescription, date: s.date });
+      await updateSession(s.id, {
+        title: s.title ?? "",
+        description: newDescription,
+        date: s.date,
+      });
       setEditing(false);
       alert("Guardado");
     } catch (e: any) {
@@ -161,26 +189,10 @@ export default function SesionDetailEditorPage() {
 
   const roCls = editing ? "" : "bg-gray-50 text-gray-600 cursor-not-allowed";
 
-  // ======= Gestión de Tipos de ejercicio =======
-  function manageKinds() {
-    const current = loadKinds();
-    const edited = prompt(
-      "Gestionar tipos (una línea por tipo). Borrá líneas para eliminar, editá para renombrar:",
-      current.join("\n")
-    );
-    if (edited === null) return;
-    const list = edited.split("\n").map(s=>s.trim()).filter(Boolean);
-    const unique = Array.from(new Set(list));
-    saveKindsList(unique);
-    setKinds(loadKinds());
-  }
-
   return (
-    <div className="p-4 md:p-6 space-y-4 print-root">
-      <style jsx global>{printCSS}</style>
-
+    <div className="p-4 md:p-6 space-y-4 print:!p-2">
       {/* Header */}
-      <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+      <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between print:hidden">
         <div>
           <h1 className="text-lg md:text-xl font-bold">
             Editor de ejercicio(s) — {marker.row || "Bloque"} ·{" "}
@@ -191,7 +203,7 @@ export default function SesionDetailEditorPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 no-print">
+        <div className="flex items-center gap-2">
           {marker.ymd && marker.turn && (
             <a
               href={`/ct/sessions/by-day/${marker.ymd}/${marker.turn}?focus=${encodeURIComponent(marker.row || "")}`}
@@ -204,95 +216,124 @@ export default function SesionDetailEditorPage() {
           <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">✏️ Editor semanal</a>
 
           {editing ? (
-            <button onClick={saveAll} disabled={saving} className={`px-3 py-1.5 rounded-xl text-xs ${saving ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}>
+            <button
+              onClick={saveAll}
+              disabled={saving}
+              className={`px-3 py-1.5 rounded-xl text-xs ${saving ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
+            >
               {saving ? "Guardando…" : "Guardar y bloquear"}
             </button>
           ) : (
-            <button onClick={() => setEditing(true)} className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50">
+            <button
+              onClick={() => setEditing(true)}
+              className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
+            >
               ✏️ Editar
             </button>
           )}
-
-          <button onClick={() => window.print()} className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50">🖨 Imprimir</button>
+          <button
+            onClick={() => window.print()}
+            className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
+            title="Imprimir"
+          >
+            🖨️ Imprimir
+          </button>
         </div>
       </header>
 
       {/* Lista de ejercicios */}
-      <div className="space-y-6">
+      <div className="space-y-4">
         {exercises.map((ex, idx) => (
           <section key={idx} className="rounded-2xl border bg-white shadow-sm overflow-hidden">
             <div className="flex items-center justify-between bg-gray-50 px-3 py-2 border-b">
-              <div className="text-[12px] font-semibold uppercase tracking-wide">EJERCICIO #{idx + 1}</div>
+              <input
+                className={`text-[12px] font-semibold uppercase tracking-wide w-full max-w-[360px] ${roCls}`}
+                placeholder={`EJERCICIO #${idx + 1} — Título`}
+                value={ex.title}
+                onChange={(e)=>updateExercise(idx,{ title: e.target.value })}
+                disabled={!editing}
+              />
               {editing && (
-                <button type="button" onClick={() => removeExercise(idx)} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50">
+                <button
+                  type="button"
+                  onClick={() => removeExercise(idx)}
+                  className="ml-2 text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50"
+                >
                   Eliminar
                 </button>
               )}
             </div>
 
             <div className="p-3 grid md:grid-cols-2 gap-3">
-              {/* Título */}
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-[11px] text-gray-500">Título del ejercicio</label>
+              {/* Tipo de ejercicio (desplegable persistente) */}
+              <div className="space-y-2">
+                <label className="text-[11px] text-gray-500">Tipo de ejercicio</label>
+                <div className="flex items-center gap-1">
+                  <select
+                    className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
+                    value={ex.kind || ""}
+                    onChange={(e)=> {
+                      const v = e.target.value;
+                      if (v === "__add__") {
+                        const created = addKind();
+                        if (created) updateExercise(idx,{ kind: created });
+                        return;
+                      }
+                      if (v === "__manage__") { manageKinds(); return; }
+                      updateExercise(idx,{ kind: v });
+                    }}
+                    disabled={!editing}
+                  >
+                    <option value="">— Seleccionar —</option>
+                    {kinds.map(k => <option key={k} value={k}>{k}</option>)}
+                    <option value="__add__">➕ Agregar…</option>
+                    <option value="__manage__">⚙️ Gestionar…</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[11px] text-gray-500">Espacio</label>
                 <input
                   className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                  value={ex.title}
-                  onChange={(e) => updateExercise(idx, { title: e.target.value })}
-                  placeholder="Ej: Activación 3 zonas"
+                  value={ex.space}
+                  onChange={(e) => updateExercise(idx, { space: e.target.value })}
+                  placeholder="Mitad de cancha"
                   disabled={!editing}
                 />
               </div>
 
-              {/* Tipo de ejercicio (Agregar / Gestionar) */}
-              <div className="space-y-2">
-                <label className="text-[11px] text-gray-500">Tipo de ejercicio</label>
-                <select
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                  value={ex.kind || ""}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (v === "__add__") {
-                      const n = prompt("Nuevo tipo de ejercicio:");
-                      if (!n) return;
-                      const name = n.trim();
-                      if (!name) return;
-                      saveKind(name);
-                      setKinds(loadKinds());
-                      updateExercise(idx, { kind: name });
-                    } else if (v === "__manage__") {
-                      manageKinds();
-                    } else {
-                      updateExercise(idx, { kind: v });
-                    }
-                  }}
-                  disabled={!editing}
-                >
-                  <option value="">— Seleccionar —</option>
-                  {kinds.map((k) => <option key={k} value={k}>{k}</option>)}
-                  <option value="__add__">➕ Agregar…</option>
-                  <option value="__manage__">⚙️ Gestionar…</option>
-                </select>
-              </div>
-
-              {/* Resto */}
-              <div className="space-y-2">
-                <label className="text-[11px] text-gray-500">Espacio</label>
-                <input className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`} value={ex.space} onChange={(e) => updateExercise(idx, { space: e.target.value })} placeholder="Mitad de cancha" disabled={!editing} />
-              </div>
-
               <div className="space-y-2">
                 <label className="text-[11px] text-gray-500">N° de jugadores</label>
-                <input className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`} value={ex.players} onChange={(e) => updateExercise(idx, { players: e.target.value })} placeholder="22 jugadores" disabled={!editing} />
+                <input
+                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
+                  value={ex.players}
+                  onChange={(e) => updateExercise(idx, { players: e.target.value })}
+                  placeholder="22 jugadores"
+                  disabled={!editing}
+                />
               </div>
 
               <div className="space-y-2">
                 <label className="text-[11px] text-gray-500">Duración</label>
-                <input className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`} value={ex.duration} onChange={(e) => updateExercise(idx, { duration: e.target.value })} placeholder="10 minutos" disabled={!editing} />
+                <input
+                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
+                  value={ex.duration}
+                  onChange={(e) => updateExercise(idx, { duration: e.target.value })}
+                  placeholder="10 minutos"
+                  disabled={!editing}
+                />
               </div>
 
               <div className="space-y-2 md:col-span-2">
                 <label className="text-[11px] text-gray-500">Descripción</label>
-                <textarea className={`w-full rounded-md border px-2 py-1.5 text-sm min-h-[120px] ${roCls}`} value={ex.description} onChange={(e) => updateExercise(idx, { description: e.target.value })} placeholder="Consignas, series, repeticiones, variantes..." disabled={!editing} />
+                <textarea
+                  className={`w-full rounded-md border px-2 py-1.5 text-sm min-h-[120px] ${roCls}`}
+                  value={ex.description}
+                  onChange={(e) => updateExercise(idx, { description: e.target.value })}
+                  placeholder="Consignas, series, repeticiones, variantes..."
+                  disabled={!editing}
+                />
               </div>
 
               <div className="space-y-2 md:col-span-2">
@@ -300,7 +341,13 @@ export default function SesionDetailEditorPage() {
                   <label className="text-[11px] text-gray-500">Imagen (URL)</label>
                   {!editing && <span className="text-[10px] text-gray-400">Bloqueado</span>}
                 </div>
-                <input className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`} value={ex.imageUrl} onChange={(e) => updateExercise(idx, { imageUrl: e.target.value })} placeholder="https://..." disabled={!editing} />
+                <input
+                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
+                  value={ex.imageUrl}
+                  onChange={(e) => updateExercise(idx, { imageUrl: e.target.value })}
+                  placeholder="https://..."
+                  disabled={!editing}
+                />
                 {ex.imageUrl ? (
                   <div className="mt-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -311,14 +358,28 @@ export default function SesionDetailEditorPage() {
             </div>
           </section>
         ))}
+
         {editing && (
-          <div className="no-print">
-            <button type="button" onClick={addExercise} className="rounded-xl border px-3 py-1.5 text-xs hover:bg-gray-50">
+          <div className="print:hidden">
+            <button
+              type="button"
+              onClick={addExercise}
+              className="rounded-xl border px-3 py-1.5 text-xs hover:bg-gray-50"
+            >
               + Agregar ejercicio
             </button>
           </div>
         )}
       </div>
+
+      {/* estilos de impresión: ocultar menú lateral/header de app */}
+      <style jsx global>{`
+        @media print {
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          nav, aside, header[role="banner"], .print\\:hidden { display:none !important; }
+          .print\\:!p-2 { padding: 8px !important; }
+        }
+      `}</style>
     </div>
   );
 }
