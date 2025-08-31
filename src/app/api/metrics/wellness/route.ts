@@ -10,10 +10,7 @@ function toUTCStart(ymd: string) {
   return d;
 }
 
-/**
- * GET /api/metrics/wellness?from=YYYY-MM-DD&to=YYYY-MM-DD&userId=...
- * Devuelve filas (orden date desc, user asc)
- */
+// GET /api/metrics/wellness?from=YYYY-MM-DD&to=YYYY-MM-DD&userId=...
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
@@ -25,11 +22,7 @@ export async function GET(req: Request) {
     if (from || to) {
       where.date = {};
       if (from) where.date.gte = toUTCStart(from);
-      if (to) {
-        const end = toUTCStart(to);
-        end.setUTCDate(end.getUTCDate() + 1); // exclusivo
-        where.date.lt = end;
-      }
+      if (to) { const end = toUTCStart(to); end.setUTCDate(end.getUTCDate() + 1); where.date.lt = end; }
     }
     if (userId) where.userId = userId;
 
@@ -44,41 +37,39 @@ export async function GET(req: Request) {
   }
 }
 
-/**
- * POST /api/metrics/wellness
- * Body:
- * {
- *   userId, date(YYYY-MM-DD),
- *   sleepQuality(1-5), sleepHours(number),
- *   fatigue(1-5), soreness(1-5), stress(1-5), mood(1-5),
- *   notes?
- * }
- * Upsert por (userId,date)
- */
+// POST (lo envía el jugador) — upsert por (userId, date)
 export async function POST(req: Request) {
   try {
     const b = await req.json();
     const userId = String(b?.userId || "");
     const date = String(b?.date || "");
-    if (!userId || !date) {
-      return new NextResponse("userId y date requeridos", { status: 400 });
-    }
+    if (!userId || !date) return new NextResponse("userId y date requeridos", { status: 400 });
 
-    const dateIso = toUTCStart(date);
-    const clamp15 = (v: any) => Math.max(1, Math.min(5, Number(v ?? 0)));
-
-    const sleepQuality = clamp15(b?.sleepQuality);
-    const sleepHours = Number(b?.sleepHours ?? 0);
-    const fatigue = clamp15(b?.fatigue);
-    const soreness = clamp15(b?.soreness);
-    const stress = clamp15(b?.stress);
-    const mood = clamp15(b?.mood);
-    const notes = (b?.notes ?? null) as string | null;
+    const d = toUTCStart(date);
+    const cap15 = (v: any) => Math.max(1, Math.min(5, Number(v ?? 0)));
 
     const data = await prisma.wellnessEntry.upsert({
-      where: { userId_date: { userId, date: dateIso } },
-      update: { sleepQuality, sleepHours, fatigue, soreness, stress, mood, notes },
-      create: { userId, date: dateIso, sleepQuality, sleepHours, fatigue, soreness, stress, mood, notes },
+      where: { userId_date: { userId, date: d } },
+      update: {
+        sleepQuality: cap15(b?.sleepQuality),
+        sleepHours: Number(b?.sleepHours ?? 0),
+        fatigue: cap15(b?.fatigue),
+        soreness: cap15(b?.soreness),
+        stress: cap15(b?.stress),
+        mood: cap15(b?.mood),
+        notes: (b?.notes ?? null) as string | null,
+      },
+      create: {
+        userId,
+        date: d,
+        sleepQuality: cap15(b?.sleepQuality),
+        sleepHours: Number(b?.sleepHours ?? 0),
+        fatigue: cap15(b?.fatigue),
+        soreness: cap15(b?.soreness),
+        stress: cap15(b?.stress),
+        mood: cap15(b?.mood),
+        notes: (b?.notes ?? null) as string | null,
+      },
     });
 
     return NextResponse.json(data);
