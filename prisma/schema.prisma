@@ -36,7 +36,7 @@ model User {
 
   sessions  Session[] @relation("UserSessions")
 
-  // Relaciones nuevas (no obligatorias para datos existentes)
+  // Nuevos
   wellness  WellnessEntry[]
   rpes      RPEEntry[]
 }
@@ -53,7 +53,6 @@ model Session {
   createdBy   String
   user        User         @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
 
-  // Relación opcional con RPEEntry (no rompe nada)
   rpes        RPEEntry[]
 
   @@index([date])
@@ -61,32 +60,36 @@ model Session {
   @@index([createdBy])
 }
 
-// ===== NUEVOS MODELOS MVP =====
-
+// ===== Wellness (jugador reporta, CT observa) =====
+// Escalas 1–5 (mayor = mejor). sleepHours en horas (float).
 model WellnessEntry {
-  id        String   @id @default(cuid())
-  userId    String
-  date      DateTime // 00:00:00 UTC del día
-  sleep     Int      // 1–10
-  soreness  Int      // 1–10
-  stress    Int      // 1–10
-  mood      Int      // 1–10
-  notes     String?
+  id           String   @id @default(cuid())
+  userId       String
+  date         DateTime // 00:00:00 UTC del día
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sleepQuality Int      // 1–5 (muy malo → excelente)
+  sleepHours   Float    // p.ej. 7.5
+  fatigue      Int      // 1–5 (extremadamente cansado → muy enérgico)
+  soreness     Int      // 1–5 (dolor intenso → sin dolor)
+  stress       Int      // 1–5 (muy alto → muy bajo)
+  mood         Int      // 1–5 (muy malhumorado → excelente)
+  notes        String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([userId, date])
   @@index([date, userId])
 }
 
+// ===== RPE (jugador reporta, CT observa) =====
 model RPEEntry {
   id         String   @id @default(cuid())
   userId     String
   date       DateTime        // 00:00:00 UTC de la sesión o del día
-  sessionId  String?         // opcional: puede linkear a Session
+  sessionId  String?         // opcional
   rpe        Int             // 0–10
   duration   Int?            // minutos
   load       Int?            // rpe*duración (precalc opcional)
