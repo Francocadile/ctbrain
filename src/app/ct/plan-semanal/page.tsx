@@ -39,25 +39,21 @@ function joinVideoValue(label: string, url: string) {
 }
 function cellKey(dayYmd: string, turn: TurnKey, row: string) { return `${dayYmd}::${turn}::${row}`; }
 
+/** ========= LUGARES: persistencia DEFINITIVA =========
+ * guardamos SIEMPRE la lista completa en localStorage.
+ */
 function loadPlaces(): string[] {
   try {
     const raw = localStorage.getItem(PLACES_KEY);
-    if (!raw) return DEFAULT_LUGARES;
+    if (!raw) return [...DEFAULT_LUGARES];        // primera carga: defaults
     const arr = JSON.parse(raw);
-    if (Array.isArray(arr)) return Array.from(new Set([...DEFAULT_LUGARES, ...arr]));
+    if (Array.isArray(arr)) return arr;           // desde aquí: manda lo guardado
   } catch {}
-  return DEFAULT_LUGARES;
+  return [...DEFAULT_LUGARES];
 }
-function savePlacesList(customList: string[]) {
-  // Solo guardo los que no son default en storage
-  const filtered = customList.filter(Boolean).map(s=>s.trim()).filter(Boolean);
-  const onlyCustom = filtered.filter(p => !DEFAULT_LUGARES.includes(p));
-  localStorage.setItem(PLACES_KEY, JSON.stringify(Array.from(new Set(onlyCustom))));
-}
-function savePlace(newPlace: string) {
-  const current = loadPlaces();
-  const next = Array.from(new Set([...current, newPlace.trim()])).filter(Boolean);
-  savePlacesList(next);
+function savePlaces(all: string[]) {
+  const list = Array.from(new Set(all.map(s=>s.trim()).filter(Boolean)));
+  localStorage.setItem(PLACES_KEY, JSON.stringify(list));
 }
 
 export default function PlanSemanalPage() {
@@ -81,7 +77,7 @@ export default function PlanSemanalPage() {
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
-  // Lugares dinámicos
+  // Lugares dinámicos (persistidos completos)
   const [places, setPlaces] = useState<string[]>(DEFAULT_LUGARES);
   useEffect(() => { setPlaces(loadPlaces()); }, []);
 
@@ -186,18 +182,17 @@ export default function PlanSemanalPage() {
     loadWeek(base);
   }
 
-  // ======= Gestión de Lugares =======
+  // ======= Gestión de Lugares (edita/borra DEFINITIVO) =======
   function managePlaces() {
-    const current = loadPlaces();
     const edited = prompt(
       "Gestionar lugares (una línea por lugar). Borrá líneas para eliminar, editá para renombrar:",
-      current.join("\n")
+      places.join("\n")
     );
     if (edited === null) return;
     const list = edited.split("\n").map(s=>s.trim()).filter(Boolean);
     const unique = Array.from(new Set(list));
-    savePlacesList(unique);
-    setPlaces(loadPlaces());
+    savePlaces(unique);     // guarda lista completa
+    setPlaces(unique);
   }
 
   // =======================
@@ -219,7 +214,7 @@ export default function PlanSemanalPage() {
     const pendingValue = pending[k];
     const value = pendingValue !== undefined ? pendingValue : original;
 
-    // LUGAR (select con Agregar / Gestionar)
+    // LUGAR (select con Agregar / Gestionar) — persistente
     if (row === "LUGAR") {
       const [localPlaces, setLocalPlaces] = useState<string[]>(places);
       useEffect(() => setLocalPlaces(places), [places]);
@@ -229,10 +224,10 @@ export default function PlanSemanalPage() {
         if (!n) return;
         const name = n.trim();
         if (!name) return;
-        savePlace(name);
-        const updated = loadPlaces();
-        setPlaces(updated);
-        setLocalPlaces(updated);
+        const next = Array.from(new Set([...places, name]));
+        savePlaces(next);        // persiste definitivo
+        setPlaces(next);
+        setLocalPlaces(next);
         stageCell(dayYmd, turn, row, name);
       };
 
