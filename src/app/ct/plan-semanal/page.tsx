@@ -12,9 +12,7 @@ import {
   toYYYYMMDDUTC,
   type SessionDTO,
 } from "@/lib/api/sessions";
-
-const DEFAULT_LUGARES = ["Complejo Deportivo","Cancha Auxiliar 1","Cancha Auxiliar 2","Gimnasio","Sala de Video"];
-const PLACES_KEY = "ct_places";
+import { listPlaces, addPlace as apiAddPlace, replacePlaces } from "@/lib/settings";
 
 type TurnKey = "morning" | "afternoon";
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
@@ -61,21 +59,6 @@ function joinVideoValue(label: string, url: string) {
 }
 function cellKey(dayYmd: string, turn: TurnKey, row: string) { return `${dayYmd}::${turn}::${row}`; }
 
-/** === Lugares: persistencia definitiva (lista completa en localStorage) === */
-function loadPlaces(): string[] {
-  try {
-    const raw = localStorage.getItem(PLACES_KEY);
-    if (!raw) return [...DEFAULT_LUGARES];
-    const arr = JSON.parse(raw);
-    if (Array.isArray(arr)) return arr;
-  } catch {}
-  return [...DEFAULT_LUGARES];
-}
-function savePlaces(all: string[]) {
-  const list = Array.from(new Set(all.map(s=>s.trim()).filter(Boolean)));
-  localStorage.setItem(PLACES_KEY, JSON.stringify(list));
-}
-
 export default function PlanSemanalPage() {
   const qs = useSearchParams();
   const router = useRouter();
@@ -97,9 +80,9 @@ export default function PlanSemanalPage() {
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
-  // Lugares
-  const [places, setPlaces] = useState<string[]>(DEFAULT_LUGARES);
-  useEffect(() => { setPlaces(loadPlaces()); }, []);
+  // Lugares (via wrapper con fallback)
+  const [places, setPlaces] = useState<string[]>([]);
+  useEffect(() => { (async ()=> setPlaces(await listPlaces()))(); }, []);
 
   // Cambios pendientes
   const [pending, setPending] = useState<Record<string, string>>({});
@@ -183,7 +166,7 @@ export default function PlanSemanalPage() {
       const next = { ...prev };
       const existing = findCell(dayYmd, turn, row);
       const currentValue = existing?.title?.trim() ?? "";
-      if (text.trim() === currentValue) delete next[k]; else next[k] = text;
+      if ((text || "").trim() === currentValue) delete next[k]; else next[k] = text;
       return next;
     });
   }
@@ -234,15 +217,16 @@ export default function PlanSemanalPage() {
 
   // ======= Gestión de Lugares (edita/borra DEFINITIVO) =======
   function managePlaces() {
-    const edited = prompt(
-      "Gestionar lugares (una línea por lugar). Borrá líneas para eliminar, editá para renombrar:",
-      places.join("\n")
-    );
-    if (edited === null) return;
-    const list = edited.split("\n").map(s=>s.trim()).filter(Boolean);
-    const unique = Array.from(new Set(list));
-    savePlaces(unique);
-    setPlaces(unique);
+    (async () => {
+      const edited = prompt(
+        "Gestionar lugares (una línea por lugar). Borrá líneas para eliminar, editá para renombrar:",
+        places.join("\n")
+      );
+      if (edited === null) return;
+      const list = edited.split("\n").map(s=>s.trim()).filter(Boolean);
+      const unique = await replacePlaces(list);
+      setPlaces(unique);
+    })();
   }
 
   // =======================
@@ -270,15 +254,14 @@ export default function PlanSemanalPage() {
       useEffect(() => setLocalPlaces(places), [places]);
 
       const addPlace = () => {
-        const n = prompt("Nuevo lugar:");
-        if (!n) return;
-        const name = n.trim();
-        if (!name) return;
-        const next = Array.from(new Set([...places, name]));
-        savePlaces(next);
-        setPlaces(next);
-        setLocalPlaces(next);
-        stageCell(dayYmd, turn, row, name);
+        (async () => {
+          const n = prompt("Nuevo lugar:");
+          if (!n) return;
+          const updated = await apiAddPlace(n);
+          setLocalPlaces(updated);
+          setPlaces(updated);
+          stageCell(dayYmd, turn, row, n.trim());
+        })();
       };
 
       return (
