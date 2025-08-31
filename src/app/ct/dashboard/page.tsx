@@ -14,10 +14,10 @@ type TurnKey = "morning" | "afternoon";
 const ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 const META_ROWS = ["LUGAR", "HORA", "VIDEO"] as const;
 
-// ====== Flags de día ======
+// ====== Flags de día (creados desde el editor semanal) ======
 type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
 type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string };
-const DAYFLAG_TAG = "DAYFLAG";                  // description: [DAYFLAG:<turn>] | YYYY-MM-DD
+const DAYFLAG_TAG = "DAYFLAG"; // description: [DAYFLAG:<turn>] | YYYY-MM-DD
 function dayFlagMarker(turn: TurnKey) { return `[${DAYFLAG_TAG}:${turn}]`; }
 function isDayFlag(s: SessionDTO, turn: TurnKey) {
   return typeof s.description === "string" && s.description.startsWith(dayFlagMarker(turn));
@@ -95,7 +95,7 @@ export default function DashboardSemanaPage() {
     return parseDayFlagTitle(f?.title);
   }
 
-  // ====== Meta (tabla normal) ======
+  // ====== Meta (solo lectura) ======
   function ReadonlyMetaCell({ ymd, row }: { ymd: string; row: (typeof META_ROWS)[number] }) {
     const s = findCell(ymd, activeTurn, row);
     const text = (s?.title || "").trim();
@@ -109,60 +109,72 @@ export default function DashboardSemanaPage() {
     return <div className="h-8 text-[12px] px-1.5 flex items-center truncate">{text}</div>;
   }
 
-  // ====== Celdas normales (contenido) ======
-  function ContentCell({ ymd, row }: { ymd: string; row: string }) {
-    const s = findCell(ymd, activeTurn, row);
-    const text = (s?.title || "").trim();
-    const href = `/ct/sessions/by-day/${ymd}/${activeTurn}?focus=${encodeURIComponent(row)}`;
-    return (
-      <div className="space-y-1">
-        <div className="flex justify-end">
-          <a href={href} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50">Ver sesión</a>
-        </div>
-        <div className="min-h-[90px] w-full rounded-xl border p-2 text-[13px] leading-5 whitespace-pre-wrap bg-gray-50">
-          {text || <span className="text-gray-400 italic">—</span>}
-        </div>
+  // ====== Tarjeta de día ======
+  function DayCard({ ymd }: { ymd: string }) {
+    const flag = getDayFlag(ymd, activeTurn);
+
+    const headerHref = `/ct/sessions/by-day/${ymd}/${activeTurn}`;
+    const headerBadge =
+      flag.kind === "LIBRE"
+        ? <span className="text-[10px] bg-gray-100 border px-1.5 py-0.5 rounded">DÍA LIBRE</span>
+        : flag.kind === "PARTIDO"
+          ? <span className="text-[10px] bg-amber-100 border px-1.5 py-0.5 rounded">PARTIDO {flag.rival ? `vs ${flag.rival}` : ""}</span>
+          : null;
+
+    // vista normal: mini-grid de 4 filas (sin repetición de títulos a la izquierda)
+    const NormalBody = () => (
+      <div className="grid gap-2" style={{ gridTemplateRows: "repeat(4, minmax(90px, auto))" }}>
+        {ROWS.map((row) => {
+          const s = findCell(ymd, activeTurn, row);
+          const txt = (s?.title || "").trim();
+          return (
+            <div key={row} className="rounded-xl border bg-gray-50 p-2 text-[13px] leading-5 whitespace-pre-wrap">
+              {txt || <span className="text-gray-400 italic">—</span>}
+            </div>
+          );
+        })}
       </div>
     );
-  }
 
-  // ====== Celda unificada (merge real con row-span) ======
-  function MergedDayCell({ ymd, flag }: { ymd: string; flag: DayFlag }) {
-    const href = `/ct/sessions/by-day/${ymd}/${activeTurn}?focus=${encodeURIComponent(ROWS[0])}`;
-    const rowSpan = flag.kind === "LIBRE" ? 4 : 3; // LIBRE ocupa 4 filas, PARTIDO 3 (sin compensatorio)
+    // bloque único: ocupa todo el body
+    const SinglePanel = ({ children }: { children: React.ReactNode }) => (
+      <div className="rounded-xl border bg-gray-50 p-3 min-h-[390px] flex items-center justify-center relative">
+        {children}
+        {flag.kind === "PARTIDO" && flag.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={flag.logoUrl} alt="Logo rival" className="absolute right-3 bottom-3 max-h-16 opacity-90" />
+        ) : null}
+      </div>
+    );
 
     return (
-      <div
-        className="p-1"
-        style={{
-          gridColumn: `span 1`,
-          gridRow: `1 / span ${rowSpan}`, // arranca en PRE ENTREN0
-        }}
-      >
-        <div className="space-y-1 h-full">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1">
-              {flag.kind === "LIBRE" && (
-                <span className="text-[10px] bg-gray-100 border px-1.5 py-0.5 rounded">DÍA LIBRE</span>
-              )}
-              {flag.kind === "PARTIDO" && (
-                <span className="text-[10px] bg-amber-100 border px-1.5 py-0.5 rounded">
-                  PARTIDO {flag.rival ? `vs ${flag.rival}` : ""}
-                </span>
-              )}
+      <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+        {/* header del día */}
+        <div className="flex items-center justify-between px-3 py-2 border-b bg-gray-50">
+          <div className="flex items-center gap-2">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide">{humanDayUTC(ymd)}</div>
+              <div className="text-[10px] text-gray-400">{ymd}</div>
             </div>
-            <a href={href} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50">Ver sesión</a>
+            {headerBadge}
           </div>
+          <a href={headerHref} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-100">Ver sesión</a>
+        </div>
 
-          <div className="relative h-full w-full rounded-xl border p-2 text-[13px] leading-5 bg-gray-50 flex items-center justify-center">
-            {flag.kind === "LIBRE" ? (
-              <span className="text-gray-600 font-semibold tracking-wide">LIBRE</span>
-            ) : null}
-            {flag.kind === "PARTIDO" && flag.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={flag.logoUrl} alt="Logo rival" className="absolute right-2 bottom-2 max-h-16 opacity-90" />
-            ) : null}
-          </div>
+        {/* body */}
+        <div className="p-3">
+          {flag.kind === "LIBRE" && (
+            <SinglePanel><span className="text-gray-700 font-semibold tracking-wide">LIBRE</span></SinglePanel>
+          )}
+          {flag.kind === "PARTIDO" && (
+            <SinglePanel>
+              <div className="text-center space-y-1">
+                <div className="text-sm font-semibold">PARTIDO</div>
+                {flag.rival ? <div className="text-[13px]">vs <b>{flag.rival}</b></div> : null}
+              </div>
+            </SinglePanel>
+          )}
+          {flag.kind === "NONE" && <NormalBody />}
         </div>
       </div>
     );
@@ -170,8 +182,9 @@ export default function DashboardSemanaPage() {
 
   return (
     <div className="p-3 md:p-4 space-y-3" onInput={stopEdit} onPaste={stopEdit} onDrop={stopEdit}>
-      {/* Print: ocultar menú/aside/header */}
+      {/* Print: ocultar menú/aside/header y conservar colores; sugerir horizontal */}
       <style jsx global>{`
+        @page { size: A4 landscape; margin: 12mm; }
         @media print {
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           nav, aside, header[role="banner"], .print\\:hidden, .sidebar, .app-sidebar { display:none !important; }
@@ -205,112 +218,51 @@ export default function DashboardSemanaPage() {
       {loading ? (
         <div className="text-gray-500">Cargando semana…</div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
-          {/* Cabecera días */}
-          <div className="grid text-xs" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
-            <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600" />
-            {orderedDays.map((ymd) => (
-              <div key={ymd} className="bg-gray-50 border-b px-2 py-1.5">
-                <div className="text-[11px] font-semibold uppercase tracking-wide">{humanDayUTC(ymd)}</div>
-                <div className="text-[10px] text-gray-400">{ymd}</div>
+        <div className="rounded-2xl border bg-white shadow-sm">
+          {/* Cabecera días + tarjetas */}
+          <div className="p-3">
+            {/* META del turno activo */}
+            <div className="mb-3">
+              <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border rounded-md uppercase tracking-wide text-[12px] inline-block">
+                {activeTurn === "morning" ? "TURNO MAÑANA · Meta" : "TURNO TARDE · Meta"}
               </div>
-            ))}
-          </div>
-
-          {/* META del turno activo */}
-          <div className="border-t">
-            <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
-              {activeTurn === "morning" ? "TURNO MAÑANA · Meta" : "TURNO TARDE · Meta"}
-            </div>
-            {META_ROWS.map((rowName) => (
-              <div key={`${activeTurn}-meta-${rowName}`} className="grid items-center" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
-                <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">{rowName}</div>
-                {orderedDays.map((ymd) => (
-                  <div key={`${ymd}-${activeTurn}-${rowName}`} className="p-1">
-                    <ReadonlyMetaCell ymd={ymd} row={rowName} />
-                  </div>
+              <div className="mt-2 grid gap-2" style={{ gridTemplateColumns: `120px repeat(7, minmax(160px, 1fr))` }}>
+                {/* labels */}
+                <div className="bg-gray-50/60 border rounded-md px-2 py-1.5 text-[11px] font-medium text-gray-600">LUGAR</div>
+                {orderedDays.map((ymd)=>(
+                  <div key={`lugar-${ymd}`} className="rounded-md border px-1.5 py-1"><ReadonlyMetaCell ymd={ymd} row="LUGAR" /></div>
+                ))}
+                <div className="bg-gray-50/60 border rounded-md px-2 py-1.5 text-[11px] font-medium text-gray-600">HORA</div>
+                {orderedDays.map((ymd)=>(
+                  <div key={`hora-${ymd}`} className="rounded-md border px-1.5 py-1"><ReadonlyMetaCell ymd={ymd} row="HORA" /></div>
+                ))}
+                <div className="bg-gray-50/60 border rounded-md px-2 py-1.5 text-[11px] font-medium text-gray-600">VIDEO</div>
+                {orderedDays.map((ymd)=>(
+                  <div key={`video-${ymd}`} className="rounded-md border px-1.5 py-1"><ReadonlyMetaCell ymd={ymd} row="VIDEO" /></div>
                 ))}
               </div>
-            ))}
-          </div>
+            </div>
 
-          {/* BLOQUES – una sola grid para permitir row-span */}
-          <div className="border-t">
-            <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
+            {/* TITULO sección */}
+            <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border rounded-md uppercase tracking-wide text-[12px] mb-2">
               {activeTurn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
             </div>
 
-            {/* Grid de contenido: 1 col labels + 7 días, 4 filas de contenido */}
-            <div
-              className="grid"
-              style={{
-                gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))`,
-                gridTemplateRows: `repeat(4, auto)`,
-              }}
-            >
-              {/* Labels de filas (col 1) */}
-              {ROWS.map((rowName, rIdx) => (
-                <div
-                  key={`label-${rowName}`}
-                  className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600 whitespace-pre-line"
-                  style={{ gridColumn: 1, gridRow: rIdx + 1 }}
-                >
-                  {rowName}
-                </div>
-              ))}
-
-              {/* Celdas por día */}
-              {orderedDays.map((ymd, colIdx) => {
-                const flag = getDayFlag(ymd, activeTurn);
-
-                // si hay flag, pintamos bloque unificado en la fila 1 (PRE ENTREN0) y nada en las filas cubiertas
-                if (flag.kind === "PARTIDO" || flag.kind === "LIBRE") {
-                  return (
-                    <div key={`merged-${ymd}`} style={{ gridColumn: colIdx + 2, gridRow: 1 }}>
-                      <MergedDayCell ymd={ymd} flag={flag} />
-                    </div>
-                  );
-                }
-
-                // caso normal: 4 celdas independientes
-                return (
-                  <div key={`col-${ymd}`} style={{ gridColumn: colIdx + 2, gridRow: 1 }}>
-                    {/* PRE */}
-                    <div className="p-1">
-                      <ContentCell ymd={ymd} row={ROWS[0]} />
-                    </div>
-
-                    {/* FISICO */}
-                    <div className="p-1" style={{ gridRow: 2 }} />
-
-                    {/* TECNICO */}
-                    <div className="p-1" style={{ gridRow: 3 }} />
-
-                    {/* COMPENSATORIO */}
-                    <div className="p-1" style={{ gridRow: 4 }} />
+            {/* Layout: 1 columna de etiquetas + 7 tarjetas */}
+            <div className="grid gap-3" style={{ gridTemplateColumns: `120px repeat(7, minmax(200px, 1fr))` }}>
+              {/* Columna de etiquetas de filas (solo referencia visual) */}
+              <div className="space-y-3">
+                {ROWS.map((r)=>(
+                  <div key={r} className="bg-gray-50/60 border rounded-md px-2 py-2 text-[11px] font-medium text-gray-600 whitespace-pre-line">
+                    {r}
                   </div>
-                );
-              })}
+                ))}
+              </div>
 
-              {/* Relleno para filas 2-4 en caso normal */}
-              {orderedDays.map((ymd, colIdx) => {
-                const flag = getDayFlag(ymd, activeTurn);
-                if (flag.kind !== "NONE") return null; // ya se pintó merged
-
-                return (
-                  <>
-                    <div key={`fis-${ymd}`} className="p-1" style={{ gridColumn: colIdx + 2, gridRow: 2 }}>
-                      <ContentCell ymd={ymd} row={ROWS[1]} />
-                    </div>
-                    <div key={`tec-${ymd}`} className="p-1" style={{ gridColumn: colIdx + 2, gridRow: 3 }}>
-                      <ContentCell ymd={ymd} row={ROWS[2]} />
-                    </div>
-                    <div key={`comp-${ymd}`} className="p-1" style={{ gridColumn: colIdx + 2, gridRow: 4 }}>
-                      <ContentCell ymd={ymd} row={ROWS[3]} />
-                    </div>
-                  </>
-                );
-              })}
+              {/* Tarjetas por día */}
+              {orderedDays.map((ymd)=>(
+                <DayCard key={`card-${ymd}`} ymd={ymd} />
+              ))}
             </div>
           </div>
         </div>
