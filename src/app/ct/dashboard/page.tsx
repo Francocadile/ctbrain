@@ -38,10 +38,11 @@ function isCellOf(s: SessionDTO, turn: TurnKey, row: string) { return typeof s.d
 function parseVideoValue(v?: string | null) { const raw=(v||"").trim(); if(!raw) return {label:"",url:""}; const [l,u]=raw.split("|").map(s=>s.trim()); if(!u && l?.startsWith("http")) return {label:"Video",url:l}; return {label:l||"",url:u||""}; }
 const stopEdit = (e: React.SyntheticEvent) => e.preventDefault();
 
-// ===== Layout compacto =====
-const COL_LABEL_W = 96;     // etiqueta filas
-const DAY_MIN_W   = 120;    // ancho mínimo por día (7 entran en laptop)
-const ROW_H       = 70;     // alto por fila
+// ===== Layout compacto y alineado =====
+const COL_LABEL_W = 96;      // etiqueta filas
+const DAY_MIN_W   = 120;     // ancho mínimo por día
+const ROW_H       = 70;      // alto por fila (4 filas)
+const DAY_HEADER_H = 56;     // ← alto fijo del encabezado de cada día
 const GAP         = 8;
 
 export default function DashboardSemanaPage() {
@@ -105,6 +106,7 @@ export default function DashboardSemanaPage() {
     const flag = getDayFlag(ymd, activeTurn);
     const headerHref = `/ct/sessions/by-day/${ymd}/${activeTurn}`;
     const showHeaderBtn = flag.kind !== "LIBRE"; // en Libre no hay sesión
+    const librePill = activeTurn === "morning" ? "Mañana libre" : "Tarde libre";
 
     const NormalBody = () => (
       <div className="grid gap-[6px]" style={{ gridTemplateRows: `repeat(4, ${ROW_H}px)` }}>
@@ -131,8 +133,7 @@ export default function DashboardSemanaPage() {
       <div className="flex flex-col items-center justify-center gap-2 text-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         {flag.logoUrl ? (
-          <img src={flag.logoUrl} alt="Logo rival"
-               className="max-h-[140px] object-contain" />
+          <img src={flag.logoUrl} alt="Logo rival" className="max-h-[140px] object-contain" />
         ) : null}
         <div className="text-[13px] font-semibold">PARTIDO</div>
         {flag.rival ? <div className="text-[12px]">vs <b>{flag.rival}</b></div> : null}
@@ -145,13 +146,20 @@ export default function DashboardSemanaPage() {
 
     return (
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        {/* Header del día: solo día + “Ver sesión” si aplica */}
-        <div className="flex items-center justify-between px-2.5 py-1 border-b bg-gray-50">
+        {/* Header del día: altura fija para alinear con columna izquierda */}
+        <div className="flex items-center justify-between px-2.5 py-1 border-b bg-gray-50"
+             style={{ height: DAY_HEADER_H }}>
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-wide">{humanDayUTC(ymd)}</div>
             <div className="text-[10px] text-gray-400">{ymd}</div>
           </div>
-          {showHeaderBtn && (
+
+          {/* Si es LIBRE, mostramos la pill; si no, "Ver sesión" */}
+          {flag.kind === "LIBRE" ? (
+            <span className="text-[10px] rounded border bg-gray-100 px-2 py-0.5">
+              {librePill}
+            </span>
+          ) : (
             <a href={headerHref} className="text-[10px] rounded border px-2 py-0.5 hover:bg-gray-100">Ver sesión</a>
           )}
         </div>
@@ -236,8 +244,10 @@ export default function DashboardSemanaPage() {
             {/* Layout: etiquetas + 7 tarjetas */}
             <div className="grid gap-3"
                  style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}>
-              {/* Columna etiquetas con alturas sincronizadas */}
-              <div className="grid gap-[6px]" style={{ gridTemplateRows: `repeat(4, ${ROW_H}px)` }}>
+              {/* Columna etiquetas: header spacer + 4 filas */}
+              <div className="grid gap-[6px]" style={{ gridTemplateRows: `${DAY_HEADER_H}px repeat(4, ${ROW_H}px)` }}>
+                {/* Espaciador para alinear con los headers de cada día */}
+                <div />
                 {ROWS.map((r)=>(
                   <div key={r} className="bg-gray-50/60 border rounded-md px-2 text-[10px] font-medium text-gray-600 flex items-center">
                     <span className="whitespace-pre-line">{r}</span>
