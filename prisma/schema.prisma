@@ -36,7 +36,7 @@ model User {
 
   sessions  Session[] @relation("UserSessions")
 
-  // Nuevos
+  // Métricas
   wellness  WellnessEntry[]
   rpes      RPEEntry[]
 }
@@ -61,7 +61,6 @@ model Session {
 }
 
 // ===== Wellness (jugador reporta, CT observa) =====
-// Escalas 1–5 (mayor = mejor). sleepHours en horas (float).
 model WellnessEntry {
   id           String   @id @default(cuid())
   userId       String
@@ -84,15 +83,15 @@ model WellnessEntry {
   @@index([date, userId])
 }
 
-// ===== RPE (jugador reporta, CT observa) =====
+// ===== RPE (jugador reporta, CT pone duración) =====
 model RPEEntry {
   id         String   @id @default(cuid())
   userId     String
-  date       DateTime        // 00:00:00 UTC de la sesión o del día
+  date       DateTime        // 00:00:00 UTC del día o de la sesión
   sessionId  String?         // opcional
   rpe        Int             // 0–10
-  duration   Int?            // minutos
-  load       Int?            // rpe*duración (precalc opcional)
+  duration   Int?            // minutos (si el CT la fija por fecha, acá se completa)
+  load       Int?            // rpe * duración (AU)
 
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   session    Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
