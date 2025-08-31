@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { getSessionById, updateSession, type SessionDTO } from "@/lib/api/sessions";
+import { listKinds, addKind as apiAddKind, replaceKinds } from "@/lib/settings";
 
 type TurnKey = "morning" | "afternoon";
 
@@ -18,22 +19,6 @@ type Exercise = {
 };
 
 const EX_TAG = "[EXERCISES]";
-const KIND_KEY = "ct_exercise_kinds";
-const DEFAULT_KINDS = ["Rueda de pases","Circuito técnico","SSG","MSG","LSG"];
-
-function loadKinds(): string[] {
-  try {
-    const raw = localStorage.getItem(KIND_KEY);
-    if (!raw) return [...DEFAULT_KINDS];
-    const arr = JSON.parse(raw);
-    if (Array.isArray(arr)) return arr;
-  } catch {}
-  return [...DEFAULT_KINDS];
-}
-function saveKinds(all: string[]) {
-  const list = Array.from(new Set(all.map(s=>s.trim()).filter(Boolean)));
-  localStorage.setItem(KIND_KEY, JSON.stringify(list));
-}
 
 // ---------- helpers ----------
 function parseMarker(description?: string) {
@@ -83,9 +68,9 @@ export default function SesionDetailEditorPage() {
   const [s, setS] = useState<SessionDTO | null>(null);
   const [prefix, setPrefix] = useState<string>("");
   const [exercises, setExercises] = useState<Exercise[]>([]);
-  const [kinds, setKinds] = useState<string[]>(DEFAULT_KINDS);
+  const [kinds, setKinds] = useState<string[]>([]);
 
-  useEffect(() => { setKinds(loadKinds()); }, []);
+  useEffect(() => { (async ()=> setKinds(await listKinds()))(); }, []);
 
   useEffect(() => {
     async function load() {
@@ -127,7 +112,9 @@ export default function SesionDetailEditorPage() {
       return next;
     });
   }
-  function addExercise() { setExercises((prev) => [...prev, { title: "", kind: "", space: "", players: "", duration: "", description: "", imageUrl: "" }]); }
+  function addExercise() {
+    setExercises((prev) => [...prev, { title: "", kind: "", space: "", players: "", duration: "", description: "", imageUrl: "" }]);
+  }
   function removeExercise(idx: number) { setExercises((prev) => prev.filter((_, i) => i !== idx)); }
 
   function addKind() {
@@ -135,21 +122,23 @@ export default function SesionDetailEditorPage() {
     if (!n) return;
     const name = n.trim();
     if (!name) return;
-    const next = Array.from(new Set([...kinds, name]));
-    saveKinds(next);
-    setKinds(next);
+    (async () => {
+      const updated = await apiAddKind(name);
+      setKinds(updated);
+    })();
     return name;
   }
   function manageKinds() {
-    const edited = prompt(
-      "Gestionar tipos (una línea por opción). Borrá para eliminar, editá para renombrar:",
-      kinds.join("\n")
-    );
-    if (edited === null) return;
-    const list = edited.split("\n").map(s=>s.trim()).filter(Boolean);
-    const unique = Array.from(new Set(list));
-    saveKinds(unique);
-    setKinds(unique);
+    (async () => {
+      const edited = prompt(
+        "Gestionar tipos (una línea por opción). Borrá para eliminar, editá para renombrar:",
+        kinds.join("\n")
+      );
+      if (edited === null) return;
+      const list = edited.split("\n").map(s=>s.trim()).filter(Boolean);
+      const unique = await replaceKinds(list);
+      setKinds(unique);
+    })();
   }
 
   async function saveAll() {
