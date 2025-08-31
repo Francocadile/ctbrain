@@ -20,6 +20,28 @@ type TurnKey = "morning" | "afternoon";
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 const META_ROWS = ["LUGAR", "HORA", "VIDEO"] as const;
 
+// ---- Day flags (por día y turno) ----
+type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
+type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string; };
+const DAYFLAG_TAG = "DAYFLAG"; // description: [DAYFLAG:<turn>] | YYYY-MM-DD
+function dayFlagMarker(turn: TurnKey) { return `[${DAYFLAG_TAG}:${turn}]`; }
+function isDayFlag(s: SessionDTO, turn: TurnKey) {
+  return typeof s.description === "string" && s.description.startsWith(dayFlagMarker(turn));
+}
+function parseDayFlagTitle(title: string | null | undefined): DayFlag {
+  const t = (title || "").trim();
+  if (!t) return { kind: "NONE" };
+  const [kind, rival, logoUrl] = t.split("|").map((x)=> (x||"").trim());
+  if (kind === "PARTIDO") return { kind: "PARTIDO", rival: rival || "", logoUrl: logoUrl || "" };
+  if (kind === "LIBRE") return { kind: "LIBRE" };
+  return { kind: "NONE" };
+}
+function buildDayFlagTitle(df: DayFlag): string {
+  if (df.kind === "PARTIDO") return `PARTIDO|${df.rival ?? ""}|${df.logoUrl ?? ""}`;
+  if (df.kind === "LIBRE") return "LIBRE";
+  return "";
+}
+
 function addDaysUTC(date: Date, days: number) { const x = new Date(date); x.setUTCDate(x.getUTCDate() + days); return x; }
 function humanDayUTC(ymd: string) { const d = new Date(`${ymd}T00:00:00.000Z`); return d.toLocaleDateString(undefined,{weekday:"short",day:"2-digit",month:"2-digit",timeZone:"UTC"}); }
 function computeISOForSlot(dayYmd: string, turn: TurnKey) { const base = new Date(`${dayYmd}T00:00:00.000Z`); const h = turn === "morning" ? 9 : 15; base.setUTCHours(h,0,0,0); return base.toISOString(); }
@@ -39,15 +61,13 @@ function joinVideoValue(label: string, url: string) {
 }
 function cellKey(dayYmd: string, turn: TurnKey, row: string) { return `${dayYmd}::${turn}::${row}`; }
 
-/** ========= LUGARES: persistencia DEFINITIVA =========
- * guardamos SIEMPRE la lista completa en localStorage.
- */
+/** === Lugares: persistencia definitiva (lista completa en localStorage) === */
 function loadPlaces(): string[] {
   try {
     const raw = localStorage.getItem(PLACES_KEY);
-    if (!raw) return [...DEFAULT_LUGARES];        // primera carga: defaults
+    if (!raw) return [...DEFAULT_LUGARES];
     const arr = JSON.parse(raw);
-    if (Array.isArray(arr)) return arr;           // desde aquí: manda lo guardado
+    if (Array.isArray(arr)) return arr;
   } catch {}
   return [...DEFAULT_LUGARES];
 }
@@ -61,7 +81,7 @@ export default function PlanSemanalPage() {
   const router = useRouter();
   const hideHeader = qs.get("hideHeader") === "1";
 
-  // ⬇️ pestañas de turno
+  // pestañas turno
   const initialTurn = (qs.get("turn") === "afternoon" ? "afternoon" : "morning") as TurnKey;
   const [activeTurn, setActiveTurn] = useState<TurnKey>(initialTurn);
   useEffect(() => {
@@ -77,15 +97,13 @@ export default function PlanSemanalPage() {
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
-  // Lugares dinámicos (persistidos completos)
+  // Lugares
   const [places, setPlaces] = useState<string[]>(DEFAULT_LUGARES);
   useEffect(() => { setPlaces(loadPlaces()); }, []);
 
-  // Cambios pendientes por celda (no guardados)
+  // Cambios pendientes
   const [pending, setPending] = useState<Record<string, string>>({});
-  // Estado de edición SOLO para VIDEO por celda (key = day::turn::row)
   const [videoEditing, setVideoEditing] = useState<Record<string, boolean>>({});
-
   const [savingAll, setSavingAll] = useState(false);
 
   async function loadWeek(d: Date) {
@@ -125,6 +143,38 @@ export default function PlanSemanalPage() {
   function findCell(dayYmd: string, turn: TurnKey, row: string): SessionDTO | undefined {
     const list = daysMap[dayYmd] || [];
     return list.find((s) => isCellOf(s, turn, row));
+  }
+  function findDayFlagSession(dayYmd: string, turn: TurnKey): SessionDTO | undefined {
+    const list = daysMap[dayYmd] || [];
+    return list.find((s) => isDayFlag(s, turn));
+  }
+  function getDayFlag(dayYmd: string, turn: TurnKey): DayFlag {
+    const s = findDayFlagSession(dayYmd, turn);
+    return parseDayFlagTitle(s?.title ?? "");
+  }
+  async function setDayFlag(dayYmd: string, turn: TurnKey, df: DayFlag) {
+    const existing = findDayFlagSession(dayYmd, turn);
+    const iso = computeISOForSlot(dayYmd, turn);
+    const marker = dayFlagMarker(turn);
+    const desc = `${marker} | ${dayYmd}`;
+    const title = buildDayFlagTitle(df);
+
+    try {
+      if (df.kind === "NONE") {
+        if (existing) await deleteSession(existing.id);
+        await loadWeek(base);
+        return;
+      }
+      if (!existing) {
+        await createSession({ title, description: desc, date: iso, type: "GENERAL" });
+      } else {
+        await updateSession(existing.id, { title, description: desc, date: iso });
+      }
+      await loadWeek(base);
+    } catch (e:any) {
+      console.error(e);
+      alert(e?.message || "No se pudo actualizar el estado del día");
+    }
   }
 
   function stageCell(dayYmd: string, turn: TurnKey, row: string, text: string) {
@@ -191,7 +241,7 @@ export default function PlanSemanalPage() {
     if (edited === null) return;
     const list = edited.split("\n").map(s=>s.trim()).filter(Boolean);
     const unique = Array.from(new Set(list));
-    savePlaces(unique);     // guarda lista completa
+    savePlaces(unique);
     setPlaces(unique);
   }
 
@@ -214,7 +264,7 @@ export default function PlanSemanalPage() {
     const pendingValue = pending[k];
     const value = pendingValue !== undefined ? pendingValue : original;
 
-    // LUGAR (select con Agregar / Gestionar) — persistente
+    // LUGAR (select con Agregar / Gestionar)
     if (row === "LUGAR") {
       const [localPlaces, setLocalPlaces] = useState<string[]>(places);
       useEffect(() => setLocalPlaces(places), [places]);
@@ -225,7 +275,7 @@ export default function PlanSemanalPage() {
         const name = n.trim();
         if (!name) return;
         const next = Array.from(new Set([...places, name]));
-        savePlaces(next);        // persiste definitivo
+        savePlaces(next);
         setPlaces(next);
         setLocalPlaces(next);
         stageCell(dayYmd, turn, row, name);
@@ -365,9 +415,19 @@ export default function PlanSemanalPage() {
 
     const sessionHref = existing?.id ? `/ct/sessions/${existing.id}` : "";
 
+    // Mostrar estado del día (si aplica)
+    const flag = getDayFlag(dayYmd, turn);
+    const flagBadge =
+      flag.kind === "LIBRE" ? (
+        <span className="text-[10px] bg-gray-100 border px-1.5 py-0.5 rounded">DÍA LIBRE</span>
+      ) : flag.kind === "PARTIDO" ? (
+        <span className="text-[10px] bg-amber-100 border px-1.5 py-0.5 rounded">PARTIDO {flag.rival ? `vs ${flag.rival}` : ""}</span>
+      ) : null;
+
     return (
       <div className="space-y-1">
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-between">
+          <div>{flagBadge}</div>
           {sessionHref ? (
             <a href={sessionHref} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50" title="Editar ejercicio">
               Editar ejercicio
@@ -393,10 +453,87 @@ export default function PlanSemanalPage() {
 
   const pendingCount = Object.keys(pending).length;
 
-  // Sección reutilizable por turno
+  // Barra de estado por día (turno actual)
+  function DayStatusRow({ turn }: { turn: TurnKey }) {
+    return (
+      <div className="grid items-center border-b bg-gray-50/60" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+        <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Estado</div>
+        {orderedDays.map((ymd) => {
+          const df = getDayFlag(ymd, turn);
+          const [kind, setKind] = useState<DayFlagKind>(df.kind);
+          const [rival, setRival] = useState(df.rival || "");
+          const [logo, setLogo] = useState(df.logoUrl || "");
+
+          useEffect(() => {
+            setKind(df.kind); setRival(df.rival || ""); setLogo(df.logoUrl || "");
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+          }, [weekStart, turn]); // recarga de semana/turno
+
+          const save = (next: DayFlag) => setDayFlag(ymd, turn, next);
+
+          return (
+            <div key={`${ymd}-${turn}-status`} className="p-1">
+              <div className="flex items-center gap-1">
+                <select
+                  className="h-7 w-[110px] rounded-md border px-1.5 text-[11px]"
+                  value={kind}
+                  onChange={(e) => {
+                    const k = e.target.value as DayFlagKind;
+                    setKind(k);
+                    if (k === "NONE") save({ kind: "NONE" });
+                    if (k === "LIBRE") save({ kind: "LIBRE" });
+                    if (k === "PARTIDO") save({ kind: "PARTIDO", rival: rival, logoUrl: logo });
+                  }}
+                >
+                  <option value="NONE">Normal</option>
+                  <option value="PARTIDO">Partido</option>
+                  <option value="LIBRE">Libre</option>
+                </select>
+
+                {kind === "PARTIDO" && (
+                  <>
+                    <input
+                      className="h-7 flex-1 rounded-md border px-2 text-[11px]"
+                      placeholder="Rival"
+                      value={rival}
+                      onChange={(e)=>setRival(e.target.value)}
+                      onBlur={()=>save({ kind: "PARTIDO", rival, logoUrl: logo })}
+                    />
+                    <input
+                      className="h-7 w-[120px] rounded-md border px-2 text-[11px]"
+                      placeholder="Logo URL"
+                      value={logo}
+                      onChange={(e)=>setLogo(e.target.value)}
+                      onBlur={()=>save({ kind: "PARTIDO", rival, logoUrl: logo })}
+                    />
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Sección por turno
   function TurnEditor({ turn }: { turn: TurnKey }) {
     return (
       <>
+        {/* Cabecera días */}
+        <div className="grid text-xs" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+          <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600"></div>
+          {orderedDays.map((ymd) => (
+            <div key={`${turn}-${ymd}`} className="bg-gray-50 border-b px-2 py-1.5">
+              <div className="text-[11px] font-semibold uppercase tracking-wide">{humanDayUTC(ymd)}</div>
+              <div className="text-[10px] text-gray-400">{ymd}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Estado del día */}
+        <DayStatusRow turn={turn} />
+
         {/* META */}
         <div className="border-t">
           <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
@@ -481,17 +618,6 @@ export default function PlanSemanalPage() {
         <div className="text-gray-500">Cargando semana…</div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
-          {/* Cabecera días */}
-          <div className="grid text-xs" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
-            <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600"></div>
-            {orderedDays.map((ymd) => (
-              <div key={ymd} className="bg-gray-50 border-b px-2 py-1.5">
-                <div className="text-[11px] font-semibold uppercase tracking-wide">{humanDayUTC(ymd)}</div>
-                <div className="text-[10px] text-gray-400">{ymd}</div>
-              </div>
-            ))}
-          </div>
-
           {/* Turno activo */}
           <TurnEditor turn={activeTurn} />
         </div>
