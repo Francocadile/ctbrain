@@ -119,33 +119,101 @@ export default function DashboardSemanaPage() {
     return <div className="h-8 text-[12px] px-1.5 flex items-center truncate" contentEditable={false} data-readonly onInput={stopEdit} onPaste={stopEdit} onDrop={stopEdit}>{text}</div>;
   }
 
-  /* ====== Celdas Contenido (con flag del día) ====== */
-  function ReadonlyContentCell({ dayYmd, turn, row }: { dayYmd: string; turn: TurnKey; row: string; }) {
-    const existing = findCell(dayYmd, turn, row);
-    const text = (existing?.title ?? "").trim();
+  /* ====== Visual “merge” por día ======
+     - PARTIDO: renderizamos un bloque único en PRE ENTREN0 y ocultamos FÍSICO + TÉCNICO–TÁCTICO
+     - LIBRE: bloque único en PRE ENTREN0 y ocultamos FÍSICO + TÉCNICO–TÁCTICO + COMPENSATORIO
+     (No tocamos datos; sólo presentación) */
+  function shouldSuppressCell(row: string, flag: DayFlag): boolean {
+    if (flag.kind === "PARTIDO") {
+      return row === "FÍSICO" || row === "TÉCNICO–TÁCTICO";
+    }
+    if (flag.kind === "LIBRE") {
+      return row !== "PRE ENTREN0"; // ocultar todo menos la primera fila
+    }
+    return false;
+  }
 
-    const sessionHref = `/ct/sessions/by-day/${dayYmd}/${turn}?focus=${encodeURIComponent(row)}`;
+  function ReadonlyMergedCell({
+    dayYmd,
+    turn,
+    flag,
+  }: {
+    dayYmd: string;
+    turn: TurnKey;
+    flag: DayFlag;
+  }) {
+    const sessionHref = `/ct/sessions/by-day/${dayYmd}/${turn}?focus=${encodeURIComponent("PRE ENTREN0")}`;
 
-    // Flag del día
-    const flag = getDayFlag(dayYmd, turn);
-    const isLibre = flag.kind === "LIBRE";
-    const isPartido = flag.kind === "PARTIDO";
+    // alto aproximado para cubrir filas ocultas (90px c/u + paddings)
+    const minH = flag.kind === "PARTIDO" ? "min-h-[200px]" : flag.kind === "LIBRE" ? "min-h-[300px]" : "min-h-[90px]";
 
     return (
-      <div className={`space-y-1 ${isLibre ? "opacity-70" : ""}`}>
+      <div className="space-y-1">
         <div className="flex items-center justify-between">
-          {/* badge de estado */}
           <div className="flex items-center gap-1">
-            {isLibre && (
+            {flag.kind === "LIBRE" && (
               <span className="text-[10px] bg-gray-100 border px-1.5 py-0.5 rounded">DÍA LIBRE</span>
             )}
-            {isPartido && (
+            {flag.kind === "PARTIDO" && (
               <span className="text-[10px] bg-amber-100 border px-1.5 py-0.5 rounded">
                 PARTIDO {flag.rival ? `vs ${flag.rival}` : ""}
               </span>
             )}
           </div>
+          <a href={sessionHref} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50" title="Ver sesión">
+            Ver sesión
+          </a>
+        </div>
 
+        <div
+          className={`relative ${minH} w-full rounded-xl border p-2 text-[13px] leading-5 whitespace-pre-wrap bg-gray-50`}
+          contentEditable={false}
+          data-readonly
+          onInput={stopEdit}
+          onPaste={stopEdit}
+          onDrop={stopEdit}
+        >
+          {flag.kind === "LIBRE" && (
+            <div className="w-full h-full flex items-center justify-center text-gray-600 font-semibold tracking-wide">
+              LIBRE
+            </div>
+          )}
+          {flag.kind === "PARTIDO" && flag.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={flag.logoUrl}
+              alt="Logo rival"
+              className="absolute right-2 bottom-2 max-h-16 opacity-90"
+            />
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  function ReadonlyContentCell({
+    dayYmd,
+    turn,
+    row,
+    suppressed = false,
+  }: {
+    dayYmd: string;
+    turn: TurnKey;
+    row: string;
+    suppressed?: boolean;
+  }) {
+    if (suppressed) {
+      // ocupamos el espacio con un “placeholder” invisible (sin borde)
+      return <div className="min-h-[0px]" aria-hidden="true" />;
+    }
+
+    const existing = findCell(dayYmd, turn, row);
+    const text = (existing?.title ?? "").trim();
+    const sessionHref = `/ct/sessions/by-day/${dayYmd}/${turn}?focus=${encodeURIComponent(row)}`;
+
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center justify-end">
           <a href={sessionHref} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50" title="Ver sesión">
             Ver sesión
           </a>
@@ -160,14 +228,6 @@ export default function DashboardSemanaPage() {
           onPaste={stopEdit}
           onDrop={stopEdit}
         >
-          {isPartido && flag.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={flag.logoUrl}
-              alt="Logo rival"
-              className="absolute right-2 bottom-2 max-h-10 opacity-90"
-            />
-          ) : null}
           {text ? text : <span className="text-gray-400 italic">—</span>}
         </div>
       </div>
@@ -194,8 +254,12 @@ export default function DashboardSemanaPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1 mr-2">
-              <button className={`px-2.5 py-1.5 rounded-xl border text-xs ${activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={()=>{const p=new URLSearchParams(qs.toString()); p.set("turn","morning"); history.replaceState(null,"",`?${p.toString()}`); setActiveTurn("morning");}}>Mañana</button>
-              <button className={`px-2.5 py-1.5 rounded-xl border text-xs ${activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={()=>{const p=new URLSearchParams(qs.toString()); p.set("turn","afternoon"); history.replaceState(null,"",`?${p.toString()}`); setActiveTurn("afternoon");}}>Tarde</button>
+              <button className={`px-2.5 py-1.5 rounded-xl border text-xs ${activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={()=>{
+                const p=new URLSearchParams(qs.toString()); p.set("turn","morning"); history.replaceState(null,"",`?${p.toString()}`); setActiveTurn("morning");
+              }}>Mañana</button>
+              <button className={`px-2.5 py-1.5 rounded-xl border text-xs ${activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={()=>{
+                const p=new URLSearchParams(qs.toString()); p.set("turn","afternoon"); history.replaceState(null,"",`?${p.toString()}`); setActiveTurn("afternoon");
+              }}>Tarde</button>
             </div>
             <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">◀ Semana anterior</button>
             <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Hoy</button>
@@ -237,19 +301,42 @@ export default function DashboardSemanaPage() {
             ))}
           </div>
 
-          {/* BLOQUES del turno activo */}
+          {/* BLOQUES del turno activo (con “merge” visual por día) */}
           <div className="border-t">
             <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]" contentEditable={false} data-readonly>
               {activeTurn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
             </div>
+
             {CONTENT_ROWS.map((rowName) => (
               <div key={`${activeTurn}-${rowName}`} className="grid items-stretch" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
                 <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600" contentEditable={false} data-readonly>{rowName}</div>
-                {orderedDays.map((ymd) => (
-                  <div key={`${ymd}-${activeTurn}-${rowName}`} className="p-1">
-                    <ReadonlyContentCell dayYmd={ymd} turn={activeTurn} row={rowName} />
-                  </div>
-                ))}
+
+                {orderedDays.map((ymd) => {
+                  const flag = getDayFlag(ymd, activeTurn);
+
+                  // si corresponde “merge”, sólo pintamos en PRE ENTREN0 y ocultamos el resto
+                  if ((flag.kind === "PARTIDO" || flag.kind === "LIBRE") && rowName === "PRE ENTREN0") {
+                    return (
+                      <div key={`${ymd}-${activeTurn}-merged`} className="p-1">
+                        <ReadonlyMergedCell dayYmd={ymd} turn={activeTurn} flag={flag} />
+                      </div>
+                    );
+                  }
+                  if (shouldSuppressCell(rowName, flag)) {
+                    return (
+                      <div key={`${ymd}-${activeTurn}-${rowName}-sup`} className="p-1">
+                        <ReadonlyContentCell dayYmd={ymd} turn={activeTurn} row={rowName} suppressed />
+                      </div>
+                    );
+                  }
+
+                  // caso normal
+                  return (
+                    <div key={`${ymd}-${activeTurn}-${rowName}`} className="p-1">
+                      <ReadonlyContentCell dayYmd={ymd} turn={activeTurn} row={rowName} />
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </div>
@@ -258,4 +345,3 @@ export default function DashboardSemanaPage() {
     </div>
   );
 }
-
