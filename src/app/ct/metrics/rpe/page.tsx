@@ -3,6 +3,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+type Color = "green" | "yellow" | "orange" | "red" | "gray";
+type Category = { band: string; color: Color; label: string };
+
 type RPE = {
   id: string;
   userId: string;
@@ -11,27 +14,27 @@ type RPE = {
   rpe: number;
   duration?: number | null;
   load?: number | null;
-  category?: { band: string; color: "green"|"yellow"|"orange"|"red"|"gray"; label: string };
+  category?: Category;
 };
 
 function toYMD(d: Date) { return d.toISOString().slice(0,10); }
 
-function badge(color: RPE["category"]["color"]) {
-  const map:any = {
+function badge(color: Color) {
+  const map: Record<Color, string> = {
     green:  "text-emerald-700 bg-emerald-50 border-emerald-200",
     yellow: "text-amber-700 bg-amber-50 border-amber-200",
     orange: "text-orange-700 bg-orange-50 border-orange-200",
     red:    "text-red-700 bg-red-50 border-red-200",
     gray:   "text-gray-700 bg-gray-50 border-gray-200",
   };
-  return map[color] || map.gray;
+  return map[color];
 }
 
 function weeklyBand(total: number) {
-  if (total < 2000) return { label: "<2000 AU (baja)", color: "red" as const };
-  if (total <= 4000) return { label: "2000–4000 AU (óptima)", color: "green" as const };
-  if (total <= 5000) return { label: "4000–5000 AU (alta)", color: "orange" as const };
-  return { label: ">5000 AU (muy alta)", color: "red" as const };
+  if (total < 2000) return { label: "<2000 AU (baja)", color: "red" as Color };
+  if (total <= 4000) return { label: "2000–4000 AU (óptima)", color: "green" as Color };
+  if (total <= 5000) return { label: "4000–5000 AU (alta)", color: "orange" as Color };
+  return { label: ">5000 AU (muy alta)", color: "red" as Color };
 }
 
 export default function RPECTPage() {
@@ -100,8 +103,8 @@ export default function RPECTPage() {
       lastRPE: number;
       lastDuration: number | null;
       lastLoad: number | null;
-      lastBand: RPE["category"]["band"];
-      lastBandColor: RPE["category"]["color"];
+      lastBand: string;
+      lastBandColor: Color;
       weeklyTotal: number;
       weeklyBadge: ReturnType<typeof weeklyBand>;
     }> = [];
@@ -114,7 +117,7 @@ export default function RPECTPage() {
       const last = arr[arr.length - 1];
       const lastLoad = last.load ?? (last.duration != null ? last.rpe * last.duration : null);
       const lastBand = last.category?.band ?? "ND";
-      const lastBandColor = last.category?.color ?? "gray";
+      const lastBandColor = (last.category?.color ?? "gray") as Color;
 
       const week = arr.filter(r => {
         const t = new Date(r.date);
@@ -219,11 +222,13 @@ export default function RPECTPage() {
                   </td>
                   <td className="p-2">{r.weeklyTotal}</td>
                   <td className="p-2">
-                    <span className={`px-2 py-0.5 rounded border text-[12px] ${r.weeklyBadge.color==="green"
-                      ? "text-emerald-700 bg-emerald-50 border-emerald-200"
-                      : r.weeklyBadge.color==="orange"
-                      ? "text-orange-700 bg-orange-50 border-orange-200"
-                      : "text-red-700 bg-red-50 border-red-200"}`}>
+                    <span className={`px-2 py-0.5 rounded border text-[12px] ${
+                      r.weeklyBadge.color==="green"
+                        ? badge("green")
+                        : r.weeklyBadge.color==="orange"
+                        ? badge("orange")
+                        : badge("red")
+                    }`}>
                       {r.weeklyBadge.label}
                     </span>
                   </td>
@@ -256,7 +261,6 @@ export default function RPECTPage() {
             <tbody>
               {list.map(r => {
                 const load = r.load ?? (r.duration != null ? r.rpe * r.duration : null);
-                const cat = r.category;
                 return (
                   <tr key={r.id} className="border-b">
                     <td className="p-2">{r.date.slice(0,10)}</td>
