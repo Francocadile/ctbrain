@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import HelpTip from "@/components/HelpTip";
 
 /** ---------- Tipos de datos ---------- */
 type WellnessRaw = {
@@ -317,7 +318,10 @@ export default function WellnessCT_Day() {
       {/* Header */}
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold">Wellness — Día (CT)</h1>
+          <h1 className="text-lg font-bold">
+            Wellness — Día (CT)
+            <HelpTip text="Vista operativa del día. Calcula SDW, compara vs baseline (21d) y aplica semáforo con overrides clínicos." />
+          </h1>
           <p className="text-xs text-gray-500">
             {rowsToday.length} registros • Baseline: ventana 21 días previos (min 7 días válidos)
           </p>
@@ -337,7 +341,10 @@ export default function WellnessCT_Day() {
       {/* Alertas priorizadas */}
       <section className="rounded-xl border bg-white p-3">
         <div className="flex items-center justify-between">
-          <div className="text-[12px] font-semibold uppercase">Alertas</div>
+          <div className="text-[12px] font-semibold uppercase">
+            Alertas
+            <HelpTip text="Ordenadas por severidad. Rojo: atender hoy; Amarillo: monitoreo/ajuste leve." />
+          </div>
           <div className="text-xs text-gray-500">{alerts.length} alerta(s)</div>
         </div>
         {loading ? (
@@ -383,15 +390,42 @@ export default function WellnessCT_Day() {
               <thead>
                 <tr className="border-b bg-gray-50">
                   <th className="text-left px-3 py-2">Jugador</th>
-                  <th className="text-left px-3 py-2">SDW (1–5)</th>
-                  <th className="text-left px-3 py-2">Baseline (μ±σ)</th>
-                  <th className="text-left px-3 py-2">Z</th>
-                  <th className="text-left px-3 py-2">Color</th>
-                  <th className="text-left px-3 py-2">Sueño (h)</th>
-                  <th className="text-left px-3 py-2">Peores ítems</th>
-                  <th className="text-left px-3 py-2">sRPE ayer</th>
-                  <th className="text-left px-3 py-2">Spark 7d</th>
-                  <th className="text-left px-3 py-2">Comentario</th>
+                  <th className="text-left px-3 py-2">
+                    SDW (1–5)
+                    <HelpTip text="Promedio de los 5 ítems (1–5); 5=mejor. Base para Z y color." />
+                  </th>
+                  <th className="text-left px-3 py-2">
+                    Baseline (μ±σ)
+                    <HelpTip text="Media y desvío de SDW en 21 días válidos. Requiere ≥7 días para Z." />
+                  </th>
+                  <th className="text-left px-3 py-2">
+                    Z
+                    <HelpTip text="(SDW_hoy − μ_baseline)/σ_baseline. Verde ≥ −0.5; Amarillo [−1.0, −0.5); Rojo < −1.0." />
+                  </th>
+                  <th className="text-left px-3 py-2">
+                    Color
+                    <HelpTip text="Semáforo por Z con overrides: Sueño <4h ⇒ ≥ amarillo; Dolor ≤2 ⇒ rojo; Estrés ≤2 ⇒ ≥ amarillo." />
+                  </th>
+                  <th className="text-left px-3 py-2">
+                    Sueño (h)
+                    <HelpTip text="Horas de sueño reportadas. <4h eleva la severidad al menos a Amarillo." />
+                  </th>
+                  <th className="text-left px-3 py-2">
+                    Peores ítems
+                    <HelpTip text="Los dos ítems con menor puntaje del día: guía rápida para intervención." />
+                  </th>
+                  <th className="text-left px-3 py-2">
+                    sRPE ayer
+                    <HelpTip text="Carga interna del día previo (RPE×min). >900 AU + SDW rojo ⇒ alerta crítica." />
+                  </th>
+                  <th className="text-left px-3 py-2">
+                    Spark 7d
+                    <HelpTip text="Mini-tendencia de SDW (ayer → hace 7 días). Más alto = mejor." />
+                  </th>
+                  <th className="text-left px-3 py-2">
+                    Comentario
+                    <HelpTip text="Texto libre del jugador para contexto cualitativo." />
+                  </th>
                 </tr>
               </thead>
               <tbody>
