@@ -43,11 +43,12 @@ async function resolveUserId(input: { userId?: string; playerKey?: string }) {
   return user?.id ?? null;
 }
 
-/** GET /api/metrics/wellness
+/**
+ * GET /api/metrics/wellness
  * Query:
  *  - date=YYYY-MM-DD (opcional)
  *  - userId=... | playerKey=... (opcional)
- * Sin date → últimas 30 entradas globales.
+ * Sin date → últimas 30 entradas (global).
  */
 export async function GET(req: Request) {
   try {
@@ -56,7 +57,8 @@ export async function GET(req: Request) {
     const qpUserId = searchParams.get("userId") || undefined;
     const playerKey = searchParams.get("playerKey") || undefined;
 
-    let userId = qpUserId;
+    // <-- FIX: puede ser string | null | undefined
+    let userId: string | null | undefined = qpUserId;
     if (!userId && playerKey) {
       userId = await resolveUserId({ playerKey });
       if (!userId) return NextResponse.json([], { status: 200 });
@@ -66,7 +68,10 @@ export async function GET(req: Request) {
       const start = toUTCStart(date);
       const end = nextUTCDay(start);
       const rows = await prisma.wellnessEntry.findMany({
-        where: { date: { gte: start, lt: end }, ...(userId ? { userId } : {}) },
+        where: {
+          date: { gte: start, lt: end },
+          ...(userId ? { userId } : {}),
+        },
         orderBy: [{ date: "desc" }],
       });
       return NextResponse.json(rows);
@@ -82,28 +87,40 @@ export async function GET(req: Request) {
   }
 }
 
-/** POST /api/metrics/wellness
- * Body admite userId o playerKey.
- * Regla: **solo un envío por jugador y día** (409 si ya existe).
+/**
+ * POST /api/metrics/wellness
+ * Body:
+ *  {
+ *    // identificar jugador (uno de los dos):
+ *    userId?: string,
+ *    playerKey?: string, // nombre/email que reconoce el CT
+ *    date: "YYYY-MM-DD",
+ *    sleepQuality: 1..5,
+ *    sleepHours?: number,
+ *    fatigue: 1..5,
+ *    soreness?: 1..5,           // alias aceptado
+ *    muscleSoreness?: 1..5,     // campo real
+ *    stress: 1..5,
+ *    mood: 1..5,
+ *    notes?: string             // alias de comment
+ *    comment?: string
+ *  }
+ * Unicidad: (userId, date)
  */
 export async function POST(req: Request) {
   try {
     const b = await req.json();
-    const dateStr = String(b?.date || "").trim();
-    if (!dateStr) return new NextResponse("date requerido", { status: 400 });
 
+    const dateStr = String(b?.date || "").trim();
+    if (!dateStr) {
+      return new NextResponse("date requerido", { status: 400 });
+    }
     const userId = await resolveUserId({ userId: b?.userId, playerKey: b?.playerKey });
     if (!userId) return new NextResponse("Jugador no identificado", { status: 400 });
 
     const start = toUTCStart(dateStr);
-    const existing = await prisma.wellnessEntry.findUnique({
-      where: { userId_date: { userId, date: start } },
-    });
-    if (existing) {
-      // No se edita desde jugador: una sola vez por día
-      return new NextResponse("Ya enviaste wellness hoy", { status: 409 });
-    }
 
+    // normalización y límites 1..5
     const sleepQuality = cap15(b?.sleepQuality);
     const fatigue = cap15(b?.fatigue);
     const muscleSoreness = cap15(
@@ -111,16 +128,31 @@ export async function POST(req: Request) {
     );
     const stress = cap15(b?.stress);
     const mood = cap15(b?.mood);
+
+    // campos opcionales
     const sleepHours = asFloat(b?.sleepHours);
     const comment: string | null =
       (b?.comment ?? b?.notes ?? null) !== null
         ? String(b?.comment ?? b?.notes ?? "").trim() || null
         : null;
 
+    // total (sin horas ni comentario): 5 ítems
     const total = sleepQuality + fatigue + muscleSoreness + stress + mood;
 
-    const entry = await prisma.wellnessEntry.create({
-      data: {
+    // upsert por (userId, date)
+    const entry = await prisma.wellnessEntry.upsert({
+      where: { userId_date: { userId, date: start } },
+      update: {
+        sleepQuality,
+        sleepHours,
+        fatigue,
+        muscleSoreness,
+        stress,
+        mood,
+        comment,
+        total,
+      },
+      create: {
         userId,
         date: start,
         sleepQuality,
