@@ -2,38 +2,44 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getPlayerIdentity, clearPlayerName } from "@/lib/player";
+import { fetchSessionUser, clearPlayerName } from "@/lib/player";
 
 function todayYMD() { return new Date().toISOString().slice(0,10); }
 
 export default function RPEJugador() {
   const [date, setDate] = useState(todayYMD());
-  const [name, setName] = useState("");
-  const [loadingName, setLoadingName] = useState(true);
+  const [userId, setUserId] = useState<string>("");
+  const [name, setName] = useState<string>("");
+  const [loadingIdentity, setLoadingIdentity] = useState(true);
 
   const [rpe, setRpe] = useState<string>("");
   const [loaded, setLoaded] = useState(false);
   const [sent, setSent] = useState(false);
 
-  // Cargar nombre desde sesión (NextAuth)
+  // Cargar identidad desde NextAuth (id + name/email)
   useEffect(() => {
-    let ok = true;
+    let alive = true;
     (async () => {
       try {
-        const n = await getPlayerIdentity();
-        if (ok) setName(n || "");
+        const u = await fetchSessionUser();
+        if (!alive) return;
+        setUserId(u?.id || "");
+        setName((u?.name || u?.email || "")?.trim());
       } finally {
-        if (ok) setLoadingName(false);
+        if (alive) setLoadingIdentity(false);
       }
     })();
-    return () => { ok = false; };
+    return () => { alive = false; };
   }, []);
 
-  // Prefill si ya envió hoy
+  // Prefill si ya envió hoy (priorizar userId; si no, playerKey)
   useEffect(() => {
     async function fetchExisting() {
-      if (!name) { setLoaded(true); return; }
-      const url = `/api/metrics/rpe?date=${date}&playerKey=${encodeURIComponent(name)}`;
+      if (!userId && !name) { setLoaded(true); return; }
+      const qp = userId
+        ? `userId=${encodeURIComponent(userId)}`
+        : `playerKey=${encodeURIComponent(name)}`;
+      const url = `/api/metrics/rpe?date=${date}&${qp}`;
       const res = await fetch(url, { cache: "no-store" });
       const data = res.ok ? await res.json() : [];
       if (Array.isArray(data) && data.length) {
@@ -47,31 +53,42 @@ export default function RPEJugador() {
       setLoaded(true);
     }
     fetchExisting();
-  }, [date, name]);
+  }, [date, userId, name]);
 
   async function submit() {
-    if (loadingName) { alert("Cargando identidad…"); return; }
-    if (!name.trim()) { alert("No hay nombre seleccionado."); return; }
+    if (loadingIdentity) { alert("Cargando identidad…"); return; }
+    if (!userId) { alert("userId y date requeridos"); return; }
 
-    const body = { date, playerKey: name.trim(), rpe: Number(rpe || 0) };
+    const body = {
+      date,
+      userId,                // <- requerido por la API
+      playerKey: name || null, // compat (por si lo usás en CT)
+      rpe: Number(rpe || 0),
+    };
+
     const res = await fetch("/api/metrics/rpe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
       cache: "no-store",
     });
-    if (!res.ok) { alert((await res.text()) || "Error"); return; }
+
+    if (!res.ok) {
+      const msg = await res.text();
+      alert(msg || "Error");
+      return;
+    }
+
     setSent(true);
     alert("¡RPE enviado!");
   }
 
   function signOut() {
-    // Compat localStorage + signout de NextAuth
-    clearPlayerName();
+    clearPlayerName(); // compat
     window.location.href = "/api/auth/signout?callbackUrl=/jugador";
   }
 
-  const submitDisabled = loadingName || !name || rpe === "";
+  const submitDisabled = loadingIdentity || !userId || rpe === "";
 
   return (
     <div className="space-y-4">
@@ -98,7 +115,7 @@ export default function RPEJugador() {
             <label className="text-[12px] text-gray-500">Tu nombre</label>
             <input
               className="w-full rounded-md border px-2 py-1.5"
-              value={loadingName ? "Cargando…" : (name || "—")}
+              value={loadingIdentity ? "Cargando…" : (name || "—")}
               disabled
             />
           </div>
