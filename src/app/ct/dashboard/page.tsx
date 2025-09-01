@@ -9,6 +9,7 @@ import {
   toYYYYMMDDUTC,
   type SessionDTO,
 } from "@/lib/api/sessions";
+import HelpTip from "@/components/HelpTip";
 
 /* =========================================================
    Tipos (KPIs Wellness/RPE)
@@ -406,7 +407,10 @@ export default function DashboardSemanaPage() {
       {!hideHeader && (
         <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between no-print">
           <div>
-            <h1 className="text-lg md:text-xl font-bold">Dashboard CT — KPIs del día</h1>
+            <h1 className="text-lg md:text-xl font-bold">
+              Dashboard CT — KPIs del día
+              <HelpTip text="Resumen ejecutivo: cumplimiento de Wellness, SDW promedio, alertas y sRPE total (hoy vs ayer)." />
+            </h1>
             <p className="text-xs md:text-sm text-gray-500">Wellness (baseline 21 días) + sRPE hoy/ayer</p>
           </div>
           <div className="flex items-center gap-2">
@@ -423,23 +427,35 @@ export default function DashboardSemanaPage() {
       {/* KPIs cards */}
       <section className="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="rounded-2xl border bg-white p-4">
-          <div className="text-xs text-gray-500">Cumplimiento (hoy / activos 14d)</div>
+          <div className="text-xs text-gray-500">
+            Cumplimiento (hoy / activos 14d)
+            <HelpTip text="Respuestas de Wellness de hoy dividido por jugadores activos (≥1 respuesta en últimos 14 días + los que contestaron hoy)." />
+          </div>
           <div className="text-2xl font-bold mt-1">{Math.round((kpis.compliance*100) || 0)}%</div>
           <div className="text-xs text-gray-500">{kpis.nToday} / {activeRoster}</div>
         </div>
         <div className="rounded-2xl border bg-white p-4">
-          <div className="text-xs text-gray-500">Promedio SDW (1–5)</div>
+          <div className="text-xs text-gray-500">
+            Promedio SDW (1–5)
+            <HelpTip text="Media del SDW de hoy (1–5). 5=mejor. Se calcula por jugador como promedio de sus 5 ítems." />
+          </div>
           <div className="text-2xl font-bold mt-1">{kpis.nToday ? kpis.avgSDW.toFixed(2) : "—"}</div>
         </div>
         <div className="rounded-2xl border bg-white p-4">
-          <div className="text-xs text-gray-500">Alertas hoy</div>
+          <div className="text-xs text-gray-500">
+            Alertas hoy
+            <HelpTip text="Conteo de jugadores en Rojo/Amarillo tras aplicar Z-score y overrides (sueño, dolor, estrés)." />
+          </div>
           <div className="text-lg font-semibold mt-1 flex items-center gap-2">
             <Badge tone="red">{kpis.reds}</Badge>
             <Badge tone="yellow">{kpis.yellows}</Badge>
           </div>
         </div>
         <div className="rounded-2xl border bg-white p-4">
-          <div className="text-xs text-gray-500">sRPE total</div>
+          <div className="text-xs text-gray-500">
+            sRPE total
+            <HelpTip text="Suma de AU de hoy (RPE×min) para el plantel. Debajo se muestra el total de ayer como referencia." />
+          </div>
           <div className="text-2xl font-bold mt-1">{Math.round(srpeTodayTotal)} AU</div>
           <div className="text-xs text-gray-500">Ayer: {Math.round(srpeYesterdayTotal)} AU</div>
         </div>
