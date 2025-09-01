@@ -83,8 +83,8 @@ function parseVideoValue(v?: string | null) { const raw=(v||"").trim(); if(!raw)
 function todayYMDLocal() { return new Date().toISOString().slice(0,10); }
 function fromYMD(s: string) { const [y,m,dd] = s.split("-").map(Number); return new Date(y, m-1, dd); }
 function addDays(d: Date, days: number) { const x = new Date(d); x.setDate(x.getDate() + days); return x; }
-function yesterdayYMD(ymd: string) { return toYYYYMMDDLocal(addDays(fromYMD(ymd), -1)); }
 function toYYYYMMDDLocal(d: Date) { return d.toISOString().slice(0,10); }
+function yesterdayYMD(ymd: string) { return toYYYYMMDDLocal(addDays(fromYMD(ymd), -1)); }
 
 /* =========================================================
    Stats helpers
@@ -276,81 +276,82 @@ export default function DashboardSemanaPage() {
   const [srpeTodayTotal, setSrpeTodayTotal] = useState<number>(0);
   const [srpeYesterdayTotal, setSrpeYesterdayTotal] = useState<number>(0);
 
-  // fetchers simples (usan tus endpoints diarios)
-  async function getWellness(d: string): Promise<WellnessRaw[]> {
-    const res = await fetch(`/api/metrics/wellness?date=${d}`, { cache: "no-store" });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return Array.isArray(data) ? data : [];
+  // ===== Fetchers BATCH (rangos) =====
+  async function getWellnessRange(start: string, end: string) {
+    const res = await fetch(`/api/metrics/wellness/range?start=${start}&end=${end}`, { cache: "no-store" });
+    if (!res.ok) return { items: [] as any[] };
+    return res.json() as Promise<{ start:string; end:string; count:number; items:any[] }>;
   }
-  async function getRPE(d: string): Promise<RPERaw[]> {
-    const res = await fetch(`/api/metrics/rpe?date=${d}`, { cache: "no-store" });
-    if (!res.ok) return [];
-    const arr = await res.json();
-    return Array.isArray(arr) ? arr : [];
+  async function getRPERange(start: string, end: string) {
+    const res = await fetch(`/api/metrics/rpe/range?start=${start}&end=${end}`, { cache: "no-store" });
+    if (!res.ok) return { items: [] as any[] };
+    return res.json() as Promise<{ start:string; end:string; count:number; items:any[] }>;
   }
 
   async function loadKpis() {
     setLoadingKpis(true);
 
-    // Wellness del día
-    const wToday = await getWellness(kpiDate);
-    const todayRows = wToday.map((r:any) => {
-      const nm = resolveName(r);
-      return { ...r, _userName: nm, _sdw: computeSDW(r) } as DayRow;
-    });
+    const start21 = toYYYYMMDDLocal(addDays(fromYMD(kpiDate), -21));
+    const start14 = toYYYYMMDDLocal(addDays(fromYMD(kpiDate), -14));
+    const yday = yesterdayYMD(kpiDate);
 
-    // Baseline 21d previos
-    const prev21 = Array.from({length:21},(_,i)=> toYYYYMMDDLocal(addDays(fromYMD(kpiDate), -(i+1))));
-    const prevChunks = await Promise.all(prev21.map(d => getWellness(d)));
+    // 1) Wellness: 21 días (incluye hoy para separar baseline vs hoy)
+    const wRange = await getWellnessRange(start21, kpiDate);
+    const wItems = wRange.items || [];
+
+    // split: hoy vs prev (para baseline 21d)
+    const todayRows = (wItems as WellnessRaw[])
+      .filter((r) => r.date === kpiDate)
+      .map((r) => ({ ...r, _userName: resolveName(r), _sdw: computeSDW(r) } as DayRow));
+
+    const prevRows = (wItems as WellnessRaw[]).filter((r) => r.date !== kpiDate);
+
+    // baseline por jugador (21d prev)
     const sdwMap: Record<string, number[]> = {};
-    const activeSet = new Set<string>();
-    for (const dayArr of prevChunks) {
-      for (const it of dayArr) {
-        const nm = resolveName(it);
-        activeSet.add(nm);
-        const sdw = computeSDW(it);
-        if (sdw > 0) {
-          if (!sdwMap[nm]) sdwMap[nm] = [];
-          sdwMap[nm].push(sdw);
-        }
+    const active14Set = new Set<string>();
+
+    for (const it of prevRows) {
+      const nm = resolveName(it);
+      const sdw = computeSDW(it);
+      if (sdw > 0) {
+        if (!sdwMap[nm]) sdwMap[nm] = [];
+        sdwMap[nm].push(sdw);
       }
+      // activos últimos 14d
+      if (it.date >= start14) active14Set.add(nm);
     }
+    // incluir a los que respondieron hoy
+    for (const it of todayRows) active14Set.add(it._userName);
+
     const baselines: Record<string, Baseline> = {};
     for (const [nm, arr] of Object.entries(sdwMap)) {
       baselines[nm] = { mean: mean(arr), sd: sdSample(arr), n: arr.length };
     }
 
-    // Activos (14d) = jugadores con ≥1 wellness en últimos 14 días + los que respondieron hoy
-    const last14 = prev21.slice(0,14);
-    const prev14Chunks = await Promise.all(last14.map(d => getWellness(d)));
-    const actives = new Set<string>([...activeSet]);
-    for (const dayArr of prev14Chunks) for (const it of dayArr) actives.add(resolveName(it));
-    for (const it of todayRows) actives.add(it._userName);
-
-    // Z + color + overrides
-    const enriched = todayRows.map(r => {
+    const enriched = todayRows.map((r) => {
       const base = baselines[r._userName];
-      const z = base && base.n >= 7 && base.sd > 0 ? (r._sdw - base.mean)/base.sd : null;
+      const z = base && base.n >= 7 && base.sd > 0 ? (r._sdw - base.mean) / base.sd : null;
       const baseColor = zToColor(z);
       const color = applyOverrides(baseColor, r);
       return { ...r, _z: z, _color: color } as DayRow;
     });
 
-    // RPE totales (hoy/ayer)
-    const rpeToday = await getRPE(kpiDate);
-    const rpeYday = await getRPE(yesterdayYMD(kpiDate));
-    const sumAU = (arr: RPERaw[]) => {
-      if (!Array.isArray(arr)) return 0;
-      let acc = 0;
-      for (const r of arr) acc += resolveAU(r);
-      return acc;
-    };
+    // 2) RPE: ayer + hoy en una sola llamada
+    const rpeRange = await getRPERange(yday, kpiDate);
+    const rpeItems = (rpeRange.items || []) as RPERaw[];
+
+    let todayAU = 0, ydayAU = 0;
+    for (const r of rpeItems) {
+      const au = (r.load ?? r.srpe ?? (Number(r.rpe ?? 0) * Number(r.duration ?? 0))) ?? 0;
+      const auInt = Math.max(0, Math.round(Number(au)));
+      if (r.date === kpiDate) todayAU += auInt;
+      else if (r.date === yday) ydayAU += auInt;
+    }
 
     setRows(enriched);
-    setActiveRoster(actives.size);
-    setSrpeTodayTotal(sumAU(rpeToday));
-    setSrpeYesterdayTotal(sumAU(rpeYday));
+    setActiveRoster(active14Set.size);
+    setSrpeTodayTotal(todayAU);
+    setSrpeYesterdayTotal(ydayAU);
     setLoadingKpis(false);
   }
 
