@@ -1,131 +1,176 @@
 // src/app/ct/metrics/rpe/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
-
-function toYMD(d: Date) { return d.toISOString().slice(0, 10); }
+import { useEffect, useMemo, useState } from "react";
 
 type Row = {
   id: string;
-  userId: string;
-  userName: string;
+  playerKey?: string | null;
+  userName?: string | null;
   date: string;
   rpe: number;
-  duration: number | null;
-  load: number | null;
+  duration?: number | null;
+  load?: number | null;
 };
 
+function toYMD(d: Date) { return d.toISOString().slice(0,10); }
+
 export default function RPECT() {
-  const [date, setDate] = useState(toYMD(new Date()));
+  const [date, setDate] = useState<string>(toYMD(new Date()));
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
-  const [defaultDur, setDefaultDur] = useState<string>("");
-  const [editing, setEditing] = useState<Record<string, string>>({}); // id -> duration (string)
-  const [saving, setSaving] = useState<Record<string, boolean>>({});  // id -> saving
+  const [q, setQ] = useState("");
+  const [bulkMin, setBulkMin] = useState<string>("90");
+  const [saving, setSaving] = useState(false);
 
   async function load() {
     setLoading(true);
-    const q = new URLSearchParams({ date });
-    const res = await fetch(`/api/metrics/rpe?${q.toString()}`, { cache: "no-store" });
+    const res = await fetch(`/api/metrics/rpe?date=${date}`, { cache: "no-store" });
     const data = res.ok ? await res.json() : [];
-    setRows(Array.isArray(data) ? data : []);
+    const fixed = (Array.isArray(data) ? data : []).map((r: any) => ({
+      ...r,
+      userName: r.userName || r.playerKey || r.user?.name || r.user?.email || "Jugador",
+    }));
+    setRows(fixed);
     setLoading(false);
   }
 
   useEffect(() => { load(); }, [date]);
 
-  async function applyDefault() {
-    const dur = Math.max(0, Number(defaultDur || 0));
-    if (!dur) { alert("Ingresá minutos > 0"); return; }
-    const res = await fetch("/api/metrics/rpe/default-duration", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date, duration: dur }),
-      cache: "no-store",
-    });
-    if (!res.ok) {
-      alert((await res.text()) || "Error");
-      return;
-    }
-    await load();
-    setDefaultDur("");
-  }
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return rows;
+    return rows.filter(r =>
+      (r.userName || "").toLowerCase().includes(t) ||
+      (r.playerKey || "").toLowerCase().includes(t)
+    );
+  }, [rows, q]);
 
-  function startEdit(r: Row) {
-    setEditing((e) => ({ ...e, [r.id]: r.duration != null ? String(r.duration) : "" }));
-  }
-
-  async function saveEdit(r: Row) {
-    const val = editing[r.id];
-    const duration = val === "" ? null : Math.max(0, Number(val));
-    setSaving((s) => ({ ...s, [r.id]: true }));
+  async function applyDefaultDuration() {
+    const minutes = Math.max(0, Number(bulkMin || 0));
+    if (!minutes) { alert("Ingresá minutos > 0"); return; }
+    setSaving(true);
     try {
-      const res = await fetch(`/api/metrics/rpe/${r.id}`, {
-        method: "PATCH",
+      const res = await fetch("/api/metrics/rpe/default-duration", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ duration }),
-        cache: "no-store",
+        body: JSON.stringify({ date, duration: minutes }),
       });
       if (!res.ok) throw new Error(await res.text());
-      const updated: Row = await res.json();
-      setRows((rows) => rows.map(x => x.id === r.id ? updated : x));
-      setEditing((e) => {
-        const { [r.id]: _, ...rest } = e;
-        return rest;
-      });
-    } catch (err: any) {
-      alert(err?.message || "Error al guardar");
+      await load();
+    } catch (e: any) {
+      alert(e?.message || "Error aplicando duración");
     } finally {
-      setSaving((s) => ({ ...s, [r.id]: false }));
+      setSaving(false);
+    }
+  }
+
+  async function clearDurations() {
+    if (!confirm(`¿Poner en blanco la duración del ${date}?`)) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/metrics/rpe/clear-duration", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await load();
+    } catch (e: any) {
+      alert(e?.message || "Error limpiando duraciones");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveOne(row: Row, newMinStr: string) {
+    const minutes = newMinStr === "" ? null : Math.max(0, Number(newMinStr));
+    setSaving(true);
+    try {
+      const res = await fetch("/api/metrics/rpe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: row.id,       // para update directo
+          date,
+          rpe: row.rpe,
+          duration: minutes,
+          playerKey: row.playerKey || row.userName || "Jugador",
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await load();
+    } catch (e: any) {
+      alert(e?.message || "Error guardando fila");
+    } finally {
+      setSaving(false);
     }
   }
 
   return (
     <div className="p-4 space-y-4">
-      <header className="flex items-center justify-between">
-        <h1 className="text-lg font-bold">RPE — Hoy</h1>
+      <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-bold">RPE — Hoy</h1>
+        </div>
         <div className="flex items-center gap-2">
           <input
             type="date"
             className="rounded-md border px-2 py-1.5 text-sm"
             value={date}
-            onChange={(e)=>setDate(e.target.value)}
+            onChange={(e)=> setDate(e.target.value)}
           />
           <button onClick={load} className="rounded-lg border px-2 py-1 text-sm hover:bg-gray-50">Recargar</button>
         </div>
       </header>
 
-      {/* Controles de duración */}
-      <section className="rounded-2xl border bg-white p-3 space-y-3">
-        <div className="text-[12px] font-semibold uppercase text-gray-600">Duración</div>
-        <div className="flex flex-col md:flex-row md:items-center gap-2">
-          <div className="flex items-center gap-2">
-            <input
-              className="w-28 rounded-md border px-2 py-1.5 text-sm"
-              placeholder="min"
-              value={defaultDur}
-              onChange={(e)=>setDefaultDur(e.target.value)}
-              inputMode="numeric"
-            />
-            <button
-              onClick={applyDefault}
-              className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50"
-            >
-              Aplicar a vacíos (día)
-            </button>
-          </div>
-          <div className="text-xs text-gray-500">
-            Aplica esta duración a todas las RPE de <b>{date}</b> que no tengan minutos cargados.
-          </div>
+      {/* Acciones rápidas */}
+      <section className="rounded-xl border bg-white p-3 flex flex-wrap items-center gap-2">
+        <div className="text-sm font-medium mr-2">Acciones:</div>
+        <div className="flex items-center gap-2">
+          <input
+            className="w-20 rounded-md border px-2 py-1 text-sm"
+            placeholder="min"
+            value={bulkMin}
+            onChange={(e)=> setBulkMin(e.target.value)}
+            inputMode="numeric"
+          />
+          <button
+            onClick={applyDefaultDuration}
+            disabled={saving}
+            className={`rounded-lg px-3 py-1.5 text-xs ${saving ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
+          >
+            Aplicar a vacíos
+          </button>
         </div>
+        <div className="h-5 w-px bg-gray-300 mx-1" />
+        <button
+          onClick={clearDurations}
+          disabled={saving}
+          className="rounded-lg border px-3 py-1.5 text-xs hover:bg-gray-50"
+        >
+          Limpiar minutos del día
+        </button>
+        <div className="ml-auto text-xs text-gray-500">sRPE = RPE × minutos</div>
       </section>
+
+      {/* Filtro */}
+      <div className="flex items-center gap-2">
+        <input
+          className="w-full md:w-80 rounded-md border px-2 py-1.5 text-sm"
+          placeholder="Buscar jugador…"
+          value={q}
+          onChange={(e)=> setQ(e.target.value)}
+        />
+        <span className="text-[12px] text-gray-500">{filtered.length} resultado(s)</span>
+      </div>
 
       {/* Tabla */}
       <section className="rounded-2xl border bg-white overflow-hidden">
         <div className="bg-gray-50 px-3 py-2 text-[12px] font-semibold uppercase">Entradas</div>
         {loading ? (
           <div className="p-4 text-gray-500">Cargando…</div>
-        ) : rows.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="p-4 text-gray-500 italic">Sin datos</div>
         ) : (
           <div className="overflow-x-auto">
@@ -140,64 +185,32 @@ export default function RPECT() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => {
-                  const isEditing = r.id in editing;
-                  const busy = !!saving[r.id];
-                  return (
-                    <tr key={r.id} className="border-b last:border-0">
-                      <td className="px-3 py-2">{r.userName}</td>
-                      <td className="px-3 py-2">{r.rpe}</td>
-                      <td className="px-3 py-2">
-                        {isEditing ? (
-                          <input
-                            className="w-24 rounded-md border px-2 py-1.5 text-sm"
-                            placeholder="min"
-                            value={editing[r.id]}
-                            onChange={(e)=> setEditing((ed)=>({ ...ed, [r.id]: e.target.value }))}
-                            inputMode="numeric"
-                          />
-                        ) : (
-                          r.duration ?? "—"
-                        )}
-                      </td>
-                      <td className="px-3 py-2">{r.load ?? "—"}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center justify-end gap-2">
-                          {isEditing ? (
-                            <>
-                              <button
-                                disabled={busy}
-                                onClick={()=>saveEdit(r)}
-                                className={`h-7 px-2 rounded border text-[11px] ${busy ? "text-gray-400" : "hover:bg-gray-50"}`}
-                              >
-                                {busy ? "Guardando…" : "Guardar"}
-                              </button>
-                              <button
-                                disabled={busy}
-                                onClick={()=>{
-                                  setEditing((e)=>{
-                                    const { [r.id]:_, ...rest } = e;
-                                    return rest;
-                                  });
-                                }}
-                                className="h-7 px-2 rounded border text-[11px] hover:bg-gray-50"
-                              >
-                                Cancelar
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              onClick={()=>startEdit(r)}
-                              className="h-7 px-2 rounded border text-[11px] hover:bg-gray-50"
-                            >
-                              {r.duration == null ? "Cargar" : "Editar"}
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {filtered.map((r) => (
+                  <tr key={r.id} className="border-b last:border-0">
+                    <td className="px-3 py-2 font-medium">{r.userName || r.playerKey || "Jugador"}</td>
+                    <td className="px-3 py-2">{r.rpe}</td>
+                    <td className="px-3 py-2">
+                      <input
+                        className="w-24 rounded-md border px-2 py-1 text-sm"
+                        defaultValue={r.duration ?? ""}
+                        onBlur={(e)=> saveOne(r, e.currentTarget.value)}
+                        placeholder="min"
+                        inputMode="numeric"
+                      />
+                    </td>
+                    <td className="px-3 py-2">{(r.load ?? null) !== null ? r.load : "—"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex justify-end">
+                        <button
+                          onClick={()=> saveOne(r, "")}
+                          className="rounded-lg border px-2 py-1 text-[11px] hover:bg-gray-50"
+                        >
+                          Vaciar
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
