@@ -13,7 +13,8 @@ function toUTCStart(ymd: string) {
 /**
  * POST /api/metrics/rpe/default-duration
  * Body: { date: "YYYY-MM-DD", duration: number }
- * Efecto: para esa fecha, en todas las RPEEntry con duration NULL, setear duration y load=rpe*duration.
+ * Efecto: para esa fecha, en todas las RPEEntry con duration NULL o load NULL,
+ *         setear duration y load=rpe*duration.
  * Devuelve: { updated: number }
  */
 export async function POST(req: Request) {
@@ -29,11 +30,13 @@ export async function POST(req: Request) {
 
     const empties = await prisma.rPEEntry.findMany({
       where: { date: { gte: start, lt: next }, OR: [{ duration: null }, { load: null }] },
+      select: { id: true, rpe: true },
     });
 
     let updated = 0;
     for (const row of empties) {
-      const load = row.rpe * duration;
+      const rpe = Number(row.rpe || 0);
+      const load = Math.trunc(rpe * duration);
       await prisma.rPEEntry.update({
         where: { id: row.id },
         data: { duration, load },
