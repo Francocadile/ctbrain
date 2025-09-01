@@ -58,7 +58,7 @@ model Session {
   @@index([createdBy])
 }
 
-/* ===== NUEVO: soporte catálogos básicos ===== */
+// ===== NUEVO: soporte catálogos básicos =====
 
 model Rival {
   id        String   @id @default(cuid())
@@ -82,22 +82,19 @@ model ExerciseKind {
   updatedAt DateTime @updatedAt
 }
 
-/* ===== NUEVO: métricas ===== */
+// ===== NUEVO: métricas =====
+// RPE del jugador (0..10). CT puede completar duración (min).
+// load (AU) = rpe * duration. Único por (userId, date).
 
-/**
- * RPE del jugador (lo carga el jugador; CT agrega duración si hace falta).
- * load (AU) = rpe * duration
- * Unicidad por jugador + fecha.
- */
 model RPEEntry {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   date      DateTime
-  rpe       Int      // 0..10 (mod Borg)
-  duration  Int?     // minutos (la setea CT o viene ya cargado)
-  load      Int?     // AU = rpe*duration
+  rpe       Int
+  duration  Int?     // minutos
+  load      Int?     // AU
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -107,11 +104,9 @@ model RPEEntry {
   @@index([userId, date])
 }
 
-/**
- * Wellness diario (1..5 por ítem; horas de sueño opcional).
- * total = suma de las escalas (no se fuerza por DB, lo calcula el servidor/cliente).
- * Unicidad por jugador + fecha.
- */
+// Wellness diario (1..5 por ítem; horas de sueño opcional).
+// total = suma de las escalas. Único por (userId, date).
+
 model WellnessEntry {
   id              String   @id @default(cuid())
   userId          String
@@ -121,13 +116,13 @@ model WellnessEntry {
 
   sleepQuality    Int      // 1..5
   sleepHours      Float?   // horas (opcional)
-  fatigue         Int      // 1..5 (5 = enérgico)
-  muscleSoreness  Int      // 1..5 (5 = sin dolor)
-  stress          Int      // 1..5 (5 = bajo)
-  mood            Int      // 1..5 (5 = excelente)
+  fatigue         Int      // 1..5
+  muscleSoreness  Int      // 1..5
+  stress          Int      // 1..5
+  mood            Int      // 1..5
   comment         String?
 
-  total           Int?     // suma de escalas (puede ser null si preferís calcular on the fly)
+  total           Int?     // suma de escalas
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
