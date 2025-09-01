@@ -35,10 +35,6 @@ model User {
   updatedAt DateTime  @updatedAt
 
   sessions  Session[] @relation("UserSessions")
-
-  // Métricas
-  wellness  WellnessEntry[]
-  rpes      RPEEntry[]
 }
 
 model Session {
@@ -53,52 +49,16 @@ model Session {
   createdBy   String
   user        User         @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
 
-  rpes        RPEEntry[]
-
   @@index([date])
   @@index([type])
   @@index([createdBy])
 }
 
-// ===== Wellness (jugador reporta, CT observa) =====
-model WellnessEntry {
-  id           String   @id @default(cuid())
-  userId       String
-  date         DateTime // 00:00:00 UTC del día
-
-  sleepQuality Int      // 1–5 (muy malo → excelente)
-  sleepHours   Float    // p.ej. 7.5
-  fatigue      Int      // 1–5 (extremadamente cansado → muy enérgico)
-  soreness     Int      // 1–5 (dolor intenso → sin dolor)
-  stress       Int      // 1–5 (muy alto → muy bajo)
-  mood         Int      // 1–5 (muy malhumorado → excelente)
-  notes        String?
-
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@unique([userId, date])
-  @@index([date, userId])
-}
-
-// ===== RPE (jugador reporta, CT pone duración) =====
-model RPEEntry {
-  id         String   @id @default(cuid())
-  userId     String
-  date       DateTime        // 00:00:00 UTC del día o de la sesión
-  sessionId  String?         // opcional
-  rpe        Int             // 0–10
-  duration   Int?            // minutos (si el CT la fija por fecha, acá se completa)
-  load       Int?            // rpe * duración (AU)
-
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  session    Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  @@index([date, userId])
-  @@index([sessionId])
+/* NUEVO: soporte para /api/ct/rivals y /ct/rivales */
+model Rival {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  logoUrl   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
