@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import HelpTip from "@/components/HelpTip";
 
 type Row = {
   id: string;
@@ -111,7 +112,10 @@ export default function RPECT() {
     <div className="p-4 space-y-4">
       <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
-          <h1 className="text-lg font-bold">RPE — Hoy</h1>
+          <h1 className="text-lg font-bold">
+            RPE — Hoy
+            <HelpTip text="RPE 0–10 respondido 30' post-sesión. El CT define la duración; sRPE = RPE×min." />
+          </h1>
         </div>
         <div className="flex items-center gap-2">
           <input
@@ -126,7 +130,10 @@ export default function RPECT() {
 
       {/* Acciones rápidas */}
       <section className="rounded-xl border bg-white p-3 flex flex-wrap items-center gap-2">
-        <div className="text-sm font-medium mr-2">Acciones:</div>
+        <div className="text-sm font-medium mr-2">
+          Acciones:
+          <HelpTip text="“Aplicar a vacíos” asigna X minutos a filas sin duración. “Limpiar” borra las duraciones del día." />
+        </div>
         <div className="flex items-center gap-2">
           <input
             className="w-20 rounded-md border px-2 py-1 text-sm"
@@ -151,7 +158,10 @@ export default function RPECT() {
         >
           Limpiar minutos del día
         </button>
-        <div className="ml-auto text-xs text-gray-500">sRPE = RPE × minutos</div>
+        <div className="ml-auto text-xs text-gray-500">
+          sRPE = RPE × minutos
+          <HelpTip text="La AU se recalcula al guardar. Si la duración está vacía, no hay AU." />
+        </div>
       </section>
 
       {/* Filtro */}
@@ -178,9 +188,18 @@ export default function RPECT() {
               <thead>
                 <tr className="border-b bg-gray-50">
                   <th className="text-left px-3 py-2">Jugador</th>
-                  <th className="text-left px-3 py-2">RPE</th>
-                  <th className="text-left px-3 py-2">Duración (min)</th>
-                  <th className="text-left px-3 py-2">sRPE (AU)</th>
+                  <th className="text-left px-3 py-2">
+                    RPE
+                    <HelpTip text="Esfuerzo percibido (0–10). 0=descanso, 10=máximo." />
+                  </th>
+                  <th className="text-left px-3 py-2">
+                    Duración (min)
+                    <HelpTip text="Minutos de la sesión definidos por el CT. Podés editarlos por fila." />
+                  </th>
+                  <th className="text-left px-3 py-2">
+                    sRPE (AU)
+                    <HelpTip text="RPE × minutos. Se actualiza al guardar cambios." />
+                  </th>
                   <th className="text-right px-3 py-2">Acciones</th>
                 </tr>
               </thead>
