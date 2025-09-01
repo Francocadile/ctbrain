@@ -62,7 +62,8 @@ export default async function CTLayout({ children }: { children: React.ReactNode
               </div>
               <ul className="space-y-0.5 mb-2">
                 <li>
-                  <NavItem href={"/ct"}>
+                  {/* 👉 apunta al dashboard real */}
+                  <NavItem href={"/ct/dashboard"}>
                     Dashboard / Inicio rápido
                   </NavItem>
                 </li>
@@ -107,8 +108,11 @@ export default async function CTLayout({ children }: { children: React.ReactNode
               <ul className="space-y-0.5 mb-2">
                 <li><NavItem soon>Carga semanal (planificado vs ejecutado)</NavItem></li>
                 <li><NavItem soon>Rendimiento (colectivo / individual)</NavItem></li>
-                <li><NavItem soon>Wellness</NavItem></li>
-                <li><NavItem soon>RPE</NavItem></li>
+
+                {/* ✅ NUEVOS LINKS ACTIVOS */}
+                <li><NavItem href={"/ct/metrics/wellness"}>Wellness (día)</NavItem></li>
+                <li><NavItem href={"/ct/metrics/rpe"}>RPE (día)</NavItem></li>
+
                 <li><NavItem soon>Lesionados</NavItem></li>
               </ul>
 
