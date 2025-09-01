@@ -24,103 +24,53 @@ function asFloat(n: any): number | null {
   return Number.isFinite(v) ? v : null;
 }
 
-async function resolveUserId(input: { userId?: string; playerKey?: string }) {
-  const byId = String(input.userId || "").trim();
-  if (byId) return byId;
-
-  const key = String(input.playerKey || "").trim();
-  if (!key) return null;
-
-  const user = await prisma.user.findFirst({
-    where: {
-      OR: [
-        { name: { equals: key, mode: "insensitive" } },
-        { email: { equals: key, mode: "insensitive" } },
-      ],
-    },
-    select: { id: true },
-  });
-  return user?.id ?? null;
-}
-
-/**
- * GET /api/metrics/wellness
- * Query:
- *  - date=YYYY-MM-DD (opcional)
- *  - userId=... | playerKey=... (opcional)
- * Sin date → últimas 30 entradas (global).
- */
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const date = searchParams.get("date") || "";
-    const qpUserId = searchParams.get("userId") || undefined;
-    const playerKey = searchParams.get("playerKey") || undefined;
-
-    // <-- FIX: puede ser string | null | undefined
-    let userId: string | null | undefined = qpUserId;
-    if (!userId && playerKey) {
-      userId = await resolveUserId({ playerKey });
-      if (!userId) return NextResponse.json([], { status: 200 });
-    }
+    const userId = searchParams.get("userId") || undefined;
 
     if (date) {
       const start = toUTCStart(date);
       const end = nextUTCDay(start);
       const rows = await prisma.wellnessEntry.findMany({
-        where: {
-          date: { gte: start, lt: end },
-          ...(userId ? { userId } : {}),
-        },
+        where: { date: { gte: start, lt: end }, ...(userId ? { userId } : {}) },
+        include: { user: { select: { name: true, email: true } } },
         orderBy: [{ date: "desc" }],
       });
-      return NextResponse.json(rows);
+      const mapped = rows.map(r => ({
+        ...r,
+        userName: r.user?.name ?? r.user?.email ?? "—",
+      }));
+      return NextResponse.json(mapped);
     }
 
     const rows = await prisma.wellnessEntry.findMany({
+      include: { user: { select: { name: true, email: true } } },
       orderBy: [{ date: "desc" }],
       take: 30,
     });
-    return NextResponse.json(rows);
+    const mapped = rows.map(r => ({
+      ...r,
+      userName: r.user?.name ?? r.user?.email ?? "—",
+    }));
+    return NextResponse.json(mapped);
   } catch (e: any) {
     return new NextResponse(e?.message || "Error", { status: 500 });
   }
 }
 
-/**
- * POST /api/metrics/wellness
- * Body:
- *  {
- *    // identificar jugador (uno de los dos):
- *    userId?: string,
- *    playerKey?: string, // nombre/email que reconoce el CT
- *    date: "YYYY-MM-DD",
- *    sleepQuality: 1..5,
- *    sleepHours?: number,
- *    fatigue: 1..5,
- *    soreness?: 1..5,           // alias aceptado
- *    muscleSoreness?: 1..5,     // campo real
- *    stress: 1..5,
- *    mood: 1..5,
- *    notes?: string             // alias de comment
- *    comment?: string
- *  }
- * Unicidad: (userId, date)
- */
 export async function POST(req: Request) {
   try {
     const b = await req.json();
 
+    const userId = String(b?.userId || "").trim();
     const dateStr = String(b?.date || "").trim();
-    if (!dateStr) {
-      return new NextResponse("date requerido", { status: 400 });
+    if (!userId || !dateStr) {
+      return new NextResponse("userId y date requeridos", { status: 400 });
     }
-    const userId = await resolveUserId({ userId: b?.userId, playerKey: b?.playerKey });
-    if (!userId) return new NextResponse("Jugador no identificado", { status: 400 });
-
     const start = toUTCStart(dateStr);
 
-    // normalización y límites 1..5
     const sleepQuality = cap15(b?.sleepQuality);
     const fatigue = cap15(b?.fatigue);
     const muscleSoreness = cap15(
@@ -129,17 +79,14 @@ export async function POST(req: Request) {
     const stress = cap15(b?.stress);
     const mood = cap15(b?.mood);
 
-    // campos opcionales
     const sleepHours = asFloat(b?.sleepHours);
     const comment: string | null =
       (b?.comment ?? b?.notes ?? null) !== null
         ? String(b?.comment ?? b?.notes ?? "").trim() || null
         : null;
 
-    // total (sin horas ni comentario): 5 ítems
     const total = sleepQuality + fatigue + muscleSoreness + stress + mood;
 
-    // upsert por (userId, date)
     const entry = await prisma.wellnessEntry.upsert({
       where: { userId_date: { userId, date: start } },
       update: {
@@ -164,9 +111,13 @@ export async function POST(req: Request) {
         comment,
         total,
       },
+      include: { user: { select: { name: true, email: true } } },
     });
 
-    return NextResponse.json(entry);
+    return NextResponse.json({
+      ...entry,
+      userName: entry.user?.name ?? entry.user?.email ?? "—",
+    });
   } catch (e: any) {
     return new NextResponse(e?.message || "Error", { status: 500 });
   }
