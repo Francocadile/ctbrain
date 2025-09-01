@@ -138,7 +138,7 @@ function resolveAU(r: RPERaw): number {
    Layout (planner semanal)
 ========================================================= */
 const COL_LABEL_W   = 110; // ancho columna izquierda
-const DAY_MIN_W     = 116; // ancho mín por día (caben 7 en 1366px)
+const DAY_MIN_W     = 116; // ancho mín por día
 const ROW_H         = 64;  // alto de cada fila
 const DAY_HEADER_H  = 52;  // altura fija encabezado de día
 const CELL_GAP      = 6;
@@ -277,13 +277,25 @@ export default function DashboardSemanaPage() {
   const [srpeTodayTotal, setSrpeTodayTotal] = useState<number>(0);
   const [srpeYesterdayTotal, setSrpeYesterdayTotal] = useState<number>(0);
 
-  // ===== Fetchers BATCH (rangos) =====
+  // ===== Fetchers =====
+  async function getWellnessDay(d: string): Promise<WellnessRaw[]> {
+    const res = await fetch(`/api/metrics/wellness?date=${d}`, { cache: "no-store" });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  }
+  async function getRpeDay(d: string): Promise<RPERaw[]> {
+    const res = await fetch(`/api/metrics/rpe?date=${d}`, { cache: "no-store" });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  }
   async function getWellnessRange(start: string, end: string) {
     const res = await fetch(`/api/metrics/wellness/range?start=${start}&end=${end}`, { cache: "no-store" });
     if (!res.ok) return { items: [] as any[] };
     return res.json() as Promise<{ start:string; end:string; count:number; items:any[] }>;
   }
-  async function getRPERange(start: string, end: string) {
+  async function getRpeRange(start: string, end: string) {
     const res = await fetch(`/api/metrics/rpe/range?start=${start}&end=${end}`, { cache: "no-store" });
     if (!res.ok) return { items: [] as any[] };
     return res.json() as Promise<{ start:string; end:string; count:number; items:any[] }>;
@@ -296,21 +308,31 @@ export default function DashboardSemanaPage() {
     const start14 = toYYYYMMDDLocal(addDays(fromYMD(kpiDate), -14));
     const yday = yesterdayYMD(kpiDate);
 
-    // 1) Wellness: 21 días (incluye hoy para separar baseline vs hoy)
+    // ---------- WELLNESS ----------
     const wRange = await getWellnessRange(start21, kpiDate);
-    const wItems = wRange.items || [];
+    let wItems = (wRange.items || []) as WellnessRaw[];
 
-    // split: hoy vs prev (para baseline 21d)
-    const todayRows = (wItems as WellnessRaw[])
-      .filter((r) => r.date === kpiDate)
-      .map((r) => ({ ...r, _userName: resolveName(r), _sdw: computeSDW(r) } as DayRow));
+    let todayRows: DayRow[] = [];
+    let prevRows: WellnessRaw[] = [];
 
-    const prevRows = (wItems as WellnessRaw[]).filter((r) => r.date !== kpiDate);
+    if (wItems.length === 0) {
+      console.debug("[KPI] wellness/range vacío → fallback diario");
+      const today = await getWellnessDay(kpiDate);
+      todayRows = today.map((r:any)=> ({ ...r, _userName: resolveName(r), _sdw: computeSDW(r) } as DayRow));
 
-    // baseline por jugador (21d prev)
+      const prevDays = Array.from({length:21},(_,i)=> toYYYYMMDDLocal(addDays(fromYMD(kpiDate), -(i+1))));
+      const chunks = await Promise.all(prevDays.map(d=> getWellnessDay(d)));
+      prevRows = chunks.flat();
+    } else {
+      todayRows = wItems
+        .filter(r=> r.date === kpiDate)
+        .map((r)=> ({ ...r, _userName: resolveName(r), _sdw: computeSDW(r) } as DayRow));
+      prevRows = wItems.filter(r=> r.date !== kpiDate);
+    }
+
+    // baseline por jugador (21d prev) + activos 14d
     const sdwMap: Record<string, number[]> = {};
     const active14Set = new Set<string>();
-
     for (const it of prevRows) {
       const nm = resolveName(it);
       const sdw = computeSDW(it);
@@ -318,10 +340,8 @@ export default function DashboardSemanaPage() {
         if (!sdwMap[nm]) sdwMap[nm] = [];
         sdwMap[nm].push(sdw);
       }
-      // activos últimos 14d
       if (it.date >= start14) active14Set.add(nm);
     }
-    // incluir a los que respondieron hoy
     for (const it of todayRows) active14Set.add(it._userName);
 
     const baselines: Record<string, Baseline> = {};
@@ -337,16 +357,23 @@ export default function DashboardSemanaPage() {
       return { ...r, _z: z, _color: color } as DayRow;
     });
 
-    // 2) RPE: ayer + hoy en una sola llamada
-    const rpeRange = await getRPERange(yday, kpiDate);
+    // ---------- RPE ----------
+    const rpeRange = await getRpeRange(yday, kpiDate);
     const rpeItems = (rpeRange.items || []) as RPERaw[];
 
     let todayAU = 0, ydayAU = 0;
-    for (const r of rpeItems) {
-      const au = (r.load ?? r.srpe ?? (Number(r.rpe ?? 0) * Number(r.duration ?? 0))) ?? 0;
-      const auInt = Math.max(0, Math.round(Number(au)));
-      if (r.date === kpiDate) todayAU += auInt;
-      else if (r.date === yday) ydayAU += auInt;
+
+    if (rpeItems.length === 0) {
+      console.debug("[KPI] rpe/range vacío → fallback diario");
+      const [rpeToday, rpeY] = await Promise.all([getRpeDay(kpiDate), getRpeDay(yday)]);
+      for (const r of rpeToday) todayAU += resolveAU(r);
+      for (const r of rpeY) ydayAU += resolveAU(r);
+    } else {
+      for (const r of rpeItems) {
+        const au = resolveAU(r);
+        if (r.date === kpiDate) todayAU += au;
+        else if (r.date === yday) ydayAU += au;
+      }
     }
 
     setRows(enriched);
@@ -372,7 +399,6 @@ export default function DashboardSemanaPage() {
      Render (KPIs + Planner)
   ========================================================= */
 
-  // estilos de badge
   function badgeClass(t: "green"|"yellow"|"red"|"gray") {
     const map: Record<string,string> = {
       green:  "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -431,8 +457,8 @@ export default function DashboardSemanaPage() {
             Cumplimiento (hoy / activos 14d)
             <HelpTip text="Respuestas de Wellness de hoy dividido por jugadores activos (≥1 respuesta en últimos 14 días + los que contestaron hoy)." />
           </div>
-          <div className="text-2xl font-bold mt-1">{Math.round((kpis.compliance*100) || 0)}%</div>
-          <div className="text-xs text-gray-500">{kpis.nToday} / {activeRoster}</div>
+          <div className="text-2xl font-bold mt-1">{activeRoster ? `${Math.round((kpis.compliance*100) || 0)}%` : "—"}</div>
+          <div className="text-xs text-gray-500">{activeRoster ? `${kpis.nToday} / ${activeRoster}` : "Sin activos en 14d"}</div>
         </div>
         <div className="rounded-2xl border bg-white p-4">
           <div className="text-xs text-gray-500">
@@ -461,7 +487,7 @@ export default function DashboardSemanaPage() {
         </div>
       </section>
 
-      {/* ======== Tu Dashboard de Plan Semanal (sin cambios visuales) ======== */}
+      {/* ======== Tu Dashboard de Plan Semanal (solo lectura) ======== */}
       {!hideHeader && (
         <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between no-print">
           <div>
