@@ -2,26 +2,37 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getPlayerName, clearPlayerName } from "@/lib/player";
+import { getPlayerIdentity, clearPlayerName } from "@/lib/player";
 
 function todayYMD() { return new Date().toISOString().slice(0,10); }
 
 export default function RPEJugador() {
   const [date, setDate] = useState(todayYMD());
   const [name, setName] = useState("");
+  const [loadingName, setLoadingName] = useState(true);
+
   const [rpe, setRpe] = useState<string>("");
   const [loaded, setLoaded] = useState(false);
   const [sent, setSent] = useState(false);
 
+  // Cargar nombre desde sesión (NextAuth)
   useEffect(() => {
-    const n = getPlayerName();
-    setName(n);
+    let ok = true;
+    (async () => {
+      try {
+        const n = await getPlayerIdentity();
+        if (ok) setName(n || "");
+      } finally {
+        if (ok) setLoadingName(false);
+      }
+    })();
+    return () => { ok = false; };
   }, []);
 
   // Prefill si ya envió hoy
   useEffect(() => {
     async function fetchExisting() {
-      if (!name) return;
+      if (!name) { setLoaded(true); return; }
       const url = `/api/metrics/rpe?date=${date}&playerKey=${encodeURIComponent(name)}`;
       const res = await fetch(url, { cache: "no-store" });
       const data = res.ok ? await res.json() : [];
@@ -39,7 +50,9 @@ export default function RPEJugador() {
   }, [date, name]);
 
   async function submit() {
+    if (loadingName) { alert("Cargando identidad…"); return; }
     if (!name.trim()) { alert("No hay nombre seleccionado."); return; }
+
     const body = { date, playerKey: name.trim(), rpe: Number(rpe || 0) };
     const res = await fetch("/api/metrics/rpe", {
       method: "POST",
@@ -53,9 +66,12 @@ export default function RPEJugador() {
   }
 
   function signOut() {
+    // Compat localStorage + signout de NextAuth
     clearPlayerName();
-    location.href = "/jugador";
+    window.location.href = "/api/auth/signout?callbackUrl=/jugador";
   }
+
+  const submitDisabled = loadingName || !name || rpe === "";
 
   return (
     <div className="space-y-4">
@@ -71,11 +87,20 @@ export default function RPEJugador() {
         <div className="grid md:grid-cols-2 gap-3">
           <div>
             <label className="text-[12px] text-gray-500">Fecha</label>
-            <input type="date" className="w-full rounded-md border px-2 py-1.5" value={date} onChange={e=>setDate(e.target.value)} />
+            <input
+              type="date"
+              className="w-full rounded-md border px-2 py-1.5"
+              value={date}
+              onChange={(e)=>setDate(e.target.value)}
+            />
           </div>
           <div>
             <label className="text-[12px] text-gray-500">Tu nombre</label>
-            <input className="w-full rounded-md border px-2 py-1.5" value={name} disabled />
+            <input
+              className="w-full rounded-md border px-2 py-1.5"
+              value={loadingName ? "Cargando…" : (name || "—")}
+              disabled
+            />
           </div>
           <div className="md:col-span-2">
             <label className="text-[12px] text-gray-500">RPE (0–10)</label>
@@ -95,7 +120,13 @@ export default function RPEJugador() {
           </div>
         )}
 
-        <button onClick={submit} className="px-3 py-1.5 rounded-xl bg-black text-white text-sm hover:opacity-90">
+        <button
+          onClick={submit}
+          disabled={submitDisabled}
+          className={`px-3 py-1.5 rounded-xl text-sm ${
+            submitDisabled ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
+          }`}
+        >
           {sent ? "Guardar cambios" : "Enviar RPE"}
         </button>
       </div>
