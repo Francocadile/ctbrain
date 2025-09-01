@@ -1,32 +1,46 @@
 // src/app/jugador/page.tsx
-import RoleGate from "@/components/auth/RoleGate";
+"use client";
 
-export default async function JugadorPage() {
+export default function JugadorHome() {
   return (
-    <RoleGate allow={["JUGADOR"]}>
-      <main className="min-h-[60vh] px-6 py-10">
-        <h1 className="text-2xl font-bold">Panel — Jugador</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Solo usuarios con rol <b>JUGADOR</b> pueden ver esta página.
+    <div className="p-6 space-y-4">
+      <header>
+        <h1 className="text-xl font-bold">Jugador — Panel</h1>
+        <p className="text-sm text-gray-600">
+          Completá tu Wellness diario y tu RPE post-entrenamiento.
         </p>
+      </header>
 
-        <section className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
-            <h3 className="font-semibold">Agenda</h3>
-            <p className="text-sm text-gray-500">Sesión del día y objetivos.</p>
+      <div className="grid gap-3 md:grid-cols-2">
+        <a
+          href="/jugador/wellness"
+          className="rounded-2xl border p-4 hover:bg-gray-50 block"
+        >
+          <div className="text-lg font-semibold">Wellness diario</div>
+          <div className="text-sm text-gray-500">
+            Sueño, fatiga, dolor muscular, estrés, ánimo (+ horas de sueño).
           </div>
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
-            <h3 className="font-semibold">Individual</h3>
-            <p className="text-sm text-gray-500">
-              Rutinas asignadas 1 a 1.
-            </p>
+        </a>
+
+        <a
+          href="/jugador/rpe"
+          className="rounded-2xl border p-4 hover:bg-gray-50 block"
+        >
+          <div className="text-lg font-semibold">RPE post-entrenamiento</div>
+          <div className="text-sm text-gray-500">
+            Escala 0–10. Duración la completa el CT (opcional si la sabés).
           </div>
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
-            <h3 className="font-semibold">Feedback</h3>
-            <p className="text-sm text-gray-500">RPE y comentarios.</p>
-          </div>
-        </section>
-      </main>
-    </RoleGate>
+        </a>
+      </div>
+
+      <div className="pt-2">
+        <a
+          href="/ct/dashboard"
+          className="inline-block rounded-xl border px-3 py-1.5 text-xs hover:bg-gray-50"
+        >
+          ← Ir al dashboard del CT
+        </a>
+      </div>
+    </div>
   );
 }
