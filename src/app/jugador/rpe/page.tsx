@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getPlayerName, clearPlayerName } from "@/lib/player";
+import { fetchSessionUser, getPlayerDisplayName } from "@/lib/player";
 
 function todayYMD() {
   const d = new Date();
@@ -11,118 +11,124 @@ function todayYMD() {
 
 export default function RPEJugador() {
   const [date, setDate] = useState(todayYMD());
-  const [name, setName] = useState("");
-  const [rpe, setRpe] = useState<string>("");
-  const [alreadySent, setAlreadySent] = useState(false);
-  const [sending, setSending] = useState(false);
+  const [userId, setUserId] = useState<string>("");
+  const [name, setName] = useState<string>("");
 
-  useEffect(() => setName(getPlayerName()), []);
+  const [rpe, setRpe] = useState<string>(""); // string para controlar el input
+  const [exists, setExists] = useState(false);
+  const [loading, setLoading] = useState(true);
 
+  // Cargar sesión
   useEffect(() => {
-    async function check() {
-      if (!name) return;
-      const res = await fetch(`/api/metrics/rpe?date=${date}&playerKey=${encodeURIComponent(name)}`, { cache: "no-store" });
-      if (res.ok) {
-        const rows = await res.json();
-        setAlreadySent(Array.isArray(rows) && rows.length > 0);
+    (async () => {
+      const u = await fetchSessionUser();
+      setUserId(u?.id || "");
+      setName((await getPlayerDisplayName()) || "");
+      setLoading(false);
+    })();
+  }, []);
+
+  // Prefill si ya existe RPE de ese día
+  useEffect(() => {
+    if (!userId || !date) return;
+    (async () => {
+      const q = new URLSearchParams({ date, userId });
+      const res = await fetch(`/api/metrics/rpe?${q.toString()}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const rows = await res.json();
+      const row = Array.isArray(rows) ? rows[0] : null;
+      if (row) {
+        setExists(true);
+        setRpe(row.rpe != null ? String(row.rpe) : "");
+      } else {
+        setExists(false);
+        setRpe("");
       }
-    }
-    check();
-  }, [name, date]);
+    })();
+  }, [userId, date]);
 
   async function submit() {
-    if (!name.trim()) {
-      alert("Fijate que arriba diga tu nombre (botón Cambiar nombre).");
+    if (!userId) {
+      alert("Necesitás estar logueado para enviar el RPE.");
       return;
     }
-    setSending(true);
-    const body = { date, playerKey: name.trim(), rpe: Number(rpe || 0) };
+    const num = Number(rpe);
+    if (!Number.isFinite(num) || num < 0 || num > 10) {
+      alert("RPE debe ser un número entre 0 y 10.");
+      return;
+    }
+    const body = {
+      date,
+      userId, // usamos el ID real del usuario
+      rpe: Math.round(num), // nuestro schema usa Int
+    };
     const res = await fetch("/api/metrics/rpe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
       cache: "no-store",
     });
-    setSending(false);
-    if (res.status === 409) {
-      setAlreadySent(true);
-      alert("Ya enviaste RPE hoy");
-      return;
-    }
     if (!res.ok) {
       const t = await res.text();
       alert(t || "Error");
       return;
     }
-    setAlreadySent(true);
-    alert("¡RPE enviado!");
-  }
-
-  function logout() {
-    clearPlayerName();
-    window.location.href = "/jugador";
+    setExists(true);
+    alert(exists ? "¡RPE actualizado!" : "¡RPE enviado!");
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <button onClick={() => history.back()} className="text-sm">
-          &larr; Volver
-        </button>
-        <button onClick={logout} className="text-xs rounded border px-2 py-1 hover:bg-gray-50">
-          Salir
-        </button>
-      </div>
-
+      <a href="/jugador" className="text-sm">
+        &larr; Volver
+      </a>
       <h1 className="text-xl font-bold">RPE post-entrenamiento</h1>
       <p className="text-sm text-gray-600">
         RPE 0–10. La <b>duración</b> la completa el <b>CT</b>.
       </p>
 
-      {alreadySent && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-800 text-sm">
-          Ya enviaste tu RPE para <b>{date}</b>. ¡Gracias!
-        </div>
-      )}
-
       <div className="rounded-2xl border bg-white p-4 space-y-4">
-        <div className="grid md:grid-cols-2 gap-3">
-          <div>
-            <label className="text-[12px] text-gray-500">Fecha</label>
-            <input
-              type="date"
-              className="w-full rounded-md border px-2 py-1.5"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              disabled={alreadySent || sending}
-            />
-          </div>
-          <div>
-            <label className="text-[12px] text-gray-500">Tu nombre</label>
-            <input className="w-full rounded-md border px-2 py-1.5" value={name} disabled />
-          </div>
-          <div>
-            <label className="text-[12px] text-gray-500">RPE (0–10)</label>
-            <input
-              className="w-full rounded-md border px-2 py-1.5"
-              placeholder="Ej: 6"
-              value={rpe}
-              onChange={(e) => setRpe(e.target.value)}
-              inputMode="numeric"
-              disabled={alreadySent || sending}
-            />
-          </div>
-        </div>
+        {loading ? (
+          <div>Cargando…</div>
+        ) : (
+          <>
+            <div className="grid md:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[12px] text-gray-500">Fecha</label>
+                <input
+                  type="date"
+                  className="w-full rounded-md border px-2 py-1.5"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-[12px] text-gray-500">Tu nombre</label>
+                <input className="w-full rounded-md border px-2 py-1.5" value={name} disabled />
+              </div>
+              <div>
+                <label className="text-[12px] text-gray-500">RPE (0–10)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={10}
+                  step={1}
+                  className="w-full rounded-md border px-2 py-1.5"
+                  placeholder="Ej: 6"
+                  value={rpe}
+                  onChange={(e) => setRpe(e.target.value)}
+                />
+              </div>
+            </div>
 
-        <button
-          onClick={submit}
-          disabled={alreadySent || sending}
-          className={`px-3 py-1.5 rounded-xl text-sm ${
-            alreadySent || sending ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
-          }`}
-        >
-          {alreadySent ? "Ya enviado" : sending ? "Enviando…" : "Enviar RPE"}
-        </button>
+            <button
+              onClick={submit}
+              className="px-3 py-1.5 rounded-xl bg-black text-white text-sm hover:opacity-90"
+            >
+              {exists ? "Actualizar RPE" : "Enviar RPE"}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
