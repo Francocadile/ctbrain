@@ -54,7 +54,7 @@ model Session {
   @@index([createdBy])
 }
 
-/* NUEVO: soporte para /api/ct/rivals y /ct/rivales */
+// NUEVO: soporte para /api/ct/rivals y /ct/rivales
 model Rival {
   id        String   @id @default(cuid())
   name      String   @unique
