@@ -35,6 +35,10 @@ model User {
   updatedAt DateTime  @updatedAt
 
   sessions  Session[] @relation("UserSessions")
+
+  // métricas
+  rpeEntries       RPEEntry[]
+  wellnessEntries  WellnessEntry[]
 }
 
 model Session {
@@ -54,11 +58,81 @@ model Session {
   @@index([createdBy])
 }
 
-// NUEVO: soporte para /api/ct/rivals y /ct/rivales
+/* ===== NUEVO: soporte catálogos básicos ===== */
+
 model Rival {
   id        String   @id @default(cuid())
   name      String   @unique
   logoUrl   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Place {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ExerciseKind {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/* ===== NUEVO: métricas ===== */
+
+/**
+ * RPE del jugador (lo carga el jugador; CT agrega duración si hace falta).
+ * load (AU) = rpe * duration
+ * Unicidad por jugador + fecha.
+ */
+model RPEEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date      DateTime
+  rpe       Int      // 0..10 (mod Borg)
+  duration  Int?     // minutos (la setea CT o viene ya cargado)
+  load      Int?     // AU = rpe*duration
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([date])
+  @@index([userId, date])
+}
+
+/**
+ * Wellness diario (1..5 por ítem; horas de sueño opcional).
+ * total = suma de las escalas (no se fuerza por DB, lo calcula el servidor/cliente).
+ * Unicidad por jugador + fecha.
+ */
+model WellnessEntry {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date            DateTime
+
+  sleepQuality    Int      // 1..5
+  sleepHours      Float?   // horas (opcional)
+  fatigue         Int      // 1..5 (5 = enérgico)
+  muscleSoreness  Int      // 1..5 (5 = sin dolor)
+  stress          Int      // 1..5 (5 = bajo)
+  mood            Int      // 1..5 (5 = excelente)
+  comment         String?
+
+  total           Int?     // suma de escalas (puede ser null si preferís calcular on the fly)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([date])
+  @@index([userId, date])
 }
