@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getPlayerName, clearPlayerName } from "@/lib/player";
+import { getPlayerIdentity } from "@/lib/player";
 
 function todayYMD() { return new Date().toISOString().slice(0,10); }
 
@@ -22,6 +22,7 @@ function Select({ value, onChange }: { value: any, onChange: (v:number)=>void })
 export default function WellnessJugador() {
   const [date, setDate] = useState(todayYMD());
   const [name, setName] = useState("");
+
   const [sleepQuality, setSleepQuality] = useState<number | "">("");
   const [sleepHours, setSleepHours] = useState<string>("");
   const [fatigue, setFatigue] = useState<number | "">("");
@@ -32,7 +33,13 @@ export default function WellnessJugador() {
   const [loaded, setLoaded] = useState(false);
   const [sent, setSent] = useState(false);
 
-  useEffect(() => setName(getPlayerName()), []);
+  // Cargar nombre desde la SESIÓN (login)
+  useEffect(() => {
+    (async () => {
+      const id = await getPlayerIdentity(); // name || email
+      setName(id);
+    })();
+  }, []);
 
   // Prefill si ya envió hoy
   useEffect(() => {
@@ -61,7 +68,7 @@ export default function WellnessJugador() {
   }, [date, name]);
 
   async function submit() {
-    if (!name.trim()) { alert("No hay nombre seleccionado."); return; }
+    if (!name.trim()) { alert("Tu sesión no trae nombre/email. Cerrá sesión y volvé a entrar."); return; }
     const body = {
       date,
       playerKey: name.trim(),
@@ -85,12 +92,15 @@ export default function WellnessJugador() {
   }
 
   function signOut() {
-    clearPlayerName();
     location.href = "/jugador";
   }
 
   const partial =
     (Number(sleepQuality||0) + Number(fatigue||0) + Number(soreness||0) + Number(stress||0) + Number(mood||0)) || 0;
+
+  const submitDisabled =
+    !name ||
+    sleepQuality === "" || fatigue === "" || soreness === "" || stress === "" || mood === "";
 
   return (
     <div className="space-y-4">
@@ -109,7 +119,7 @@ export default function WellnessJugador() {
             <input type="date" className="w-full rounded-md border px-2 py-1.5" value={date} onChange={e=>setDate(e.target.value)} />
           </div>
           <div>
-            <label className="text-[12px] text-gray-500">Tu nombre</label>
+            <label className="text-[12px] text-gray-500">Tu nombre (login)</label>
             <input className="w-full rounded-md border px-2 py-1.5" value={name} disabled />
           </div>
 
@@ -155,9 +165,19 @@ export default function WellnessJugador() {
           </div>
         )}
 
-        <button onClick={submit} className="px-3 py-1.5 rounded-xl bg-black text-white text-sm hover:opacity-90">
+        <button
+          onClick={submit}
+          disabled={submitDisabled}
+          className={`px-3 py-1.5 rounded-xl text-sm ${submitDisabled ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
+        >
           {sent ? "Guardar cambios" : "Enviar Wellness"}
         </button>
+
+        {!name && (
+          <div className="text-xs text-red-600 mt-2">
+            No pudimos leer tu nombre/email de la sesión. Cerrá sesión y volvé a iniciar.
+          </div>
+        )}
       </div>
     </div>
   );
