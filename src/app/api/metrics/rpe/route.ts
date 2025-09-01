@@ -44,7 +44,8 @@ export async function GET(req: Request) {
     const qpUserId = searchParams.get("userId") || undefined;
     const playerKey = searchParams.get("playerKey") || undefined;
 
-    let userId = qpUserId;
+    // <-- Fix de tipos: puede ser string | null | undefined
+    let userId: string | null | undefined = qpUserId;
     if (!userId && playerKey) {
       userId = await resolveUserId({ playerKey });
       if (!userId) return NextResponse.json([], { status: 200 });
@@ -96,7 +97,6 @@ export async function POST(req: Request) {
       where: { userId, date: { gte: start, lt: end } },
     });
 
-    // ¿viene duración? si NO, es envío de jugador
     const cameWithDuration =
       b?.duration !== undefined && b?.duration !== null && Number.isFinite(Number(b?.duration));
 
@@ -120,7 +120,6 @@ export async function POST(req: Request) {
       return NextResponse.json(created);
     }
 
-    // actualización (típicamente desde CT)
     if (duration == null) duration = existing.duration ?? null;
     const load = duration != null ? Math.round(rpe * duration) : null;
 
