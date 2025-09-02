@@ -5,20 +5,23 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 function toUTCStart(ymd: string) {
-  const d = new Date(${ymd}T00:00:00.000Z);
+  const d = new Date(`${ymd}T00:00:00.000Z`);
   if (Number.isNaN(d.getTime())) throw new Error("Fecha inválida");
   return d;
 }
+
 function nextUTCDay(d: Date) {
   const n = new Date(d);
   n.setUTCDate(n.getUTCDate() + 1);
   return n;
 }
+
 function cap15(n: any): number {
   const v = Math.floor(Number(n ?? 0));
   if (!Number.isFinite(v)) return 0;
   return Math.max(1, Math.min(5, v));
 }
+
 function asFloat(n: any): number | null {
   const v = Number(n);
   return Number.isFinite(v) ? v : null;
@@ -33,12 +36,17 @@ export async function GET(req: Request) {
     if (date) {
       const start = toUTCStart(date);
       const end = nextUTCDay(start);
+
       const rows = await prisma.wellnessEntry.findMany({
-        where: { date: { gte: start, lt: end }, ...(userId ? { userId } : {}) },
+        where: {
+          date: { gte: start, lt: end },
+          ...(userId ? { userId } : {}),
+        },
         include: { user: { select: { name: true, email: true } } },
         orderBy: [{ date: "desc" }],
       });
-      const mapped = rows.map(r => ({
+
+      const mapped = rows.map((r) => ({
         ...r,
         userName: r.user?.name ?? r.user?.email ?? "—",
       }));
@@ -50,7 +58,8 @@ export async function GET(req: Request) {
       orderBy: [{ date: "desc" }],
       take: 30,
     });
-    const mapped = rows.map(r => ({
+
+    const mapped = rows.map((r) => ({
       ...r,
       userName: r.user?.name ?? r.user?.email ?? "—",
     }));
@@ -63,12 +72,13 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const b = await req.json();
-
     const userId = String(b?.userId || "").trim();
     const dateStr = String(b?.date || "").trim();
+
     if (!userId || !dateStr) {
       return new NextResponse("userId y date requeridos", { status: 400 });
     }
+
     const start = toUTCStart(dateStr);
 
     const sleepQuality = cap15(b?.sleepQuality);
@@ -78,7 +88,6 @@ export async function POST(req: Request) {
     );
     const stress = cap15(b?.stress);
     const mood = cap15(b?.mood);
-
     const sleepHours = asFloat(b?.sleepHours);
     const comment: string | null =
       (b?.comment ?? b?.notes ?? null) !== null
