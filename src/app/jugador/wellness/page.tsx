@@ -1,20 +1,31 @@
 // src/app/jugador/wellness/page.tsx
 "use client";
-
 import { useEffect, useState } from "react";
 import { getPlayerIdentity } from "@/lib/player";
 
-function todayYMD() { return new Date().toISOString().slice(0,10); }
+function todayYMD() {
+  return new Date().toISOString().slice(0, 10);
+}
 
-function Select({ value, onChange }: { value: any, onChange: (v:number)=>void }) {
+function Select({
+  value,
+  onChange,
+}: {
+  value: any;
+  onChange: (v: number) => void;
+}) {
   return (
     <select
       className="w-full rounded-md border px-2 py-1.5"
       value={String(value)}
-      onChange={(e)=> onChange(Number(e.target.value))}
+      onChange={(e) => onChange(Number(e.target.value))}
     >
       <option value="">Elegí…</option>
-      {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+      {[1, 2, 3, 4, 5].map((n) => (
+        <option key={n} value={n}>
+          {n}
+        </option>
+      ))}
     </select>
   );
 }
@@ -22,7 +33,6 @@ function Select({ value, onChange }: { value: any, onChange: (v:number)=>void })
 export default function WellnessJugador() {
   const [date, setDate] = useState(todayYMD());
   const [name, setName] = useState("");
-
   const [sleepQuality, setSleepQuality] = useState<number | "">("");
   const [sleepHours, setSleepHours] = useState<string>("");
   const [fatigue, setFatigue] = useState<number | "">("");
@@ -45,7 +55,7 @@ export default function WellnessJugador() {
   useEffect(() => {
     async function fetchExisting() {
       if (!name) return;
-      const url = /api/metrics/wellness?date=${date}&playerKey=${encodeURIComponent(name)};
+      const url = `/api/metrics/wellness?date=${date}&playerKey=${encodeURIComponent(name)}`;
       const res = await fetch(url, { cache: "no-store" });
       const data = res.ok ? await res.json() : [];
       if (Array.isArray(data) && data.length) {
@@ -59,7 +69,13 @@ export default function WellnessJugador() {
         setNotes(r.comment ?? r.notes ?? "");
         setSent(true);
       } else {
-        setSleepQuality(""); setSleepHours(""); setFatigue(""); setSoreness(""); setStress(""); setMood(""); setNotes("");
+        setSleepQuality("");
+        setSleepHours("");
+        setFatigue("");
+        setSoreness("");
+        setStress("");
+        setMood("");
+        setNotes("");
         setSent(false);
       }
       setLoaded(true);
@@ -68,7 +84,10 @@ export default function WellnessJugador() {
   }, [date, name]);
 
   async function submit() {
-    if (!name.trim()) { alert("Tu sesión no trae nombre/email. Cerrá sesión y volvé a entrar."); return; }
+    if (!name.trim()) {
+      alert("Tu sesión no trae nombre/email. Cerrá sesión y volvé a entrar.");
+      return;
+    }
     const body = {
       date,
       playerKey: name.trim(),
@@ -86,7 +105,10 @@ export default function WellnessJugador() {
       body: JSON.stringify(body),
       cache: "no-store",
     });
-    if (!res.ok) { alert((await res.text()) || "Error"); return; }
+    if (!res.ok) {
+      alert((await res.text()) || "Error");
+      return;
+    }
     setSent(true);
     alert("¡Wellness enviado!");
   }
@@ -96,17 +118,29 @@ export default function WellnessJugador() {
   }
 
   const partial =
-    (Number(sleepQuality||0) + Number(fatigue||0) + Number(soreness||0) + Number(stress||0) + Number(mood||0)) || 0;
+    Number(sleepQuality || 0) +
+      Number(fatigue || 0) +
+      Number(soreness || 0) +
+      Number(stress || 0) +
+      Number(mood || 0) || 0;
 
   const submitDisabled =
     !name ||
-    sleepQuality === "" || fatigue === "" || soreness === "" || stress === "" || mood === "";
+    sleepQuality === "" ||
+    fatigue === "" ||
+    soreness === "" ||
+    stress === "" ||
+    mood === "";
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <button onClick={()=>history.back()} className="text-sm">&larr; Volver</button>
-        <button onClick={signOut} className="text-sm underline">Salir</button>
+        <button onClick={() => history.back()} className="text-sm">
+          &larr; Volver
+        </button>
+        <button onClick={signOut} className="text-sm underline">
+          Salir
+        </button>
       </div>
 
       <h1 className="text-xl font-bold">Wellness diario</h1>
@@ -116,22 +150,30 @@ export default function WellnessJugador() {
         <div className="grid md:grid-cols-2 gap-3">
           <div>
             <label className="text-[12px] text-gray-500">Fecha</label>
-            <input type="date" className="w-full rounded-md border px-2 py-1.5" value={date} onChange={e=>setDate(e.target.value)} />
+            <input
+              type="date"
+              className="w-full rounded-md border px-2 py-1.5"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
           </div>
           <div>
             <label className="text-[12px] text-gray-500">Tu nombre (login)</label>
             <input className="w-full rounded-md border px-2 py-1.5" value={name} disabled />
           </div>
-
           <div>
             <label className="text-[12px] text-gray-500">Calidad de sueño (1–5)</label>
             <Select value={sleepQuality} onChange={setSleepQuality} />
           </div>
           <div>
             <label className="text-[12px] text-gray-500">Horas de sueño</label>
-            <input className="w-full rounded-md border px-2 py-1.5" placeholder="Ej: 7.5" value={sleepHours} onChange={e=>setSleepHours(e.target.value)} />
+            <input
+              className="w-full rounded-md border px-2 py-1.5"
+              placeholder="Ej: 7.5"
+              value={sleepHours}
+              onChange={(e) => setSleepHours(e.target.value)}
+            />
           </div>
-
           <div>
             <label className="text-[12px] text-gray-500">Fatiga (1–5)</label>
             <Select value={fatigue} onChange={setFatigue} />
@@ -148,10 +190,14 @@ export default function WellnessJugador() {
             <label className="text-[12px] text-gray-500">Ánimo (1–5)</label>
             <Select value={mood} onChange={setMood} />
           </div>
-
           <div className="md:col-span-2">
             <label className="text-[12px] text-gray-500">Comentario (opcional)</label>
-            <textarea className="w-full rounded-md border px-2 py-1.5" rows={3} value={notes} onChange={e=>setNotes(e.target.value)} />
+            <textarea
+              className="w-full rounded-md border px-2 py-1.5"
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
           </div>
         </div>
 
@@ -168,7 +214,11 @@ export default function WellnessJugador() {
         <button
           onClick={submit}
           disabled={submitDisabled}
-          className={px-3 py-1.5 rounded-xl text-sm ${submitDisabled ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}}
+          className={`px-3 py-1.5 rounded-xl text-sm ${
+            submitDisabled
+              ? "bg-gray-200 text-gray-500"
+              : "bg-black text-white hover:opacity-90"
+          }`}
         >
           {sent ? "Guardar cambios" : "Enviar Wellness"}
         </button>
