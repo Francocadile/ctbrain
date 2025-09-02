@@ -1,17 +1,17 @@
 // src/app/jugador/rpe/page.tsx
 "use client";
-
 import { useEffect, useState } from "react";
 import { fetchSessionUser, clearPlayerName } from "@/lib/player";
 
-function todayYMD() { return new Date().toISOString().slice(0,10); }
+function todayYMD() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export default function RPEJugador() {
   const [date, setDate] = useState(todayYMD());
   const [userId, setUserId] = useState<string>("");
   const [name, setName] = useState<string>("");
   const [loadingIdentity, setLoadingIdentity] = useState(true);
-
   const [rpe, setRpe] = useState<string>("");
   const [loaded, setLoaded] = useState(false);
   const [sent, setSent] = useState(false);
@@ -29,15 +29,22 @@ export default function RPEJugador() {
         if (alive) setLoadingIdentity(false);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
   // Prefill si ya envió hoy (priorizar userId; si no, playerKey)
   useEffect(() => {
     async function fetchExisting() {
-      if (!userId && !name) { setLoaded(true); return; }
-      const qp = userId ? userId=${encodeURIComponent(userId)} : playerKey=${encodeURIComponent(name)};
-      const url = /api/metrics/rpe?date=${date}&${qp};
+      if (!userId && !name) {
+        setLoaded(true);
+        return;
+      }
+      const qp = userId
+        ? `userId=${encodeURIComponent(userId)}`
+        : `playerKey=${encodeURIComponent(name)}`;
+      const url = `/api/metrics/rpe?date=${date}&${qp}`;
       const res = await fetch(url, { cache: "no-store" });
       const data = res.ok ? await res.json() : [];
       if (Array.isArray(data) && data.length) {
@@ -54,29 +61,31 @@ export default function RPEJugador() {
   }, [date, userId, name]);
 
   async function submit() {
-    if (loadingIdentity) { alert("Cargando identidad…"); return; }
-    if (!userId) { alert("userId y date requeridos"); return; }
-
+    if (loadingIdentity) {
+      alert("Cargando identidad…");
+      return;
+    }
+    if (!userId) {
+      alert("userId y date requeridos");
+      return;
+    }
     const body = {
       date,
-      userId,                // <- requerido por la API
+      userId, // <- requerido por la API
       playerKey: name || null, // compat (por si lo usás en CT)
       rpe: Number(rpe || 0),
     };
-
     const res = await fetch("/api/metrics/rpe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
       cache: "no-store",
     });
-
     if (!res.ok) {
       const msg = await res.text();
       alert(msg || "Error");
       return;
     }
-
     setSent(true);
     alert("¡RPE enviado!");
   }
@@ -91,12 +100,18 @@ export default function RPEJugador() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <button onClick={()=>history.back()} className="text-sm">&larr; Volver</button>
-        <button onClick={signOut} className="text-sm underline">Salir</button>
+        <button onClick={() => history.back()} className="text-sm">
+          &larr; Volver
+        </button>
+        <button onClick={signOut} className="text-sm underline">
+          Salir
+        </button>
       </div>
 
       <h1 className="text-xl font-bold">RPE post-entrenamiento</h1>
-      <p className="text-sm text-gray-600">RPE 0–10. La <b>duración</b> la completa el <b>CT</b>.</p>
+      <p className="text-sm text-gray-600">
+        RPE 0–10. La <b>duración</b> la completa el <b>CT</b>.
+      </p>
 
       <div className="rounded-2xl border bg-white p-4 space-y-4">
         <div className="grid md:grid-cols-2 gap-3">
@@ -106,14 +121,14 @@ export default function RPEJugador() {
               type="date"
               className="w-full rounded-md border px-2 py-1.5"
               value={date}
-              onChange={(e)=>setDate(e.target.value)}
+              onChange={(e) => setDate(e.target.value)}
             />
           </div>
           <div>
             <label className="text-[12px] text-gray-500">Tu nombre</label>
             <input
               className="w-full rounded-md border px-2 py-1.5"
-              value={loadingIdentity ? "Cargando…" : (name || "—")}
+              value={loadingIdentity ? "Cargando…" : name || "—"}
               disabled
             />
           </div>
@@ -123,7 +138,7 @@ export default function RPEJugador() {
               className="w-full md:w-64 rounded-md border px-2 py-1.5"
               placeholder="Ej: 6"
               value={rpe}
-              onChange={(e)=> setRpe(e.target.value)}
+              onChange={(e) => setRpe(e.target.value)}
               inputMode="numeric"
             />
           </div>
@@ -138,9 +153,9 @@ export default function RPEJugador() {
         <button
           onClick={submit}
           disabled={submitDisabled}
-          className={px-3 py-1.5 rounded-xl text-sm ${
+          className={`px-3 py-1.5 rounded-xl text-sm ${
             submitDisabled ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
-          }}
+          }`}
         >
           {sent ? "Guardar cambios" : "Enviar RPE"}
         </button>
