@@ -2,6 +2,8 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 
+export const dynamic = "force-dynamic";
+
 const prisma = new PrismaClient();
 
 function toUTCStart(ymd: string) {
@@ -39,7 +41,6 @@ export async function GET(req: Request) {
     if (date) {
       const start = toUTCStart(date);
       const end = nextUTCDay(start);
-
       const rows = await prisma.rPEEntry.findMany({
         where: {
           date: { gte: start, lt: end },
@@ -48,7 +49,6 @@ export async function GET(req: Request) {
         include: { user: { select: { name: true, email: true } } },
         orderBy: [{ date: "desc" }],
       });
-
       const mapped = rows.map((r) => ({
         ...r,
         userName: r.user?.name ?? r.user?.email ?? "—",
@@ -61,7 +61,6 @@ export async function GET(req: Request) {
       orderBy: [{ date: "desc" }],
       take: 30,
     });
-
     const mapped = rows.map((r) => ({
       ...r,
       userName: r.user?.name ?? r.user?.email ?? "—",
@@ -88,11 +87,9 @@ export async function POST(req: Request) {
     const b = await req.json();
     const userId = String(b?.userId || "").trim();
     const dateStr = String(b?.date || "").trim();
-
     if (!userId || !dateStr) {
       return new NextResponse("userId y date requeridos", { status: 400 });
     }
-
     const start = toUTCStart(dateStr);
     const rpe = clamp010(b?.rpe);
     const duration = b?.duration != null ? Math.max(0, Number(b.duration)) : null;
