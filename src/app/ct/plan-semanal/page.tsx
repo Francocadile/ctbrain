@@ -16,6 +16,15 @@ import { listPlaces, addPlace as apiAddPlace, replacePlaces } from "@/lib/settin
 
 export const dynamic = "force-dynamic";
 
+export default function Page() {
+  // ⚠️ No usar useSearchParams acá. Solo Suspense + hijo.
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-gray-500">Cargando…</div>}>
+      <PlanSemanalInner />
+    </Suspense>
+  );
+}
+
 type TurnKey = "morning" | "afternoon";
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 const META_ROWS = ["LUGAR", "HORA", "VIDEO"] as const;
@@ -90,8 +99,8 @@ function cellKey(dayYmd: string, turn: TurnKey, row: string) {
   return `${dayYmd}::${turn}::${row}`;
 }
 
-export default function PlanSemanalPage() {
-  const qs = useSearchParams();
+function PlanSemanalInner() {
+  const qs = useSearchParams(); // ✅ ahora está dentro de Suspense
   const router = useRouter();
   const hideHeader = qs.get("hideHeader") === "1";
 
@@ -675,102 +684,83 @@ export default function PlanSemanalPage() {
   }
 
   return (
-    <Suspense fallback={<div className="p-4 text-sm text-gray-500">Cargando…</div>}>
-      <div className="p-3 md:p-4 space-y-3">
-        <style jsx>{`[contenteditable][data-placeholder]:empty:before{content:attr(data-placeholder);color:#9ca3af;pointer-events:none;display:block;}`}</style>
+    <div className="p-3 md:p-4 space-y-3">
+      <style jsx>{`[contenteditable][data-placeholder]:empty:before{content:attr(data-placeholder);color:#9ca3af;pointer-events:none;display:block;}`}</style>
 
-        {!hideHeader && (
-          <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-lg md:text-xl font-bold">
-                Plan semanal — Editor en tabla
-              </h1>
-              <p className="text-xs md:text-sm text-gray-500">
-                Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)
-              </p>
-              <p className="mt-1 text-[10px] text-gray-400">
-                Tip: <kbd className="rounded border px-1">Ctrl</kbd>/
-                <kbd className="rounded border px-1">⌘</kbd> +{" "}
-                <kbd className="rounded border px-1">Enter</kbd> para “marcar”
-                una celda sin guardar aún.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={goPrevWeek}
-                className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
-              >
-                ◀ Semana anterior
-              </button>
-              <button
-                onClick={goTodayWeek}
-                className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
-              >
-                Hoy
-              </button>
-              <button
-                onClick={goNextWeek}
-                className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
-              >
-                Semana siguiente ▶
-              </button>
-              <div className="w-px h-6 bg-gray-200 mx-1" />
-              <button
-                onClick={saveAll}
-                disabled={pendingCount === 0 || savingAll}
-                className={`px-3 py-1.5 rounded-xl text-xs ${
-                  pendingCount === 0 || savingAll
-                    ? "bg-gray-200 text-gray-500"
-                    : "bg-black text-white hover:opacity-90"
-                }`}
-                title={
-                  pendingCount ? `${pendingCount} cambio(s) por guardar` : "Sin cambios"
-                }
-              >
-                {savingAll
-                  ? "Guardando..."
-                  : `Guardar cambios${pendingCount ? ` (${pendingCount})` : ""}`}
-              </button>
-              <button
-                onClick={discardAll}
-                disabled={pendingCount === 0 || savingAll}
-                className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
-              >
-                Descartar
-              </button>
-            </div>
-          </header>
-        )}
-
-        {/* Pestañas turno */}
-        <div className="flex items-center gap-2">
-          <button
-            className={`px-3 py-1.5 rounded-xl border text-xs ${
-              activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"
-            }`}
-            onClick={() => setActiveTurn("morning")}
-          >
-            Mañana
-          </button>
-          <button
-            className={`px-3 py-1.5 rounded-xl border text-xs ${
-              activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"
-            }`}
-            onClick={() => setActiveTurn("afternoon")}
-          >
-            Tarde
-          </button>
-        </div>
-
-        {loading ? (
-          <div className="text-gray-500">Cargando semana…</div>
-        ) : (
-          <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
-            {/* Turno activo */}
-            <TurnEditor turn={activeTurn} />
+      {!hideHeader && (
+        <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-lg md:text-xl font-bold">Plan semanal — Editor en tabla</h1>
+            <p className="text-xs md:text-sm text-gray-500">
+              Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)
+            </p>
+            <p className="mt-1 text-[10px] text-gray-400">
+              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/
+              <kbd className="rounded border px-1">⌘</kbd> +{" "}
+              <kbd className="rounded border px-1">Enter</kbd> para “marcar” una celda sin
+              guardar aún.
+            </p>
           </div>
-        )}
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+              ◀ Semana anterior
+            </button>
+            <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+              Hoy
+            </button>
+            <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+              Semana siguiente ▶
+            </button>
+            <div className="w-px h-6 bg-gray-200 mx-1" />
+            <button
+              onClick={saveAll}
+              disabled={pendingCount === 0 || savingAll}
+              className={`px-3 py-1.5 rounded-xl text-xs ${
+                pendingCount === 0 || savingAll ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
+              }`}
+              title={pendingCount ? `${pendingCount} cambio(s) por guardar` : "Sin cambios"}
+            >
+              {savingAll ? "Guardando..." : `Guardar cambios${pendingCount ? ` (${pendingCount})` : ""}`}
+            </button>
+            <button
+              onClick={discardAll}
+              disabled={pendingCount === 0 || savingAll}
+              className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
+            >
+              Descartar
+            </button>
+          </div>
+        </header>
+      )}
+
+      {/* Pestañas turno */}
+      <div className="flex items-center gap-2">
+        <button
+          className={`px-3 py-1.5 rounded-xl border text-xs ${
+            activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"
+          }`}
+          onClick={() => setActiveTurn("morning")}
+        >
+          Mañana
+        </button>
+        <button
+          className={`px-3 py-1.5 rounded-xl border text-xs ${
+            activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"
+          }`}
+          onClick={() => setActiveTurn("afternoon")}
+        >
+          Tarde
+        </button>
       </div>
-    </Suspense>
+
+      {loading ? (
+        <div className="text-gray-500">Cargando semana…</div>
+      ) : (
+        <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
+          {/* Turno activo */}
+          <TurnEditor turn={activeTurn} />
+        </div>
+      )}
+    </div>
   );
 }
