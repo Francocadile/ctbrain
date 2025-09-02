@@ -36,10 +36,8 @@ export default function RPEJugador() {
   useEffect(() => {
     async function fetchExisting() {
       if (!userId && !name) { setLoaded(true); return; }
-      const qp = userId
-        ? `userId=${encodeURIComponent(userId)}`
-        : `playerKey=${encodeURIComponent(name)}`;
-      const url = `/api/metrics/rpe?date=${date}&${qp}`;
+      const qp = userId ? userId=${encodeURIComponent(userId)} : playerKey=${encodeURIComponent(name)};
+      const url = /api/metrics/rpe?date=${date}&${qp};
       const res = await fetch(url, { cache: "no-store" });
       const data = res.ok ? await res.json() : [];
       if (Array.isArray(data) && data.length) {
@@ -140,9 +138,9 @@ export default function RPEJugador() {
         <button
           onClick={submit}
           disabled={submitDisabled}
-          className={`px-3 py-1.5 rounded-xl text-sm ${
+          className={px-3 py-1.5 rounded-xl text-sm ${
             submitDisabled ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
-          }`}
+          }}
         >
           {sent ? "Guardar cambios" : "Enviar RPE"}
         </button>
