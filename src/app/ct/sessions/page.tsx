@@ -6,65 +6,39 @@ import React, { useEffect, useMemo, useState } from "react";
 type Role = "ADMIN" | "CT" | "MEDICO" | "JUGADOR" | "DIRECTIVO";
 type TurnKey = "morning" | "afternoon";
 
-type User = {
-  id: string;
-  name: string | null;
-  email: string | null;
-  role: Role;
-};
-
+type User = { id: string; name: string | null; email: string | null; role: Role; };
 type SessionRow = {
   id: string;
   title: string | null;
   description?: string | null;
   date: string; // ISO
-  createdAt?: string; // ISO
-  updatedAt?: string; // ISO
+  createdAt?: string;
+  updatedAt?: string;
   createdBy?: Pick<User, "id" | "name" | "email"> | null;
   user?: { id: string; name: string | null; email: string | null; role?: string | null } | null;
   type?: string | null;
 };
 
-type GroupItem = {
-  key: string;           // ymd::turn
-  ymd: string;           // YYYY-MM-DD
-  turn: TurnKey;
-  dateISO: string;       // para ordenar
-  name: string;          // viene de [GRID:turn:TITULO]
-  place?: string;        // viene de [GRID:turn:LUGAR]
-};
+type GroupItem = { key: string; ymd: string; turn: TurnKey; dateISO: string; name: string; place?: string; };
 
 function ymdUTCFromISO(iso: string) {
   const d = new Date(iso);
   return d.toISOString().slice(0, 10);
 }
 
-// description esperado:
-// [GRID:morning:<ROW>] | YYYY-MM-DD
-// [DAYFLAG:afternoon]  | YYYY-MM-DD
-const GRID_RE = /^\[(GRID|DAYFLAG):(morning|afternoon)(?::(.+?))?\]\s*\|\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/i;
+const RE = /^\[(GRID|DAYFLAG):(morning|afternoon)(?::(.+?))?\]\s*\|\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/i;
 
-function parseMarker(description: string | null | undefined): {
-  kind?: "GRID" | "DAYFLAG";
-  turn?: TurnKey;
-  row?: string;
-  ymd?: string;
-} {
-  const m = (description || "").match(GRID_RE);
+function parse(description?: string | null) {
+  const m = (description || "").match(RE);
   if (!m) return {};
-  return {
-    kind: m[1] as any,
-    turn: m[2] as TurnKey,
-    row: (m[3] || "").trim(),
-    ymd: m[4],
-  };
+  return { kind: m[1] as "GRID" | "DAYFLAG", turn: m[2] as TurnKey, row: (m[3] || "").trim(), ymd: m[4] };
 }
 
 export default function CTSessionsPage() {
   const [rows, setRows] = useState<SessionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dateFilter, setDateFilter] = useState<string>("");
+  const [dateFilter, setDateFilter] = useState("");
 
   async function fetchAll() {
     try {
@@ -80,17 +54,13 @@ export default function CTSessionsPage() {
       setLoading(false);
     }
   }
-
   useEffect(() => { fetchAll(); }, []);
 
-  // Agrupar por ymd+turn y tomar nombre/lugar desde filas del editor
   const groups: GroupItem[] = useMemo(() => {
     const map = new Map<string, GroupItem>();
-
     for (const s of rows) {
-      const { kind, turn, row, ymd } = parseMarker(s.description);
-      if (!turn || !ymd) continue; // ignoramos filas que no pertenecen a un día/turno
-
+      const { turn, row, ymd } = parse(s.description);
+      if (!turn || !ymd) continue;
       const key = `${ymd}::${turn}`;
       if (!map.has(key)) {
         map.set(key, {
@@ -98,41 +68,31 @@ export default function CTSessionsPage() {
           ymd,
           turn,
           dateISO: new Date(`${ymd}T00:00:00.000Z`).toISOString(),
-          name: "", // lo llenamos si aparece TITULO
+          name: "",
           place: undefined,
         });
       }
       const g = map.get(key)!;
 
-      // Nombre de la sesión (fila TITULO)
-      if (row?.toUpperCase() === "TITULO") {
+      const rowUp = (row || "").toUpperCase();
+      // Nombre de sesión: fila "TITULO" o que empiece con "NOMBRE"
+      if (rowUp === "TITULO" || rowUp.startsWith("NOMBRE")) {
         const t = (s.title || "").trim();
         if (t) g.name = t;
       }
-
-      // Lugar
-      if (row?.toUpperCase() === "LUGAR") {
+      if (rowUp === "LUGAR") {
         const t = (s.title || "").trim();
         if (t) g.place = t;
       }
     }
 
-    // Generar nombre por defecto si no hay TITULO
     let idx = 1;
-    const list = Array.from(map.values())
+    return Array.from(map.values())
       .sort((a, b) => (a.dateISO < b.dateISO ? 1 : -1))
-      .map((g) => ({
-        ...g,
-        name: g.name || `Sesión ${idx++} ${g.turn === "morning" ? "TM" : "TT"}`,
-      }));
-
-    return list;
+      .map((g) => ({ ...g, name: g.name || `Sesión ${idx++} ${g.turn === "morning" ? "TM" : "TT"}` }));
   }, [rows]);
 
-  const visible = useMemo(() => {
-    if (!dateFilter) return groups;
-    return groups.filter((g) => g.ymd === dateFilter);
-  }, [groups, dateFilter]);
+  const visible = useMemo(() => (!dateFilter ? groups : groups.filter((g) => g.ymd === dateFilter)), [groups, dateFilter]);
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -142,30 +102,15 @@ export default function CTSessionsPage() {
           <p className="text-sm text-gray-500">Listado cronológico · “Ver sesión” abre el día/turno</p>
         </div>
         <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className="rounded-lg border px-2 py-1.5 text-sm"
-            placeholder="YYYY-MM-DD"
-            title="Filtrar por fecha"
-          />
-          <button
-            onClick={() => setDateFilter("")}
-            className="text-sm px-3 py-1.5 rounded-lg border hover:bg-gray-50"
-            disabled={!dateFilter}
-            title="Quitar filtro"
-          >
+          <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)}
+                 className="rounded-lg border px-2 py-1.5 text-sm" />
+          <button onClick={() => setDateFilter("")} className="text-sm px-3 py-1.5 rounded-lg border hover:bg-gray-50" disabled={!dateFilter}>
             Limpiar
           </button>
         </div>
       </header>
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
+      {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
       {loading ? (
         <div className="text-sm text-gray-500">Cargando…</div>
