@@ -2,6 +2,8 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 
+export const dynamic = "force-dynamic";
+
 const prisma = new PrismaClient();
 
 function toUTCStart(ymd: string) {
@@ -15,11 +17,9 @@ export async function POST(req: Request) {
     const b = await req.json();
     const date = String(b?.date || "");
     const duration = Math.max(0, Number(b?.duration ?? 0));
-
     if (!date || !duration) {
       return new NextResponse("date y duration requeridos", { status: 400 });
     }
-
     const start = toUTCStart(date);
     const next = new Date(start);
     next.setUTCDate(next.getUTCDate() + 1);
