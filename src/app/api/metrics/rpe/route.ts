@@ -5,15 +5,17 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 function toUTCStart(ymd: string) {
-  const d = new Date(${ymd}T00:00:00.000Z);
+  const d = new Date(`${ymd}T00:00:00.000Z`);
   if (Number.isNaN(d.getTime())) throw new Error("Fecha inválida");
   return d;
 }
+
 function nextUTCDay(d: Date) {
   const n = new Date(d);
   n.setUTCDate(n.getUTCDate() + 1);
   return n;
 }
+
 function clamp010(n: any): number {
   const v = Math.round(Number(n ?? 0));
   if (!Number.isFinite(v)) return 0;
@@ -23,8 +25,8 @@ function clamp010(n: any): number {
 /**
  * GET /api/metrics/rpe
  * Query:
- *  - date=YYYY-MM-DD (opcional) → devuelve entradas de ese día
- *  - userId=... (opcional)
+ * - date=YYYY-MM-DD (opcional) → devuelve entradas de ese día
+ * - userId=... (opcional)
  * Sin date → últimas 30 entradas (global).
  * Devuelve cada fila con userName para CT.
  */
@@ -37,6 +39,7 @@ export async function GET(req: Request) {
     if (date) {
       const start = toUTCStart(date);
       const end = nextUTCDay(start);
+
       const rows = await prisma.rPEEntry.findMany({
         where: {
           date: { gte: start, lt: end },
@@ -45,7 +48,8 @@ export async function GET(req: Request) {
         include: { user: { select: { name: true, email: true } } },
         orderBy: [{ date: "desc" }],
       });
-      const mapped = rows.map(r => ({
+
+      const mapped = rows.map((r) => ({
         ...r,
         userName: r.user?.name ?? r.user?.email ?? "—",
       }));
@@ -57,7 +61,8 @@ export async function GET(req: Request) {
       orderBy: [{ date: "desc" }],
       take: 30,
     });
-    const mapped = rows.map(r => ({
+
+    const mapped = rows.map((r) => ({
       ...r,
       userName: r.user?.name ?? r.user?.email ?? "—",
     }));
@@ -70,12 +75,12 @@ export async function GET(req: Request) {
 /**
  * POST /api/metrics/rpe
  * Body:
- *  {
- *    userId: string,
- *    date: "YYYY-MM-DD",
- *    rpe: 0..10,
- *    duration?: number // opcional (min)
- *  }
+ * {
+ *   userId: string,
+ *   date: "YYYY-MM-DD",
+ *   rpe: 0..10,
+ *   duration?: number // opcional (min)
+ * }
  * Unicidad: (userId, date). Recalcula load si hay duration.
  */
 export async function POST(req: Request) {
@@ -83,9 +88,11 @@ export async function POST(req: Request) {
     const b = await req.json();
     const userId = String(b?.userId || "").trim();
     const dateStr = String(b?.date || "").trim();
+
     if (!userId || !dateStr) {
       return new NextResponse("userId y date requeridos", { status: 400 });
     }
+
     const start = toUTCStart(dateStr);
     const rpe = clamp010(b?.rpe);
     const duration = b?.duration != null ? Math.max(0, Number(b.duration)) : null;
