@@ -1,9 +1,17 @@
 // src/components/HelpTip.tsx
 "use client";
+
 import { useState } from "react";
 
-export default function HelpTip({ text, className = "" }: { text: string; className?: string }) {
+export default function HelpTip({
+  text,
+  className = "",
+}: {
+  text: string;
+  className?: string;
+}) {
   const [open, setOpen] = useState(false);
+
   return (
     <span
       className={`relative inline-flex items-center ${className}`}
