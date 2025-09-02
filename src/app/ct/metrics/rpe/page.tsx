@@ -1,240 +1,225 @@
-// src/app/ct/metrics/rpe/page.tsx
+// src/app/jugador/wellness/page.tsx
+// src/app/jugador/wellness/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import HelpTip from "@/components/HelpTip";
+import { useEffect, useState } from "react";
+import { getPlayerIdentity } from "@/lib/player";
 
-type Row = {
-  id: string;
-  playerKey?: string | null;
-  userName?: string | null;
-  date: string;
-  rpe: number;
-  duration?: number | null;
-  load?: number | null;
-};
+function todayYMD() {
+  return new Date().toISOString().slice(0, 10);
+}
 
-function toYMD(d: Date) { return d.toISOString().slice(0,10); }
+function Select({ value, onChange }: { value: any; onChange: (v: number) => void }) {
+  return (
+    <select
+      className="w-full rounded-md border px-2 py-1.5"
+      value={String(value)}
+      onChange={(e) => onChange(Number(e.target.value))}
+    >
+      <option value="">Elegí…</option>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <option key={n} value={n}>
+          {n}
+        </option>
+      ))}
+    </select>
+  );
+}
 
-export default function RPECT() {
-  const [date, setDate] = useState<string>(toYMD(new Date()));
-  const [rows, setRows] = useState<Row[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState("");
-  const [bulkMin, setBulkMin] = useState<string>("90");
-  const [saving, setSaving] = useState(false);
+export default function WellnessJugador() {
+  const [date, setDate] = useState(todayYMD());
+  const [name, setName] = useState("");
 
-  async function load() {
-    setLoading(true);
-    const res = await fetch(`/api/metrics/rpe?date=${date}`, { cache: "no-store" });
-    const data = res.ok ? await res.json() : [];
-    const fixed = (Array.isArray(data) ? data : []).map((r: any) => ({
-      ...r,
-      userName: r.userName || r.playerKey || r.user?.name || r.user?.email || "Jugador",
-    }));
-    setRows(fixed);
-    setLoading(false);
-  }
+  const [sleepQuality, setSleepQuality] = useState<number | "">("");
+  const [sleepHours, setSleepHours] = useState<string>("");
+  const [fatigue, setFatigue] = useState<number | "">("");
+  const [soreness, setSoreness] = useState<number | "">("");
+  const [stress, setStress] = useState<number | "">("");
+  const [mood, setMood] = useState<number | "">("");
+  const [notes, setNotes] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [sent, setSent] = useState(false);
 
-  useEffect(() => { load(); }, [date]);
+  // Cargar nombre desde la SESIÓN (login)
+  useEffect(() => {
+    (async () => {
+      const id = await getPlayerIdentity(); // name || email
+      setName(id);
+    })();
+  }, []);
 
-  const filtered = useMemo(() => {
-    const t = q.trim().toLowerCase();
-    if (!t) return rows;
-    return rows.filter(r =>
-      (r.userName || "").toLowerCase().includes(t) ||
-      (r.playerKey || "").toLowerCase().includes(t)
-    );
-  }, [rows, q]);
-
-  async function applyDefaultDuration() {
-    const minutes = Math.max(0, Number(bulkMin || 0));
-    if (!minutes) { alert("Ingresá minutos > 0"); return; }
-    setSaving(true);
-    try {
-      const res = await fetch("/api/metrics/rpe/default-duration", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, duration: minutes }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      await load();
-    } catch (e: any) {
-      alert(e?.message || "Error aplicando duración");
-    } finally {
-      setSaving(false);
+  // Prefill si ya envió hoy
+  useEffect(() => {
+    async function fetchExisting() {
+      if (!name) return;
+      const url = /api/metrics/wellness?date=${date}&playerKey=${encodeURIComponent(name)};
+      const res = await fetch(url, { cache: "no-store" });
+      const data = res.ok ? await res.json() : [];
+      if (Array.isArray(data) && data.length) {
+        const r = data[0];
+        setSleepQuality(r.sleepQuality ?? "");
+        setSleepHours(r.sleepHours != null ? String(r.sleepHours) : "");
+        setFatigue(r.fatigue ?? "");
+        setSoreness(r.muscleSoreness ?? r.soreness ?? "");
+        setStress(r.stress ?? "");
+        setMood(r.mood ?? "");
+        setNotes(r.comment ?? r.notes ?? "");
+        setSent(true);
+      } else {
+        setSleepQuality("");
+        setSleepHours("");
+        setFatigue("");
+        setSoreness("");
+        setStress("");
+        setMood("");
+        setNotes("");
+        setSent(false);
+      }
+      setLoaded(true);
     }
+    fetchExisting();
+  }, [date, name]);
+
+  async function submit() {
+    if (!name.trim()) {
+      alert("Tu sesión no trae nombre/email. Cerrá sesión y volvé a entrar.");
+      return;
+    }
+    const body = {
+      date,
+      playerKey: name.trim(),
+      sleepQuality: Number(sleepQuality || 0),
+      sleepHours: sleepHours ? Number(sleepHours) : null,
+      fatigue: Number(fatigue || 0),
+      soreness: Number(soreness || 0),
+      stress: Number(stress || 0),
+      mood: Number(mood || 0),
+      notes: notes.trim() || null,
+    };
+    const res = await fetch("/api/metrics/wellness", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      alert((await res.text()) || "Error");
+      return;
+    }
+    setSent(true);
+    alert("¡Wellness enviado!");
   }
 
-  async function clearDurations() {
-    if (!confirm(`¿Poner en blanco la duración del ${date}?`)) return;
-    setSaving(true);
-    try {
-      const res = await fetch("/api/metrics/rpe/clear-duration", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      await load();
-    } catch (e: any) {
-      alert(e?.message || "Error limpiando duraciones");
-    } finally {
-      setSaving(false);
-    }
+  function signOut() {
+    location.href = "/jugador";
   }
 
-  async function saveOne(row: Row, newMinStr: string) {
-    const minutes = newMinStr === "" ? null : Math.max(0, Number(newMinStr));
-    setSaving(true);
-    try {
-      const res = await fetch("/api/metrics/rpe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: row.id,       // para update directo
-          date,
-          rpe: row.rpe,
-          duration: minutes,
-          playerKey: row.playerKey || row.userName || "Jugador",
-        }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      await load();
-    } catch (e: any) {
-      alert(e?.message || "Error guardando fila");
-    } finally {
-      setSaving(false);
-    }
-  }
+  const partial =
+    (Number(sleepQuality || 0) +
+      Number(fatigue || 0) +
+      Number(soreness || 0) +
+      Number(stress || 0) +
+      Number(mood || 0)) || 0;
+
+  const submitDisabled =
+    !name || sleepQuality === "" || fatigue === "" || soreness === "" || stress === "" || mood === "";
 
   return (
-    <div className="p-4 space-y-4">
-      <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-bold">
-            RPE — Hoy
-            <HelpTip text="RPE 0–10 respondido 30' post-sesión. El CT define la duración; sRPE = RPE×min." />
-          </h1>
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            className="rounded-md border px-2 py-1.5 text-sm"
-            value={date}
-            onChange={(e)=> setDate(e.target.value)}
-          />
-          <button onClick={load} className="rounded-lg border px-2 py-1 text-sm hover:bg-gray-50">Recargar</button>
-        </div>
-      </header>
-
-      {/* Acciones rápidas */}
-      <section className="rounded-xl border bg-white p-3 flex flex-wrap items-center gap-2">
-        <div className="text-sm font-medium mr-2">
-          Acciones:
-          <HelpTip text="“Aplicar a vacíos” asigna X minutos a filas sin duración. “Limpiar” borra las duraciones del día." />
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            className="w-20 rounded-md border px-2 py-1 text-sm"
-            placeholder="min"
-            value={bulkMin}
-            onChange={(e)=> setBulkMin(e.target.value)}
-            inputMode="numeric"
-          />
-          <button
-            onClick={applyDefaultDuration}
-            disabled={saving}
-            className={`rounded-lg px-3 py-1.5 text-xs ${saving ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
-          >
-            Aplicar a vacíos
-          </button>
-        </div>
-        <div className="h-5 w-px bg-gray-300 mx-1" />
-        <button
-          onClick={clearDurations}
-          disabled={saving}
-          className="rounded-lg border px-3 py-1.5 text-xs hover:bg-gray-50"
-        >
-          Limpiar minutos del día
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <button onClick={() => history.back()} className="text-sm">
+          &larr; Volver
         </button>
-        <div className="ml-auto text-xs text-gray-500">
-          sRPE = RPE × minutos
-          <HelpTip text="La AU se recalcula al guardar. Si la duración está vacía, no hay AU." />
-        </div>
-      </section>
-
-      {/* Filtro */}
-      <div className="flex items-center gap-2">
-        <input
-          className="w-full md:w-80 rounded-md border px-2 py-1.5 text-sm"
-          placeholder="Buscar jugador…"
-          value={q}
-          onChange={(e)=> setQ(e.target.value)}
-        />
-        <span className="text-[12px] text-gray-500">{filtered.length} resultado(s)</span>
+        <button onClick={signOut} className="text-sm underline">
+          Salir
+        </button>
       </div>
 
-      {/* Tabla */}
-      <section className="rounded-2xl border bg-white overflow-hidden">
-        <div className="bg-gray-50 px-3 py-2 text-[12px] font-semibold uppercase">Entradas</div>
-        {loading ? (
-          <div className="p-4 text-gray-500">Cargando…</div>
-        ) : filtered.length === 0 ? (
-          <div className="p-4 text-gray-500 italic">Sin datos</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b bg-gray-50">
-                  <th className="text-left px-3 py-2">Jugador</th>
-                  <th className="text-left px-3 py-2">
-                    RPE
-                    <HelpTip text="Esfuerzo percibido (0–10). 0=descanso, 10=máximo." />
-                  </th>
-                  <th className="text-left px-3 py-2">
-                    Duración (min)
-                    <HelpTip text="Minutos de la sesión definidos por el CT. Podés editarlos por fila." />
-                  </th>
-                  <th className="text-left px-3 py-2">
-                    sRPE (AU)
-                    <HelpTip text="RPE × minutos. Se actualiza al guardar cambios." />
-                  </th>
-                  <th className="text-right px-3 py-2">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((r) => (
-                  <tr key={r.id} className="border-b last:border-0">
-                    <td className="px-3 py-2 font-medium">{r.userName || r.playerKey || "Jugador"}</td>
-                    <td className="px-3 py-2">{r.rpe}</td>
-                    <td className="px-3 py-2">
-                      <input
-                        className="w-24 rounded-md border px-2 py-1 text-sm"
-                        defaultValue={r.duration ?? ""}
-                        onBlur={(e)=> saveOne(r, e.currentTarget.value)}
-                        placeholder="min"
-                        inputMode="numeric"
-                      />
-                    </td>
-                    <td className="px-3 py-2">{(r.load ?? null) !== null ? r.load : "—"}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex justify-end">
-                        <button
-                          onClick={()=> saveOne(r, "")}
-                          className="rounded-lg border px-2 py-1 text-[11px] hover:bg-gray-50"
-                        >
-                          Vaciar
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <h1 className="text-xl font-bold">Wellness diario</h1>
+      <p className="text-sm text-gray-600">Escala 1–5. Completá una vez por día.</p>
+
+      <div className="rounded-2xl border bg-white p-4 space-y-4">
+        <div className="grid md:grid-cols-2 gap-3">
+          <div>
+            <label className="text-[12px] text-gray-500">Fecha</label>
+            <input
+              type="date"
+              className="w-full rounded-md border px-2 py-1.5"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="text-[12px] text-gray-500">Tu nombre (login)</label>
+            <input className="w-full rounded-md border px-2 py-1.5" value={name} disabled />
+          </div>
+
+          <div>
+            <label className="text-[12px] text-gray-500">Calidad de sueño (1–5)</label>
+            <Select value={sleepQuality} onChange={setSleepQuality} />
+          </div>
+          <div>
+            <label className="text-[12px] text-gray-500">Horas de sueño</label>
+            <input
+              className="w-full rounded-md border px-2 py-1.5"
+              placeholder="Ej: 7.5"
+              value={sleepHours}
+              onChange={(e) => setSleepHours(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="text-[12px] text-gray-500">Fatiga (1–5)</label>
+            <Select value={fatigue} onChange={setFatigue} />
+          </div>
+          <div>
+            <label className="text-[12px] text-gray-500">Dolor muscular (1–5)</label>
+            <Select value={soreness} onChange={setSoreness} />
+          </div>
+          <div>
+            <label className="text-[12px] text-gray-500">Estrés (1–5)</label>
+            <Select value={stress} onChange={setStress} />
+          </div>
+          <div>
+            <label className="text-[12px] text-gray-500">Ánimo (1–5)</label>
+            <Select value={mood} onChange={setMood} />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="text-[12px] text-gray-500">Comentario (opcional)</label>
+            <textarea
+              className="w-full rounded-md border px-2 py-1.5"
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="text-sm text-gray-600">
+          Puntaje parcial (sin horas): <b>{partial ? partial : "—"}</b>
+        </div>
+
+        {loaded && sent && (
+          <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-1">
+            Ya enviaste tu Wellness hoy. Podés editar y volver a <b>Guardar</b>.
           </div>
         )}
-      </section>
+
+        <button
+          onClick={submit}
+          disabled={submitDisabled}
+          className={px-3 py-1.5 rounded-xl text-sm ${submitDisabled ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}}
+        >
+          {sent ? "Guardar cambios" : "Enviar Wellness"}
+        </button>
+
+        {!name && (
+          <div className="text-xs text-red-600 mt-2">
+            No pudimos leer tu nombre/email de la sesión. Cerrá sesión y volvé a iniciar.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
