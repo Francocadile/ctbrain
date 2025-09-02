@@ -11,16 +11,15 @@ function bad(msg: string, code = 400) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const start = searchParams.get("start"); // YYYY-MM-DD inclusive
-  const end = searchParams.get("end");     // YYYY-MM-DD inclusive
+  const end = searchParams.get("end"); // YYYY-MM-DD inclusive
   const player = searchParams.get("player"); // opcional: nombre o email
 
   if (!start || !end) return bad("Parámetros requeridos: start, end (YYYY-MM-DD)");
 
   try {
     // where sin playerKey (no existe en tu RPEEntry)
-    const where: any = {
-      date: { gte: start, lte: end },
-    };
+    const where: any = { date: { gte: start, lte: end } };
+
     if (player) {
       // filtro por relación user (name/email, case-insensitive)
       where.user = {
@@ -45,9 +44,7 @@ export async function GET(req: NextRequest) {
       const rpe = Number(r.rpe ?? 0);
       const duration = r.duration ?? null;
       const srpe =
-        r.load ??
-        r.srpe ??
-        (duration != null ? rpe * Number(duration) : null);
+        r.load ?? r.srpe ?? (duration != null ? rpe * Number(duration) : null);
 
       return {
         id: r.id,
