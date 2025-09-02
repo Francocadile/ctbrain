@@ -4,6 +4,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 type Role = "ADMIN" | "CT" | "MEDICO" | "JUGADOR" | "DIRECTIVO";
+type TurnKey = "morning" | "afternoon";
 
 type User = {
   id: string;
@@ -23,8 +24,6 @@ type Session = {
   players: User[];
   type?: string | null;
 };
-
-type TurnKey = "morning" | "afternoon";
 
 // ---- helpers -------------------------------------------------------
 function ymdUTCFromISO(iso: string) {
@@ -274,12 +273,16 @@ export default function CTSessionsPage() {
             const byDayHref =
               `/ct/sessions/by-day/${ymd}/${turn}` +
               (row ? `?focus=${encodeURIComponent(row)}` : "");
-            const displayTitle = (s.title || "").trim() || `Sesión ${idx + 1}`;
+
+            // Título visual: si no hay, generamos "Sesión N TM/TT"
+            const hasTitle = (s.title || "").trim().length > 0;
+            const displayTitle = hasTitle
+              ? (s.title || "").trim()
+              : `Sesión ${idx + 1} ${turn === "morning" ? "TM" : "TT"}`;
 
             return (
-              <li key={s.id} className="rounded-xl border p-4 shadow-sm flex items-start justify-between">
+              <li key={s.id} className="rounded-xl border p-3 shadow-sm flex items-start justify-between bg-white">
                 <div>
-                  {/* Título mostrado */}
                   <h3 className="font-semibold text-[15px]">
                     <a href={byDayHref} className="hover:underline" title="Abrir sesión (día/turno)">
                       {displayTitle}
@@ -291,26 +294,15 @@ export default function CTSessionsPage() {
                     <span className="inline-block mr-3">🕑 {turn === "morning" ? "Mañana" : "Tarde"}</span>
                     <span className="inline-block">👤 {s.createdBy?.name || s.createdBy?.email || "CT"}</span>
                   </div>
-
-                  {s.description ? (
-                    <p className="text-sm text-gray-600 mt-2 line-clamp-2">{s.description}</p>
-                  ) : null}
                 </div>
 
                 <div className="flex flex-col items-end gap-2">
                   <a
                     href={byDayHref}
-                    className="text-xs px-3 py-1 rounded-lg border hover:bg-gray-50"
+                    className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
                     title="Ver sesión (día/turno)"
                   >
                     Ver sesión
-                  </a>
-                  <a
-                    href={`/ct/sessions/${s.id}`}
-                    className="text-xs px-3 py-1 rounded-lg border hover:bg-gray-50"
-                    title="Ver detalle por ID"
-                  >
-                    Ver detalle
                   </a>
 
                   <div className="flex gap-2">
@@ -364,7 +356,7 @@ export default function CTSessionsPage() {
                     placeholder="Ej: Sesión 12 · MD-3 · Alta intensidad"
                   />
                   <p className="text-[11px] text-gray-500 mt-1">
-                    Si lo dejás vacío, en el listado se mostrará “Sesión N”.
+                    Si lo dejás vacío, en el listado se mostrará “Sesión N TM/TT”.
                   </p>
                 </div>
 
