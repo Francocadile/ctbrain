@@ -1,3 +1,4 @@
+// src/app/ct/sessions/page.tsx
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -25,24 +26,46 @@ type Session = {
 
 type TurnKey = "morning" | "afternoon";
 
+// ---- helpers -------------------------------------------------------
 function ymdUTCFromISO(iso: string) {
   const d = new Date(iso);
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return d.toISOString().slice(0, 10);
 }
 
-function inferTurn(s: Session): TurnKey {
-  // 1) Intentar por marcador en description: [GRID:turn:...] o [DAYFLAG:turn]
-  const desc = s.description || "";
-  let m = desc.match(/^\[(?:GRID|DAYFLAG):(morning|afternoon)/i);
-  if (m && (m[1] === "morning" || m[1] === "afternoon")) return m[1] as TurnKey;
+/** Intenta leer turno y bloque desde description.
+ *  Soporta:
+ *   [GRID:morning:PRE ENTREN0] | YYYY-MM-DD
+ *   [DAYFLAG:afternoon] | YYYY-MM-DD
+ */
+function parseTurnAndRow(description?: string | null): {
+  turn?: TurnKey;
+  row?: string;
+} {
+  const text = (description || "").trim();
+  if (!text) return {};
 
-  // 2) Fallback por hora UTC (si fue creada con 9:00/15:00 desde el editor)
-  const h = new Date(s.date).getUTCHours();
-  return h >= 12 ? "afternoon" : "morning";
+  let m = text.match(/^\[GRID:(morning|afternoon):(.+?)\]/i);
+  if (m) {
+    return { turn: m[1] as TurnKey, row: (m[2] || "").trim() };
+  }
+
+  m = text.match(/^\[DAYFLAG:(morning|afternoon)\]/i);
+  if (m) {
+    return { turn: m[1] as TurnKey };
+  }
+
+  return {};
 }
+
+/** Si no hay marcador, inferimos por hora UTC:
+ *  < 12 => morning ; >= 12 => afternoon
+ */
+function inferTurnFromISO(iso: string): TurnKey {
+  const h = new Date(iso).getUTCHours();
+  return h < 12 ? "morning" : "afternoon";
+}
+
+// -------------------------------------------------------------------
 
 export default function CTSessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -57,7 +80,6 @@ export default function CTSessionsPage() {
 
   // Form
   const [title, setTitle] = useState("");
-  thead
   const [date, setDate] = useState<string>(() => new Date().toISOString().slice(0, 16));
   const [description, setDescription] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -229,53 +251,68 @@ export default function CTSessionsPage() {
       ) : (
         <ul className="grid md:grid-cols-2 gap-4">
           {sorted.map((s) => {
+            const { turn: parsedTurn, row } = parseTurnAndRow(s.description);
+            const turn = parsedTurn ?? inferTurnFromISO(s.date);
             const ymd = ymdUTCFromISO(s.date);
-            const turn = inferTurn(s);
-            const byDayHref = `/ct/sessions/by-day/${ymd}/${turn}`;
+            const byDayHref =
+              `/ct/sessions/by-day/${ymd}/${turn}` +
+              (row ? `?focus=${encodeURIComponent(row)}` : "");
 
             return (
               <li key={s.id} className="rounded-xl border p-4 shadow-sm">
                 <div className="flex items-start justify-between gap-4">
                   <div>
+                    {/* Título ➜ vista por día/turno */}
                     <h3 className="font-semibold">
-                      <a href={byDayHref} className="hover:underline" title="Ver sesión por día/turno">
+                      <a href={byDayHref} className="hover:underline" title="Abrir sesión por día/turno">
                         {s.title}
                       </a>
                     </h3>
+
                     {s.description ? (
                       <p className="text-sm text-gray-600 mt-1">{s.description}</p>
                     ) : null}
+
                     <div className="text-xs text-gray-500 mt-2">
                       <span className="inline-block mr-3">
                         📅 {new Date(s.date).toLocaleString()}
+                      </span>
+                      <span className="inline-block mr-3">
+                        🕑 Turno: {turn === "morning" ? "Mañana" : "Tarde"}
                       </span>
                       <span className="inline-block">
                         👤 {s.createdBy?.name || s.createdBy?.email || "CT"}
                       </span>
                     </div>
                   </div>
-                  <div className="flex gap-2">
+
+                  <div className="flex flex-col items-end gap-2">
+                    {/* Ver detalle por ID */}
                     <a
                       href={`/ct/sessions/${s.id}`}
                       className="text-xs px-3 py-1 rounded-lg border hover:bg-gray-50"
-                      title="Ver detalle por ID"
+                      title="Ver detalle (ID)"
                     >
                       Ver detalle
                     </a>
-                    <button
-                      onClick={() => openEdit(s)}
-                      className="text-xs px-3 py-1 rounded-lg border hover:bg-gray-50"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => handleDelete(s.id)}
-                      className="text-xs px-3 py-1 rounded-lg border hover:bg-gray-50"
-                    >
-                      Eliminar
-                    </button>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => openEdit(s)}
+                        className="text-xs px-3 py-1 rounded-lg border hover:bg-gray-50"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => handleDelete(s.id)}
+                        className="text-xs px-3 py-1 rounded-lg border hover:bg-gray-50"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
                   </div>
                 </div>
+
                 {s.players?.length ? (
                   <div className="mt-3">
                     <div className="text-xs font-medium mb-1">Jugadores asignados</div>
@@ -330,9 +367,7 @@ export default function CTSessionsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Fecha y hora
-                  </label>
+                  <label className="block text-sm font-medium mb-1">Fecha y hora</label>
                   <input
                     type="datetime-local"
                     value={date}
@@ -342,9 +377,7 @@ export default function CTSessionsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Descripción (opcional)
-                  </label>
+                  <label className="block text-sm font-medium mb-1">Descripción (opcional)</label>
                   <textarea
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
