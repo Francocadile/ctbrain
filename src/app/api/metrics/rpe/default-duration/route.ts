@@ -5,7 +5,7 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 function toUTCStart(ymd: string) {
-  const d = new Date(${ymd}T00:00:00.000Z);
+  const d = new Date(`${ymd}T00:00:00.000Z`);
   if (Number.isNaN(d.getTime())) throw new Error("Fecha inválida");
   return d;
 }
@@ -15,6 +15,7 @@ export async function POST(req: Request) {
     const b = await req.json();
     const date = String(b?.date || "");
     const duration = Math.max(0, Number(b?.duration ?? 0));
+
     if (!date || !duration) {
       return new NextResponse("date y duration requeridos", { status: 400 });
     }
