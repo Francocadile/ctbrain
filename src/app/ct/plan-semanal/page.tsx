@@ -28,19 +28,19 @@ type TurnKey = "morning" | "afternoon";
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 const META_ROWS = ["LUGAR", "HORA", "VIDEO"] as const;
 
-/* ====== Etiquetas por día/turno ====== */
+// ---------- TAGS ----------
 type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
 type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string };
 
-const DAYFLAG_TAG = "DAYFLAG"; // [DAYFLAG:<turn>] | YYYY-MM-DD  — título: PARTIDO|rival|logo  | LIBRE | ""
-const DAYNAME_TAG = "DAYNAME"; // [DAYNAME:<turn>] | YYYY-MM-DD  — título: <Nombre de la sesión>
+const DAYFLAG_TAG = "DAYFLAG";   // description: [DAYFLAG:<turn>] | YYYY-MM-DD  -> title = "PARTIDO|rival|logo" | "LIBRE" | ""
+const DAYNAME_TAG = "DAYNAME";   // description: [DAYNAME:<turn>] | YYYY-MM-DD  -> title = "<nombre de sesión>"
 
-function tagMarker(tag: string, turn: TurnKey) {
-  return `[${tag}:${turn}]`;
-}
+function marker(tag: string, turn: TurnKey) { return `[${tag}:${turn}]`; }
 function isTag(s: SessionDTO, tag: string, turn: TurnKey) {
-  return typeof s.description === "string" && s.description.startsWith(tagMarker(tag, turn));
+  return typeof s.description === "string" && s.description.startsWith(marker(tag, turn));
 }
+function isDayFlag(s: SessionDTO, turn: TurnKey) { return isTag(s, DAYFLAG_TAG, turn); }
+function isDayName(s: SessionDTO, turn: TurnKey) { return isTag(s, DAYNAME_TAG, turn); }
 
 function parseDayFlagTitle(title: string | null | undefined): DayFlag {
   const t = (title || "").trim();
@@ -56,7 +56,6 @@ function buildDayFlagTitle(df: DayFlag): string {
   return "";
 }
 
-/* ====== fechas ====== */
 function addDaysUTC(date: Date, days: number) {
   const x = new Date(date);
   x.setUTCDate(x.getUTCDate() + days);
@@ -64,15 +63,19 @@ function addDaysUTC(date: Date, days: number) {
 }
 function humanDayUTC(ymd: string) {
   const d = new Date(`${ymd}T00:00:00.000Z`);
-  return d.toLocaleDateString(undefined, { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" });
+  return d.toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "UTC",
+  });
 }
 function computeISOForSlot(dayYmd: string, turn: TurnKey) {
   const base = new Date(`${dayYmd}T00:00:00.000Z`);
-  base.setUTCHours(turn === "morning" ? 9 : 15, 0, 0, 0);
+  const h = turn === "morning" ? 9 : 15;
+  base.setUTCHours(h, 0, 0, 0);
   return base.toISOString();
 }
-
-/* ====== grid ====== */
 function cellMarker(turn: TurnKey, row: string) { return `[GRID:${turn}:${row}]`; }
 function isCellOf(s: SessionDTO, turn: TurnKey, row: string) {
   return typeof s.description === "string" && s.description.startsWith(cellMarker(turn, row));
@@ -84,8 +87,11 @@ function parseVideoValue(v: string | null | undefined): { label: string; url: st
   return { label: label || "", url: url || "" };
 }
 function joinVideoValue(label: string, url: string) {
-  const l = (label || "").trim(); const u = (url || "").trim();
-  if (!l && !u) return ""; if (!l && u) return u; return `${l}|${u}`;
+  const l = (label || "").trim();
+  const u = (url || "").trim();
+  if (!l && !u) return "";
+  if (!l && u) return u;
+  return `${l}|${u}`;
 }
 function cellKey(dayYmd: string, turn: TurnKey, row: string) {
   return `${dayYmd}::${turn}::${row}`;
@@ -115,7 +121,7 @@ function PlanSemanalInner() {
   const [places, setPlaces] = useState<string[]>([]);
   useEffect(() => { (async () => setPlaces(await listPlaces()))(); }, []);
 
-  // cambios pendientes (bloques/meta)
+  // Cambios pendientes (solo celdas GRID/LUGAR/HORA/VIDEO)
   const [pending, setPending] = useState<Record<string, string>>({});
   const [videoEditing, setVideoEditing] = useState<Record<string, boolean>>({});
   const [savingAll, setSavingAll] = useState(false);
@@ -124,7 +130,8 @@ function PlanSemanalInner() {
     setLoading(true);
     try {
       const monday = getMonday(d);
-      const res = await getSessionsWeek({ start: toYYYYMMDDUTC(monday) });
+      const startYYYYMMDD = toYYYYMMDDUTC(monday);
+      const res = await getSessionsWeek({ start: startYYYYMMDD });
       setDaysMap(res.days);
       setWeekStart(res.weekStart);
       setWeekEnd(res.weekEnd);
@@ -137,14 +144,15 @@ function PlanSemanalInner() {
       setLoading(false);
     }
   }
-  useEffect(() => { loadWeek(base); /* eslint-disable-line */ }, [base]);
+  useEffect(() => { loadWeek(base); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [base]);
 
   function confirmDiscardIfNeeded(action: () => void) {
     if (Object.keys(pending).length === 0) return action();
-    if (confirm("Tenés cambios sin guardar. ¿Descartarlos?")) action();
+    const ok = confirm("Tenés cambios sin guardar. ¿Descartarlos?");
+    if (ok) action();
   }
-  const goPrevWeek = () => confirmDiscardIfNeeded(() => setBase((d) => addDaysUTC(d, -7)));
-  const goNextWeek = () => confirmDiscardIfNeeded(() => setBase((d) => addDaysUTC(d, 7)));
+  const goPrevWeek  = () => confirmDiscardIfNeeded(() => setBase((d) => addDaysUTC(d, -7)));
+  const goNextWeek  = () => confirmDiscardIfNeeded(() => setBase((d) => addDaysUTC(d, +7)));
   const goTodayWeek = () => confirmDiscardIfNeeded(() => setBase(getMonday(new Date())));
 
   const orderedDays = useMemo(() => {
@@ -153,82 +161,53 @@ function PlanSemanalInner() {
     return Array.from({ length: 7 }).map((_, i) => toYYYYMMDDUTC(addDaysUTC(start, i)));
   }, [weekStart]);
 
-  function findCell(dayYmd: string, turn: TurnKey, row: string) {
-    return (daysMap[dayYmd] || []).find((s) => isCellOf(s, turn, row));
+  // ------- helpers de búsqueda -------
+  function findCell(dayYmd: string, turn: TurnKey, row: string): SessionDTO | undefined {
+    const list = daysMap[dayYmd] || [];
+    return list.find((s) => isCellOf(s, turn, row));
   }
-  function findByTag(dayYmd: string, tag: string, turn: TurnKey) {
-    return (daysMap[dayYmd] || []).find((s) => isTag(s, tag, turn));
+  function findDayFlagSession(dayYmd: string, turn: TurnKey): SessionDTO | undefined {
+    const list = daysMap[dayYmd] || [];
+    return list.find((s) => isDayFlag(s, turn));
   }
-
-  /* ====== helpers de update optimista para tags ====== */
-  function upsertTagLocal(dayYmd: string, turn: TurnKey, tag: "DAYFLAG" | "DAYNAME", title: string) {
-    setDaysMap((prev) => {
-      const list = [...(prev[dayYmd] || [])];
-      const idx = list.findIndex((s) => isTag(s, tag, turn));
-      if (!title) {
-        if (idx >= 0) list.splice(idx, 1); // borrar
-      } else {
-        const baseItem: SessionDTO = {
-          id: idx >= 0 ? list[idx].id : `tmp-${tag}-${turn}-${dayYmd}`,
-          title,
-          description: `${tagMarker(tag, turn)} | ${dayYmd}`,
-          date: computeISOForSlot(dayYmd, turn),
-          type: "GENERAL",
-        };
-        if (idx >= 0) list[idx] = { ...list[idx], ...baseItem };
-        else list.push(baseItem);
-      }
-      return { ...prev, [dayYmd]: list };
-    });
+  function findDayNameSession(dayYmd: string, turn: TurnKey): SessionDTO | undefined {
+    const list = daysMap[dayYmd] || [];
+    return list.find((s) => isDayName(s, turn));
   }
 
-  /* ====== TIPO (DayFlag) ====== */
   function getDayFlag(dayYmd: string, turn: TurnKey): DayFlag {
-    const s = findByTag(dayYmd, DAYFLAG_TAG, turn);
+    const s = findDayFlagSession(dayYmd, turn);
     return parseDayFlagTitle(s?.title ?? "");
   }
-
   async function setDayFlag(dayYmd: string, turn: TurnKey, df: DayFlag) {
-    const existing = findByTag(dayYmd, DAYFLAG_TAG, turn);
+    const existing = findDayFlagSession(dayYmd, turn);
     const iso = computeISOForSlot(dayYmd, turn);
-    const desc = `${tagMarker(DAYFLAG_TAG, turn)} | ${dayYmd}`;
+    const desc = `${marker(DAYFLAG_TAG, turn)} | ${dayYmd}`;
     const title = buildDayFlagTitle(df);
-
-    // 🔄 optimista primero
-    upsertTagLocal(dayYmd, turn, "DAYFLAG", title);
-
     try {
-      if (!title) {
+      if (df.kind === "NONE") {
         if (existing) await deleteSession(existing.id);
       } else if (!existing) {
         await createSession({ title, description: desc, date: iso, type: "GENERAL" });
       } else {
         await updateSession(existing.id, { title, description: desc, date: iso });
       }
-      // no recargo la semana; el estado ya quedó consistente
-    } catch (e) {
-      console.error(e);
-      alert("No se pudo actualizar el Tipo. Reintentá.");
-      // fallback a recargar si falló
       await loadWeek(base);
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message || "No se pudo actualizar el tipo de día");
     }
   }
 
-  /* ====== NOMBRE DE SESIÓN (DayName) ====== */
   function getDayName(dayYmd: string, turn: TurnKey): string {
-    const s = findByTag(dayYmd, DAYNAME_TAG, turn);
+    const s = findDayNameSession(dayYmd, turn);
     return (s?.title || "").trim();
   }
-
   async function setDayName(dayYmd: string, turn: TurnKey, name: string) {
-    const title = (name || "").trim();
-    const existing = findByTag(dayYmd, DAYNAME_TAG, turn);
+    const existing = findDayNameSession(dayYmd, turn);
     const iso = computeISOForSlot(dayYmd, turn);
-    const desc = `${tagMarker(DAYNAME_TAG, turn)} | ${dayYmd}`;
-
-    // 🔄 optimista
-    upsertTagLocal(dayYmd, turn, "DAYNAME", title);
-
+    const desc = `${marker(DAYNAME_TAG, turn)} | ${dayYmd}`;
+    const title = (name || "").trim();
     try {
       if (!title) {
         if (existing) await deleteSession(existing.id);
@@ -237,14 +216,13 @@ function PlanSemanalInner() {
       } else {
         await updateSession(existing.id, { title, description: desc, date: iso });
       }
-    } catch (e) {
-      console.error(e);
-      alert("No se pudo guardar el nombre de sesión. Reintentá.");
       await loadWeek(base);
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message || "No se pudo actualizar el nombre de la sesión");
     }
   }
 
-  /* ====== staging de celdas (bloques/meta) ====== */
   function stageCell(dayYmd: string, turn: TurnKey, row: string, text: string) {
     const k = cellKey(dayYmd, turn, row);
     setPending((prev) => {
@@ -257,6 +235,13 @@ function PlanSemanalInner() {
     });
   }
 
+  function forceCommitActiveField() {
+    if (typeof document !== "undefined") {
+      const el = document.activeElement as HTMLElement | null;
+      el?.blur?.();
+    }
+  }
+
   async function saveAll() {
     const entries = Object.entries(pending);
     if (entries.length === 0) return;
@@ -266,7 +251,7 @@ function PlanSemanalInner() {
         const [dayYmd, turn, row] = k.split("::") as [string, TurnKey, string];
         const existing = findCell(dayYmd, turn, row);
         const iso = computeISOForSlot(dayYmd, turn);
-        const markerStr = cellMarker(turn, row);
+        const m = cellMarker(turn, row);
         const text = (value ?? "").trim();
 
         if (!text) {
@@ -274,19 +259,19 @@ function PlanSemanalInner() {
           continue;
         }
         if (!existing) {
-          await createSession({ title: text, description: `${markerStr} | ${dayYmd}`, date: iso, type: "GENERAL" });
+          await createSession({ title: text, description: `${m} | ${dayYmd}`, date: iso, type: "GENERAL" });
         } else {
           await updateSession(existing.id, {
             title: text,
-            description: existing.description?.startsWith(markerStr) ? existing.description : `${markerStr} | ${dayYmd}`,
+            description: existing.description?.startsWith(m) ? existing.description : `${m} | ${dayYmd}`,
             date: iso,
           });
         }
       }
       await loadWeek(base);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Error al guardar cambios");
+      alert(e?.message || "Error al guardar cambios");
     } finally {
       setSavingAll(false);
     }
@@ -294,16 +279,20 @@ function PlanSemanalInner() {
 
   function discardAll() {
     if (Object.keys(pending).length === 0) return;
-    if (!confirm("¿Descartar todos los cambios sin guardar?")) return;
+    const ok = confirm("¿Descartar todos los cambios sin guardar?");
+    if (!ok) return;
     setPending({});
     setVideoEditing({});
     loadWeek(base);
   }
 
-  /* ====== gestión de lugares ====== */
+  // ===== Lugares (gestión definitiva) =====
   function managePlaces() {
     (async () => {
-      const edited = prompt("Gestionar lugares (una línea por lugar):", places.join("\n"));
+      const edited = prompt(
+        "Gestionar lugares (una línea por lugar). Borrá líneas para eliminar, editá para renombrar:",
+        places.join("\n")
+      );
       if (edited === null) return;
       const list = edited.split("\n").map((s) => s.trim()).filter(Boolean);
       const unique = await replacePlaces(list);
@@ -311,11 +300,12 @@ function PlanSemanalInner() {
     })();
   }
 
-  /* ====== MetaInput (LUGAR/HORA/VIDEO) ====== */
-  function MetaInput({ dayYmd, turn, row }: { dayYmd: string; turn: TurnKey; row: (typeof META_ROWS)[number] }) {
+  // =======================
+  // MetaInput (LUGAR/HORA/VIDEO)
+  // =======================
+  function MetaInput({ dayYmd, turn, row }: { dayYmd: string; turn: TurnKey; row: (typeof META_ROWS)[number]; }) {
     const existing = findCell(dayYmd, turn, row);
     const original = (existing?.title ?? "").trim();
-
     const k = cellKey(dayYmd, turn, row);
     const pendingValue = pending[k];
     const value = pendingValue !== undefined ? pendingValue : original;
@@ -326,9 +316,11 @@ function PlanSemanalInner() {
 
       const addPlace = () => {
         (async () => {
-          const n = prompt("Nuevo lugar:"); if (!n) return;
+          const n = prompt("Nuevo lugar:");
+          if (!n) return;
           const updated = await apiAddPlace(n);
-          setLocalPlaces(updated); setPlaces(updated);
+          setLocalPlaces(updated);
+          setPlaces(updated);
           stageCell(dayYmd, turn, row, n.trim());
         })();
       };
@@ -356,7 +348,14 @@ function PlanSemanalInner() {
 
     if (row === "HORA") {
       const hhmm = /^[0-9]{2}:[0-9]{2}$/.test(value || "") ? value : "";
-      return <input type="time" className="h-8 w-full rounded-md border px-2 text-xs" value={hhmm} onChange={(e) => stageCell(dayYmd, turn, row, e.target.value)} />;
+      return (
+        <input
+          type="time"
+          className="h-8 w-full rounded-md border px-2 text-xs"
+          value={hhmm}
+          onChange={(e) => stageCell(dayYmd, turn, row, e.target.value)}
+        />
+      );
     }
 
     const parsed = parseVideoValue(value || "");
@@ -364,7 +363,11 @@ function PlanSemanalInner() {
     const [localLabel, setLocalLabel] = useState(parsed.label);
     const [localUrl, setLocalUrl] = useState(parsed.url);
 
-    useEffect(() => { setLocalLabel(parsed.label); setLocalUrl(parsed.url); /* eslint-disable-next-line */ }, [k, isEditing]);
+    useEffect(() => {
+      setLocalLabel(parsed.label);
+      setLocalUrl(parsed.url);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [k, isEditing]);
 
     if (!isEditing && (parsed.label || parsed.url)) {
       return (
@@ -377,8 +380,12 @@ function PlanSemanalInner() {
             <span className="text-[12px] text-gray-500 truncate">{parsed.label}</span>
           )}
           <div className="flex items-center gap-1">
-            <button type="button" className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50" onClick={() => setVideoEditing((m) => ({ ...m, [k]: true }))}>✏️</button>
-            <button type="button" className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50" onClick={() => stageCell(dayYmd, turn, row, "")}>❌</button>
+            <button type="button" className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50" onClick={() => setVideoEditing((m) => ({ ...m, [k]: true }))}>
+              ✏️
+            </button>
+            <button type="button" className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50" onClick={() => stageCell(dayYmd, turn, row, "")}>
+              ❌
+            </button>
           </div>
         </div>
       );
@@ -386,17 +393,37 @@ function PlanSemanalInner() {
 
     return (
       <div className="flex items-center gap-1.5">
-        <input className="h-8 w-[45%] rounded-md border px-2 text-xs" placeholder="Título" value={localLabel} onChange={(e) => setLocalLabel(e.target.value)} />
-        <input type="url" className="h-8 w-[55%] rounded-md border px-2 text-xs" placeholder="https://…" value={localUrl} onChange={(e) => setLocalUrl(e.target.value)} />
-        <button type="button" className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50"
-          onClick={() => { stageCell(dayYmd, turn, row, joinVideoValue(localLabel, localUrl)); setVideoEditing((m) => ({ ...m, [k]: false })); }}>
+        <input
+          className="h-8 w-[45%] rounded-md border px-2 text-xs"
+          placeholder="Título"
+          value={localLabel}
+          onChange={(e) => setLocalLabel(e.target.value)}
+        />
+        <input
+          type="url"
+          className="h-8 w-[55%] rounded-md border px-2 text-xs"
+          placeholder="https://…"
+          value={localUrl}
+          onChange={(e) => setLocalUrl(e.target.value)}
+        />
+        <button
+          type="button"
+          className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50"
+          onClick={() => {
+            stageCell(dayYmd, turn, row, joinVideoValue(localLabel, localUrl));
+            setVideoEditing((m) => ({ ...m, [k]: false }));
+          }}
+          title="Listo"
+        >
           ✓
         </button>
       </div>
     );
   }
 
-  /* ====== Celda de bloques ====== */
+  // =======================
+  // Celda de contenido GRID
+  // =======================
   function EditableCell({ dayYmd, turn, row }: { dayYmd: string; turn: TurnKey; row: string; }) {
     const existing = findCell(dayYmd, turn, row);
     const ref = useRef<HTMLDivElement | null>(null);
@@ -404,27 +431,48 @@ function PlanSemanalInner() {
     const staged = pending[k];
     const initialText = staged !== undefined ? staged : existing?.title ?? "";
 
-    const onBlur = () => stageCell(dayYmd, turn, row, ref.current?.innerText ?? "");
-    const onKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); onBlur(); }
+    const onBlur = () => {
+      const txt = ref.current?.innerText ?? "";
+      stageCell(dayYmd, turn, row, txt);
     };
+    const onKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        const txt = ref.current?.innerText ?? "";
+        stageCell(dayYmd, turn, row, txt);
+      }
+    };
+
+    const sessionHref = existing?.id ? `/ct/sessions/${existing.id}` : "";
 
     const flag = getDayFlag(dayYmd, turn);
     const flagBadge =
-      flag.kind === "LIBRE" ? <span className="text-[10px] bg-gray-100 border px-1.5 py-0.5 rounded">DÍA LIBRE</span>
-      : flag.kind === "PARTIDO" ? <span className="text-[10px] bg-amber-100 border px-1.5 py-0.5 rounded">PARTIDO {flag.rival ? `vs ${flag.rival}` : ""}</span>
-      : null;
+      flag.kind === "LIBRE" ? (
+        <span className="text-[10px] bg-gray-100 border px-1.5 py-0.5 rounded">DÍA LIBRE</span>
+      ) : flag.kind === "PARTIDO" ? (
+        <span className="text-[10px] bg-amber-100 border px-1.5 py-0.5 rounded">PARTIDO {flag.rival ? `vs ${flag.rival}` : ""}</span>
+      ) : null;
 
     return (
       <div className="space-y-1">
-        <div className="flex items-center justify-between"><div>{flagBadge}</div></div>
+        <div className="flex items-center justify-between">
+          <div>{flagBadge}</div>
+          {sessionHref ? (
+            <a href={sessionHref} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50" title="Editar ejercicio">
+              Editar ejercicio
+            </a>
+          ) : null}
+        </div>
+
         <div
           ref={ref}
           contentEditable
           suppressContentEditableWarning
           onBlur={onBlur}
           onKeyDown={onKeyDown}
-          className={`min-h-[90px] w-full rounded-xl border p-2 text-[13px] leading-5 outline-none focus:ring-2 ${staged !== undefined ? "border-emerald-400 ring-emerald-200" : "focus:ring-emerald-400"} whitespace-pre-wrap`}
+          className={`min-h[90px] w-full rounded-xl border p-2 text-[13px] leading-5 outline-none focus:ring-2 ${
+            staged !== undefined ? "border-emerald-400 ring-emerald-200" : "focus:ring-emerald-400"
+          } whitespace-pre-wrap`}
           data-placeholder="Escribir…"
           dangerouslySetInnerHTML={{ __html: (initialText || "").replace(/\n/g, "<br/>") }}
         />
@@ -432,79 +480,124 @@ function PlanSemanalInner() {
     );
   }
 
-  const pendingCount = Object.keys(pending).length;
+  // =======================
+  // Tipo de día (Normal/Partido/Libre)
+  // =======================
+  function DayFlagCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
+    const df = getDayFlag(ymd, turn);
+    const [kind, setKind] = useState<DayFlagKind>(df.kind);
+    const [rival, setRival] = useState(df.rival || "");
+    const [logo, setLogo] = useState(df.logoUrl || "");
 
-  /* ====== Fila: Tipo (Normal/Partido/Libre) ====== */
+    // Mantener sincronizado si cambia desde servidor (incluye DOMINGO)
+    useEffect(() => {
+      setKind(df.kind);
+      setRival(df.rival || "");
+      setLogo(df.logoUrl || "");
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [df.kind, df.rival, df.logoUrl, ymd, turn]);
+
+    return (
+      <div className="p-1" key={`${ymd}-${turn}-flag`}>
+        <div className="flex items-center gap-1">
+          <select
+            className="h-7 w-[110px] rounded-md border px-1.5 text-[11px]"
+            value={kind}
+            onChange={async (e) => {
+              const k = e.target.value as DayFlagKind;
+              setKind(k);
+              if (k === "NONE") await setDayFlag(ymd, turn, { kind: "NONE" });
+              if (k === "LIBRE") await setDayFlag(ymd, turn, { kind: "LIBRE" });
+              if (k === "PARTIDO") await setDayFlag(ymd, turn, { kind: "PARTIDO", rival, logoUrl: logo });
+            }}
+          >
+            <option value="NONE">Normal</option>
+            <option value="PARTIDO">Partido</option>
+            <option value="LIBRE">Libre</option>
+          </select>
+
+          {kind === "PARTIDO" && (
+            <>
+              <input
+                className="h-7 flex-1 rounded-md border px-2 text-[11px]"
+                placeholder="Rival"
+                value={rival}
+                onChange={(e) => setRival(e.target.value)}
+                onBlur={() => setDayFlag(ymd, turn, { kind: "PARTIDO", rival, logoUrl: logo })}
+              />
+              <input
+                className="h-7 w-[120px] rounded-md border px-2 text-[11px]"
+                placeholder="Logo URL"
+                value={logo}
+                onChange={(e) => setLogo(e.target.value)}
+                onBlur={() => setDayFlag(ymd, turn, { kind: "PARTIDO", rival, logoUrl: logo })}
+              />
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   function DayStatusRow({ turn }: { turn: TurnKey }) {
     return (
-      <div className="grid items-center border-b bg-gray-50/60" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+      <div
+        className="grid items-center border-b bg-gray-50/60"
+        style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
+      >
         <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Tipo</div>
-        {orderedDays.map((ymd) => {
-          const df = getDayFlag(ymd, turn);
-          const rivalRef = useRef<HTMLInputElement | null>(null);
-          const logoRef  = useRef<HTMLInputElement | null>(null);
-
-          const save = (nextKind: DayFlagKind) => {
-            const payload: DayFlag = { kind: nextKind };
-            if (nextKind === "PARTIDO") {
-              payload.rival = rivalRef.current?.value || "";
-              payload.logoUrl = logoRef.current?.value || "";
-            }
-            setDayFlag(ymd, turn, payload);
-          };
-
-          return (
-            <div key={`${ymd}-${turn}-tipo`} className="p-1">
-              <div className="flex items-center gap-1">
-                <select className="h-7 w-[110px] rounded-md border px-1.5 text-[11px]" value={df.kind} onChange={(e) => save(e.target.value as DayFlagKind)}>
-                  <option value="NONE">Normal</option>
-                  <option value="PARTIDO">Partido</option>
-                  <option value="LIBRE">Libre</option>
-                </select>
-                {df.kind === "PARTIDO" && (
-                  <>
-                    <input key={`${ymd}-rv`} ref={rivalRef} defaultValue={df.rival || ""} className="h-7 flex-1 rounded-md border px-2 text-[11px]" placeholder="Rival" onBlur={() => save("PARTIDO")} />
-                    <input key={`${ymd}-lg`} ref={logoRef}  defaultValue={df.logoUrl || ""} className="h-7 w-[120px] rounded-md border px-2 text-[11px]" placeholder="Logo URL" onBlur={() => save("PARTIDO")} />
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
+        {orderedDays.map((ymd) => <DayFlagCell key={`${ymd}-${turn}-c`} ymd={ymd} turn={turn} />)}
       </div>
     );
   }
 
-  /* ====== Fila: Nombre de la sesión ====== */
+  // =======================
+  // Nombre de sesión
+  // =======================
+  function DayNameCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
+    const initial = getDayName(ymd, turn);
+    const [text, setText] = useState(initial);
+
+    useEffect(() => { setText(initial); /* keep in sync */ }, [initial, ymd, turn]);
+
+    const commit = async () => { await setDayName(ymd, turn, text); };
+
+    const onKeyDown: React.KeyboardEventHandler<HTMLInputElement> = async (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        (e.currentTarget as HTMLInputElement).blur();
+      }
+    };
+
+    return (
+      <div className="p-1">
+        <input
+          className="h-8 w-full rounded-md border px-2 text-xs"
+          placeholder="Nombre de sesión (ej. Sesión 1 TM)"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={commit}             // ✅ guarda solo en blur
+          onKeyDown={onKeyDown}       // ✅ o con Enter
+        />
+      </div>
+    );
+  }
+
   function DayNameRow({ turn }: { turn: TurnKey }) {
     return (
-      <div className="grid items-center border-b" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+      <div
+        className="grid items-center border-b"
+        style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
+      >
         <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">Nombre sesión</div>
-        {orderedDays.map((ymd) => {
-          const current = getDayName(ymd, turn);
-          const [local, setLocal] = useState(current);
-          useEffect(() => { setLocal(current); /* sync al cambiar semana/turno */ }, [weekStart, turn]);
-
-          const commit = async () => { await setDayName(ymd, turn, local); };
-
-          return (
-            <div key={`${ymd}-${turn}-name`} className="p-1">
-              <input
-                className="h-8 w-full rounded-md border px-2 text-xs"
-                placeholder="Ej: Sesión 1 TM · MD-3 · Alta intensidad…"
-                value={local}
-                onChange={(e) => setLocal(e.target.value)}
-                onBlur={commit}
-                onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-              />
-            </div>
-          );
-        })}
+        {orderedDays.map((ymd) => <DayNameCell key={`${ymd}-${turn}-name`} ymd={ymd} turn={turn} />)}
       </div>
     );
   }
 
-  /* ====== Sección por turno ====== */
+  const pendingCount = Object.keys(pending).length;
+
+  // Sección por turno
   function TurnEditor({ turn }: { turn: TurnKey }) {
     return (
       <>
@@ -519,8 +612,10 @@ function PlanSemanalInner() {
           ))}
         </div>
 
-        {/* Tipo y Nombre */}
+        {/* Tipo del día */}
         <DayStatusRow turn={turn} />
+
+        {/* Nombre de sesión */}
         <DayNameRow turn={turn} />
 
         {/* META */}
@@ -568,9 +663,11 @@ function PlanSemanalInner() {
         <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-lg md:text-xl font-bold">Plan semanal — Editor en tabla</h1>
-            <p className="text-xs md:text-sm text-gray-500">Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)</p>
+            <p className="text-xs md:text-sm text-gray-500">
+              Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)
+            </p>
             <p className="mt-1 text-[10px] text-gray-400">
-              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd> + <kbd className="rounded border px-1">Enter</kbd> para “marcar” una celda.
+              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd> + <kbd className="rounded border px-1">Enter</kbd> para “marcar” una celda sin guardar aún.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -578,12 +675,17 @@ function PlanSemanalInner() {
             <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Hoy</button>
             <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Semana siguiente ▶</button>
             <div className="w-px h-6 bg-gray-200 mx-1" />
-            <button onClick={saveAll} disabled={pendingCount === 0 || savingAll}
+            <button
+              onClick={() => { forceCommitActiveField(); setTimeout(saveAll, 0); }}
+              disabled={pendingCount === 0 || savingAll}
               className={`px-3 py-1.5 rounded-xl text-xs ${pendingCount === 0 || savingAll ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
-              title={pendingCount ? `${pendingCount} cambio(s) por guardar` : "Sin cambios"}>
+              title={pendingCount ? `${pendingCount} cambio(s) por guardar` : "Sin cambios"}
+            >
               {savingAll ? "Guardando..." : `Guardar cambios${pendingCount ? ` (${pendingCount})` : ""}`}
             </button>
-            <button onClick={discardAll} disabled={pendingCount === 0 || savingAll} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Descartar</button>
+            <button onClick={discardAll} disabled={pendingCount === 0 || savingAll} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+              Descartar
+            </button>
           </div>
         </header>
       )}
