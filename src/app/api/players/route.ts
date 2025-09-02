@@ -1,23 +1,20 @@
 // src/app/api/players/route.ts
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
-import { getServerSession } from "next-auth";
+import { PrismaClient } from "@prisma/client";
+
+export const dynamic = "force-dynamic";
+
+const prisma = new PrismaClient();
 
 export async function GET() {
   try {
-    const session = await getServerSession();
-    if (!session?.user) {
-      return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-    }
-    const players = await prisma.user.findMany({
-      where: { role: "JUGADOR" },
-      select: { id: true, name: true, email: true, role: true },
-      orderBy: [{ name: "asc" }, { email: "asc" }],
-      take: 500,
+    // Ajustá los campos a tu modelo real
+    const users = await prisma.user.findMany({
+      select: { id: true, name: true, email: true },
+      orderBy: { name: "asc" },
     });
-    return NextResponse.json({ data: players });
-  } catch (err) {
-    console.error("GET /api/players error:", err);
-    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+    return NextResponse.json(users);
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Error" }, { status: 500 });
   }
 }
