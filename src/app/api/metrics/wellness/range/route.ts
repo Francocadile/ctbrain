@@ -11,7 +11,7 @@ function bad(msg: string, code = 400) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const start = searchParams.get("start"); // YYYY-MM-DD inclusive
-  const end = searchParams.get("end");     // YYYY-MM-DD inclusive
+  const end = searchParams.get("end"); // YYYY-MM-DD inclusive
   const player = searchParams.get("player"); // opcional: nombre o email
 
   if (!start || !end) return bad("Parámetros requeridos: start, end (YYYY-MM-DD)");
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
       where.user = {
         is: {
           OR: [
-            { name:  { equals: player, mode: "insensitive" } },
+            { name: { equals: player, mode: "insensitive" } },
             { email: { equals: player, mode: "insensitive" } },
           ],
         },
@@ -47,7 +47,6 @@ export async function GET(req: NextRequest) {
       playerKey: r.playerKey ?? null,
       userId: r.userId ?? null,
       user: r.user ?? null,
-
       sleepQuality: Number(r.sleepQuality ?? 0),
       sleepHours: r.sleepHours != null ? Number(r.sleepHours) : null,
       fatigue: Number(r.fatigue ?? 0),
@@ -55,7 +54,6 @@ export async function GET(req: NextRequest) {
       stress: Number(r.stress ?? 0),
       mood: Number(r.mood ?? 0),
       comment: r.comment ?? r.notes ?? null,
-
       // campos derivados si los hubieras persistido (no obligatorios)
       sdw: r.sdw ?? null,
       zScore: r.z_score_sdw ?? r.zScore ?? null,
