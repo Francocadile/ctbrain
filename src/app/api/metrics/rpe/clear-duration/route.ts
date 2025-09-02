@@ -4,7 +4,7 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 function toUTCStart(ymd: string) {
-  const d = new Date(`${ymd}T00:00:00.000Z`);
+  const d = new Date(${ymd}T00:00:00.000Z);
   if (Number.isNaN(d.getTime())) throw new Error("Fecha inválida");
   return d;
 }
