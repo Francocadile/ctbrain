@@ -48,12 +48,12 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
         <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">MONITOREO</div>
         <ul className="space-y-0.5 mb-2">
           <li>
-            <NavItem href={"/ct/wellness" satisfies Route}>
+            <NavItem href={"/ct/metrics/wellness" satisfies Route}>
               Wellness (día)
             </NavItem>
           </li>
           <li>
-            <NavItem href={"/ct/rpe" satisfies Route}>
+            <NavItem href={"/ct/metrics/rpe" satisfies Route}>
               RPE (día)
             </NavItem>
           </li>
