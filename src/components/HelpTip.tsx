@@ -6,7 +6,7 @@ import { useState } from "react";
 export default function HelpTip({ text, className = "" }: { text: string; className?: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <span className={`relative inline-flex items-center ${className}`}
+    <span className={relative inline-flex items-center ${className}}
           onMouseEnter={()=>setOpen(true)} onMouseLeave={()=>setOpen(false)}>
       <span
         aria-label="Ayuda"
