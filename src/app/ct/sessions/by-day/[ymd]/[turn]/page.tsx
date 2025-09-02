@@ -71,7 +71,7 @@ export default function SessionTurnoPage() {
         console.error(e);
         alert("No se pudo cargar la sesión.");
       } finally {
-        setLoading(false);
+               setLoading(false);
       }
     }
     load();
