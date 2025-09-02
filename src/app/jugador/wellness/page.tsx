@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchSessionUser, clearPlayerName } from "@/lib/player";
+import { getPlayerIdentity } from "@/lib/player";
 
 function todayYMD() { return new Date().toISOString().slice(0,10); }
 
@@ -21,13 +21,8 @@ function Select({ value, onChange }: { value: any, onChange: (v:number)=>void })
 
 export default function WellnessJugador() {
   const [date, setDate] = useState(todayYMD());
+  const [name, setName] = useState("");
 
-  // identidad sesión
-  const [userId, setUserId] = useState<string>("");
-  const [name, setName] = useState<string>("");
-  const [loadingIdentity, setLoadingIdentity] = useState(true);
-
-  // campos
   const [sleepQuality, setSleepQuality] = useState<number | "">("");
   const [sleepHours, setSleepHours] = useState<string>("");
   const [fatigue, setFatigue] = useState<number | "">("");
@@ -38,21 +33,19 @@ export default function WellnessJugador() {
   const [loaded, setLoaded] = useState(false);
   const [sent, setSent] = useState(false);
 
-  // cargar identidad
+  // Cargar nombre desde la SESIÓN (login)
   useEffect(() => {
     (async () => {
-      const u = await fetchSessionUser();
-      setUserId(u?.id || "");
-      setName((u?.name || u?.email || "").trim());
-      setLoadingIdentity(false);
+      const id = await getPlayerIdentity(); // name || email
+      setName(id);
     })();
   }, []);
 
-  // prefill si ya envió hoy
+  // Prefill si ya envió hoy
   useEffect(() => {
     async function fetchExisting() {
-      if (!userId) { setLoaded(true); return; }
-      const url = `/api/metrics/wellness?date=${date}&userId=${encodeURIComponent(userId)}`;
+      if (!name) return;
+      const url = /api/metrics/wellness?date=${date}&playerKey=${encodeURIComponent(name)};
       const res = await fetch(url, { cache: "no-store" });
       const data = res.ok ? await res.json() : [];
       if (Array.isArray(data) && data.length) {
@@ -72,23 +65,20 @@ export default function WellnessJugador() {
       setLoaded(true);
     }
     fetchExisting();
-  }, [date, userId]);
+  }, [date, name]);
 
   async function submit() {
-    if (loadingIdentity) { alert("Cargando identidad…"); return; }
-    if (!userId) { alert("No pudimos leer tu sesión. Volvé a iniciar."); return; }
-
+    if (!name.trim()) { alert("Tu sesión no trae nombre/email. Cerrá sesión y volvé a entrar."); return; }
     const body = {
       date,
-      userId,               // requerido por API
-      playerKey: name || null, // compat opcional
+      playerKey: name.trim(),
       sleepQuality: Number(sleepQuality || 0),
       sleepHours: sleepHours ? Number(sleepHours) : null,
       fatigue: Number(fatigue || 0),
-      muscleSoreness: Number(soreness || 0),
+      soreness: Number(soreness || 0),
       stress: Number(stress || 0),
       mood: Number(mood || 0),
-      comment: notes.trim() || null,
+      notes: notes.trim() || null,
     };
     const res = await fetch("/api/metrics/wellness", {
       method: "POST",
@@ -102,12 +92,15 @@ export default function WellnessJugador() {
   }
 
   function signOut() {
-    clearPlayerName(); // compat legacy
-    window.location.href = "/api/auth/signout?callbackUrl=/jugador";
+    location.href = "/jugador";
   }
 
-  const partial = (Number(sleepQuality||0) + Number(fatigue||0) + Number(soreness||0) + Number(stress||0) + Number(mood||0)) || 0;
-  const submitDisabled = loadingIdentity || !userId || sleepQuality === "" || fatigue === "" || soreness === "" || stress === "" || mood === "";
+  const partial =
+    (Number(sleepQuality||0) + Number(fatigue||0) + Number(soreness||0) + Number(stress||0) + Number(mood||0)) || 0;
+
+  const submitDisabled =
+    !name ||
+    sleepQuality === "" || fatigue === "" || soreness === "" || stress === "" || mood === "";
 
   return (
     <div className="space-y-4">
@@ -126,8 +119,8 @@ export default function WellnessJugador() {
             <input type="date" className="w-full rounded-md border px-2 py-1.5" value={date} onChange={e=>setDate(e.target.value)} />
           </div>
           <div>
-            <label className="text-[12px] text-gray-500">Tu nombre (sesión)</label>
-            <input className="w-full rounded-md border px-2 py-1.5" value={loadingIdentity ? "Cargando…" : (name || "—")} disabled />
+            <label className="text-[12px] text-gray-500">Tu nombre (login)</label>
+            <input className="w-full rounded-md border px-2 py-1.5" value={name} disabled />
           </div>
 
           <div>
@@ -175,10 +168,16 @@ export default function WellnessJugador() {
         <button
           onClick={submit}
           disabled={submitDisabled}
-          className={`px-3 py-1.5 rounded-xl text-sm ${submitDisabled ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
+          className={px-3 py-1.5 rounded-xl text-sm ${submitDisabled ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}}
         >
           {sent ? "Guardar cambios" : "Enviar Wellness"}
         </button>
+
+        {!name && (
+          <div className="text-xs text-red-600 mt-2">
+            No pudimos leer tu nombre/email de la sesión. Cerrá sesión y volvé a iniciar.
+          </div>
+        )}
       </div>
     </div>
   );
