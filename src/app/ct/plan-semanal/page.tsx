@@ -17,7 +17,6 @@ import { listPlaces, addPlace as apiAddPlace, replacePlaces } from "@/lib/settin
 export const dynamic = "force-dynamic";
 
 export default function Page() {
-  // ⚠️ No usar useSearchParams acá. Solo Suspense + hijo.
   return (
     <Suspense fallback={<div className="p-4 text-sm text-gray-500">Cargando…</div>}>
       <PlanSemanalInner />
@@ -28,6 +27,8 @@ export default function Page() {
 type TurnKey = "morning" | "afternoon";
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 const META_ROWS = ["LUGAR", "HORA", "VIDEO"] as const;
+// NUEVO: identificador para el nombre de la sesión (se guarda como celda meta)
+const TITLE_ROW = "TITULO" as const;
 
 // ---- Day flags (por día y turno) ----
 type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
@@ -100,7 +101,7 @@ function cellKey(dayYmd: string, turn: TurnKey, row: string) {
 }
 
 function PlanSemanalInner() {
-  const qs = useSearchParams(); // ✅ ahora está dentro de Suspense
+  const qs = useSearchParams();
   const router = useRouter();
   const hideHeader = qs.get("hideHeader") === "1";
 
@@ -120,7 +121,7 @@ function PlanSemanalInner() {
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
-  // Lugares (via wrapper con fallback)
+  // Lugares
   const [places, setPlaces] = useState<string[]>([]);
   useEffect(() => {
     (async () => setPlaces(await listPlaces()))();
@@ -205,7 +206,7 @@ function PlanSemanalInner() {
       await loadWeek(base);
     } catch (e: any) {
       console.error(e);
-      alert(e?.message || "No se pudo actualizar el estado del día");
+      alert(e?.message || "No se pudo actualizar el tipo del día");
     }
   }
 
@@ -272,7 +273,7 @@ function PlanSemanalInner() {
     loadWeek(base);
   }
 
-  // ======= Gestión de Lugares (edita/borra DEFINITIVO) =======
+  // ======= Gestión de Lugares =======
   function managePlaces() {
     (async () => {
       const edited = prompt(
@@ -308,7 +309,7 @@ function PlanSemanalInner() {
     const pendingValue = pending[k];
     const value = pendingValue !== undefined ? pendingValue : original;
 
-    // LUGAR (select con Agregar / Gestionar)
+    // LUGAR
     if (row === "LUGAR") {
       const [localPlaces, setLocalPlaces] = useState<string[]>(places);
       useEffect(() => setLocalPlaces(places), [places]);
@@ -355,7 +356,7 @@ function PlanSemanalInner() {
       );
     }
 
-    // HORA (HH:mm)
+    // HORA
     if (row === "HORA") {
       const hhmm = /^[0-9]{2}:[0-9]{2}$/.test(value || "") ? value : "";
       return (
@@ -368,7 +369,7 @@ function PlanSemanalInner() {
       );
     }
 
-    // VIDEO — edición local
+    // VIDEO
     const parsed = parseVideoValue(value || "");
     const isEditing = !!videoEditing[k];
 
@@ -483,7 +484,7 @@ function PlanSemanalInner() {
 
     const sessionHref = existing?.id ? `/ct/sessions/${existing.id}` : "";
 
-    // Mostrar estado del día (si aplica)
+    // Estado del día (badge)
     const flag = getDayFlag(dayYmd, turn);
     const flagBadge =
       flag.kind === "LIBRE" ? (
@@ -517,7 +518,7 @@ function PlanSemanalInner() {
           suppressContentEditableWarning
           onBlur={onBlur}
           onKeyDown={onKeyDown}
-          className={`min-h-[90px] w-full rounded-xl border p-2 text-[13px] leading-5 outline-none focus:ring-2 ${
+          className={`min-h[90px] w-full rounded-xl border p-2 text-[13px] leading-5 outline-none focus:ring-2 ${
             staged !== undefined
               ? "border-emerald-400 ring-emerald-200"
               : "focus:ring-emerald-400"
@@ -533,7 +534,7 @@ function PlanSemanalInner() {
 
   const pendingCount = Object.keys(pending).length;
 
-  // Barra de estado por día (turno actual)
+  // ---- Fila: Tipo del día (antes “Estado”) ----
   function DayStatusRow({ turn }: { turn: TurnKey }) {
     return (
       <div
@@ -541,7 +542,7 @@ function PlanSemanalInner() {
         style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
       >
         <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">
-          Estado
+          Tipo
         </div>
         {orderedDays.map((ymd) => {
           const df = getDayFlag(ymd, turn);
@@ -554,7 +555,7 @@ function PlanSemanalInner() {
             setRival(df.rival || "");
             setLogo(df.logoUrl || "");
             // eslint-disable-next-line react-hooks/exhaustive-deps
-          }, [weekStart, turn]); // recarga de semana/turno
+          }, [weekStart, turn]);
 
           const save = (next: DayFlag) => setDayFlag(ymd, turn, next);
 
@@ -608,6 +609,36 @@ function PlanSemanalInner() {
     );
   }
 
+  // ---- Fila: NOMBRE DE LA SESIÓN (usa row TITULO) ----
+  function TitleRow({ turn }: { turn: TurnKey }) {
+    return (
+      <div
+        className="grid items-center border-b"
+        style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
+      >
+        <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">
+          Nombre sesión
+        </div>
+        {orderedDays.map((ymd) => {
+          const existing = findCell(ymd, turn, TITLE_ROW);
+          const k = cellKey(ymd, turn, TITLE_ROW);
+          const pendingValue = pending[k];
+          const value = pendingValue !== undefined ? pendingValue : (existing?.title ?? "");
+          return (
+            <div key={`${ymd}-${turn}-titulo`} className="p-1">
+              <input
+                className="h-8 w-full rounded-md border px-2 text-xs"
+                placeholder="Ej: Sesión 1 TM, MD-3, etc."
+                value={value}
+                onChange={(e) => stageCell(ymd, turn, TITLE_ROW, e.target.value)}
+              />
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   // Sección por turno
   function TurnEditor({ turn }: { turn: TurnKey }) {
     return (
@@ -631,8 +662,11 @@ function PlanSemanalInner() {
           ))}
         </div>
 
-        {/* Estado del día */}
+        {/* Tipo del día */}
         <DayStatusRow turn={turn} />
+
+        {/* Nombre de la sesión */}
+        <TitleRow turn={turn} />
 
         {/* META */}
         <div className="border-t">
@@ -757,7 +791,6 @@ function PlanSemanalInner() {
         <div className="text-gray-500">Cargando semana…</div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
-          {/* Turno activo */}
           <TurnEditor turn={activeTurn} />
         </div>
       )}
