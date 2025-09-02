@@ -1,6 +1,5 @@
 // src/app/ct/metrics/wellness/page.tsx
 "use client";
-
 import { useEffect, useMemo, useState } from "react";
 import HelpTip from "@/components/HelpTip";
 
@@ -72,7 +71,6 @@ function sdSample(arr: number[]) {
   const v = arr.reduce((acc, v) => acc + (v - m) * (v - m), 0) / (n - 1);
   return Math.sqrt(v);
 }
-
 /** SDW = promedio (1..5) de los 5 ítems orientados a 5=mejor */
 function computeSDW(r: WellnessRaw) {
   const vals = [
@@ -86,7 +84,6 @@ function computeSDW(r: WellnessRaw) {
   if (!valid.length) return 0;
   return valid.reduce((a, b) => a + b, 0) / valid.length;
 }
-
 /** Semáforo por Z-score según especificación */
 function zToColor(z: number | null): "green" | "yellow" | "red" {
   if (z === null) return "yellow"; // sin baseline suficiente → atención leve
@@ -94,7 +91,6 @@ function zToColor(z: number | null): "green" | "yellow" | "red" {
   if (z >= -1.0) return "yellow";
   return "red";
 }
-
 /** CSS de badges */
 function Badge({
   children,
@@ -110,9 +106,14 @@ function Badge({
     orange: "bg-orange-50 text-orange-700 border-orange-200",
     red: "bg-red-50 text-red-700 border-red-200",
   };
-  return <span className={inline-flex rounded-md border px-2 py-0.5 text-xs font-semibold ${map[tone]}}>{children}</span>;
+  return (
+    <span
+      className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-semibold ${map[tone]}`}
+    >
+      {children}
+    </span>
+  );
 }
-
 /** Eleva severidad de color según overrides clínicos */
 function applyOverrides(base: "green" | "yellow" | "red", r: DayRow) {
   let level = base; // green < yellow < red
@@ -128,7 +129,6 @@ function applyOverrides(base: "green" | "yellow" | "red", r: DayRow) {
   }
   return level;
 }
-
 /** Mini sparkline (7 días) usando bloques */
 function Sparkline({ vals }: { vals: number[] }) {
   if (!vals.length) return <span className="text-gray-400">—</span>;
@@ -139,7 +139,13 @@ function Sparkline({ vals }: { vals: number[] }) {
     <div className="flex items-end gap-0.5 h-6">
       {vals.map((v, i) => {
         const h = 6 + Math.round(16 * ((v - min) / range)); // 6..22px
-        return <div key={i} className="w-1.5 bg-gray-400/60 rounded-sm" style={{height: ${h}px}} />;
+        return (
+          <div
+            key={i}
+            className="w-1.5 bg-gray-400/60 rounded-sm"
+            style={{ height: `${h}px` }}
+          />
+        );
       })}
     </div>
   );
@@ -160,26 +166,27 @@ export default function WellnessCT_Day() {
 
   useEffect(() => {
     loadAll();
-    /* eslint-disable-next-line */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 
   async function fetchWellnessDay(d: string): Promise<WellnessRaw[]> {
-    const res = await fetch(/api/metrics/wellness?date=${d}, { cache: "no-store" });
+    const res = await fetch(`/api/metrics/wellness?date=${d}`, { cache: "no-store" });
     if (!res.ok) return [];
     const data = await res.json();
     return Array.isArray(data) ? data : [];
   }
 
   async function fetchRPE(d: string): Promise<RPERow[]> {
-    const res = await fetch(/api/metrics/rpe?date=${d}, { cache: "no-store" });
+    const res = await fetch(`/api/metrics/rpe?date=${d}`, { cache: "no-store" });
     if (!res.ok) return [];
     const arr = await res.json();
     if (!Array.isArray(arr)) return [];
     return arr.map((r: any) => {
       const srpeVal =
-        (r.load ?? r.srpe ?? (Number(r.rpe ?? 0) * Number(r.duration ?? 0))) ?? 0; // usar nullish, sin mezclar ||
+        r.load ?? r.srpe ?? Number(r.rpe ?? 0) * Number(r.duration ?? 0) ?? 0; // usar nullish, sin mezclar ||
       return {
-        userName: r.userName || r.playerKey || r.user?.name || r.user?.email || "Jugador",
+        userName:
+          r.userName || r.playerKey || r.user?.name || r.user?.email || "Jugador",
         srpe: Number(srpeVal),
       };
     });
@@ -200,13 +207,16 @@ export default function WellnessCT_Day() {
       toYMD(addDays(fromYMD(date), -(i + 1)))
     );
     const prevDataChunks = await Promise.all(prevDays.map((d) => fetchWellnessDay(d)));
+
     // por jugador → SDWs
     const map: Record<string, number[]> = {};
     const last7map: Record<string, number[]> = {};
+
     for (let di = 0; di < prevDataChunks.length; di++) {
       const dayArr = prevDataChunks[di];
       for (const it of dayArr) {
-        const nm = it.userName || it.user?.name || it.user?.email || it.playerKey || "—";
+        const nm =
+          it.userName || it.user?.name || it.user?.email || it.playerKey || "—";
         const sdw = computeSDW(it);
         if (!map[nm]) map[nm] = [];
         map[nm].push(sdw);
@@ -217,10 +227,15 @@ export default function WellnessCT_Day() {
         }
       }
     }
+
     const baselines: Record<string, Baseline> = {};
     for (const [nm, arr] of Object.entries(map)) {
       const arrClean = arr.filter((v) => v > 0);
-      baselines[nm] = { mean: mean(arrClean), sd: sdSample(arrClean), n: arrClean.length };
+      baselines[nm] = {
+        mean: mean(arrClean),
+        sd: sdSample(arrClean),
+        n: arrClean.length,
+      };
     }
 
     // 3) sRPE de ayer
@@ -231,7 +246,8 @@ export default function WellnessCT_Day() {
     // 4) Enriquecemos filas de hoy con z-score, color y overrides
     const withStats = todayFixed.map((r) => {
       const base = baselines[r._userName];
-      const z = base && base.n >= 7 && base.sd > 0 ? (r._sdw - base.mean) / base.sd : null;
+      const z =
+        base && base.n >= 7 && base.sd > 0 ? (r._sdw - base.mean) / base.sd : null;
       const baseColor = zToColor(z);
       const finalColor = applyOverrides(baseColor, r);
       return { ...r, _z: z, _color: finalColor, _base: base || { mean: 0, sd: 0, n: 0 } };
@@ -243,8 +259,10 @@ export default function WellnessCT_Day() {
       const base = (r as any)._base as Baseline;
       const z = (r as any)._z as number | null;
       const color = (r as any)._color as "green" | "yellow" | "red";
+
       const overrides: string[] = [];
-      if ((r.sleepHours ?? null) !== null && (r.sleepHours as number) < 4) overrides.push("Sueño <4h");
+      if ((r.sleepHours ?? null) !== null && (r.sleepHours as number) < 4)
+        overrides.push("Sueño <4h");
       if (r.muscleSoreness <= 2) overrides.push("Dolor muscular ≤2");
       if (r.stress <= 2) overrides.push("Estrés ≤2");
 
@@ -255,11 +273,11 @@ export default function WellnessCT_Day() {
         alertsList.push({
           kind: "CRITICO",
           reason:
-            (z !== null && z < -1.0 && base.n >= 7)
-              ? SDW rojo (Z=${z.toFixed(2)})
+            z !== null && z < -1.0 && base.n >= 7
+              ? `SDW rojo (Z=${z.toFixed(2)})`
               : overrides[0]
-                ? Override: ${overrides.join(", ")}
-                : SDW rojo,
+              ? `Override: ${overrides.join(", ")}`
+              : "SDW rojo",
           userName: r._userName,
           priority: 1,
         });
@@ -267,11 +285,11 @@ export default function WellnessCT_Day() {
         alertsList.push({
           kind: "AMARILLO",
           reason:
-            (z !== null && z < -0.5 && base.n >= 7)
-              ? Descenso leve (Z=${z.toFixed(2)})
+            z !== null && z < -0.5 && base.n >= 7
+              ? `Descenso leve (Z=${z.toFixed(2)})`
               : overrides[0]
-                ? Override leve: ${overrides.join(", ")}
-                : Atención,
+              ? `Override leve: ${overrides.join(", ")}`
+              : "Atención",
           userName: r._userName,
           priority: 5,
         });
@@ -281,12 +299,13 @@ export default function WellnessCT_Day() {
       if (srpe > 900 && color === "red") {
         alertsList.push({
           kind: "CRITICO",
-          reason: sRPE ayer ${Math.round(srpe)} AU + SDW rojo,
+          reason: `sRPE ayer ${Math.round(srpe)} AU + SDW rojo`,
           userName: r._userName,
           priority: 0,
         });
       }
     }
+
     alertsList.sort((a, b) => a.priority - b.priority);
 
     setRowsToday(withStats);
@@ -325,12 +344,14 @@ export default function WellnessCT_Day() {
       "Semana_ISO",
     ];
     const lines = [header.join(",")];
+
     for (const r of filtered) {
       const wk = r.date; // simple; si querés ISO week exacta lo agregamos luego
       const color = (r as any)._color as string;
+
       lines.push(
         [
-          "${r._userName.replace(/\"/g,'\"\"')}",
+          `"${r._userName.replace(/"/g, '""')}"`,
           r.date,
           r.sleepQuality,
           (r.sleepHours ?? "") as any,
@@ -339,17 +360,18 @@ export default function WellnessCT_Day() {
           r.stress,
           r.mood,
           (r as any)._sdw.toFixed(2),
-          "${(r.comment||\"\").replace(/\"/g,'\"\"')}",
+          `"${(r.comment || "").replace(/"/g, '""')}"`,
           color.toUpperCase(),
           wk,
         ].join(",")
       );
     }
+
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = wellness_dia_${date}.csv;
+    a.download = `wellness_dia_${date}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -360,7 +382,7 @@ export default function WellnessCT_Day() {
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold">
-            Wellness — Día (CT)
+            Wellness — Día (CT){" "}
             <HelpTip text="Vista operativa del día. Calcula SDW, compara vs baseline (21d) y aplica semáforo con overrides clínicos." />
           </h1>
           <p className="text-xs text-gray-500">
@@ -374,7 +396,10 @@ export default function WellnessCT_Day() {
             value={date}
             onChange={(e) => setDate(e.target.value)}
           />
-          <button onClick={loadAll} className="rounded-lg border px-2 py-1 text-sm hover:bg-gray-50">
+          <button
+            onClick={loadAll}
+            className="rounded-lg border px-2 py-1 text-sm hover:bg-gray-50"
+          >
             Recargar
           </button>
           <button
@@ -390,11 +415,12 @@ export default function WellnessCT_Day() {
       <section className="rounded-xl border bg-white p-3">
         <div className="flex items-center justify-between">
           <div className="text-[12px] font-semibold uppercase">
-            Alertas
+            Alertas{" "}
             <HelpTip text="Ordenadas por severidad. Rojo: atender hoy; Amarillo: monitoreo/ajuste leve." />
           </div>
           <div className="text-xs text-gray-500">{alerts.length} alerta(s)</div>
         </div>
+
         {loading ? (
           <div className="p-2 text-gray-500">Cargando…</div>
         ) : alerts.length === 0 ? (
@@ -402,7 +428,10 @@ export default function WellnessCT_Day() {
         ) : (
           <ul className="mt-2 space-y-1">
             {alerts.map((a, i) => (
-              <li key={i} className="flex items-center justify-between rounded-lg border px-2 py-1">
+              <li
+                key={i}
+                className="flex items-center justify-between rounded-lg border px-2 py-1"
+              >
                 <div className="flex items-center gap-2">
                   {a.kind === "CRITICO" ? (
                     <Badge tone="red">Rojo</Badge>
@@ -431,7 +460,9 @@ export default function WellnessCT_Day() {
 
       {/* Tabla principal */}
       <section className="rounded-2xl border bg-white overflow-hidden">
-        <div className="bg-gray-50 px-3 py-2 text-[12px] font-semibold uppercase">Entradas (día)</div>
+        <div className="bg-gray-50 px-3 py-2 text-[12px] font-semibold uppercase">
+          Entradas (día)
+        </div>
         {loading ? (
           <div className="p-4 text-gray-500">Cargando…</div>
         ) : filtered.length === 0 ? (
@@ -443,40 +474,39 @@ export default function WellnessCT_Day() {
                 <tr className="border-b bg-gray-50">
                   <th className="text-left px-3 py-2">Jugador</th>
                   <th className="text-left px-3 py-2">
-                    SDW (1–5)
+                    SDW (1–5){" "}
                     <HelpTip text="Promedio de los 5 ítems (1–5); 5=mejor. Base para Z y color." />
                   </th>
                   <th className="text-left px-3 py-2">
-                    Baseline (μ±σ)
+                    Baseline (μ±σ){" "}
                     <HelpTip text="Media y desvío de SDW en 21 días válidos. Requiere ≥7 días para Z." />
                   </th>
                   <th className="text-left px-3 py-2">
-                    Z
+                    Z{" "}
                     <HelpTip text="(SDW_hoy − μ_baseline)/σ_baseline. Verde ≥ −0.5; Amarillo [−1.0, −0.5); Rojo < −1.0." />
                   </th>
                   <th className="text-left px-3 py-2">
-                    Color
+                    Color{" "}
                     <HelpTip text="Semáforo por Z con overrides: Sueño <4h ⇒ ≥ amarillo; Dolor ≤2 ⇒ rojo; Estrés ≤2 ⇒ ≥ amarillo." />
                   </th>
                   <th className="text-left px-3 py-2">
-                    Sueño (h)
+                    Sueño (h){" "}
                     <HelpTip text="Horas de sueño reportadas. <4h eleva la severidad al menos a Amarillo." />
                   </th>
                   <th className="text-left px-3 py-2">
-                    Peores ítems
+                    Peores ítems{" "}
                     <HelpTip text="Los dos ítems con menor puntaje del día: guía rápida para intervención." />
                   </th>
                   <th className="text-left px-3 py-2">
-                    sRPE ayer
+                    sRPE ayer{" "}
                     <HelpTip text="Carga interna del día previo (RPE×min). >900 AU + SDW rojo ⇒ alerta crítica." />
                   </th>
                   <th className="text-left px-3 py-2">
-                    Spark 7d
+                    Spark 7d{" "}
                     <HelpTip text="Mini-tendencia de SDW (ayer → hace 7 días). Más alto = mejor." />
                   </th>
                   <th className="text-left px-3 py-2">
-                    Comentario
-                    <HelpTip text="Texto libre del jugador para contexto cualitativo." />
+                    Comentario <HelpTip text="Texto libre del jugador para contexto cualitativo." />
                   </th>
                 </tr>
               </thead>
@@ -491,8 +521,8 @@ export default function WellnessCT_Day() {
                     const bc = (b as any)._color as "green" | "yellow" | "red";
                     if (colorRank(ac) !== colorRank(bc)) return colorRank(ac) - colorRank(bc);
                     // Luego por Z más bajo primero
-                    const az = (a as any)._z;
-                    const bz = (b as any)._z;
+                    const az = (a as any)._z as number | null;
+                    const bz = (b as any)._z as number | null;
                     if (az != null && bz != null) return az - bz;
                     return 0;
                   })
@@ -506,18 +536,27 @@ export default function WellnessCT_Day() {
                       { k: "Dolor", v: r.muscleSoreness },
                       { k: "Estrés", v: r.stress },
                       { k: "Ánimo", v: r.mood },
-                    ].sort((a, b) => a.v - b.v).slice(0, 2);
+                    ]
+                      .sort((a, b) => a.v - b.v)
+                      .slice(0, 2);
                     const spark = (last7[r._userName] || []).slice().reverse(); // ayer..hace 7
                     const srpe = srpeYesterday[r._userName] ?? null;
+
                     return (
                       <tr key={r.id} className="border-b last:border-0 align-top">
                         <td className="px-3 py-2 font-medium">{r._userName}</td>
                         <td className="px-3 py-2">{(r as any)._sdw.toFixed(2)}</td>
                         <td className="px-3 py-2 text-xs text-gray-700">
-                          {base.n >= 7 ? ${base.mean.toFixed(2)} ± ${base.sd.toFixed(2)} (n=${base.n}) : <span className="text-gray-400">insuficiente</span>}
+                          {base.n >= 7 ? (
+                            `${base.mean.toFixed(2)} ± ${base.sd.toFixed(2)} (n=${base.n})`
+                          ) : (
+                            <span className="text-gray-400">insuficiente</span>
+                          )}
                         </td>
                         <td className="px-3 py-2">{z != null ? z.toFixed(2) : "—"}</td>
-                        <td className="px-3 py-2"><Badge tone={baseTone}>{baseTone.toUpperCase()}</Badge></td>
+                        <td className="px-3 py-2">
+                          <Badge tone={baseTone}>{baseTone.toUpperCase()}</Badge>
+                        </td>
                         <td className="px-3 py-2">{r.sleepHours ?? "—"}</td>
                         <td className="px-3 py-2 text-xs">
                           {worst.map((w) => (
@@ -526,9 +565,15 @@ export default function WellnessCT_Day() {
                             </div>
                           ))}
                         </td>
-                        <td className="px-3 py-2">{srpe != null ? ${Math.round(srpe)} AU : "—"}</td>
-                        <td className="px-3 py-2"><Sparkline vals={spark} /></td>
-                        <td className="px-3 py-2"><span className="text-gray-600">{r.comment || "—"}</span></td>
+                        <td className="px-3 py-2">
+                          {srpe != null ? `${Math.round(srpe)} AU` : "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <Sparkline vals={spark} />
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="text-gray-600">{r.comment || "—"}</span>
+                        </td>
                       </tr>
                     );
                   })}
@@ -540,7 +585,8 @@ export default function WellnessCT_Day() {
 
       {/* Leyenda simple */}
       <div className="rounded-xl border bg-white p-3 text-xs text-gray-600">
-        <b>Semáforo por Z:</b> verde ≥ −0.5, amarillo [−1.0, −0.5), rojo &lt; −1.0. Overrides: Sueño &lt;4h ⇒ ≥ amarillo; Dolor ≤2 ⇒ rojo; Estrés ≤2 ⇒ ≥ amarillo.
+        <b>Semáforo por Z:</b> verde ≥ −0.5, amarillo [−1.0, −0.5), rojo &lt; −1.0. Overrides:
+        Sueño &lt;4h ⇒ ≥ amarillo; Dolor ≤2 ⇒ rojo; Estrés ≤2 ⇒ ≥ amarillo.
       </div>
     </div>
   );
