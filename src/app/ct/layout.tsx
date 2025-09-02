@@ -1,65 +1,52 @@
 // src/app/ct/layout.tsx
 import * as React from "react";
 import Link from "next/link";
-
-// Puedes borrar esto si ya tenés Metadata global.
-// export const metadata = { title: "CT · Panel" };
+import type { Route } from "next"; // ✅ para typedRoutes
 
 function NavItem({
   href,
   children,
-  soon = false,
+  soon,
 }: {
-  href?: string;
+  href?: Route;                 // ✅ Link tipado
   children: React.ReactNode;
   soon?: boolean;
 }) {
-  const className =
-    "block rounded-md px-2 py-1.5 text-sm hover:bg-gray-100 transition";
-  if (soon) {
+  if (!href) {
     return (
-      <span className={`${className} text-gray-400 cursor-not-allowed`}>
-        {children} <small className="ml-1">(pronto)</small>
+      <span className="block rounded-md px-2 py-1.5 text-sm text-gray-400 cursor-not-allowed">
+        {children} {soon && <small className="ml-1">PRONTO</small>}
       </span>
     );
   }
   return (
-    <Link href={href || "#"} className={className}>
+    <Link href={href} className="block rounded-md px-2 py-1.5 text-sm hover:bg-gray-100 transition">
       {children}
     </Link>
   );
 }
 
-export default function CTLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function CTLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex bg-gray-50">
       {/* Sidebar */}
       <aside className="w-64 shrink-0 border-r bg-white p-3 space-y-3">
-        <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
-          INICIO
-        </div>
+        <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">INICIO</div>
         <ul className="space-y-0.5 mb-2">
-          <li><NavItem href="/ct/dashboard">Dashboard / Inicio rápido</NavItem></li>
+          <li><NavItem href={"/ct" satisfies Route}>Dashboard / Inicio rápido</NavItem></li>
         </ul>
 
-        <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
-          MONITOREO
-        </div>
+        <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">MONITOREO</div>
         <ul className="space-y-0.5 mb-2">
-          <li><NavItem href="/ct/metrics/wellness">Wellness (día)</NavItem></li>
-          <li><NavItem href="/ct/metrics/rpe">RPE (día)</NavItem></li>
+          <li><NavItem href={"/ct/metrics/wellness" satisfies Route}>Wellness (día)</NavItem></li>
+          <li><NavItem href={"/ct/metrics/rpe" satisfies Route}>RPE (día)</NavItem></li>
           <li><NavItem soon>Lesionados</NavItem></li>
         </ul>
 
-        <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
-          PLANIFICACIÓN
-        </div>
+        <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">PLANIFICACIÓN</div>
         <ul className="space-y-0.5 mb-2">
-          <li><NavItem href="/ct/sessions">Plan semanal (Editor)</NavItem></li>
+          <li><NavItem href={"/ct/plan-semanal" satisfies Route}>Plan semanal (Editor)</NavItem></li>
+          <li><NavItem soon>Sesiones y ejercicios</NavItem></li>
         </ul>
       </aside>
 
