@@ -31,60 +31,42 @@ function ymdUTCFromISO(iso: string) {
   return d.toISOString().slice(0, 10);
 }
 
-/** Marca de turno/bloque dentro de description:
- *  [GRID:morning:PRE ENTREN0] | YYYY-MM-DD
- *  [DAYFLAG:afternoon] | YYYY-MM-DD
- */
-function parseTurnAndRow(description?: string | null): {
-  turn?: TurnKey;
-  row?: string;
-} {
+// Parse marcador inicial
+function parseMarker(description?: string | null):
+  | { kind: "GRID"; turn: TurnKey; row: string }
+  | { kind: "DAYFLAG"; turn: TurnKey }
+  | null {
   const text = (description || "").trim();
-  if (!text) return {};
+  if (!text) return null;
   let m = text.match(/^\[GRID:(morning|afternoon):(.+?)\]/i);
-  if (m) return { turn: m[1] as TurnKey, row: (m[2] || "").trim() };
+  if (m) return { kind: "GRID", turn: m[1] as TurnKey, row: (m[2] || "").trim() };
   m = text.match(/^\[DAYFLAG:(morning|afternoon)\]/i);
-  if (m) return { turn: m[1] as TurnKey };
-  return {};
+  if (m) return { kind: "DAYFLAG", turn: m[1] as TurnKey };
+  return null;
 }
 
-/** Si no hay marcador, inferir por hora UTC */
+// Si no hay marcador, inferir por hora UTC
 function inferTurnFromISO(iso: string): TurnKey {
   const h = new Date(iso).getUTCHours();
   return h < 12 ? "morning" : "afternoon";
 }
 
+type Group = {
+  key: string;
+  ymd: string;
+  turn: TurnKey;
+  title?: string; // TITULO
+  place?: string; // LUGAR
+  anyDateISO?: string; // para ordenar estable cuando hay empate
+};
+
 export default function CTSessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [players, setPlayers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Filtro por fecha (YYYY-MM-DD). Vacío => mostrar todas
   const [dateFilter, setDateFilter] = useState<string>("");
-
-  // Modal (crear/editar)
-  const [open, setOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-
-  // Form
-  const [title, setTitle] = useState("");
-  const [date, setDate] = useState<string>(() => new Date().toISOString().slice(0, 16));
-  const [description, setDescription] = useState("");
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [playerSearch, setPlayerSearch] = useState("");
-
-  // Helpers
-  const filteredPlayers = useMemo(() => {
-    const q = playerSearch.trim().toLowerCase();
-    if (!q) return players;
-    return players.filter(
-      (p) =>
-        (p.name || "").toLowerCase().includes(q) ||
-        (p.email || "").toLowerCase().includes(q)
-    );
-  }, [players, playerSearch]);
 
   const fetchSessions = async () => {
     try {
@@ -101,131 +83,71 @@ export default function CTSessionsPage() {
     }
   };
 
-  const fetchPlayers = async () => {
-    try {
-      const res = await fetch("/api/users?role=JUGADOR", { cache: "no-store" });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "No se pudieron cargar jugadores");
-      setPlayers(json.data as User[]);
-    } catch (e: any) {
-      console.error(e);
-    }
-  };
-
   useEffect(() => {
     fetchSessions();
-    fetchPlayers();
   }, []);
 
-  const resetForm = () => {
-    setTitle("");
-    setDescription("");
-    setSelectedIds([]);
-    setDate(new Date().toISOString().slice(0, 16));
-    setPlayerSearch("");
-    setEditingId(null);
-  };
+  // ---- Agrupar por día/turno y tomar meta (TITULO, LUGAR) ----
+  const groups = useMemo(() => {
+    const map = new Map<string, Group>();
 
-  const openCreate = () => {
-    resetForm();
-    setOpen(true);
-  };
+    for (const s of sessions) {
+      const marker = parseMarker(s.description);
+      if (!marker) continue; // ignoramos sesiones sueltas sin GRID/DAYFLAG (no son parte del plan semanal)
+      const turn = marker.kind === "GRID" ? marker.turn : marker.turn;
+      const ymd = ymdUTCFromISO(s.date);
+      const key = `${ymd}::${turn}`;
 
-  const openEdit = (s: Session) => {
-    setEditingId(s.id);
-    setTitle(s.title);
-    setDescription(s.description || "");
-    const dt = new Date(s.date);
-    const local = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000)
-      .toISOString()
-      .slice(0, 16);
-    setDate(local);
-    setSelectedIds(s.players?.map((p) => p.id) || []);
-    setPlayerSearch("");
-    setOpen(true);
-  };
-
-  const handleSubmit = async () => {
-    try {
-      setCreating(true);
-      setError(null);
-
-      const iso = new Date(date).toISOString();
-      const payload = {
-        title,
-        description: description || undefined,
-        date: iso,
-        playerIds: selectedIds.length ? selectedIds : undefined,
-      };
-
-      let res: Response;
-      if (editingId) {
-        res = await fetch(`/api/sessions/${editingId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      } else {
-        res = await fetch("/api/sessions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+      if (!map.has(key)) {
+        map.set(key, { key, ymd, turn, anyDateISO: s.date });
       }
+      const g = map.get(key)!;
 
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json?.error || "No se pudo guardar la sesión");
-
-      setOpen(false);
-      resetForm();
-      await fetchSessions();
-    } catch (e: any) {
-      setError(e.message || "Error guardando sesión");
-    } finally {
-      setCreating(false);
+      if (marker.kind === "GRID") {
+        const row = marker.row.toUpperCase();
+        if (row === "TITULO") {
+          // nombre de la sesión
+          const name = (s.title || "").trim();
+          if (name) g.title = name;
+        } else if (row === "LUGAR") {
+          const place = (s.title || "").trim();
+          if (place) g.place = place;
+        }
+      }
+      // si el registro trae una fecha "mejor", la usamos para ordenar
+      if (!g.anyDateISO || new Date(s.date).getTime() < new Date(g.anyDateISO).getTime()) {
+        g.anyDateISO = s.date;
+      }
     }
-  };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("¿Eliminar esta sesión?")) return;
-    try {
-      setError(null);
-      const res = await fetch(`/api/sessions/${id}`, { method: "DELETE" });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json?.error || "No se pudo eliminar la sesión");
-      await fetchSessions();
-    } catch (e: any) {
-      setError(e.message || "Error eliminando sesión");
-    }
-  };
-
-  // Ordenar todas por fecha (desc)
-  const sortedAll = useMemo(
-    () => [...sessions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-    [sessions]
-  );
+    // array ordenado por fecha desc y mañana->tarde
+    const arr = Array.from(map.values());
+    arr.sort((a, b) => {
+      const t = new Date(b.anyDateISO || `${b.ymd}T00:00:00Z`).getTime()
+              - new Date(a.anyDateISO || `${a.ymd}T00:00:00Z`).getTime();
+      if (t !== 0) return t;
+      // mañana antes que tarde en el mismo día (desc ⇒ invertimos)
+      const order = (x: TurnKey) => (x === "morning" ? 0 : 1);
+      return order(a.turn) - order(b.turn);
+    });
+    return arr;
+  }, [sessions]);
 
   // Aplicar filtro por fecha si se eligió un día
   const visible = useMemo(() => {
-    if (!dateFilter) return sortedAll;
-    return sortedAll.filter((s) => ymdUTCFromISO(s.date) === dateFilter);
-  }, [sortedAll, dateFilter]);
-
-  const togglePlayer = (id: string) => {
-    setSelectedIds((curr) =>
-      curr.includes(id) ? curr.filter((x) => x !== id) : [...curr, id]
-    );
-  };
+    if (!dateFilter) return groups;
+    return groups.filter((g) => g.ymd === dateFilter);
+  }, [groups, dateFilter]);
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
+    <div className="max-w-5xl mx-auto p-6 space-y-6">
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Sesiones</h1>
           <p className="text-sm text-gray-500">Listado cronológico · “Ver sesión” abre el día/turno</p>
         </div>
 
-        {/* Filtro por fecha (opcional) */}
+        {/* Filtro por fecha */}
         <div className="flex items-center gap-2">
           <input
             type="date"
@@ -242,12 +164,6 @@ export default function CTSessionsPage() {
             title="Quitar filtro"
           >
             Limpiar
-          </button>
-          <button
-            onClick={openCreate}
-            className="px-4 py-2 rounded-xl shadow border text-sm font-medium hover:shadow-md"
-          >
-            Nueva sesión
           </button>
         </div>
       </header>
@@ -266,178 +182,42 @@ export default function CTSessionsPage() {
         </div>
       ) : (
         <ul className="space-y-3">
-          {visible.map((s, idx) => {
-            const { turn: parsedTurn, row } = parseTurnAndRow(s.description);
-            const turn = parsedTurn ?? inferTurnFromISO(s.date);
-            const ymd = ymdUTCFromISO(s.date);
-            const byDayHref =
-              `/ct/sessions/by-day/${ymd}/${turn}` +
-              (row ? `?focus=${encodeURIComponent(row)}` : "");
-
-            // Título visual: si no hay, generamos "Sesión N TM/TT"
-            const hasTitle = (s.title || "").trim().length > 0;
-            const displayTitle = hasTitle
-              ? (s.title || "").trim()
-              : `Sesión ${idx + 1} ${turn === "morning" ? "TM" : "TT"}`;
+          {visible.map((g, idx) => {
+            const byDayHref = `/ct/sessions/by-day/${g.ymd}/${g.turn}`;
+            const displayTitle =
+              (g.title || "").trim() ||
+              `Sesión ${idx + 1} ${g.turn === "morning" ? "TM" : "TT"}`;
 
             return (
-              <li key={s.id} className="rounded-xl border p-3 shadow-sm flex items-start justify-between bg-white">
-                <div>
-                  <h3 className="font-semibold text-[15px]">
+              <li
+                key={g.key}
+                className="rounded-xl border p-3 shadow-sm flex items-center justify-between bg-white"
+              >
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-[15px] truncate">
                     <a href={byDayHref} className="hover:underline" title="Abrir sesión (día/turno)">
                       {displayTitle}
                     </a>
                   </h3>
 
-                  <div className="text-xs text-gray-500 mt-1">
-                    <span className="inline-block mr-3">📅 {new Date(s.date).toLocaleString()}</span>
-                    <span className="inline-block mr-3">🕑 {turn === "morning" ? "Mañana" : "Tarde"}</span>
-                    <span className="inline-block">👤 {s.createdBy?.name || s.createdBy?.email || "CT"}</span>
+                  <div className="text-[12px] text-gray-600 mt-0.5 flex flex-wrap gap-x-3">
+                    <span>📅 {g.ymd}</span>
+                    <span>🕑 {g.turn === "morning" ? "Mañana" : "Tarde"}</span>
+                    {g.place && <span>📍 {g.place}</span>}
                   </div>
                 </div>
 
-                <div className="flex flex-col items-end gap-2">
-                  <a
-                    href={byDayHref}
-                    className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
-                    title="Ver sesión (día/turno)"
-                  >
-                    Ver sesión
-                  </a>
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => openEdit(s)}
-                      className="text-xs px-3 py-1 rounded-lg border hover:bg-gray-50"
-                    >
-                      Editar
-                    </button>
-                    <button
-                      onClick={() => handleDelete(s.id)}
-                      className="text-xs px-3 py-1 rounded-lg border hover:bg-gray-50"
-                    >
-                      Eliminar
-                    </button>
-                  </div>
-                </div>
+                <a
+                  href={byDayHref}
+                  className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50 shrink-0"
+                  title="Ver sesión (día/turno)"
+                >
+                  Ver sesión
+                </a>
               </li>
             );
           })}
         </ul>
-      )}
-
-      {/* Modal crear/editar (igual que tenías) */}
-      {open && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-xl border">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold">
-                {editingId ? "Editar sesión" : "Nueva sesión"}
-              </h2>
-              <button
-                onClick={() => {
-                  setOpen(false);
-                  resetForm();
-                }}
-                className="text-sm px-3 py-1 rounded-lg border hover:bg-gray-50"
-              >
-                Cerrar
-              </button>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Título</label>
-                  <input
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className="w-full rounded-lg border px-3 py-2 text-sm"
-                    placeholder="Ej: Sesión 12 · MD-3 · Alta intensidad"
-                  />
-                  <p className="text-[11px] text-gray-500 mt-1">
-                    Si lo dejás vacío, en el listado se mostrará “Sesión N TM/TT”.
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">Fecha y hora</label>
-                  <input
-                    type="datetime-local"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full rounded-lg border px-3 py-2 text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">Descripción (opcional)</label>
-                  <textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    className="w-full rounded-lg border px-3 py-2 text-sm min-h-[80px]"
-                    placeholder="Objetivos, bloques, cargas, observaciones…"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">Jugadores</label>
-                <input
-                  value={playerSearch}
-                  onChange={(e) => setPlayerSearch(e.target.value)}
-                  placeholder="Buscar por nombre o email…"
-                  className="w-full rounded-lg border px-3 py-2 text-sm mb-2"
-                />
-                <div className="max-h-48 overflow-auto rounded-lg border divide-y">
-                  {filteredPlayers.map((p) => {
-                    const checked = selectedIds.includes(p.id);
-                    return (
-                      <label
-                        key={p.id}
-                        className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50"
-                        title={p.email || undefined}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => togglePlayer(p.id)}
-                        />
-                        <span>{p.name || p.email || p.id}</span>
-                      </label>
-                    );
-                  })}
-                  {filteredPlayers.length === 0 && (
-                    <div className="px-3 py-2 text-sm text-gray-500">Sin resultados</div>
-                  )}
-                </div>
-
-                {selectedIds.length > 0 && (
-                  <div className="text-xs text-gray-600">Seleccionados: {selectedIds.length}</div>
-                )}
-              </div>
-            </div>
-
-            <div className="mt-4 flex items-center justify-end gap-2">
-              <button
-                onClick={() => {
-                  setOpen(false);
-                  resetForm();
-                }}
-                className="text-sm px-4 py-2 rounded-lg border hover:bg-gray-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={creating || !title.trim()}
-                className="text-sm px-4 py-2 rounded-lg border shadow hover:shadow-md disabled:opacity-60"
-              >
-                {creating ? "Guardando…" : editingId ? "Guardar cambios" : "Crear sesión"}
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
