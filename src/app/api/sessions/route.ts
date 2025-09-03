@@ -1,11 +1,10 @@
-// src/app/api/sessions/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { requireAuth, requireSessionWithRoles } from "@/lib/auth-helpers";
 import { Role } from "@prisma/client";
 
-/* ====== Fechas ====== */
+/* ===== Fechas ===== */
 function toYYYYMMDDUTC(d: Date) {
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
@@ -25,14 +24,14 @@ function addDaysUTC(d: Date, n: number) {
   return x;
 }
 
-/* ====== DAYFLAG helpers ====== */
+/* ===== DAYFLAG helpers ===== */
 const DAYFLAG_RE = /^\[DAYFLAG:(morning|afternoon)\]/i;
 function isDayFlagDescription(desc?: string | null) {
   const t = (desc || "").trim();
   return !!t && DAYFLAG_RE.test(t);
 }
 
-/* ====== Select ====== */
+/* ===== Select ===== */
 const sessionSelect = {
   id: true,
   title: true,
@@ -45,7 +44,7 @@ const sessionSelect = {
   user: { select: { id: true, name: true, email: true, role: true } },
 } as const;
 
-/* ====== Validación POST ====== */
+/* ===== Validación POST ===== */
 const createSchema = z
   .object({
     title: z.string().optional().nullable(), // "" permitido si es DAYFLAG
@@ -66,9 +65,9 @@ const createSchema = z
     }
   });
 
-/* ====== GET ====== */
-// ?start=YYYY-MM-DD -> semana (DOMINGO fijo usando nextMonday fin exclusivo)
-// sin start -> listado histórico SOLO de “NOMBRE SESIÓN” + DAYFLAG (tal como te gustó)
+/* ===== GET ===== */
+// ?start=YYYY-MM-DD -> semana (con nextMonday fin EXCLUSIVO)
+// sin start -> listado histórico SOLO “NOMBRE SESIÓN” + DAYFLAG (todas)
 export async function GET(req: Request) {
   try {
     await requireAuth();
@@ -83,7 +82,7 @@ export async function GET(req: Request) {
       }
 
       const monday = getMondayUTC(startDate);
-      const nextMonday = addDaysUTC(monday, 7); // fin EXCLUSIVO -> domingo incluido
+      const nextMonday = addDaysUTC(monday, 7); // <- FIN EXCLUSIVO (incluye domingo completo)
 
       const items = await prisma.session.findMany({
         where: { date: { gte: monday, lt: nextMonday } },
@@ -105,7 +104,7 @@ export async function GET(req: Request) {
       });
     }
 
-    // === Listado histórico EXACTO como querías (no tocar) ===
+    // === “Sesiones”: solo NOMBRE SESIÓN + DAYFLAG, mostrar TODAS ===
     const NAME_ROW = "NOMBRE SESIÓN";
     const sessions = await prisma.session.findMany({
       where: {
@@ -118,7 +117,6 @@ export async function GET(req: Request) {
       },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       select: sessionSelect,
-      // sin límite: mostramos todas
     });
 
     return NextResponse.json({ data: sessions });
@@ -129,7 +127,7 @@ export async function GET(req: Request) {
   }
 }
 
-/* ====== POST ====== */
+/* ===== POST ===== */
 export async function POST(req: Request) {
   try {
     const session = await requireSessionWithRoles([Role.CT, Role.ADMIN]);
