@@ -46,10 +46,8 @@ const sessionSelect = {
 } as const;
 
 // ---------- Validación POST ----------
-// Igual a tu esquema anterior, con la única excepción:
-// si es DAYFLAG, permitimos title = "" (Normal / Partido / Libre no necesitan título).
 const createSchema = z.object({
-  title: z.string().optional().nullable(), // puede quedar vacío si es DAYFLAG
+  title: z.string().optional().nullable(), // "" permitido si es DAYFLAG
   description: z.string().optional().nullable(),
   date: z.string().datetime({ message: "Fecha inválida (usar ISO, ej: 2025-08-27T12:00:00Z)" }),
   type: z.enum(["GENERAL", "FUERZA", "TACTICA", "AEROBICO", "RECUPERACION"]).optional(),
@@ -81,10 +79,10 @@ export async function GET(req: Request) {
       }
 
       const monday = getMondayUTC(startDate);
-      const sunday = addDaysUTC(monday, 6);
+      const nextMonday = addDaysUTC(monday, 7); // <-- FIN EXCLUSIVO (arregla DOMINGO)
 
       const items = await prisma.session.findMany({
-        where: { date: { gte: monday, lte: sunday } },
+        where: { date: { gte: monday, lt: nextMonday } }, // <-- lt en lugar de lte domingo
         orderBy: [{ date: "asc" }, { createdAt: "asc" }],
         select: sessionSelect,
       });
@@ -103,7 +101,7 @@ export async function GET(req: Request) {
       return NextResponse.json({
         days,
         weekStart: toYYYYMMDDUTC(monday),
-        weekEnd: toYYYYMMDDUTC(sunday),
+        weekEnd: toYYYYMMDDUTC(addDaysUTC(monday, 6)), // solo informativo
       });
     }
 
@@ -138,7 +136,7 @@ export async function POST(req: Request) {
 
     const created = await prisma.session.create({
       data: {
-        title: (title ?? "").trim(),                 // "" permitido si es DAYFLAG
+        title: (title ?? "").trim(), // "" permitido si es DAYFLAG
         description: description ?? null,
         date: new Date(date),
         type: type ?? "GENERAL",
