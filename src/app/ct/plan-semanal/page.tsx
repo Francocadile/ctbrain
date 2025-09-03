@@ -13,6 +13,7 @@ import {
   type SessionDTO,
 } from "@/lib/api/sessions";
 import { listPlaces, addPlace as apiAddPlace, replacePlaces } from "@/lib/settings";
+import PlannerActionsBar from "./PlannerActionsBar";
 
 export const dynamic = "force-dynamic";
 
@@ -579,6 +580,9 @@ function PlanSemanalInner() {
           </div>
         </header>
       )}
+
+      {/* Barra de acciones: Exportar / Importar / Duplicar semana */}
+      <PlannerActionsBar onAfterChange={() => loadWeek(base)} />
 
       <div className="flex items-center gap-2">
         <button className={`px-3 py-1.5 rounded-xl border text-xs ${activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={() => setActiveTurn("morning")}>
