@@ -1,24 +1,19 @@
 // src/app/api/planner/labels/route.ts
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-// Import flexible: no dependemos de un export en particular
 import * as Auth from "@/lib/auth";
 
-/** Intenta obtener userId con distintos helpers que puedas tener en tu proyecto. */
+// Helper flexible: intenta varios helpers de auth disponibles en tu proyecto.
 async function getUserIdOrThrow(): Promise<string> {
   const a: any = Auth;
-
-  // 1) requireSessionWithRoles([...])
   if (typeof a.requireSessionWithRoles === "function") {
     const s = await a.requireSessionWithRoles(["ADMIN", "CT", "MEDICO", "JUGADOR", "DIRECTIVO"]);
     return s.user.id;
   }
-  // 2) requireSession()
   if (typeof a.requireSession === "function") {
     const s = await a.requireSession();
     return s.user.id;
   }
-  // 3) next-auth helpers comunes
   if (typeof a.getServerSession === "function") {
     const s = await a.getServerSession();
     if (s?.user?.id) return s.user.id as string;
@@ -27,21 +22,10 @@ async function getUserIdOrThrow(): Promise<string> {
     const s = await a.auth();
     if (s?.user?.id) return s.user.id as string;
   }
-
   throw new Error("UNAUTHENTICATED");
 }
 
-/**
- * Preferencias del planner por usuario:
- *  - rowLabels: Record<string,string>
- *  - places: string[]
- *
- * Métodos:
- *  GET       -> { rowLabels, places }
- *  PUT       -> body { rowLabels?, places? } (parcial; cualquiera puede omitirse)
- *  DELETE    -> ?target=labels | places | all
- */
-
+// GET: devuelve { rowLabels, places }
 export async function GET() {
   try {
     const userId = await getUserIdOrThrow();
@@ -49,13 +33,15 @@ export async function GET() {
 
     return NextResponse.json({
       rowLabels: (pref?.rowLabels as Record<string, string> | null) ?? null,
-      places: (pref?.places as string[] | null) ?? [],
+      // usamos (pref as any) para evitar error de tipos si tu client local aún no tiene el campo
+      places: ((pref as any)?.places as string[] | null) ?? [],
     });
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 }
 
+// PUT: body { rowLabels?, places? }
 export async function PUT(req: Request) {
   try {
     const userId = await getUserIdOrThrow();
@@ -73,10 +59,8 @@ export async function PUT(req: Request) {
 
     const nextPlaces =
       incomingPlaces !== null
-        ? Array.from(
-            new Set((incomingPlaces as string[]).map((s) => (s || "").trim()).filter(Boolean))
-          )
-        : ((current?.places as string[] | null) ?? []);
+        ? Array.from(new Set((incomingPlaces as string[]).map((s) => (s || "").trim()).filter(Boolean)))
+        : (((current as any)?.places as string[] | null) ?? []);
 
     const saved = await prisma.plannerPrefs.upsert({
       where: { userId },
@@ -87,20 +71,20 @@ export async function PUT(req: Request) {
     return NextResponse.json({
       ok: true,
       rowLabels: saved.rowLabels,
-      places: saved.places,
+      places: (saved as any).places ?? [],
     });
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 }
 
+// DELETE: ?target=labels | places | all
 export async function DELETE(req: Request) {
   try {
     const userId = await getUserIdOrThrow();
     const url = new URL(req.url);
     const target = (url.searchParams.get("target") || "labels") as "labels" | "places" | "all";
 
-    // Aseguro que exista el registro
     const existing = await prisma.plannerPrefs.findUnique({ where: { userId } });
     if (!existing) {
       await prisma.plannerPrefs.create({ data: { userId, rowLabels: {}, places: [] } });
@@ -120,7 +104,7 @@ export async function DELETE(req: Request) {
     return NextResponse.json({
       ok: true,
       rowLabels: updated.rowLabels,
-      places: updated.places,
+      places: ((updated as any).places as string[]) ?? [],
     });
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
