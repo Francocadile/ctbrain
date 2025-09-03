@@ -179,8 +179,23 @@ function PlanSemanalInner() {
     const s = findDayFlagSession(dayYmd, turn);
     return parseDayFlagTitle(s?.title ?? "");
   }
+  function getDayName(dayYmd: string, turn: TurnKey): string {
+    const s = findDayNameSession(dayYmd, turn);
+    return (s?.title || "").trim();
+  }
 
-  // 🟢 ACTUALIZA daysMap EN MEMORIA para evitar “saltos” (incluye DOMINGO)
+  // ---------- refresh de UN día (sin tocar pending) ----------
+  async function refreshOneDay(ymd: string) {
+    try {
+      const res = await getSessionsWeek({ start: weekStart || ymd }); // misma semana
+      const fresh = res.days?.[ymd] || [];
+      setDaysMap((prev) => ({ ...prev, [ymd]: fresh }));
+    } catch (e) {
+      console.error("No se pudo refrescar el día:", ymd, e);
+    }
+  }
+
+  // 🟢 ACTUALIZA daysMap EN MEMORIA (optimista) + merge desde server del día afectado
   function upsertDayFlagLocal(ymd: string, turn: TurnKey, df: DayFlag, server?: SessionDTO | null) {
     setDaysMap((prev) => {
       const list = [...(prev[ymd] || [])];
@@ -210,28 +225,28 @@ function PlanSemanalInner() {
     const desc = `${marker(DAYFLAG_TAG, turn)} | ${ymd}`;
     const title = buildDayFlagTitle(df);
 
-    if (df.kind === "NONE") {
-      // Optimista local
-      upsertDayFlagLocal(ymd, turn, { kind: "NONE" });
-      if (existing) await deleteSession(existing.id);
-      return;
-    }
-
-    if (!existing) {
-      const res = await createSession({ title, description: desc, date: iso, type: "GENERAL" });
-      upsertDayFlagLocal(ymd, turn, df, res.data);
-    } else {
-      const res = await updateSession(existing.id, { title, description: desc, date: iso });
-      upsertDayFlagLocal(ymd, turn, df, res.data);
+    try {
+      if (df.kind === "NONE") {
+        upsertDayFlagLocal(ymd, turn, { kind: "NONE" });
+        if (existing) await deleteSession(existing.id);
+        await refreshOneDay(ymd);
+        return;
+      }
+      if (!existing) {
+        const res = await createSession({ title, description: desc, date: iso, type: "GENERAL" });
+        upsertDayFlagLocal(ymd, turn, df, res.data);
+      } else {
+        const res = await updateSession(existing.id, { title, description: desc, date: iso });
+        upsertDayFlagLocal(ymd, turn, df, res.data);
+      }
+      await refreshOneDay(ymd);
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message || "No se pudo guardar el Tipo del día");
+      await refreshOneDay(ymd); // revertir a server
     }
   }
 
-  function getDayName(dayYmd: string, turn: TurnKey): string {
-    const s = findDayNameSession(dayYmd, turn);
-    return (s?.title || "").trim();
-  }
-
-  // 🟢 ACTUALIZA daysMap EN MEMORIA para “Nombre sesión”
   function upsertDayNameLocal(ymd: string, turn: TurnKey, name: string, server?: SessionDTO | null) {
     setDaysMap((prev) => {
       const list = [...(prev[ymd] || [])];
@@ -261,20 +276,28 @@ function PlanSemanalInner() {
     const desc = `${marker(DAYNAME_TAG, turn)} | ${dayYmd}`;
     const title = (name || "").trim();
 
-    // Optimista local (guarda solo en blur/Enter)
-    upsertDayNameLocal(dayYmd, turn, title);
+    try {
+      // optimista
+      upsertDayNameLocal(dayYmd, turn, title);
 
-    if (!title) {
-      if (existing) await deleteSession(existing.id);
-      return;
-    }
+      if (!title) {
+        if (existing) await deleteSession(existing.id);
+        await refreshOneDay(dayYmd);
+        return;
+      }
 
-    if (!existing) {
-      const res = await createSession({ title, description: desc, date: iso, type: "GENERAL" });
-      upsertDayNameLocal(dayYmd, turn, title, res.data);
-    } else {
-      const res = await updateSession(existing.id, { title, description: desc, date: iso });
-      upsertDayNameLocal(dayYmd, turn, title, res.data);
+      if (!existing) {
+        const res = await createSession({ title, description: desc, date: iso, type: "GENERAL" });
+        upsertDayNameLocal(dayYmd, turn, title, res.data);
+      } else {
+        const res = await updateSession(existing.id, { title, description: desc, date: iso });
+        upsertDayNameLocal(dayYmd, turn, title, res.data);
+      }
+      await refreshOneDay(dayYmd);
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message || "No se pudo guardar el Nombre de sesión");
+      await refreshOneDay(dayYmd); // revertir a server
     }
   }
 
@@ -305,12 +328,12 @@ function PlanSemanalInner() {
         if (!text) {
           if (existing) {
             await deleteSession(existing.id);
-            // optimista local: remover
             setDaysMap((prev) => {
               const list = [...(prev[dayYmd] || [])].filter((s) => !isCellOf(s, turn, row));
               return { ...prev, [dayYmd]: list };
             });
           }
+          await refreshOneDay(dayYmd);
           continue;
         }
 
@@ -333,6 +356,7 @@ function PlanSemanalInner() {
             return { ...prev, [dayYmd]: list };
           });
         }
+        await refreshOneDay(dayYmd);
       }
       setPending({});
     } catch (e: any) {
@@ -547,7 +571,7 @@ function PlanSemanalInner() {
   }
 
   // =======================
-  // Tipo de día (Normal/Partido/Libre) — **OPTIMISTA + SIN RELOAD**
+  // Tipo de día (Normal/Partido/Libre) — **OPTIMISTA + MERGE DÍA**
   // =======================
   function DayFlagCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const df = getDayFlag(ymd, turn);
@@ -557,7 +581,6 @@ function PlanSemanalInner() {
     const [logo, setLogo]   = useState(df.logoUrl || "");
     const [saving, setSaving] = useState(false);
 
-    // sync con store cuando cambie realmente
     useEffect(() => {
       setLocalKind(df.kind);
       setRival(df.rival || "");
@@ -568,7 +591,7 @@ function PlanSemanalInner() {
     const commit = async (next: DayFlag) => {
       setSaving(true);
       try {
-        await setDayFlag(ymd, turn, next); // esto actualiza daysMap local sin recargar
+        await setDayFlag(ymd, turn, next);
       } finally {
         setSaving(false);
       }
@@ -635,14 +658,23 @@ function PlanSemanalInner() {
   }
 
   // =======================
-  // Nombre de sesión (solo guarda en blur/Enter)
+  // Nombre de sesión (solo guarda en blur/Enter) — **OPTIMISTA + MERGE DÍA**
   // =======================
   function DayNameCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const initial = getDayName(ymd, turn);
     const [text, setText] = useState(initial);
+    const [saving, setSaving] = useState(false);
+
     useEffect(() => { setText(initial); }, [initial, ymd, turn]);
 
-    const commit = async () => { await setDayName(ymd, turn, text); };
+    const commit = async () => {
+      setSaving(true);
+      try {
+        await setDayName(ymd, turn, text);
+      } finally {
+        setSaving(false);
+      }
+    };
     const onKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
       if (e.key === "Enter") { e.preventDefault(); (e.currentTarget as HTMLInputElement).blur(); }
     };
@@ -656,6 +688,7 @@ function PlanSemanalInner() {
           onChange={(e) => setText(e.target.value)}
           onBlur={commit}
           onKeyDown={onKeyDown}
+          disabled={saving}
         />
       </div>
     );
