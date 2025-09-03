@@ -59,7 +59,7 @@ function parseCSV(text: string): string[][] {
     const ch = text[i];
     if (inQuotes) {
       if (ch === '"') {
-        if (text[i + 1] === '"') { field += '"'; i += 2; continue; } // escaped "
+        if (text[i + 1] === '"') { field += '"'; i += 2; continue; }
         inQuotes = false; i++; continue;
       }
       field += ch; i++; continue;
@@ -71,7 +71,6 @@ function parseCSV(text: string): string[][] {
       field += ch; i++; continue;
     }
   }
-  // último campo / fila
   pushField();
   if (row.length > 1 || (row.length === 1 && row[0] !== "")) pushRow();
   return rows;
@@ -81,8 +80,8 @@ function parseCSV(text: string): string[][] {
 type CSVRow = {
   date: string;                           // YYYY-MM-DD
   turn: "morning" | "afternoon";
-  row?: string;                           // block/meta row (opcional si es solo flag)
-  title?: string;                         // texto para celda (o label video si se usa video_label/video_url)
+  row?: string;
+  title?: string;
   place?: string | null;
   time?: string | null;                   // HH:MM
   video_label?: string | null;
@@ -110,43 +109,27 @@ function rowsToActions(rows: CSVRow[]) {
 
   for (let idx = 0; idx < rows.length; idx++) {
     const r = rows[idx];
-    const ctx = `fila ${idx + 2}`; // +1 por header, +1 base 1
+    const ctx = `fila ${idx + 2}`;
 
-    // Validaciones básicas
     if (!/^\d{4}-\d{2}-\d{2}$/.test(r.date || "")) { errors.push(`${ctx}: date inválida`); continue; }
     if (r.turn !== "morning" && r.turn !== "afternoon") { errors.push(`${ctx}: turn debe ser morning|afternoon`); continue; }
 
-    // Día FLAG (prioridad si viene)
     const df = (r.day_flag || "").toUpperCase() as "NONE" | "PARTIDO" | "LIBRE" | "";
     if (df === "PARTIDO" || df === "LIBRE") {
-      actions.push({
-        kind: df === "PARTIDO" ? "FLAG" : "FLAG",
-        ymd: r.date,
-        turn: r.turn,
-        flag: df,
-        rival: r.flag_rival || undefined,
-        logo: r.flag_logo || undefined,
-      } as PlanAction);
+      actions.push({ kind: "FLAG", ymd: r.date, turn: r.turn, flag: df, rival: r.flag_rival || undefined, logo: r.flag_logo || undefined });
     } else if (df === "NONE") {
       actions.push({ kind: "CLEAR_FLAG", ymd: r.date, turn: r.turn });
     }
 
-    // Celdas
     const rowName = (r.row || "").trim();
     if (rowName) {
-      if (!VALID_ROWS.has(rowName)) {
-        errors.push(`${ctx}: row inválido "${rowName}"`);
-        continue;
-      }
+      if (!VALID_ROWS.has(rowName)) { errors.push(`${ctx}: row inválido "${rowName}"`); continue; }
       let value = (r.title || "").trim();
 
       if (rowName === "VIDEO") {
         const label = (r.video_label || "").trim();
         const url = (r.video_url || "").trim();
-        if (!label && !url && !value) {
-          warnings.push(`${ctx}: VIDEO vacío`);
-          continue;
-        }
+        if (!label && !url && !value) { warnings.push(`${ctx}: VIDEO vacío`); continue; }
         value = label && url ? `${label}|${url}` : (url ? url : label);
         if (url && !/^https?:\/\//i.test(url)) warnings.push(`${ctx}: URL de video no parece válida`);
       }
@@ -154,11 +137,8 @@ function rowsToActions(rows: CSVRow[]) {
       if (rowName === "LUGAR" && r.place) value = r.place.trim();
       if (rowName === "HORA" && r.time) value = r.time.trim();
 
-      if (!value) {
-        actions.push({ kind: "CLEAR_CELL", ymd: r.date, turn: r.turn, row: rowName });
-      } else {
-        actions.push({ kind: "CELL", ymd: r.date, turn: r.turn, row: rowName, value });
-      }
+      if (!value) actions.push({ kind: "CLEAR_CELL", ymd: r.date, turn: r.turn, row: rowName });
+      else actions.push({ kind: "CELL", ymd: r.date, turn: r.turn, row: rowName, value });
     }
   }
 
@@ -166,12 +146,19 @@ function rowsToActions(rows: CSVRow[]) {
 }
 
 export async function POST(req: Request) {
-  await requireSessionWithRoles(["CT", "ADMIN"]);
+  // ✅ obtenemos la sesión; necesitamos el userId para asignar owner en Session.create
+  const session: any = await requireSessionWithRoles(["CT", "ADMIN"]);
+  const userId: string | undefined =
+    session?.user?.id || session?.id || session?.userId; // tolerante a distintas formas del helper
+
+  if (!userId) {
+    return NextResponse.json({ ok: false, error: "Usuario no identificado" }, { status: 401 });
+  }
 
   const body = await req.json().catch(() => ({}));
   const csvText: string = body.csvText || "";
-  const targetStart: string | null = body.targetStart || null;          // YYYY-MM-DD (opcional)
-  const overwrite: boolean = !!body.overwrite;                          // limpiar celdas afectadas antes
+  const targetStart: string | null = body.targetStart || null; // YYYY-MM-DD
+  const overwrite: boolean = !!body.overwrite;
   const dryRun: boolean = !!body.dryRun;
 
   if (!csvText.trim()) {
@@ -195,7 +182,6 @@ export async function POST(req: Request) {
   const rows: CSVRow[] = rowsRaw.slice(1).map(cols => {
     const obj: any = {};
     header.forEach((h, i) => obj[h] = (cols[i] ?? "").trim());
-    // normalizaciones
     obj.turn = (obj.turn || "").toLowerCase();
     if (obj.day_flag) obj.day_flag = String(obj.day_flag).toUpperCase();
     return obj as CSVRow;
@@ -204,8 +190,7 @@ export async function POST(req: Request) {
   const { actions, warnings, errors } = rowsToActions(rows);
   if (errors.length) {
     return NextResponse.json({ ok: false, errors, warnings }, { status: 400 });
-  }
-
+    }
   // Alineación (opcional)
   let diffDays = 0;
   if (targetStart) {
@@ -220,7 +205,7 @@ export async function POST(req: Request) {
     diffDays = Math.round((targetMonday.getTime() - sourceMonday.getTime()) / (24 * 3600 * 1000));
   }
 
-  // Si es dry-run solo devolvemos resumen
+  // Dry-run
   if (dryRun) {
     const counts = {
       cell_set: actions.filter(a => a.kind === "CELL").length,
@@ -241,9 +226,7 @@ export async function POST(req: Request) {
 
         if (a.kind === "CLEAR_FLAG") {
           const marker = `${dayFlagMarker(a.turn)} | ${ymd}`;
-          deleted += await tx.session.deleteMany({
-            where: { description: marker }
-          }).then(r => r.count);
+          deleted += await tx.session.deleteMany({ where: { description: marker } }).then(r => r.count);
           continue;
         }
 
@@ -252,14 +235,22 @@ export async function POST(req: Request) {
           const title = buildDayFlagTitle(a.flag, a.rival, a.logo);
           const iso = computeISOForSlot(ymd, a.turn);
 
-          // overwrite: borramos previos de ese flag-turno-día
           if (overwrite) {
             deleted += await tx.session.deleteMany({ where: { description: marker } }).then(r => r.count);
           }
 
           const existing = await tx.session.findFirst({ where: { description: marker } });
           if (!existing) {
-            await tx.session.create({ data: { title, description: marker, date: new Date(iso), type: "GENERAL" } });
+            // ✅ asignamos owner
+            const data: any = {
+              title,
+              description: marker,
+              date: new Date(iso),
+              type: "GENERAL",
+              user: { connect: { id: userId } },
+              createdBy: userId, // si existe en el schema, queda seteado
+            };
+            await tx.session.create({ data });
             created++;
           } else {
             await tx.session.update({ where: { id: existing.id }, data: { title, date: new Date(iso) } });
@@ -270,9 +261,7 @@ export async function POST(req: Request) {
 
         if (a.kind === "CLEAR_CELL") {
           const marker = `${cellMarker(a.turn, a.row)} | ${ymd}`;
-          deleted += await tx.session.deleteMany({
-            where: { description: marker }
-          }).then(r => r.count);
+          deleted += await tx.session.deleteMany({ where: { description: marker } }).then(r => r.count);
           continue;
         }
 
@@ -286,14 +275,16 @@ export async function POST(req: Request) {
 
           const existing = await tx.session.findFirst({ where: { description: marker } });
           if (!existing) {
-            await tx.session.create({
-              data: {
-                title: a.value,
-                description: marker,
-                date: new Date(iso),
-                type: "GENERAL",
-              },
-            });
+            // ✅ asignamos owner
+            const data: any = {
+              title: a.value,
+              description: marker,
+              date: new Date(iso),
+              type: "GENERAL",
+              user: { connect: { id: userId } },
+              createdBy: userId, // si existe
+            };
+            await tx.session.create({ data });
             created++;
           } else {
             await tx.session.update({
