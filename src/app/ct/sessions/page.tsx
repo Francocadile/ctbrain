@@ -1,4 +1,3 @@
-// src/app/ct/sessions/page.tsx
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -48,7 +47,6 @@ export default function CTSessionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filtro por fecha (YYYY-MM-DD). Vacío => mostrar todas
   const [dateFilter, setDateFilter] = useState<string>("");
 
   const fetchSessions = async () => {
@@ -67,7 +65,6 @@ export default function CTSessionsPage() {
   };
   useEffect(() => { fetchSessions(); }, []);
 
-  // Solo NOMBRES DE SESIÓN del editor (DAYNAME:*). Nada de bloques ni meta.
   const onlyDayNames = useMemo(() => {
     return (sessions || []).filter((s) => {
       const d = (s.description || "").trim();
@@ -75,7 +72,6 @@ export default function CTSessionsPage() {
     });
   }, [sessions]);
 
-  // Ordenadas desc por fecha
   const sorted = useMemo(
     () => [...onlyDayNames].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     [onlyDayNames]
@@ -129,7 +125,7 @@ export default function CTSessionsPage() {
             const turn = parseTurnFromDescription(s.description) ?? inferTurnFromISO(s.date);
             const ymd = ymdUTCFromISO(s.date);
             const byDayHref = `/ct/sessions/by-day/${ymd}/${turn}`;
-            const displayTitle = (s.title || "").trim(); // EXACTO lo que pusiste en el editor
+            const displayTitle = (s.title || "").trim();
 
             return (
               <li key={s.id} className="rounded-xl border p-3 shadow-sm flex items-start justify-between bg-white">
@@ -142,7 +138,6 @@ export default function CTSessionsPage() {
                   <div className="text-xs text-gray-500 mt-1">
                     <span className="inline-block mr-3">📅 {new Date(s.date).toLocaleString()}</span>
                     <span className="inline-block mr-3">🕑 {turn === "morning" ? "Mañana" : "Tarde"}</span>
-                    {/* Lugar se ve en la vista por día */}
                   </div>
                 </div>
 
