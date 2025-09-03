@@ -130,8 +130,7 @@ function PlanSemanalInner() {
     if (activePane === "tools") p.set("pane", "tools");
     else p.delete("pane");
     router.replace(`?${p.toString()}`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTurn, activePane]);
+  }, [activeTurn, activePane]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [base, setBase] = useState<Date>(() => getMonday(new Date()));
   const [loading, setLoading] = useState(false);
@@ -145,7 +144,6 @@ function PlanSemanalInner() {
   }, []);
 
   const [pending, setPending] = useState<Record<string, string>>({});
-  const [videoEditing, setVideoEditing] = useState<Record<string, boolean>>({});
   const [savingAll, setSavingAll] = useState(false);
 
   // Etiquetas visibles personalizadas (desde Herramientas)
@@ -169,7 +167,6 @@ function PlanSemanalInner() {
       setWeekStart(res.weekStart);
       setWeekEnd(res.weekEnd);
       setPending({});
-      setVideoEditing({});
     } catch (e) {
       console.error(e);
       alert("No se pudo cargar la semana.");
@@ -179,8 +176,7 @@ function PlanSemanalInner() {
   }
   useEffect(() => {
     loadWeek(base);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [base]);
+  }, [base]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function confirmDiscardIfNeeded(action: () => void) {
     if (Object.keys(pending).length === 0) return action();
@@ -370,8 +366,7 @@ function PlanSemanalInner() {
     useEffect(() => {
       setLocalLabel(parsed.label);
       setLocalUrl(parsed.url);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [k, value]);
+    }, [k, value]); // eslint-disable-line react-hooks/exhaustive-deps
 
     if (!isEditing && (parsed.label || parsed.url)) {
       return (
@@ -531,8 +526,7 @@ function PlanSemanalInner() {
       setKind(fresh.kind);
       setRival(fresh.rival || "");
       setLogo(fresh.logoUrl || "");
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [weekStart, ymd, turn]);
+    }, [weekStart, ymd, turn]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const save = (next: DayFlag) => setDayFlag(ymd, turn, next);
 
@@ -695,7 +689,7 @@ function PlanSemanalInner() {
             </p>
           </div>
 
-          {/* Botones de navegación y acciones (solo en editor) */}
+          {/* Botones de navegación y guardar (solo en editor) */}
           {activePane === "editor" ? (
             <div className="flex flex-wrap items-center gap-2">
               <button
@@ -731,7 +725,7 @@ function PlanSemanalInner() {
               </button>
             </div>
           ) : (
-            // En Herramientas solo mostramos navegación de semana
+            // En Herramientas solo navegación de semana
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={goPrevWeek}
