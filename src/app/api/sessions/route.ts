@@ -4,7 +4,7 @@ import prisma from "@/lib/prisma";
 import { requireAuth, requireSessionWithRoles } from "@/lib/auth-helpers";
 import { Role } from "@prisma/client";
 
-/* ===== Fechas ===== */
+/* ===== Fecha (UTC) ===== */
 function toYYYYMMDDUTC(d: Date) {
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
@@ -49,10 +49,13 @@ const createSchema = z
   .object({
     title: z.string().optional().nullable(), // "" permitido si es DAYFLAG
     description: z.string().optional().nullable(),
-    date: z.string().datetime({ message: "Fecha inválida (usar ISO, ej: 2025-08-27T12:00:00Z)" }),
-    type: z.enum(["GENERAL", "FUERZA", "TACTICA", "AEROBICO", "RECUPERACION"]).optional(),
+    date: z.string().datetime({ message: "Fecha inválida (ISO)" }),
+    type: z
+      .enum(["GENERAL", "FUERZA", "TACTICA", "AEROBICO", "RECUPERACION"])
+      .optional(),
   })
   .superRefine((data, ctx) => {
+    // Si NO es un DAYFLAG, exigimos título >= 2
     if (!isDayFlagDescription(data.description)) {
       const len = (data.title || "").trim().length;
       if (len < 2) {
@@ -65,9 +68,10 @@ const createSchema = z
     }
   });
 
-/* ===== GET ===== */
-// ?start=YYYY-MM-DD -> semana (con nextMonday fin EXCLUSIVO)
-// sin start -> listado histórico SOLO “NOMBRE SESIÓN” + DAYFLAG (todas)
+/* ===== GET /api/sessions =====
+   - ?start=YYYY-MM-DD  -> semana [lunes 00:00, lunes siguiente 00:00)
+   - sin start -> últimas 50 sesiones
+*/
 export async function GET(req: Request) {
   try {
     await requireAuth();
@@ -82,16 +86,20 @@ export async function GET(req: Request) {
       }
 
       const monday = getMondayUTC(startDate);
-      const nextMonday = addDaysUTC(monday, 7); // <- FIN EXCLUSIVO (incluye domingo completo)
+      const nextMonday = addDaysUTC(monday, 7); // **fin EXCLUSIVO**
 
       const items = await prisma.session.findMany({
-        where: { date: { gte: monday, lt: nextMonday } },
+        where: { date: { gte: monday, lt: nextMonday } }, // <- incluye TODO el domingo
         orderBy: [{ date: "asc" }, { createdAt: "asc" }],
         select: sessionSelect,
       });
 
+      // Mapa Lun..Dom
       const days: Record<string, typeof items> = {};
-      for (let i = 0; i < 7; i++) days[toYYYYMMDDUTC(addDaysUTC(monday, i))] = [];
+      for (let i = 0; i < 7; i++) {
+        const key = toYYYYMMDDUTC(addDaysUTC(monday, i));
+        days[key] = [];
+      }
       for (const s of items) {
         const k = toYYYYMMDDUTC(new Date(s.date));
         (days[k] ||= []).push(s);
@@ -100,25 +108,16 @@ export async function GET(req: Request) {
       return NextResponse.json({
         days,
         weekStart: toYYYYMMDDUTC(monday),
-        weekEnd: toYYYYMMDDUTC(addDaysUTC(monday, 6)),
+        weekEnd: toYYYYMMDDUTC(addDaysUTC(monday, 6)), // informativo
       });
     }
 
-    // === “Sesiones”: solo NOMBRE SESIÓN + DAYFLAG, mostrar TODAS ===
-    const NAME_ROW = "NOMBRE SESIÓN";
+    // Listado general (Sesiones)
     const sessions = await prisma.session.findMany({
-      where: {
-        OR: [
-          { description: { startsWith: `[GRID:morning:${NAME_ROW}]` } },
-          { description: { startsWith: `[GRID:afternoon:${NAME_ROW}]` } },
-          { description: { startsWith: `[DAYFLAG:morning]` } },
-          { description: { startsWith: `[DAYFLAG:afternoon]` } },
-        ],
-      },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       select: sessionSelect,
+      take: 50,
     });
-
     return NextResponse.json({ data: sessions });
   } catch (err: any) {
     if (err instanceof Response) return err;
@@ -127,7 +126,7 @@ export async function GET(req: Request) {
   }
 }
 
-/* ===== POST ===== */
+/* ===== POST /api/sessions ===== */
 export async function POST(req: Request) {
   try {
     const session = await requireSessionWithRoles([Role.CT, Role.ADMIN]);
