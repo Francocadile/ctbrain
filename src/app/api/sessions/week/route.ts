@@ -2,6 +2,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+// 👇 Clave para evitar "Dynamic server usage" (usa request.url)
+export const dynamic = "force-dynamic";
+
 function toYYYYMMDDUTC(d: Date) {
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
