@@ -1,10 +1,11 @@
+// src/app/api/sessions/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { requireAuth, requireSessionWithRoles } from "@/lib/auth-helpers";
 import { Role } from "@prisma/client";
 
-/* ===== Fecha (UTC) ===== */
+// ---------- Fecha ----------
 function toYYYYMMDDUTC(d: Date) {
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
@@ -24,14 +25,14 @@ function addDaysUTC(d: Date, n: number) {
   return x;
 }
 
-/* ===== DAYFLAG helpers ===== */
+// ---------- DAYFLAG helpers ----------
 const DAYFLAG_RE = /^\[DAYFLAG:(morning|afternoon)\]/i;
 function isDayFlagDescription(desc?: string | null) {
   const t = (desc || "").trim();
   return !!t && DAYFLAG_RE.test(t);
 }
 
-/* ===== Select ===== */
+// ---------- Select ----------
 const sessionSelect = {
   id: true,
   title: true,
@@ -44,18 +45,19 @@ const sessionSelect = {
   user: { select: { id: true, name: true, email: true, role: true } },
 } as const;
 
-/* ===== Validación POST ===== */
+// ---------- Validación POST ----------
 const createSchema = z
   .object({
     title: z.string().optional().nullable(), // "" permitido si es DAYFLAG
     description: z.string().optional().nullable(),
-    date: z.string().datetime({ message: "Fecha inválida (ISO)" }),
+    date: z
+      .string()
+      .datetime({ message: "Fecha inválida (usar ISO, ej: 2025-08-27T12:00:00Z)" }),
     type: z
       .enum(["GENERAL", "FUERZA", "TACTICA", "AEROBICO", "RECUPERACION"])
       .optional(),
   })
   .superRefine((data, ctx) => {
-    // Si NO es un DAYFLAG, exigimos título >= 2
     if (!isDayFlagDescription(data.description)) {
       const len = (data.title || "").trim().length;
       if (len < 2) {
@@ -68,10 +70,7 @@ const createSchema = z
     }
   });
 
-/* ===== GET /api/sessions =====
-   - ?start=YYYY-MM-DD  -> semana [lunes 00:00, lunes siguiente 00:00)
-   - sin start -> últimas 50 sesiones
-*/
+// GET /api/sessions?start=YYYY-MM-DD  (semana)  |  fallback: últimas 50
 export async function GET(req: Request) {
   try {
     await requireAuth();
@@ -82,19 +81,21 @@ export async function GET(req: Request) {
     if (start) {
       const startDate = new Date(`${start}T00:00:00.000Z`);
       if (Number.isNaN(startDate.valueOf())) {
-        return NextResponse.json({ error: "start inválido (YYYY-MM-DD)" }, { status: 400 });
+        return NextResponse.json(
+          { error: "start inválido (YYYY-MM-DD)" },
+          { status: 400 }
+        );
       }
 
       const monday = getMondayUTC(startDate);
-      const nextMonday = addDaysUTC(monday, 7); // **fin EXCLUSIVO**
+      const nextMonday = addDaysUTC(monday, 7); // FIN EXCLUSIVO
 
       const items = await prisma.session.findMany({
-        where: { date: { gte: monday, lt: nextMonday } }, // <- incluye TODO el domingo
+        where: { date: { gte: monday, lt: nextMonday } }, // <--- lt, no lte
         orderBy: [{ date: "asc" }, { createdAt: "asc" }],
         select: sessionSelect,
       });
 
-      // Mapa Lun..Dom
       const days: Record<string, typeof items> = {};
       for (let i = 0; i < 7; i++) {
         const key = toYYYYMMDDUTC(addDaysUTC(monday, i));
@@ -102,7 +103,8 @@ export async function GET(req: Request) {
       }
       for (const s of items) {
         const k = toYYYYMMDDUTC(new Date(s.date));
-        (days[k] ||= []).push(s);
+        if (!days[k]) days[k] = [];
+        days[k].push(s);
       }
 
       return NextResponse.json({
@@ -122,11 +124,14 @@ export async function GET(req: Request) {
   } catch (err: any) {
     if (err instanceof Response) return err;
     console.error("GET /api/sessions error:", err);
-    return NextResponse.json({ error: "Error al listar sesiones" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Error al listar sesiones" },
+      { status: 500 }
+    );
   }
 }
 
-/* ===== POST /api/sessions ===== */
+// POST /api/sessions
 export async function POST(req: Request) {
   try {
     const session = await requireSessionWithRoles([Role.CT, Role.ADMIN]);
