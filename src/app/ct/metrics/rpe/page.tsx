@@ -5,17 +5,13 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import HelpTip from "@/components/HelpTip";
 
+import { mean, srpeOf, type RPERow as RPERowLib } from "@/lib/metrics/rpe";
+
 export const dynamic = "force-dynamic";
 
-type Row = {
+type Row = RPERowLib & {
   id: string;
-  playerKey?: string | null;
-  userName?: string | null;
-  user?: { name?: string; email?: string };
   date: string;
-  rpe: number;
-  duration?: number | null;
-  load?: number | null; // sRPE (AU)
 };
 
 /** ---------- Utils ---------- */
@@ -30,16 +26,6 @@ function addDays(d: Date, days: number) {
   const x = new Date(d);
   x.setDate(x.getDate() + days);
   return x;
-}
-function mean(nums: number[]) {
-  if (!nums.length) return 0;
-  return nums.reduce((a, b) => a + b, 0) / nums.length;
-}
-function srpeOf(r: Row) {
-  const l = r.load;
-  if (l != null) return Number(l);
-  const dur = r.duration == null ? 0 : Number(r.duration);
-  return Number(r.rpe ?? 0) * dur;
 }
 
 /** Barras inline para KPIs */
@@ -88,6 +74,8 @@ function BarsInline({
 function RPECT() {
   type Tab = "respuestas" | "kpis" | "reportes";
   const search = useSearchParams();
+  theLoop: {
+  }
   const initialTab = (search.get("tab") as Tab) || "respuestas";
   const [tab, setTab] = useState<Tab>(initialTab);
   function switchTab(next: Tab) {
@@ -235,6 +223,28 @@ function RPECT() {
     };
   }, [rows]);
 
+  // ----- Export CSV -----
+  function exportCSV() {
+    const header = ["Jugador", "Fecha", "RPE", "Minutos", "sRPE_AU"];
+    const lines = [header.join(",")];
+
+    for (const r of filtered) {
+      const jug = (r.userName || r.playerKey || "Jugador").replace(/"/g, '""');
+      const au = srpeOf(r);
+      lines.push(
+        [`"${jug}"`, r.date, r.rpe, r.duration ?? "", au ? Math.round(au) : ""].join(",")
+      );
+    }
+
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `rpe_dia_${date}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   // ----- KPIs de rango (fetch por día, igual que Wellness) -----
   useEffect(() => {
     if (tab !== "kpis") return;
@@ -255,7 +265,7 @@ function RPECT() {
             userName: r.userName || r.playerKey || r.user?.name || r.user?.email || "Jugador",
           }));
 
-          const srpes = fixed.map(srpeOf).filter((v) => !Number.isNaN(v));
+          const srpes = fixed.map((x) => srpeOf(x)).filter((v) => !Number.isNaN(v));
           dailyTeam.push(srpes.reduce((a, b) => a + b, 0));
           allIndividual.push(...srpes);
         }
@@ -304,6 +314,12 @@ function RPECT() {
             className="rounded-lg border px-2 py-1 text-sm hover:bg-gray-50"
           >
             Recargar
+          </button>
+          <button
+            onClick={exportCSV}
+            className="rounded-lg bg-black text-white px-3 py-1.5 text-sm hover:opacity-90"
+          >
+            Exportar CSV
           </button>
         </div>
       </header>
