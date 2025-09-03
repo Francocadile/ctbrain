@@ -12,8 +12,9 @@ import {
   toYYYYMMDDUTC,
   type SessionDTO,
 } from "@/lib/api/sessions";
-import { listPlaces, addPlace as apiAddPlace, replacePlaces } from "@/lib/settings";
+import { listPlaces } from "@/lib/settings";
 import PlannerActionsBar from "./PlannerActionsBar";
+import HelpTip from "@/components/HelpTip";
 
 export const dynamic = "force-dynamic";
 
@@ -155,7 +156,7 @@ function PlanSemanalInner() {
     window.addEventListener("planner-row-labels-updated", onUpd as any);
     return () => window.removeEventListener("planner-row-labels-updated", onUpd as any);
   }, []);
-  // ✅ Si no hay personalizado, usamos el nombre original (sin "Activación" por defecto)
+  // Si no hay personalizado, usamos el nombre original
   const label = (id: string) => rowLabels[id] || id;
 
   async function loadWeek(d: Date) {
@@ -287,31 +288,7 @@ function PlanSemanalInner() {
     }
   }
 
-  function discardAll() {
-    if (Object.keys(pending).length === 0) return;
-    const ok = confirm("¿Descartar todos los cambios sin guardar?");
-    if (!ok) return;
-    setPending({});
-    setVideoEditing({});
-    loadWeek(base);
-  }
-
-  function managePlaces() {
-    (async () => {
-      const edited = prompt(
-        "Gestionar lugares (una línea por lugar). Borrá líneas para eliminar, editá para renombrar:",
-        places.join("\n")
-      );
-      if (edited === null) return;
-      const list = edited
-        .split("\n")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const unique = await replacePlaces(list);
-      setPlaces(unique);
-    })();
-  }
-
+  // -------- Inputs específicos --------
   function MetaInput({
     dayYmd,
     turn,
@@ -349,43 +326,22 @@ function PlanSemanalInner() {
       );
     }
 
-    // LUGAR
+    // LUGAR → TEXTO MANUAL + AUTOCOMPLETAR (datalist). Gestión SOLO en “Herramientas”.
     if (row === "LUGAR") {
-      const [localPlaces, setLocalPlaces] = useState<string[]>(places);
-      useEffect(() => setLocalPlaces(places), [places]);
-
-      const addPlace = () => {
-        (async () => {
-          const n = prompt("Nuevo lugar:");
-          if (!n) return;
-          const updated = await apiAddPlace(n);
-          setLocalPlaces(updated);
-          setPlaces(updated);
-          stageCell(dayYmd, turn, row, n.trim());
-        })();
-      };
+      const [local, setLocal] = useState(value || "");
+      useEffect(() => setLocal(value || ""), [value, k]);
 
       return (
-        <div className="flex gap-1">
-          <select
+        <div className="flex items-center gap-1">
+          <input
+            list="places-datalist"
             className="h-8 w-full rounded-md border px-2 text-xs"
-            value={value || ""}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v === "__add__") return addPlace();
-              if (v === "__manage__") return managePlaces();
-              stageCell(dayYmd, turn, row, v);
-            }}
-          >
-            <option value="">— Lugar —</option>
-            {localPlaces.map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-            <option value="__add__">➕ Agregar…</option>
-            <option value="__manage__">⚙️ Gestionar…</option>
-          </select>
+            placeholder="Lugar (texto libre o elegí de sugerencias)"
+            value={local}
+            onChange={(e) => setLocal(e.target.value)}
+            onBlur={() => stageCell(dayYmd, turn, row, (local || "").trim())}
+          />
+          <HelpTip text="Escribí el lugar. Si querés una lista fija para elegir, agregá y gestioná lugares en la pestaña Herramientas." />
         </div>
       );
     }
@@ -394,25 +350,28 @@ function PlanSemanalInner() {
     if (row === "HORA") {
       const hhmm = /^[0-9]{2}:[0-9]{2}$/.test(value || "") ? value : "";
       return (
-        <input
-          type="time"
-          className="h-8 w-full rounded-md border px-2 text-xs"
-          value={hhmm}
-          onChange={(e) => stageCell(dayYmd, turn, row, e.target.value)}
-        />
+        <div className="flex items-center gap-1">
+          <input
+            type="time"
+            className="h-8 w-full rounded-md border px-2 text-xs"
+            value={hhmm}
+            onChange={(e) => stageCell(dayYmd, turn, row, e.target.value)}
+          />
+          <HelpTip text="Hora de inicio (opcional)." />
+        </div>
       );
     }
 
     // VIDEO
     const parsed = parseVideoValue(value || "");
-    const isEditing = !!videoEditing[k];
+    const [isEditing, setIsEditing] = useState(false);
     const [localLabel, setLocalLabel] = useState(parsed.label);
     const [localUrl, setLocalUrl] = useState(parsed.url);
     useEffect(() => {
       setLocalLabel(parsed.label);
       setLocalUrl(parsed.url);
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [k, isEditing]);
+    }, [k, value]);
 
     if (!isEditing && (parsed.label || parsed.url)) {
       return (
@@ -434,7 +393,7 @@ function PlanSemanalInner() {
             <button
               type="button"
               className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
-              onClick={() => setVideoEditing((m) => ({ ...m, [k]: true }))}
+              onClick={() => setIsEditing(true)}
               title="Editar"
             >
               ✏️
@@ -452,34 +411,39 @@ function PlanSemanalInner() {
       );
     }
 
-    return (
-      <div className="flex items-center gap-1.5">
-        <input
-          className="h-8 w-[45%] rounded-md border px-2 text-xs"
-          placeholder="Título"
-          value={localLabel}
-          onChange={(e) => setLocalLabel(e.target.value)}
-        />
-        <input
-          type="url"
-          className="h-8 w-[55%] rounded-md border px-2 text-xs"
-          placeholder="https://…"
-          value={localUrl}
-          onChange={(e) => setLocalUrl(e.target.value)}
-        />
-        <button
-          type="button"
-          className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50"
-          onClick={() => {
-            stageCell(dayYmd, turn, row, joinVideoValue(localLabel, localUrl));
-            setVideoEditing((m) => ({ ...m, [k]: false }));
-          }}
-          title="Listo"
-        >
-          ✓
-        </button>
-      </div>
-    );
+    if (row === "VIDEO") {
+      return (
+        <div className="flex items-center gap-1.5">
+          <input
+            className="h-8 w-[45%] rounded-md border px-2 text-xs"
+            placeholder="Título"
+            value={localLabel}
+            onChange={(e) => setLocalLabel(e.target.value)}
+          />
+          <input
+            type="url"
+            className="h-8 w-[55%] rounded-md border px-2 text-xs"
+            placeholder="https://…"
+            value={localUrl}
+            onChange={(e) => setLocalUrl(e.target.value)}
+          />
+          <button
+            type="button"
+            className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50"
+            onClick={() => {
+              stageCell(dayYmd, turn, row, joinVideoValue(localLabel, localUrl));
+              setIsEditing(false);
+            }}
+            title="Listo"
+          >
+            ✓
+          </button>
+          <HelpTip text="Podés pegar un enlace (YouTube, Drive, etc.). Opcionalmente agregá un título." />
+        </div>
+      );
+    }
+
+    return null;
   }
 
   function EditableCell({
@@ -524,7 +488,10 @@ function PlanSemanalInner() {
     return (
       <div className="space-y-1">
         <div className="flex items-center justify-between">
-          <div>{flagBadge}</div>
+          <div className="flex items-center gap-1">
+            {flagBadge}
+            <HelpTip text="Escribí libremente. Tip: Ctrl/⌘ + Enter para marcar la celda sin guardar todavía." />
+          </div>
           {sessionHref ? (
             <a
               href={sessionHref}
@@ -655,7 +622,6 @@ function PlanSemanalInner() {
               className="grid items-center"
               style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
             >
-              {/* Meta: NO se renombran, se muestran tal cual */}
               <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">
                 {rowName}
               </div>
@@ -678,7 +644,6 @@ function PlanSemanalInner() {
               className="grid items-stretch"
               style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
             >
-              {/* Contenido: SÍ usan nombres personalizados */}
               <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600 whitespace-pre-line">
                 {label(rowName)}
               </div>
@@ -690,6 +655,13 @@ function PlanSemanalInner() {
             </div>
           ))}
         </div>
+
+        {/* Autocompletar de lugares (se llena desde Herramientas) */}
+        <datalist id="places-datalist">
+          {places.map((p) => (
+            <option key={p} value={p} />
+          ))}
+        </datalist>
       </>
     );
   }
@@ -710,14 +682,16 @@ function PlanSemanalInner() {
       {!hideHeader && (
         <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-lg md:text-xl font-bold">Plan semanal — Editor en tabla</h1>
+            <h1 className="text-lg md:text-xl font-bold flex items-center gap-2">
+              Plan semanal — Editor en tabla
+              <HelpTip text="Acá armás la semana. Usá Mañana/Tarde para alternar, y Herramientas para importar/duplicar y cargar lugares predefinidos." />
+            </h1>
             <p className="text-xs md:text-sm text-gray-500">
               Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)
             </p>
             <p className="mt-1 text-[10px] text-gray-400">
-              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/
-              <kbd className="rounded border px-1">⌘</kbd> +{" "}
-              <kbd className="rounded border px-1">Enter</kbd> para marcar una celda sin guardar aún.
+              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd> +{" "}
+              <kbd className="rounded border px-1">Enter</kbd> marca una celda sin guardar aún.
             </p>
           </div>
 
@@ -754,13 +728,6 @@ function PlanSemanalInner() {
                 title={pendingCount ? `${pendingCount} cambio(s) por guardar` : "Sin cambios"}
               >
                 {savingAll ? "Guardando..." : `Guardar cambios${pendingCount ? ` (${pendingCount})` : ""}`}
-              </button>
-              <button
-                onClick={discardAll}
-                disabled={pendingCount === 0 || savingAll}
-                className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
-              >
-                Descartar
               </button>
             </div>
           ) : (
@@ -822,7 +789,7 @@ function PlanSemanalInner() {
             activePane === "tools" ? "bg-black text-white" : "hover:bg-gray-50"
           }`}
           onClick={() => setActivePane("tools")}
-          title="Exportar / Importar / Duplicar semana y Configurar etiquetas"
+          title="Exportar / Importar / Duplicar semana y cargar Lugares"
         >
           Herramientas
         </button>
@@ -832,6 +799,12 @@ function PlanSemanalInner() {
       {activePane === "tools" ? (
         <div className="rounded-2xl border bg-white shadow-sm p-3">
           <PlannerActionsBar onAfterChange={() => loadWeek(base)} />
+          <div className="mt-2 text-[12px] text-gray-600 flex items-center gap-1">
+            <HelpTip text="Desde Herramientas podés: importar/duplicar semanas y cargar la lista de 'Lugares' que luego se sugieren en el campo Lugar." />
+          </div>
+          <div className="mt-2 text-[12px] text-gray-600 flex items-center gap-1">
+            <HelpTip text="Los nombres de filas (Pre entreno, Físico, etc.) se pueden personalizar desde Herramientas. Hoy se guardan en este navegador; si querés que quede por usuario en cualquier dispositivo, lo activamos como siguiente paso." />
+          </div>
         </div>
       ) : loading ? (
         <div className="text-gray-500">Cargando semana…</div>
