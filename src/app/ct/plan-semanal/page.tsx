@@ -121,7 +121,7 @@ function PlanSemanalInner() {
   const [places, setPlaces] = useState<string[]>([]);
   useEffect(() => { (async () => setPlaces(await listPlaces()))(); }, []);
 
-  // Cambios pendientes (solo celdas GRID/LUGAR/HORA/VIDEO)
+  // Cambios pendientes (GRID/META)
   const [pending, setPending] = useState<Record<string, string>>({});
   const [videoEditing, setVideoEditing] = useState<Record<string, boolean>>({});
   const [savingAll, setSavingAll] = useState(false);
@@ -161,7 +161,7 @@ function PlanSemanalInner() {
     return Array.from({ length: 7 }).map((_, i) => toYYYYMMDDUTC(addDaysUTC(start, i)));
   }, [weekStart]);
 
-  // ------- helpers de búsqueda -------
+  // ------- helpers búsqueda -------
   function findCell(dayYmd: string, turn: TurnKey, row: string): SessionDTO | undefined {
     const list = daysMap[dayYmd] || [];
     return list.find((s) => isCellOf(s, turn, row));
@@ -286,7 +286,7 @@ function PlanSemanalInner() {
     loadWeek(base);
   }
 
-  // ===== Lugares (gestión definitiva) =====
+  // ===== Lugares (gestión) =====
   function managePlaces() {
     (async () => {
       const edited = prompt(
@@ -470,7 +470,7 @@ function PlanSemanalInner() {
           suppressContentEditableWarning
           onBlur={onBlur}
           onKeyDown={onKeyDown}
-          className={`min-h[90px] w-full rounded-xl border p-2 text-[13px] leading-5 outline-none focus:ring-2 ${
+          className={`min-h-[90px] w-full rounded-xl border p-2 text-[13px] leading-5 outline-none focus:ring-2 ${
             staged !== undefined ? "border-emerald-400 ring-emerald-200" : "focus:ring-emerald-400"
           } whitespace-pre-wrap`}
           data-placeholder="Escribir…"
@@ -481,42 +481,41 @@ function PlanSemanalInner() {
   }
 
   // =======================
-  // Tipo de día (Normal/Partido/Libre)
+  // Tipo de día (Normal/Partido/Libre) — CONTROLADO
   // =======================
   function DayFlagCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
+    // Valor SIEMPRE viene de daysMap (sin estados locales de kind que se reseteen)
     const df = getDayFlag(ymd, turn);
-    const [kind, setKind] = useState<DayFlagKind>(df.kind);
     const [rival, setRival] = useState(df.rival || "");
-    const [logo, setLogo] = useState(df.logoUrl || "");
+    const [logo, setLogo]   = useState(df.logoUrl || "");
 
-    // Mantener sincronizado si cambia desde servidor (incluye DOMINGO)
+    // Sincronizar campos extra cuando cambie desde servidor (incluye domingo)
     useEffect(() => {
-      setKind(df.kind);
       setRival(df.rival || "");
       setLogo(df.logoUrl || "");
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [df.kind, df.rival, df.logoUrl, ymd, turn]);
+    }, [df.rival, df.logoUrl, ymd, turn]);
+
+    const onChangeKind = async (k: DayFlagKind) => {
+      if (k === "NONE") await setDayFlag(ymd, turn, { kind: "NONE" });
+      if (k === "LIBRE") await setDayFlag(ymd, turn, { kind: "LIBRE" });
+      if (k === "PARTIDO") await setDayFlag(ymd, turn, { kind: "PARTIDO", rival, logoUrl: logo });
+    };
 
     return (
-      <div className="p-1" key={`${ymd}-${turn}-flag`}>
+      <div className="p-1">
         <div className="flex items-center gap-1">
           <select
             className="h-7 w-[110px] rounded-md border px-1.5 text-[11px]"
-            value={kind}
-            onChange={async (e) => {
-              const k = e.target.value as DayFlagKind;
-              setKind(k);
-              if (k === "NONE") await setDayFlag(ymd, turn, { kind: "NONE" });
-              if (k === "LIBRE") await setDayFlag(ymd, turn, { kind: "LIBRE" });
-              if (k === "PARTIDO") await setDayFlag(ymd, turn, { kind: "PARTIDO", rival, logoUrl: logo });
-            }}
+            value={df.kind /* ← controlado por store */}
+            onChange={(e) => onChangeKind(e.target.value as DayFlagKind)}
           >
             <option value="NONE">Normal</option>
             <option value="PARTIDO">Partido</option>
             <option value="LIBRE">Libre</option>
           </select>
 
-          {kind === "PARTIDO" && (
+          {df.kind === "PARTIDO" && (
             <>
               <input
                 className="h-7 flex-1 rounded-md border px-2 text-[11px]"
@@ -546,27 +545,24 @@ function PlanSemanalInner() {
         style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
       >
         <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Tipo</div>
-        {orderedDays.map((ymd) => <DayFlagCell key={`${ymd}-${turn}-c`} ymd={ymd} turn={turn} />)}
+        {orderedDays.map((ymd) => (
+          <DayFlagCell key={`${ymd}-${turn}-flag`} ymd={ymd} turn={turn} />
+        ))}
       </div>
     );
   }
 
   // =======================
-  // Nombre de sesión
+  // Nombre de sesión (solo guarda en blur/Enter)
   // =======================
   function DayNameCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const initial = getDayName(ymd, turn);
     const [text, setText] = useState(initial);
-
-    useEffect(() => { setText(initial); /* keep in sync */ }, [initial, ymd, turn]);
+    useEffect(() => { setText(initial); }, [initial, ymd, turn]);
 
     const commit = async () => { await setDayName(ymd, turn, text); };
-
-    const onKeyDown: React.KeyboardEventHandler<HTMLInputElement> = async (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        (e.currentTarget as HTMLInputElement).blur();
-      }
+    const onKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
+      if (e.key === "Enter") { e.preventDefault(); (e.currentTarget as HTMLInputElement).blur(); }
     };
 
     return (
@@ -576,13 +572,12 @@ function PlanSemanalInner() {
           placeholder="Nombre de sesión (ej. Sesión 1 TM)"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onBlur={commit}             // ✅ guarda solo en blur
-          onKeyDown={onKeyDown}       // ✅ o con Enter
+          onBlur={commit}
+          onKeyDown={onKeyDown}
         />
       </div>
     );
   }
-
   function DayNameRow({ turn }: { turn: TurnKey }) {
     return (
       <div
@@ -597,7 +592,6 @@ function PlanSemanalInner() {
 
   const pendingCount = Object.keys(pending).length;
 
-  // Sección por turno
   function TurnEditor({ turn }: { turn: TurnKey }) {
     return (
       <>
@@ -667,7 +661,7 @@ function PlanSemanalInner() {
               Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)
             </p>
             <p className="mt-1 text-[10px] text-gray-400">
-              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd> + <kbd className="rounded border px-1">Enter</kbd> para “marcar” una celda sin guardar aún.
+              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd> + <kbd className="rounded border px-1">Enter</kbd> marca una celda sin guardar aún.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -676,7 +670,11 @@ function PlanSemanalInner() {
             <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Semana siguiente ▶</button>
             <div className="w-px h-6 bg-gray-200 mx-1" />
             <button
-              onClick={() => { forceCommitActiveField(); setTimeout(saveAll, 0); }}
+              onClick={() => { 
+                // forzar blur antes de guardar para no perder el último cambio tipeado
+                if (typeof document !== "undefined") (document.activeElement as HTMLElement | null)?.blur?.(); 
+                setTimeout(saveAll, 0);
+              }}
               disabled={pendingCount === 0 || savingAll}
               className={`px-3 py-1.5 rounded-xl text-xs ${pendingCount === 0 || savingAll ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
               title={pendingCount ? `${pendingCount} cambio(s) por guardar` : "Sin cambios"}
