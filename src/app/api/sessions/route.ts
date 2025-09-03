@@ -5,7 +5,7 @@ import prisma from "@/lib/prisma";
 import { requireAuth, requireSessionWithRoles } from "@/lib/auth-helpers";
 import { Role } from "@prisma/client";
 
-// ---------- Fecha ----------
+/* ---------- Fecha ---------- */
 function toYYYYMMDDUTC(d: Date) {
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
@@ -14,7 +14,7 @@ function toYYYYMMDDUTC(d: Date) {
 }
 function getMondayUTC(d: Date) {
   const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  const dow = x.getUTCDay() || 7;
+  const dow = x.getUTCDay() || 7; // 1..7 (Domingo=7)
   if (dow !== 1) x.setUTCDate(x.getUTCDate() - (dow - 1));
   x.setUTCHours(0, 0, 0, 0);
   return x;
@@ -25,14 +25,14 @@ function addDaysUTC(d: Date, n: number) {
   return x;
 }
 
-// ---------- DAYFLAG helpers ----------
+/* ---------- DAYFLAG helpers ---------- */
 const DAYFLAG_RE = /^\[DAYFLAG:(morning|afternoon)\]/i;
 function isDayFlagDescription(desc?: string | null) {
   const t = (desc || "").trim();
   return !!t && DAYFLAG_RE.test(t);
 }
 
-// ---------- Select ----------
+/* ---------- Select ---------- */
 const sessionSelect = {
   id: true,
   title: true,
@@ -45,7 +45,7 @@ const sessionSelect = {
   user: { select: { id: true, name: true, email: true, role: true } },
 } as const;
 
-// ---------- Validación POST ----------
+/* ---------- Validación POST ---------- */
 const createSchema = z
   .object({
     title: z.string().optional().nullable(), // "" permitido si es DAYFLAG
@@ -58,6 +58,7 @@ const createSchema = z
       .optional(),
   })
   .superRefine((data, ctx) => {
+    // Si NO es un DAYFLAG, exigir mínimo 2 caracteres de título
     if (!isDayFlagDescription(data.description)) {
       const len = (data.title || "").trim().length;
       if (len < 2) {
@@ -70,7 +71,10 @@ const createSchema = z
     }
   });
 
-// GET /api/sessions?start=YYYY-MM-DD  (semana)  |  fallback: últimas 50
+/* ---------- GET /api/sessions ---------- */
+/* ?start=YYYY-MM-DD  -> devuelve mapa de la semana (Lun..Dom),
+   usando lunes siguiente como FIN EXCLUSIVO (lt: nextMonday) para incluir DOMINGO a cualquier hora.
+   Sin start -> listado de últimas 50 sesiones (para /ct/sessions). */
 export async function GET(req: Request) {
   try {
     await requireAuth();
@@ -79,6 +83,7 @@ export async function GET(req: Request) {
     const start = url.searchParams.get("start");
 
     if (start) {
+      // Semana para el editor
       const startDate = new Date(`${start}T00:00:00.000Z`);
       if (Number.isNaN(startDate.valueOf())) {
         return NextResponse.json(
@@ -88,14 +93,15 @@ export async function GET(req: Request) {
       }
 
       const monday = getMondayUTC(startDate);
-      const nextMonday = addDaysUTC(monday, 7); // FIN EXCLUSIVO
+      const nextMonday = addDaysUTC(monday, 7); // ✅ FIN EXCLUSIVO
 
       const items = await prisma.session.findMany({
-        where: { date: { gte: monday, lt: nextMonday } }, // <--- lt, no lte
+        where: { date: { gte: monday, lt: nextMonday } }, // ✅ lt para incluir DOMINGO entero
         orderBy: [{ date: "asc" }, { createdAt: "asc" }],
         select: sessionSelect,
       });
 
+      // Construir mapa Lun..Dom
       const days: Record<string, typeof items> = {};
       for (let i = 0; i < 7; i++) {
         const key = toYYYYMMDDUTC(addDaysUTC(monday, i));
@@ -110,11 +116,11 @@ export async function GET(req: Request) {
       return NextResponse.json({
         days,
         weekStart: toYYYYMMDDUTC(monday),
-        weekEnd: toYYYYMMDDUTC(addDaysUTC(monday, 6)), // informativo
+        weekEnd: toYYYYMMDDUTC(addDaysUTC(monday, 6)), // solo informativo
       });
     }
 
-    // Listado general (Sesiones)
+    // Listado para /ct/sessions (no tocar, así como te funciona)
     const sessions = await prisma.session.findMany({
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       select: sessionSelect,
@@ -131,7 +137,7 @@ export async function GET(req: Request) {
   }
 }
 
-// POST /api/sessions
+/* ---------- POST /api/sessions ---------- */
 export async function POST(req: Request) {
   try {
     const session = await requireSessionWithRoles([Role.CT, Role.ADMIN]);
@@ -162,6 +168,9 @@ export async function POST(req: Request) {
   } catch (err: any) {
     if (err instanceof Response) return err;
     console.error("POST /api/sessions error:", err);
-    return NextResponse.json({ error: "Error al crear la sesión" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Error al crear la sesión" },
+      { status: 500 }
+    );
   }
 }
