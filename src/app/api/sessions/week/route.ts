@@ -1,24 +1,20 @@
-// src/app/api/sessions/week/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-/* ===== helpers de fecha (UTC) ===== */
+/* ===== helpers UTC ===== */
 function toYYYYMMDDUTC(d: Date) {
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
   const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
-
 function getMondayUTC(base: Date) {
-  // normalizamos a 00:00 UTC y retrocedemos hasta lunes
   const d = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate()));
-  const dow = d.getUTCDay() || 7; // 1..7
+  const dow = d.getUTCDay() || 7;
   if (dow !== 1) d.setUTCDate(d.getUTCDate() - (dow - 1));
   d.setUTCHours(0, 0, 0, 0);
   return d;
 }
-
 function addDaysUTC(d: Date, n: number) {
   const x = new Date(d);
   x.setUTCDate(x.getUTCDate() + n);
@@ -31,25 +27,18 @@ export async function GET(req: Request) {
     const start = url.searchParams.get("start"); // YYYY-MM-DD (opcional)
 
     const base = start ? new Date(`${start}T00:00:00.000Z`) : new Date();
-    const weekStart = getMondayUTC(base);        // lunes 00:00 UTC
+    const weekStart = getMondayUTC(base);
     const nextMonday = addDaysUTC(weekStart, 7); // **fin EXCLUSIVO**
-    const sunday = addDaysUTC(weekStart, 6);     // solo informativo
+    const sunday = addDaysUTC(weekStart, 6);     // info
 
-    // Traemos TODO lo que cae dentro de [weekStart, nextMonday)
     const rows = await prisma.session.findMany({
-      where: {
-        date: {
-          gte: weekStart,
-          lt: nextMonday, // <- clave: excluye el lunes siguiente, incluye TODO el domingo
-        },
-      },
+      where: { date: { gte: weekStart, lt: nextMonday } }, // <- incluye todo el domingo
       orderBy: { date: "asc" },
       include: {
         user: { select: { id: true, name: true, email: true, role: true } },
       },
     });
 
-    // Inicializamos Lun..Dom
     const days: Record<string, any[]> = {};
     for (let i = 0; i < 7; i++) {
       days[toYYYYMMDDUTC(addDaysUTC(weekStart, i))] = [];
@@ -72,7 +61,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       weekStart: toYYYYMMDDUTC(weekStart),
-      weekEnd: toYYYYMMDDUTC(sunday), // informativo
+      weekEnd: toYYYYMMDDUTC(sunday),
       days,
     });
   } catch (e: any) {
