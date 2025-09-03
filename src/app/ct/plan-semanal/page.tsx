@@ -97,6 +97,12 @@ function cellKey(dayYmd: string, turn: TurnKey, row: string) {
   return `${dayYmd}::${turn}::${row}`;
 }
 
+// ---------- helpers de semana para un día arbitrario ----------
+function mondayOfYMD(ymd: string) {
+  const d = new Date(`${ymd}T00:00:00.000Z`);
+  return getMonday(d);
+}
+
 function PlanSemanalInner() {
   const qs = useSearchParams();
   const router = useRouter();
@@ -187,7 +193,8 @@ function PlanSemanalInner() {
   // ---------- refresh de UN día (sin tocar pending) ----------
   async function refreshOneDay(ymd: string) {
     try {
-      const res = await getSessionsWeek({ start: weekStart || ymd }); // misma semana
+      const monday = mondayOfYMD(ymd);
+      const res = await getSessionsWeek({ start: toYYYYMMDDUTC(monday) });
       const fresh = res.days?.[ymd] || [];
       setDaysMap((prev) => ({ ...prev, [ymd]: fresh }));
     } catch (e) {
@@ -195,7 +202,7 @@ function PlanSemanalInner() {
     }
   }
 
-  // 🟢 ACTUALIZA daysMap EN MEMORIA (optimista) + merge desde server del día afectado
+  // 🟢 OPTIMISTA para FLAG: actualiza daysMap antes de la IO
   function upsertDayFlagLocal(ymd: string, turn: TurnKey, df: DayFlag, server?: SessionDTO | null) {
     setDaysMap((prev) => {
       const list = [...(prev[ymd] || [])];
@@ -220,6 +227,9 @@ function PlanSemanalInner() {
   }
 
   async function setDayFlag(ymd: string, turn: TurnKey, df: DayFlag) {
+    // 🔸 Optimista inmediato (evita “reset” del select, incluso en Domingo)
+    upsertDayFlagLocal(ymd, turn, df);
+
     const existing = findDayFlagSession(ymd, turn);
     const iso = computeISOForSlot(ymd, turn);
     const desc = `${marker(DAYFLAG_TAG, turn)} | ${ymd}`;
@@ -227,7 +237,6 @@ function PlanSemanalInner() {
 
     try {
       if (df.kind === "NONE") {
-        upsertDayFlagLocal(ymd, turn, { kind: "NONE" });
         if (existing) await deleteSession(existing.id);
         await refreshOneDay(ymd);
         return;
@@ -243,10 +252,12 @@ function PlanSemanalInner() {
     } catch (e: any) {
       console.error(e);
       alert(e?.message || "No se pudo guardar el Tipo del día");
-      await refreshOneDay(ymd); // revertir a server
+      // 🔸 Revertir a lo que diga el servidor
+      await refreshOneDay(ymd);
     }
   }
 
+  // 🟢 OPTIMISTA para NOMBRE de sesión
   function upsertDayNameLocal(ymd: string, turn: TurnKey, name: string, server?: SessionDTO | null) {
     setDaysMap((prev) => {
       const list = [...(prev[ymd] || [])];
@@ -271,15 +282,15 @@ function PlanSemanalInner() {
   }
 
   async function setDayName(dayYmd: string, turn: TurnKey, name: string) {
+    // 🔸 optimista
+    upsertDayNameLocal(dayYmd, turn, name);
+
     const existing = findDayNameSession(dayYmd, turn);
     const iso = computeISOForSlot(dayYmd, turn);
     const desc = `${marker(DAYNAME_TAG, turn)} | ${dayYmd}`;
     const title = (name || "").trim();
 
     try {
-      // optimista
-      upsertDayNameLocal(dayYmd, turn, title);
-
       if (!title) {
         if (existing) await deleteSession(existing.id);
         await refreshOneDay(dayYmd);
@@ -297,7 +308,7 @@ function PlanSemanalInner() {
     } catch (e: any) {
       console.error(e);
       alert(e?.message || "No se pudo guardar el Nombre de sesión");
-      await refreshOneDay(dayYmd); // revertir a server
+      await refreshOneDay(dayYmd);
     }
   }
 
@@ -571,7 +582,7 @@ function PlanSemanalInner() {
   }
 
   // =======================
-  // Tipo de día (Normal/Partido/Libre) — **OPTIMISTA + MERGE DÍA**
+  // Tipo de día (Normal/Partido/Libre) — OPTIMISTA + refresh de día
   // =======================
   function DayFlagCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const df = getDayFlag(ymd, turn);
@@ -581,12 +592,14 @@ function PlanSemanalInner() {
     const [logo, setLogo]   = useState(df.logoUrl || "");
     const [saving, setSaving] = useState(false);
 
+    // Si cambia lo que viene de server para ESTE ymd/turn, sincronizamos
     useEffect(() => {
       setLocalKind(df.kind);
       setRival(df.rival || "");
       setLogo(df.logoUrl || "");
+      // solo reacciona cuando llega algo distinto desde server
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [df.kind, df.rival, df.logoUrl, ymd, turn]);
+    }, [ymd, turn, df.kind, df.rival, df.logoUrl]);
 
     const commit = async (next: DayFlag) => {
       setSaving(true);
@@ -598,7 +611,7 @@ function PlanSemanalInner() {
     };
 
     const onChangeKind = (k: DayFlagKind) => {
-      setLocalKind(k); // optimista
+      setLocalKind(k); // mantiene el select estable inmediatamente
       if (k === "NONE") return commit({ kind: "NONE" });
       if (k === "LIBRE") return commit({ kind: "LIBRE" });
       return commit({ kind: "PARTIDO", rival, logoUrl: logo });
@@ -658,7 +671,7 @@ function PlanSemanalInner() {
   }
 
   // =======================
-  // Nombre de sesión (solo guarda en blur/Enter) — **OPTIMISTA + MERGE DÍA**
+  // Nombre de sesión (solo guarda en blur/Enter) — OPTIMISTA + refresh día
   // =======================
   function DayNameCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const initial = getDayName(ymd, turn);
