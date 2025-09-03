@@ -1,3 +1,4 @@
+// src/app/ct/plan-semanal/page.tsx
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -27,19 +28,21 @@ type TurnKey = "morning" | "afternoon";
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 const META_ROWS = ["LUGAR", "HORA", "VIDEO"] as const;
 
-// ---------- TAGS ----------
+// ---- Marcadores especiales por día+turno ----
 type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
 type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string };
 
-const DAYFLAG_TAG = "DAYFLAG";   // description: [DAYFLAG:<turn>] | YYYY-MM-DD
-const DAYNAME_TAG = "DAYNAME";   // description: [DAYNAME:<turn>] | YYYY-MM-DD
+const DAYFLAG_TAG = "DAYFLAG";    // [DAYFLAG:<turn>] | YYYY-MM-DD
+const DAYNAME_TAG = "DAYNAME";    // [DAYNAME:<turn>] | YYYY-MM-DD  (título = nombre de sesión)
 
-function marker(tag: string, turn: TurnKey) { return `[${tag}:${turn}]`; }
-function isTag(s: SessionDTO, tag: string, turn: TurnKey) {
+function marker(tag: string, turn: TurnKey) {
+  return `[${tag}:${turn}]`;
+}
+function isWithMarker(s: SessionDTO, tag: string, turn: TurnKey) {
   return typeof s.description === "string" && s.description.startsWith(marker(tag, turn));
 }
-function isDayFlag(s: SessionDTO, turn: TurnKey) { return isTag(s, DAYFLAG_TAG, turn); }
-function isDayName(s: SessionDTO, turn: TurnKey) { return isTag(s, DAYNAME_TAG, turn); }
+function isDayFlag(s: SessionDTO, turn: TurnKey) { return isWithMarker(s, DAYFLAG_TAG, turn); }
+function isDayName(s: SessionDTO, turn: TurnKey) { return isWithMarker(s, DAYNAME_TAG, turn); }
 
 function parseDayFlagTitle(title: string | null | undefined): DayFlag {
   const t = (title || "").trim();
@@ -55,6 +58,7 @@ function buildDayFlagTitle(df: DayFlag): string {
   return "";
 }
 
+// ---- utilidades tiempo ----
 function addDaysUTC(date: Date, days: number) {
   const x = new Date(date);
   x.setUTCDate(x.getUTCDate() + days);
@@ -70,18 +74,23 @@ function humanDayUTC(ymd: string) {
   });
 }
 function computeISOForSlot(dayYmd: string, turn: TurnKey) {
-  // hora fija en UTC para evitar DST/local
-  const base = new Date(`${dayYmd}T12:00:00.000Z`);
+  const base = new Date(`${dayYmd}T00:00:00.000Z`);
   const h = turn === "morning" ? 9 : 15;
   base.setUTCHours(h, 0, 0, 0);
   return base.toISOString();
 }
-function cellMarker(turn: TurnKey, row: string) { return `[GRID:${turn}:${row}]`; }
+
+// ---- celdas de la grilla ----
+function cellMarker(turn: TurnKey, row: string) {
+  return `[GRID:${turn}:${row}]`;
+}
 function isCellOf(s: SessionDTO, turn: TurnKey, row: string) {
   return typeof s.description === "string" && s.description.startsWith(cellMarker(turn, row));
 }
+
 function parseVideoValue(v: string | null | undefined): { label: string; url: string } {
-  const raw = (v || "").trim(); if (!raw) return { label: "", url: "" };
+  const raw = (v || "").trim();
+  if (!raw) return { label: "", url: "" };
   const [label, url] = raw.split("|").map((s) => s.trim());
   if (!url && label?.startsWith("http")) return { label: "Video", url: label };
   return { label: label || "", url: url || "" };
@@ -97,16 +106,12 @@ function cellKey(dayYmd: string, turn: TurnKey, row: string) {
   return `${dayYmd}::${turn}::${row}`;
 }
 
-function mondayOfYMD(ymd: string) {
-  const d = new Date(`${ymd}T00:00:00.000Z`);
-  return getMonday(d);
-}
-
 function PlanSemanalInner() {
   const qs = useSearchParams();
   const router = useRouter();
   const hideHeader = qs.get("hideHeader") === "1";
 
+  // pestañas turno
   const initialTurn = (qs.get("turn") === "afternoon" ? "afternoon" : "morning") as TurnKey;
   const [activeTurn, setActiveTurn] = useState<TurnKey>(initialTurn);
   useEffect(() => {
@@ -126,7 +131,7 @@ function PlanSemanalInner() {
   const [places, setPlaces] = useState<string[]>([]);
   useEffect(() => { (async () => setPlaces(await listPlaces()))(); }, []);
 
-  // Cambios pendientes (GRID/META)
+  // Cambios pendientes (solo GRID/META). Tipo y Nombre de sesión se guardan al blur/enter.
   const [pending, setPending] = useState<Record<string, string>>({});
   const [videoEditing, setVideoEditing] = useState<Record<string, boolean>>({});
   const [savingAll, setSavingAll] = useState(false);
@@ -156,8 +161,8 @@ function PlanSemanalInner() {
     const ok = confirm("Tenés cambios sin guardar. ¿Descartarlos?");
     if (ok) action();
   }
-  const goPrevWeek  = () => confirmDiscardIfNeeded(() => setBase((d) => addDaysUTC(d, -7)));
-  const goNextWeek  = () => confirmDiscardIfNeeded(() => setBase((d) => addDaysUTC(d, +7)));
+  const goPrevWeek = () => confirmDiscardIfNeeded(() => setBase((d) => addDaysUTC(d, -7)));
+  const goNextWeek = () => confirmDiscardIfNeeded(() => setBase((d) => addDaysUTC(d, 7)));
   const goTodayWeek = () => confirmDiscardIfNeeded(() => setBase(getMonday(new Date())));
 
   const orderedDays = useMemo(() => {
@@ -166,7 +171,7 @@ function PlanSemanalInner() {
     return Array.from({ length: 7 }).map((_, i) => toYYYYMMDDUTC(addDaysUTC(start, i)));
   }, [weekStart]);
 
-  // ------- helpers búsqueda -------
+  // Helpers para buscar sesiones especiales de un día
   function findCell(dayYmd: string, turn: TurnKey, row: string): SessionDTO | undefined {
     const list = daysMap[dayYmd] || [];
     return list.find((s) => isCellOf(s, turn, row));
@@ -180,53 +185,37 @@ function PlanSemanalInner() {
     return list.find((s) => isDayName(s, turn));
   }
 
+  // ---- TIPO (Normal/Partido/Libre) ----
   function getDayFlag(dayYmd: string, turn: TurnKey): DayFlag {
     const s = findDayFlagSession(dayYmd, turn);
     return parseDayFlagTitle(s?.title ?? "");
   }
-  function getDayName(dayYmd: string, turn: TurnKey): string {
-    const s = findDayNameSession(dayYmd, turn);
-    return (s?.title || "").trim();
-  }
-
-  // ---------- ACTUALIZACIONES LOCALES SIN REFRESH ----------
-  function replaceDayEntries(ymd: string, predicate: (s: SessionDTO) => boolean, next?: SessionDTO) {
-    setDaysMap((prev) => {
-      const list = [...(prev[ymd] || [])].filter((s) => !predicate(s));
-      if (next) list.push(next);
-      return { ...prev, [ymd]: list };
-    });
-  }
-
-  // --------- FLAG (Tipo) ---------
-  async function setDayFlag(ymd: string, turn: TurnKey, df: DayFlag) {
-    const existing = findDayFlagSession(ymd, turn);
-    const iso = computeISOForSlot(ymd, turn);
-    const desc = `${marker(DAYFLAG_TAG, turn)} | ${ymd}`;
+  async function setDayFlag(dayYmd: string, turn: TurnKey, df: DayFlag) {
+    const existing = findDayFlagSession(dayYmd, turn);
+    const iso = computeISOForSlot(dayYmd, turn);
+    const desc = `${marker(DAYFLAG_TAG, turn)} | ${dayYmd}`;
     const title = buildDayFlagTitle(df);
 
     try {
       if (df.kind === "NONE") {
         if (existing) await deleteSession(existing.id);
-        // actualizar local
-        replaceDayEntries(ymd, (s) => isDayFlag(s, turn));
-        return;
-      }
-
-      if (!existing) {
-        const res = await createSession({ title, description: desc, date: iso, type: "GENERAL" });
-        replaceDayEntries(ymd, (s) => isDayFlag(s, turn), res.data);
+      } else if (!existing) {
+        await createSession({ title, description: desc, date: iso, type: "GENERAL" });
       } else {
-        const res = await updateSession(existing.id, { title, description: desc, date: iso });
-        replaceDayEntries(ymd, (s) => isDayFlag(s, turn), res.data);
+        await updateSession(existing.id, { title, description: desc, date: iso });
       }
+      await loadWeek(base);
     } catch (e: any) {
       console.error(e);
-      alert(e?.message || "No se pudo guardar el Tipo del día");
+      alert(e?.message || "No se pudo actualizar el tipo del día");
     }
   }
 
-  // --------- NOMBRE DE SESIÓN ---------
+  // ---- NOMBRE DE SESIÓN (por día+turno) ----
+  function getDayName(dayYmd: string, turn: TurnKey): string {
+    const s = findDayNameSession(dayYmd, turn);
+    return (s?.title || "").trim();
+  }
   async function setDayName(dayYmd: string, turn: TurnKey, name: string) {
     const existing = findDayNameSession(dayYmd, turn);
     const iso = computeISOForSlot(dayYmd, turn);
@@ -236,23 +225,19 @@ function PlanSemanalInner() {
     try {
       if (!title) {
         if (existing) await deleteSession(existing.id);
-        replaceDayEntries(dayYmd, (s) => isDayName(s, turn));
-        return;
-      }
-
-      if (!existing) {
-        const res = await createSession({ title, description: desc, date: iso, type: "GENERAL" });
-        replaceDayEntries(dayYmd, (s) => isDayName(s, turn), res.data);
+      } else if (!existing) {
+        await createSession({ title, description: desc, date: iso, type: "GENERAL" });
       } else {
-        const res = await updateSession(existing.id, { title, description: desc, date: iso });
-        replaceDayEntries(dayYmd, (s) => isDayName(s, turn), res.data);
+        await updateSession(existing.id, { title, description: desc, date: iso });
       }
+      await loadWeek(base);
     } catch (e: any) {
       console.error(e);
-      alert(e?.message || "No se pudo guardar el Nombre de sesión");
+      alert(e?.message || "No se pudo actualizar el nombre de la sesión");
     }
   }
 
+  // ---- staging celdas GRID/META ----
   function stageCell(dayYmd: string, turn: TurnKey, row: string, text: string) {
     const k = cellKey(dayYmd, turn, row);
     setPending((prev) => {
@@ -278,28 +263,20 @@ function PlanSemanalInner() {
         const text = (value ?? "").trim();
 
         if (!text) {
-          if (existing) {
-            await deleteSession(existing.id);
-            replaceDayEntries(dayYmd, (s) => s.id === existing.id);
-          } else {
-            // nada
-          }
+          if (existing) await deleteSession(existing.id);
           continue;
         }
-
         if (!existing) {
-          const res = await createSession({ title: text, description: `${m} | ${dayYmd}`, date: iso, type: "GENERAL" });
-          replaceDayEntries(dayYmd, () => false, res.data); // push
+          await createSession({ title: text, description: `${m} | ${dayYmd}`, date: iso, type: "GENERAL" });
         } else {
-          const res = await updateSession(existing.id, {
+          await updateSession(existing.id, {
             title: text,
             description: existing.description?.startsWith(m) ? existing.description : `${m} | ${dayYmd}`,
             date: iso,
           });
-          replaceDayEntries(dayYmd, (s) => s.id === existing.id, res.data);
         }
       }
-      setPending({});
+      await loadWeek(base);
     } catch (e: any) {
       console.error(e);
       alert(e?.message || "Error al guardar cambios");
@@ -317,7 +294,7 @@ function PlanSemanalInner() {
     loadWeek(base);
   }
 
-  // ===== Lugares (gestión) =====
+  // ======= Gestión Lugares (persistente) =======
   function managePlaces() {
     (async () => {
       const edited = prompt(
@@ -334,9 +311,18 @@ function PlanSemanalInner() {
   // =======================
   // MetaInput (LUGAR/HORA/VIDEO)
   // =======================
-  function MetaInput({ dayYmd, turn, row }: { dayYmd: string; turn: TurnKey; row: (typeof META_ROWS)[number]; }) {
+  function MetaInput({
+    dayYmd,
+    turn,
+    row,
+  }: {
+    dayYmd: string;
+    turn: TurnKey;
+    row: (typeof META_ROWS)[number];
+  }) {
     const existing = findCell(dayYmd, turn, row);
     const original = (existing?.title ?? "").trim();
+
     const k = cellKey(dayYmd, turn, row);
     const pendingValue = pending[k];
     const value = pendingValue !== undefined ? pendingValue : original;
@@ -363,13 +349,13 @@ function PlanSemanalInner() {
             value={value || ""}
             onChange={(e) => {
               const v = e.target.value;
-              if (v === "__add__") return addPlace();
-              if (v === "__manage__") return managePlaces();
+              if (v === "__add__") { addPlace(); return; }
+              if (v === "__manage__") { managePlaces(); return; }
               stageCell(dayYmd, turn, row, v);
             }}
           >
             <option value="">— Lugar —</option>
-            {localPlaces.map((l) => <option key={l} value={l}>{l}</option>)}
+            {localPlaces.map((l) => (<option key={l} value={l}>{l}</option>))}
             <option value="__add__">➕ Agregar…</option>
             <option value="__manage__">⚙️ Gestionar…</option>
           </select>
@@ -389,6 +375,7 @@ function PlanSemanalInner() {
       );
     }
 
+    // VIDEO
     const parsed = parseVideoValue(value || "");
     const isEditing = !!videoEditing[k];
     const [localLabel, setLocalLabel] = useState(parsed.label);
@@ -404,17 +391,33 @@ function PlanSemanalInner() {
       return (
         <div className="flex items-center justify-between gap-1">
           {parsed.url ? (
-            <a href={parsed.url} target="_blank" rel="noreferrer" className="text-[12px] underline text-emerald-700 truncate" title={parsed.label || "Video"}>
+            <a
+              href={parsed.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[12px] underline text-emerald-700 truncate"
+              title={parsed.label || "Video"}
+            >
               {parsed.label || "Video"}
             </a>
           ) : (
             <span className="text-[12px] text-gray-500 truncate">{parsed.label}</span>
           )}
           <div className="flex items-center gap-1">
-            <button type="button" className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50" onClick={() => setVideoEditing((m) => ({ ...m, [k]: true }))}>
+            <button
+              type="button"
+              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+              onClick={() => setVideoEditing((m) => ({ ...m, [k]: true }))}
+              title="Editar"
+            >
               ✏️
             </button>
-            <button type="button" className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50" onClick={() => stageCell(dayYmd, turn, row, "")}>
+            <button
+              type="button"
+              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+              onClick={() => stageCell(dayYmd, turn, row, "")}
+              title="Borrar"
+            >
               ❌
             </button>
           </div>
@@ -453,7 +456,7 @@ function PlanSemanalInner() {
   }
 
   // =======================
-  // Celda de contenido GRID
+  // Celda de contenido (bloques)
   // =======================
   function EditableCell({ dayYmd, turn, row }: { dayYmd: string; turn: TurnKey; row: string; }) {
     const existing = findCell(dayYmd, turn, row);
@@ -476,12 +479,15 @@ function PlanSemanalInner() {
 
     const sessionHref = existing?.id ? `/ct/sessions/${existing.id}` : "";
 
+    // Estado del día (badge informativo)
     const flag = getDayFlag(dayYmd, turn);
     const flagBadge =
       flag.kind === "LIBRE" ? (
         <span className="text-[10px] bg-gray-100 border px-1.5 py-0.5 rounded">DÍA LIBRE</span>
       ) : flag.kind === "PARTIDO" ? (
-        <span className="text-[10px] bg-amber-100 border px-1.5 py-0.5 rounded">PARTIDO {flag.rival ? `vs ${flag.rival}` : ""}</span>
+        <span className="text-[10px] bg-amber-100 border px-1.5 py-0.5 rounded">
+          PARTIDO {flag.rival ? `vs ${flag.rival}` : ""}
+        </span>
       ) : null;
 
     return (
@@ -511,142 +517,125 @@ function PlanSemanalInner() {
     );
   }
 
-  // =======================
-  // Tipo de día (controlado)
-  // =======================
-  function DayFlagCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
-    const df = getDayFlag(ymd, turn);
-    const [localKind, setLocalKind] = useState<DayFlagKind>(df.kind);
-    const [rival, setRival] = useState(df.rival || "");
-    const [logo, setLogo]   = useState(df.logoUrl || "");
-    const [saving, setSaving] = useState(false);
-
-    useEffect(() => {
-      setLocalKind(df.kind);
-      setRival(df.rival || "");
-      setLogo(df.logoUrl || "");
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [ymd, turn, df.kind, df.rival, df.logoUrl]);
-
-    const commit = async (next: DayFlag) => {
-      setSaving(true);
-      try {
-        await setDayFlag(ymd, turn, next); // actualiza local con respuesta del server
-      } finally {
-        setSaving(false);
-      }
-    };
-
-    const onChangeKind = (k: DayFlagKind) => {
-      setLocalKind(k);
-      if (k === "NONE") return commit({ kind: "NONE" });
-      if (k === "LIBRE") return commit({ kind: "LIBRE" });
-      return commit({ kind: "PARTIDO", rival, logoUrl: logo });
-    };
-
-    return (
-      <div className="p-1" key={`flag-${ymd}-${turn}`}>
-        <div className="flex items-center gap-1">
-          <select
-            className="h-7 w-[110px] rounded-md border px-1.5 text-[11px]"
-            value={localKind}
-            onChange={(e) => onChangeKind(e.target.value as DayFlagKind)}
-            disabled={saving}
-          >
-            <option value="NONE">Normal</option>
-            <option value="PARTIDO">Partido</option>
-            <option value="LIBRE">Libre</option>
-          </select>
-
-          {localKind === "PARTIDO" && (
-            <>
-              <input
-                className="h-7 flex-1 rounded-md border px-2 text-[11px]"
-                placeholder="Rival"
-                value={rival}
-                onChange={(e) => setRival(e.target.value)}
-                onBlur={() => commit({ kind: "PARTIDO", rival, logoUrl: logo })}
-                disabled={saving}
-              />
-              <input
-                className="h-7 w-[120px] rounded-md border px-2 text-[11px]"
-                placeholder="Logo URL"
-                value={logo}
-                onChange={(e) => setLogo(e.target.value)}
-                onBlur={() => commit({ kind: "PARTIDO", rival, logoUrl: logo })}
-                disabled={saving}
-              />
-            </>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  function DayStatusRow({ turn }: { turn: TurnKey }) {
-    return (
-      <div
-        className="grid items-center border-b bg-gray-50/60"
-        style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
-      >
-        <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Tipo</div>
-        {orderedDays.map((ymd) => (
-          <DayFlagCell key={`row-flag-${ymd}-${turn}`} ymd={ymd} turn={turn} />
-        ))}
-      </div>
-    );
-  }
-
-  // =======================
-  // Nombre de sesión (blur/Enter)
-  // =======================
-  function DayNameCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
-    const initial = getDayName(ymd, turn);
-    const [text, setText] = useState(initial);
-    const [saving, setSaving] = useState(false);
-
-    useEffect(() => { setText(initial); }, [initial, ymd, turn]);
-
-    const commit = async () => {
-      setSaving(true);
-      try {
-        await setDayName(ymd, turn, text); // actualiza local con respuesta del server
-      } finally {
-        setSaving(false);
-      }
-    };
-    const onKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
-      if (e.key === "Enter") { e.preventDefault(); (e.currentTarget as HTMLInputElement).blur(); }
-    };
-
-    return (
-      <div className="p-1" key={`name-${ymd}-${turn}`}>
-        <input
-          className="h-8 w-full rounded-md border px-2 text-xs"
-          placeholder="Nombre de sesión (ej. Sesión 1 TM)"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onBlur={commit}
-          onKeyDown={onKeyDown}
-          disabled={saving}
-        />
-      </div>
-    );
-  }
-  function DayNameRow({ turn }: { turn: TurnKey }) {
-    return (
-      <div
-        className="grid items-center border-b"
-        style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
-      >
-        <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">Nombre sesión</div>
-        {orderedDays.map((ymd) => <DayNameCell key={`row-name-${ymd}-${turn}`} ymd={ymd} turn={turn} />)}
-      </div>
-    );
-  }
-
   const pendingCount = Object.keys(pending).length;
 
+  // =======================
+  // Fila: Tipo (Normal/Partido/Libre)
+  // =======================
+  function DayTypeRow({ turn }: { turn: TurnKey }) {
+    return (
+      <div className="grid items-center border-b bg-gray-50/60"
+           style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+        <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Tipo</div>
+        {orderedDays.map((ymd) => {
+          const df = getDayFlag(ymd, turn);
+          const [kind, setKind] = useState<DayFlagKind>(df.kind);
+          const [rival, setRival] = useState(df.rival || "");
+          const [logo, setLogo] = useState(df.logoUrl || "");
+
+          // Cuando cambia la semana o el turno, sincronizamos el valor mostrado
+          useEffect(() => {
+            const next = getDayFlag(ymd, turn);
+            setKind(next.kind);
+            setRival(next.rival || "");
+            setLogo(next.logoUrl || "");
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+          }, [weekStart, turn]);
+
+          const save = (next: DayFlag) => setDayFlag(ymd, turn, next);
+
+          return (
+            <div key={`${ymd}-${turn}-type`} className="p-1">
+              <div className="flex items-center gap-1">
+                <select
+                  className="h-7 w-[110px] rounded-md border px-1.5 text-[11px]"
+                  value={kind}
+                  onChange={(e) => {
+                    const k = e.target.value as DayFlagKind;
+                    setKind(k);
+                    if (k === "NONE") save({ kind: "NONE" });
+                    if (k === "LIBRE") save({ kind: "LIBRE" });
+                    if (k === "PARTIDO") save({ kind: "PARTIDO", rival, logoUrl: logo });
+                  }}
+                >
+                  <option value="NONE">Normal</option>
+                  <option value="PARTIDO">Partido</option>
+                  <option value="LIBRE">Libre</option>
+                </select>
+
+                {kind === "PARTIDO" && (
+                  <>
+                    <input
+                      className="h-7 flex-1 rounded-md border px-2 text-[11px]"
+                      placeholder="Rival"
+                      value={rival}
+                      onChange={(e) => setRival(e.target.value)}
+                      onBlur={() => save({ kind: "PARTIDO", rival, logoUrl: logo })}
+                    />
+                    <input
+                      className="h-7 w-[120px] rounded-md border px-2 text-[11px]"
+                      placeholder="Logo URL"
+                      value={logo}
+                      onChange={(e) => setLogo(e.target.value)}
+                      onBlur={() => save({ kind: "PARTIDO", rival, logoUrl: logo })}
+                    />
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // =======================
+  // Fila: Nombre de sesión (por día+turno)
+  // =======================
+  function DayNameRow({ turn }: { turn: TurnKey }) {
+    return (
+      <div className="grid items-center border-b"
+           style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+        <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">
+          Nombre de sesión
+        </div>
+        {orderedDays.map((ymd) => {
+          const initial = getDayName(ymd, turn);
+          const [val, setVal] = useState(initial);
+
+          useEffect(() => {
+            setVal(getDayName(ymd, turn));
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+          }, [weekStart, turn]);
+
+          const doSave = async () => {
+            const trimmed = (val || "").trim();
+            await setDayName(ymd, turn, trimmed);
+          };
+
+          return (
+            <div key={`${ymd}-${turn}-dayname`} className="p-1">
+              <input
+                className="h-8 w-full rounded-md border px-2 text-xs"
+                placeholder={turn === "morning" ? "Ej: Sesión 1 TM" : "Ej: Sesión 1 TT"}
+                value={val}
+                onChange={(e) => setVal(e.target.value)} // NO guardamos por tecla
+                onBlur={doSave}                           // Guardar al salir
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    (e.currentTarget as HTMLInputElement).blur(); // dispara onBlur -> guarda
+                  }
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Sección por turno
   function TurnEditor({ turn }: { turn: TurnKey }) {
     return (
       <>
@@ -654,15 +643,15 @@ function PlanSemanalInner() {
         <div className="grid text-xs" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
           <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600"></div>
           {orderedDays.map((ymd) => (
-            <div key={`head-${turn}-${ymd}`} className="bg-gray-50 border-b px-2 py-1.5">
+            <div key={`${turn}-${ymd}`} className="bg-gray-50 border-b px-2 py-1.5">
               <div className="text-[11px] font-semibold uppercase tracking-wide">{humanDayUTC(ymd)}</div>
               <div className="text-[10px] text-gray-400">{ymd}</div>
             </div>
           ))}
         </div>
 
-        {/* Tipo del día */}
-        <DayStatusRow turn={turn} />
+        {/* Tipo (Normal/Partido/Libre) */}
+        <DayTypeRow turn={turn} />
 
         {/* Nombre de sesión */}
         <DayNameRow turn={turn} />
@@ -673,10 +662,13 @@ function PlanSemanalInner() {
             {turn === "morning" ? "TURNO MAÑANA · Meta" : "TURNO TARDE · Meta"}
           </div>
           {META_ROWS.map((rowName) => (
-            <div key={`meta-${turn}-${rowName}`} className="grid items-center" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
-              <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">{rowName}</div>
+            <div key={`${turn}-meta-${rowName}`} className="grid items-center"
+                 style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+              <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">
+                {rowName}
+              </div>
               {orderedDays.map((ymd) => (
-                <div key={`meta-${ymd}-${turn}-${rowName}`} className="p-1">
+                <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
                   <MetaInput dayYmd={ymd} turn={turn} row={rowName} />
                 </div>
               ))}
@@ -690,10 +682,13 @@ function PlanSemanalInner() {
             {turn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
           </div>
           {CONTENT_ROWS.map((rowName) => (
-            <div key={`grid-${turn}-${rowName}`} className="grid items-stretch" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
-              <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600 whitespace-pre-line">{rowName}</div>
+            <div key={`${turn}-${rowName}`} className="grid items-stretch"
+                 style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+              <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600 whitespace-pre-line">
+                {rowName}
+              </div>
               {orderedDays.map((ymd) => (
-                <div key={`grid-${ymd}-${turn}-${rowName}`} className="p-1">
+                <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
                   <EditableCell dayYmd={ymd} turn={turn} row={rowName} />
                 </div>
               ))}
@@ -716,7 +711,8 @@ function PlanSemanalInner() {
               Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)
             </p>
             <p className="mt-1 text-[10px] text-gray-400">
-              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd> + <kbd className="rounded border px-1">Enter</kbd> marca una celda sin guardar aún.
+              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd>{" "}
+              + <kbd className="rounded border px-1">Enter</kbd> marca una celda (no guarda aún).
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -725,10 +721,7 @@ function PlanSemanalInner() {
             <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Semana siguiente ▶</button>
             <div className="w-px h-6 bg-gray-200 mx-1" />
             <button
-              onClick={() => {
-                if (typeof document !== "undefined") (document.activeElement as HTMLElement | null)?.blur?.();
-                setTimeout(saveAll, 0);
-              }}
+              onClick={saveAll}
               disabled={pendingCount === 0 || savingAll}
               className={`px-3 py-1.5 rounded-xl text-xs ${pendingCount === 0 || savingAll ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
               title={pendingCount ? `${pendingCount} cambio(s) por guardar` : "Sin cambios"}
@@ -744,8 +737,18 @@ function PlanSemanalInner() {
 
       {/* Pestañas turno */}
       <div className="flex items-center gap-2">
-        <button className={`px-3 py-1.5 rounded-xl border text-xs ${activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={() => setActiveTurn("morning")}>Mañana</button>
-        <button className={`px-3 py-1.5 rounded-xl border text-xs ${activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={() => setActiveTurn("afternoon")}>Tarde</button>
+        <button
+          className={`px-3 py-1.5 rounded-xl border text-xs ${activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"}`}
+          onClick={() => setActiveTurn("morning")}
+        >
+          Mañana
+        </button>
+        <button
+          className={`px-3 py-1.5 rounded-xl border text-xs ${activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"}`}
+          onClick={() => setActiveTurn("afternoon")}
+        >
+          Tarde
+        </button>
       </div>
 
       {loading ? (
