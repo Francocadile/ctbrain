@@ -1,29 +1,30 @@
 // src/lib/metrics/wellness.ts
+// Utilidades y tipos compartidos para Wellness (CT)
 
-/** ---------- Tipos ---------- */
 export type WellnessRaw = {
   id: string;
-  user?: { name?: string; email?: string };
-  userName?: string | null;
-  playerKey?: string | null;
+  user?: { name?: string; email?: string } | null;
+  userName?: string | null; // compat con API
+  playerKey?: string | null; // compat con API
   date: string; // YYYY-MM-DD
-  sleepQuality: number; // 1..5 (5 = mejor)
-  sleepHours?: number | null; // 0..14 (opcional)
-  fatigue: number; // 1..5 (5 = mejor)
-  muscleSoreness: number; // 1..5 (5 = mejor → menor dolor)
-  stress: number; // 1..5 (5 = mejor → menor estrés)
-  mood: number; // 1..5 (5 = mejor)
+  sleepQuality: number; // 1..5 (5=mejor)
+  sleepHours?: number | null; // 0..14
+  fatigue: number; // 1..5 (5=mejor)
+  muscleSoreness: number; // 1..5 (5=mejor → menor dolor)
+  stress: number; // 1..5 (5=mejor → menor estrés)
+  mood: number; // 1..5 (5=mejor)
   comment?: string | null;
 };
 
 export type Baseline = {
-  mean: number; // media SDW
-  sd: number;   // desvío estándar SDW
-  n: number;    // días válidos
+  mean: number; // media SDW (21d)
+  sd: number; // desvío estándar SDW (21d)
+  n: number; // días válidos
 };
 
 /** ---------- Fechas ---------- */
 export function toYMD(d: Date) {
+  // ISO local-date
   return d.toISOString().slice(0, 10);
 }
 export function fromYMD(s: string) {
@@ -39,7 +40,7 @@ export function yesterday(ymd: string) {
   return toYMD(addDays(fromYMD(ymd), -1));
 }
 
-/** ---------- Estadística ---------- */
+/** ---------- Stats ---------- */
 export function mean(arr: number[]) {
   if (!arr.length) return 0;
   return arr.reduce((a, b) => a + b, 0) / arr.length;
@@ -53,7 +54,7 @@ export function sdSample(arr: number[]) {
 }
 
 /** SDW = promedio (1..5) de los 5 ítems orientados a 5=mejor */
-export function computeSDW(r: Pick<WellnessRaw, "sleepQuality"|"fatigue"|"muscleSoreness"|"stress"|"mood">) {
+export function computeSDW(r: Partial<WellnessRaw>) {
   const vals = [
     Number(r.sleepQuality ?? 0),
     Number(r.fatigue ?? 0),
@@ -66,37 +67,28 @@ export function computeSDW(r: Pick<WellnessRaw, "sleepQuality"|"fatigue"|"muscle
   return valid.reduce((a, b) => a + b, 0) / valid.length;
 }
 
-/** Color por Z-score */
-export type Traffic = "green" | "yellow" | "red";
-export function zToColor(z: number | null): Traffic {
+/** Semáforo por Z-score según especificación */
+export function zToColor(z: number | null): "green" | "yellow" | "red" {
   if (z === null) return "yellow"; // sin baseline suficiente → atención leve
   if (z >= -0.5) return "green";
   if (z >= -1.0) return "yellow";
   return "red";
 }
 
-/** Overrides clínicos */
-export function applyOverrides(base: Traffic, r: { sleepHours?: number|null; muscleSoreness: number; stress: number }): Traffic {
+/** Eleva severidad de color según overrides clínicos */
+export function applyOverrides<
+  T extends { sleepHours?: number | null; muscleSoreness?: number; stress?: number }
+>(base: "green" | "yellow" | "red", r: T) {
   let level = base; // green < yellow < red
   const sleepH = r.sleepHours ?? null;
   if (sleepH !== null && sleepH < 4) {
     level = level === "green" ? "yellow" : level;
   }
-  if (r.muscleSoreness <= 2) {
+  if ((r.muscleSoreness ?? 3) <= 2) {
     level = "red";
   }
-  if (r.stress <= 2) {
+  if ((r.stress ?? 3) <= 2) {
     level = level === "green" ? "yellow" : level;
   }
   return level;
-}
-
-/** Helpers de baseline y Z */
-export function computeBaseline(sdws: number[]): Baseline {
-  const clean = sdws.filter((v) => v > 0);
-  return { mean: mean(clean), sd: sdSample(clean), n: clean.length };
-}
-export function computeZ(sdw: number, base?: Baseline | null): number | null {
-  if (!base || base.n < 7 || base.sd <= 0) return null;
-  return (sdw - base.mean) / base.sd;
 }
