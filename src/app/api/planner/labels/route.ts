@@ -1,15 +1,20 @@
 // src/app/api/planner/labels/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma"; // usa tu singleton
 import { requireSessionWithRoles } from "@/lib/auth-helpers";
+import { Role } from "@prisma/client";
 
-const prisma = new PrismaClient();
-
-// Aceptamos a cualquier usuario autenticado (ajustá si querés restringir)
-const ANY_ROLE = ["ADMIN", "CT", "MEDICO", "JUGADOR", "DIRECTIVO"] as const;
+// Aceptamos a cualquier usuario autenticado
+const ANY_ROLE: Role[] = [
+  Role.ADMIN,
+  Role.CT,
+  Role.MEDICO,
+  Role.JUGADOR,
+  Role.DIRECTIVO,
+];
 
 /**
- * GET  -> devuelve preferencias del usuario:
+ * GET -> devuelve preferencias del usuario:
  * { rowLabels: Record<string,string> | null, places: string[] }
  */
 export async function GET() {
@@ -25,12 +30,12 @@ export async function GET() {
 }
 
 /**
- * POST -> guarda preferencias.
- * Body JSON puede incluir:
+ * POST -> guarda preferencias del usuario.
+ * Body JSON admite:
  * - rowLabels?: Record<string,string>
  * - places?: string[]
  *
- * Responde: { ok: true, rowLabels, places }
+ * Respuesta: { ok: true, rowLabels, places }
  */
 export async function POST(req: Request) {
   const session = await requireSessionWithRoles(ANY_ROLE);
@@ -48,7 +53,6 @@ export async function POST(req: Request) {
     places?: string[];
   };
 
-  // Construimos el "update" solo con campos presentes
   const updateData: Record<string, any> = {};
   if (rowLabels !== undefined) updateData.rowLabels = rowLabels;
   if (places !== undefined) updateData.places = places;
