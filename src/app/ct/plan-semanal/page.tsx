@@ -558,6 +558,65 @@ function PlanSemanalInner() {
 
   const pendingCount = Object.keys(pending).length;
 
+  // ===== NUEVO: una celda de "Tipo" por día con su propio estado (evita hooks dentro del map) =====
+  function DayStatusCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
+    const df = getDayFlag(ymd, turn);
+    const [kind, setKind] = useState<DayFlagKind>(df.kind);
+    const [rival, setRival] = useState(df.rival || "");
+    const [logo, setLogo] = useState(df.logoUrl || "");
+
+    useEffect(() => {
+      const fresh = getDayFlag(ymd, turn);
+      setKind(fresh.kind);
+      setRival(fresh.rival || "");
+      setLogo(fresh.logoUrl || "");
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [weekStart, ymd, turn]);
+
+    const save = (next: DayFlag) => setDayFlag(ymd, turn, next);
+
+    return (
+      <div className="p-1">
+        <div className="flex items-center gap-1">
+          <select
+            className="h-7 w-[110px] rounded-md border px-1.5 text-[11px]"
+            value={kind}
+            onChange={(e) => {
+              const k = e.target.value as DayFlagKind;
+              setKind(k);
+              if (k === "NONE") save({ kind: "NONE" });
+              if (k === "LIBRE") save({ kind: "LIBRE" });
+              if (k === "PARTIDO") save({ kind: "PARTIDO", rival, logoUrl: logo });
+            }}
+          >
+            <option value="NONE">Normal</option>
+            <option value="PARTIDO">Partido</option>
+            <option value="LIBRE">Libre</option>
+          </select>
+
+          {kind === "PARTIDO" && (
+            <>
+              <input
+                className="h-7 flex-1 rounded-md border px-2 text-[11px]"
+                placeholder="Rival"
+                value={rival}
+                onChange={(e) => setRival(e.target.value)}
+                onBlur={() => save({ kind: "PARTIDO", rival, logoUrl: logo })}
+              />
+              <input
+                className="h-7 w-[120px] rounded-md border px-2 text-[11px]"
+                placeholder="Logo URL"
+                value={logo}
+                onChange={(e) => setLogo(e.target.value)}
+                onBlur={() => save({ kind: "PARTIDO", rival, logoUrl: logo })}
+              />
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // Barra de estado por día (turno actual) — "Tipo"
   function DayStatusRow({ turn }: { turn: TurnKey }) {
     return (
@@ -568,67 +627,9 @@ function PlanSemanalInner() {
         <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">
           Tipo
         </div>
-        {orderedDays.map((ymd) => {
-          const df = getDayFlag(ymd, turn);
-          const [kind, setKind] = useState<DayFlagKind>(df.kind);
-          const [rival, setRival] = useState(df.rival || "");
-          const [logo, setLogo] = useState(df.logoUrl || "");
-
-          useEffect(() => {
-            setKind(df.kind);
-            setRival(df.rival || "");
-            setLogo(df.logoUrl || "");
-            // eslint-disable-next-line react-hooks/exhaustive-deps
-          }, [weekStart, turn]);
-
-          const save = (next: DayFlag) => setDayFlag(ymd, turn, next);
-
-          return (
-            <div key={`${ymd}-${turn}-status`} className="p-1">
-              <div className="flex items-center gap-1">
-                <select
-                  className="h-7 w-[110px] rounded-md border px-1.5 text-[11px]"
-                  value={kind}
-                  onChange={(e) => {
-                    const k = e.target.value as DayFlagKind;
-                    setKind(k);
-                    if (k === "NONE") save({ kind: "NONE" });
-                    if (k === "LIBRE") save({ kind: "LIBRE" });
-                    if (k === "PARTIDO")
-                      save({ kind: "PARTIDO", rival: rival, logoUrl: logo });
-                  }}
-                >
-                  <option value="NONE">Normal</option>
-                  <option value="PARTIDO">Partido</option>
-                  <option value="LIBRE">Libre</option>
-                </select>
-
-                {kind === "PARTIDO" && (
-                  <>
-                    <input
-                      className="h-7 flex-1 rounded-md border px-2 text-[11px]"
-                      placeholder="Rival"
-                      value={rival}
-                      onChange={(e) => setRival(e.target.value)}
-                      onBlur={() =>
-                        save({ kind: "PARTIDO", rival, logoUrl: logo })
-                      }
-                    />
-                    <input
-                      className="h-7 w-[120px] rounded-md border px-2 text-[11px]"
-                      placeholder="Logo URL"
-                      value={logo}
-                      onChange={(e) => setLogo(e.target.value)}
-                      onBlur={() =>
-                        save({ kind: "PARTIDO", rival, logoUrl: logo })
-                      }
-                    />
-                  </>
-                )}
-              </div>
-            </div>
-          );
-        })}
+        {orderedDays.map((ymd) => (
+          <DayStatusCell key={`${ymd}-${turn}-status`} ymd={ymd} turn={turn} />
+        ))}
       </div>
     );
   }
