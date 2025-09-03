@@ -26,8 +26,9 @@ function toYYYYMMDDUTC(d: Date) {
 }
 function getMondayUTC(d: Date) {
   const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  const day = x.getUTCDay() || 7;
-  if (day !== 1) x.setUTCDate(x.getUTCDate() - (day - 1));
+  const day = x.getUTCDay() || 7; // 1..7 (Dom=7)
+  if (day !== 1) x.setUTCDate(x.getUTCDate() - (day - 1)); // ir a lunes
+  x.setUTCHours(0, 0, 0, 0);
   return x;
 }
 function addDaysUTC(d: Date, n: number) {
@@ -49,7 +50,7 @@ const sessionSelect = {
   user: { select: { id: true, name: true, email: true, role: true } },
 } as const;
 
-// GET /api/sessions?start=YYYY-MM-DD  (semana)  |  fallback: últimas 50
+// GET /api/sessions?start=YYYY-MM-DD  (semana)  |  fallback: últimas 50 (SOLO DAYNAME)
 export async function GET(req: Request) {
   try {
     await requireAuth();
@@ -58,6 +59,7 @@ export async function GET(req: Request) {
     const start = url.searchParams.get("start");
 
     if (start) {
+      // ------- SEMANA (editor) -------
       const startDate = new Date(`${start}T00:00:00.000Z`);
       if (Number.isNaN(startDate.valueOf())) {
         return NextResponse.json(
@@ -67,14 +69,15 @@ export async function GET(req: Request) {
       }
 
       const monday = getMondayUTC(startDate);
-      const sunday = addDaysUTC(monday, 6);
+      const nextMonday = addDaysUTC(monday, 7); // fin EXCLUSIVO
 
       const items = await prisma.session.findMany({
-        where: { date: { gte: monday, lte: sunday } },
+        where: { date: { gte: monday, lt: nextMonday } },
         orderBy: [{ date: "asc" }, { createdAt: "asc" }],
         select: sessionSelect,
       });
 
+      // Inicializar mapa Lun..Dom
       const days: Record<string, typeof items> = {};
       for (let i = 0; i < 7; i++) {
         const key = toYYYYMMDDUTC(addDaysUTC(monday, i));
@@ -89,15 +92,23 @@ export async function GET(req: Request) {
       return NextResponse.json({
         days,
         weekStart: toYYYYMMDDUTC(monday),
-        weekEnd: toYYYYMMDDUTC(sunday),
+        weekEnd: toYYYYMMDDUTC(addDaysUTC(monday, 6)), // Domingo (informativo)
       });
     }
 
+    // ------- LISTADO GENERAL (pantalla "Sesiones") -------
+    // Devolvemos SOLO las sesiones "reales": description que empieza con [DAYNAME:...]
     const sessions = await prisma.session.findMany({
+      where: {
+        description: {
+          startsWith: "[DAYNAME:",
+        },
+      },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       select: sessionSelect,
       take: 50,
     });
+
     return NextResponse.json({ data: sessions });
   } catch (err: any) {
     if (err instanceof Response) return err;
