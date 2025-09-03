@@ -316,6 +316,44 @@ export default function WellnessCT_Day() {
     setLoading(false);
   }
 
+  // ------ KPIs de cabecera (hoy) ------
+  const kpis = useMemo(() => {
+    const n = rowsToday.length;
+    const sdws = rowsToday.map((r: any) => Number(r._sdw || 0)).filter((v) => v > 0);
+    const sdwAvg = sdws.length ? mean(sdws) : 0;
+
+    let reds = 0,
+      yellows = 0,
+      greens = 0;
+    let zVals: number[] = [];
+    for (const r of rowsToday as any[]) {
+      const c = r._color as "green" | "yellow" | "red";
+      if (c === "red") reds++;
+      else if (c === "yellow") yellows++;
+      else if (c === "green") greens++;
+
+      if (r._z != null) zVals.push(Number(r._z));
+    }
+    const zAvg = zVals.length ? mean(zVals) : null;
+
+    return {
+      n,
+      sdwAvg,
+      reds,
+      yellows,
+      greens,
+      zAvg,
+      // distribución (porcentaje)
+      dist: n
+        ? {
+            red: Math.round((reds / n) * 100),
+            yellow: Math.round((yellows / n) * 100),
+            green: Math.round((greens / n) * 100),
+          }
+        : { red: 0, yellow: 0, green: 0 },
+    };
+  }, [rowsToday]);
+
   // Filtro por nombre
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -410,6 +448,83 @@ export default function WellnessCT_Day() {
           </button>
         </div>
       </header>
+
+      {/* KPIs del día */}
+      <section className="rounded-2xl border bg-white px-4 py-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div className="rounded-xl border p-3">
+            <div className="text-[11px] uppercase text-gray-500 flex items-center gap-1">
+              Respondieron hoy
+              <HelpTip text="Cantidad de jugadores con wellness cargado en la fecha seleccionada." />
+            </div>
+            <div className="mt-1 text-2xl font-bold">{kpis.n}</div>
+          </div>
+          <div className="rounded-xl border p-3">
+            <div className="text-[11px] uppercase text-gray-500 flex items-center gap-1">
+              SDW promedio
+              <HelpTip text="Promedio de SDW (1–5) entre quienes reportaron hoy." />
+            </div>
+            <div className="mt-1 text-2xl font-bold">
+              {kpis.sdwAvg ? kpis.sdwAvg.toFixed(2) : "—"}
+            </div>
+          </div>
+          <div className="rounded-xl border p-3">
+            <div className="text-[11px] uppercase text-gray-500 flex items-center gap-1">
+              Verdes / Amarillos / Rojos
+              <HelpTip text="Distribución de severidad por jugador en el día." />
+            </div>
+            <div className="mt-1 text-sm font-semibold">
+              <span className="text-emerald-700">{kpis.greens}</span>{" "}
+              <span className="text-gray-400">/</span>{" "}
+              <span className="text-amber-700">{kpis.yellows}</span>{" "}
+              <span className="text-gray-400">/</span>{" "}
+              <span className="text-red-700">{kpis.reds}</span>
+            </div>
+            {/* Barra de distribución (SVG inline) */}
+            <div className="mt-2 h-2 w-full rounded bg-gray-100 overflow-hidden">
+              <div
+                className="h-2 bg-emerald-400/80 inline-block"
+                style={{ width: `${kpis.dist.green}%` }}
+                title={`Verde ${kpis.dist.green}%`}
+              />
+              <div
+                className="h-2 bg-amber-400/80 inline-block"
+                style={{ width: `${kpis.dist.yellow}%` }}
+                title={`Amarillo ${kpis.dist.yellow}%`}
+              />
+              <div
+                className="h-2 bg-red-400/80 inline-block"
+                style={{ width: `${kpis.dist.red}%` }}
+                title={`Rojo ${kpis.dist.red}%`}
+              />
+            </div>
+          </div>
+          <div className="rounded-xl border p-3">
+            <div className="text-[11px] uppercase text-gray-500 flex items-center gap-1">
+              Z medio (válidos)
+              <HelpTip text="Promedio de Z entre quienes tienen baseline suficiente (≥7 días y σ>0)." />
+            </div>
+            <div className="mt-1 text-2xl font-bold">
+              {kpis.zAvg !== null ? kpis.zAvg.toFixed(2) : "—"}
+            </div>
+          </div>
+          <div className="rounded-xl border p-3">
+            <div className="text-[11px] uppercase text-gray-500 flex items-center gap-1">
+              Nota del día
+              <HelpTip text="Lectura rápida: priorizar rojos, luego amarillos; chequear causas (dolor, sueño, estrés)." />
+            </div>
+            <div className="mt-1 text-sm text-gray-700">
+              {kpis.reds > 0
+                ? "Atender rojos hoy (intervención)."
+                : kpis.yellows > 0
+                ? "Monitorear amarillos, ajustar carga."
+                : kpis.n > 0
+                ? "Todo en verde. Mantener."
+                : "Sin datos hoy."}
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Alertas priorizadas */}
       <section className="rounded-xl border bg-white p-3">
