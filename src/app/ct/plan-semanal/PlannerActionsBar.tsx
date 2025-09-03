@@ -2,18 +2,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { toYYYYMMDDUTC, getMonday } from "@/lib/api/sessions";
 import {
   fetchRowLabels,
   saveRowLabels,
   resetRowLabels,
   type RowLabels,
+  fetchPlaces,
+  savePlaces,
+  clearPlaces,
 } from "@/lib/planner-prefs";
 import HelpTip from "@/components/HelpTip";
 
 type Props = { onAfterChange?: () => void };
 
-// Valores base (lo que muestra el editor si no hay preferencia)
+// Etiquetas por defecto que entiende el Editor
 const DEFAULT_LABELS: RowLabels = {
   "PRE ENTREN0": "PRE ENTREN0",
   "FÍSICO": "FÍSICO",
@@ -26,68 +28,27 @@ const DEFAULT_LABELS: RowLabels = {
 };
 
 export default function PlannerActionsBar({ onAfterChange }: Props) {
-  const [weekRef] = useState<string>(() => toYYYYMMDDUTC(getMonday(new Date())));
   const [loading, setLoading] = useState(false);
 
-  // Preferencias actuales del servidor
-  const [serverRowLabels, setServerRowLabels] = useState<RowLabels>({});
-  const computed = useMemo<RowLabels>(
-    () => ({ ...DEFAULT_LABELS, ...serverRowLabels }),
-    [serverRowLabels]
-  );
+  // ---- Nombres de filas
+  const [labels, setLabels] = useState<RowLabels>(DEFAULT_LABELS);
+  const computed = useMemo<RowLabels>(() => ({ ...DEFAULT_LABELS, ...labels }), [labels]);
 
-  // Entradas que escribe el usuario (vacías por defecto, con placeholder)
-  const [typedRowLabels, setTypedRowLabels] = useState<RowLabels>({});
-
-  // Lugares (lista editable)
-  const [placesText, setPlacesText] = useState<string>(""); // 1 lugar por línea
-  const [serverPlacesCount, setServerPlacesCount] = useState<number>(0);
-
-  // Carga inicial (rowLabels + places)
   useEffect(() => {
     (async () => {
-      // Row labels (módulo ya existente)
-      const rl = await fetchRowLabels();
-      setServerRowLabels(rl || {});
-
-      // Places (mismo endpoint REST)
       try {
-        const r = await fetch("/api/planner/labels", { cache: "no-store" });
-        if (r.ok) {
-          const j = await r.json();
-          const places: string[] = Array.isArray(j?.places) ? j.places : [];
-          setPlacesText(places.join("\n"));
-          setServerPlacesCount(places.length);
-        }
+        const server = await fetchRowLabels();
+        setLabels((prev) => ({ ...prev, ...server }));
       } catch {
-        // si falla, dejamos vacío y seguimos
-        setPlacesText("");
-        setServerPlacesCount(0);
+        // sigue con defaults
       }
     })();
   }, []);
 
-  // --- Guardar nombres de filas ---
   async function handleSaveLabels() {
-    // Tomamos sólo los campos donde el usuario escribió algo
-    const patch: RowLabels = {};
-    (["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const).forEach((k) => {
-      const v = (typedRowLabels[k] || "").trim();
-      if (v) patch[k] = v;
-    });
-
-    if (Object.keys(patch).length === 0) {
-      alert("Escribí al menos un nombre para guardar.");
-      return;
-    }
-
     setLoading(true);
     try {
-      // Enviamos el merge (el helper ya guarda todo el objeto)
-      const newLabels = { ...computed, ...patch };
-      await saveRowLabels(newLabels);
-      setServerRowLabels(newLabels);
-      setTypedRowLabels({}); // limpiamos inputs
+      await saveRowLabels(labels);
       window.dispatchEvent(new Event("planner-row-labels-updated"));
       onAfterChange?.();
       alert("Nombres guardados.");
@@ -98,41 +59,53 @@ export default function PlannerActionsBar({ onAfterChange }: Props) {
     }
   }
 
-  // --- Restaurar nombres base ---
   async function handleResetLabels() {
     const ok = confirm("¿Restaurar nombres originales?");
     if (!ok) return;
     setLoading(true);
     try {
       await resetRowLabels();
-      setServerRowLabels({});
-      setTypedRowLabels({});
+      setLabels({});
       window.dispatchEvent(new Event("planner-row-labels-updated"));
       onAfterChange?.();
       alert("Restaurado.");
     } catch (e: any) {
-      alert(e?.message || "No se pudo restaurar");
+      alert(e?.message || "No se pudo resetear");
     } finally {
       setLoading(false);
     }
   }
 
-  // --- Guardar lugares ---
-  async function handleSavePlaces() {
-    const list = placesText
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
+  // ---- Lugares (sugerencias)
+  const [placesText, setPlacesText] = useState("");
+  const [placesCount, setPlacesCount] = useState(0);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await fetchPlaces();
+        setPlacesText(list.join("\n"));
+        setPlacesCount(list.length);
+      } catch {
+        setPlacesText("");
+        setPlacesCount(0);
+      }
+    })();
+  }, []);
+
+  async function handleSavePlaces() {
+    const list = Array.from(
+      new Set(
+        placesText
+          .split("\n")
+          .map((s) => (s || "").trim())
+          .filter(Boolean)
+      )
+    );
     setLoading(true);
     try {
-      const r = await fetch("/api/planner/labels", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ places: list }),
-      });
-      if (!r.ok) throw new Error("No se pudo guardar los lugares");
-      setServerPlacesCount(list.length);
+      await savePlaces(list);
+      setPlacesCount(list.length);
       window.dispatchEvent(new Event("planner-places-updated"));
       onAfterChange?.();
       alert("Lugares guardados.");
@@ -143,25 +116,19 @@ export default function PlannerActionsBar({ onAfterChange }: Props) {
     }
   }
 
-  // --- Vaciar lista de lugares ---
   async function handleClearPlaces() {
     const ok = confirm("¿Vaciar la lista de lugares?");
     if (!ok) return;
     setLoading(true);
     try {
-      const r = await fetch("/api/planner/labels", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ places: [] }),
-      });
-      if (!r.ok) throw new Error("No se pudo vaciar los lugares");
+      await clearPlaces();
       setPlacesText("");
-      setServerPlacesCount(0);
+      setPlacesCount(0);
       window.dispatchEvent(new Event("planner-places-updated"));
       onAfterChange?.();
       alert("Lista vaciada.");
     } catch (e: any) {
-      alert(e?.message || "No se pudo vaciar los lugares");
+      alert(e?.message || "No se pudo vaciar la lista");
     } finally {
       setLoading(false);
     }
@@ -169,36 +136,30 @@ export default function PlannerActionsBar({ onAfterChange }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* === Nombres de filas === */}
+      {/* --- Nombres de filas --- */}
       <section className="rounded-xl border p-3">
         <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-sm font-semibold flex items-center gap-2">
-            Nombres de filas (tu preferencia)
-            <HelpTip text="Si querés, cambiá los nombres de estas filas. Se guardan en tu usuario y se aplican en el Editor." />
-          </h3>
-          <div className="text-[11px] text-gray-500">Afecta sólo tu usuario.</div>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold">Nombres de filas (tu preferencia)</h3>
+            <HelpTip text="Cambia cómo querés que se vean las filas en el Editor. Afecta sólo a tu usuario." />
+          </div>
+          <div className="text-[11px] text-gray-500">Se aplican en el Editor.</div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {(
-            [
-              ["PRE ENTREN0", "Ej: Activación"],
-              ["FÍSICO", "Ej: Fuerza + Aeróbico"],
-              ["TÉCNICO–TÁCTICO", "Ej: Juego de posición"],
-              ["COMPENSATORIO", "Ej: Movilidad y core"],
-            ] as const
-          ).map(([key, ph]) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+          {([
+            ["PRE ENTREN0", "Activación"],
+            ["FÍSICO", "Entrada en calor"],
+            ["TÉCNICO–TÁCTICO", "Principal"],
+            ["COMPENSATORIO", "Post entreno"],
+          ] as const).map(([key, placeholder]) => (
             <div key={key} className="flex flex-col gap-1">
-              <div className="text-[11px] text-gray-500">
-                Actual: <span className="font-medium text-gray-700">{computed[key]}</span>
-              </div>
+              <label className="text-[11px] text-gray-600">Actual: {key}</label>
               <input
                 className="h-9 rounded-md border px-2 text-sm"
-                value={typedRowLabels[key] || ""}
-                onChange={(e) =>
-                  setTypedRowLabels((prev) => ({ ...prev, [key]: e.target.value }))
-                }
-                placeholder={ph}
+                value={computed[key]}
+                onChange={(e) => setLabels((prev) => ({ ...prev, [key]: e.target.value }))}
+                placeholder={placeholder}
               />
             </div>
           ))}
@@ -208,58 +169,57 @@ export default function PlannerActionsBar({ onAfterChange }: Props) {
           <button
             onClick={handleSaveLabels}
             disabled={loading}
-            className="px-3 py-1.5 rounded-lg bg-black text-white text-xs hover:opacity-90 disabled:opacity-60"
+            className="px-3 py-1.5 rounded-lg bg-black text-white text-xs hover:opacity-90"
           >
             Guardar
           </button>
           <button
             onClick={handleResetLabels}
             disabled={loading}
-            className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50 disabled:opacity-60"
+            className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50"
           >
             Restaurar originales
           </button>
         </div>
       </section>
 
-      {/* === Lugares (sugerencias para el campo “LUGAR”) === */}
+      {/* --- Lugares --- */}
       <section className="rounded-xl border p-3">
         <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-sm font-semibold flex items-center gap-2">
-            Lugares
-            <HelpTip text="Escribí 1 lugar por línea (Cancha 1, Complejo Deportivo, Gimnasio, etc.). Se sugieren luego en el campo LUGAR del Editor." />
-          </h3>
-          <div className="text-[11px] text-gray-500">
-            {serverPlacesCount} guardados
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold">Lugares</h3>
+            <HelpTip text="Escribí uno por línea. Luego, en el Editor, te aparecen como sugerencias al escribir en 'Lugar'." />
           </div>
+          <div className="text-[11px] text-gray-500">{placesCount} guardados</div>
         </div>
 
         <textarea
-          className="w-full min-h-[120px] rounded-md border p-2 text-sm"
+          className="min-h-[120px] w-full rounded-md border p-2 text-sm"
+          placeholder={`Ejemplos (uno por línea):
+Cancha 1
+Complejo Deportivo
+Gimnasio`}
           value={placesText}
           onChange={(e) => setPlacesText(e.target.value)}
-          placeholder={`Ejemplos:\nCancha 1\nComplejo Deportivo\nGimnasio`}
         />
 
-        <div className="mt-3 flex gap-2">
+        <div className="mt-2 flex gap-2">
           <button
             onClick={handleSavePlaces}
             disabled={loading}
-            className="px-3 py-1.5 rounded-lg bg-black text-white text-xs hover:opacity-90 disabled:opacity-60"
+            className="px-3 py-1.5 rounded-lg bg-black text-white text-xs hover:opacity-90"
           >
             Guardar lugares
           </button>
           <button
             onClick={handleClearPlaces}
             disabled={loading}
-            className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50 disabled:opacity-60"
+            className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50"
           >
             Vaciar lista
           </button>
         </div>
       </section>
-
-      {/* Dejás acá cualquier otra herramienta que ya tenías (exportar, duplicar, etc.) */}
     </div>
   );
 }
