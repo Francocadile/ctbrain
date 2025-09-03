@@ -2,8 +2,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSessionWithRoles } from "@/lib/auth-helpers";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth-helpers"; // si tu helper exporta opciones; si no, quita esta línea y el getServerSession
 
 function ymdToDateUTC(ymd: string) {
   const [y, m, d] = ymd.split("-").map(Number);
@@ -25,18 +23,11 @@ function addDaysUTC(d: Date, n: number) {
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
+  // Solo roles CT/ADMIN pueden importar
   await requireSessionWithRoles(["CT", "ADMIN"]);
 
-  // Obtenemos userId para createdBy (fallback si no viene en payload)
-  let userId: string | null = null;
-  try {
-    const session = await getServerSession(authOptions as any);
-    userId = (session?.user as any)?.id ?? null;
-  } catch {
-    // ok
-  }
-
   const body = await req.json().catch(() => ({}));
+
   // Formatos aceptados:
   // A) { sessions: [{title, description, date(ISO), type, createdBy?}], targetStart?: "YYYY-MM-DD" }
   // B) { version, weekStart, sessions: [...], targetStart?: "YYYY-MM-DD" }
@@ -46,18 +37,24 @@ export async function POST(req: Request) {
   if (!sessions.length) {
     return NextResponse.json({ error: "Payload vacío: sessions[]" }, { status: 400 });
   }
+
+  // No usamos getServerSession ni authOptions aquí para evitar dependencias.
+  // createdBy será el provisto en cada item o null.
+  const fallbackCreatedBy: string | null = null;
+
   if (!targetStart) {
-    // Si no se indica targetStart, se insertan con sus fechas ISO originales
+    // Inserta con fechas ISO originales
     const created = [];
     for (const s of sessions) {
       const iso = s.date ? new Date(s.date) : new Date();
+      if (isNaN(iso.getTime())) continue;
       const row = await prisma.session.create({
         data: {
           title: String(s.title ?? ""),
           description: String(s.description ?? ""),
           date: iso,
           type: s.type ?? null,
-          createdBy: s.createdBy ?? userId,
+          createdBy: s.createdBy ?? fallbackCreatedBy,
         },
       });
       created.push(row.id);
@@ -65,8 +62,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, created: created.length });
   }
 
-  // Si hay targetStart, realineamos por diferencia entre lunes origen y lunes destino
-  // Si en el payload recibimos weekStart, usamos eso; si no, deducimos desde la fecha mínima
+  // Con targetStart: realinear por diferencia entre lunes origen y lunes destino
   let sourceMonday: Date;
   if (body.weekStart) {
     sourceMonday = ymdToDateUTC(body.weekStart);
@@ -93,7 +89,7 @@ export async function POST(req: Request) {
         description: String(s.description ?? ""),
         date: newDate,
         type: s.type ?? null,
-        createdBy: s.createdBy ?? userId,
+        createdBy: s.createdBy ?? fallbackCreatedBy,
       },
     });
     created.push(row.id);
