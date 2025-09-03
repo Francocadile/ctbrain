@@ -1,4 +1,3 @@
-// src/app/ct/plan-semanal/page.tsx
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -32,8 +31,8 @@ const META_ROWS = ["LUGAR", "HORA", "VIDEO"] as const;
 type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
 type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string };
 
-const DAYFLAG_TAG = "DAYFLAG";   // description: [DAYFLAG:<turn>] | YYYY-MM-DD  -> title = "PARTIDO|rival|logo" | "LIBRE" | ""
-const DAYNAME_TAG = "DAYNAME";   // description: [DAYNAME:<turn>] | YYYY-MM-DD  -> title = "<nombre de sesión>"
+const DAYFLAG_TAG = "DAYFLAG";   // description: [DAYFLAG:<turn>] | YYYY-MM-DD
+const DAYNAME_TAG = "DAYNAME";   // description: [DAYNAME:<turn>] | YYYY-MM-DD
 
 function marker(tag: string, turn: TurnKey) { return `[${tag}:${turn}]`; }
 function isTag(s: SessionDTO, tag: string, turn: TurnKey) {
@@ -71,7 +70,7 @@ function humanDayUTC(ymd: string) {
   });
 }
 function computeISOForSlot(dayYmd: string, turn: TurnKey) {
-  // Fijamos siempre hora estable en UTC para evitar rarezas (DST/local)
+  // hora fija en UTC para evitar DST/local
   const base = new Date(`${dayYmd}T12:00:00.000Z`);
   const h = turn === "morning" ? 9 : 15;
   base.setUTCHours(h, 0, 0, 0);
@@ -98,7 +97,6 @@ function cellKey(dayYmd: string, turn: TurnKey, row: string) {
   return `${dayYmd}::${turn}::${row}`;
 }
 
-// ---------- helpers ----------
 function mondayOfYMD(ymd: string) {
   const d = new Date(`${ymd}T00:00:00.000Z`);
   return getMonday(d);
@@ -191,46 +189,17 @@ function PlanSemanalInner() {
     return (s?.title || "").trim();
   }
 
-  // ---------- refresh de UN día ----------
-  async function refreshOneDay(ymd: string) {
-    try {
-      const monday = mondayOfYMD(ymd);
-      const res = await getSessionsWeek({ start: toYYYYMMDDUTC(monday) });
-      const fresh = res.days?.[ymd] || [];
-      setDaysMap((prev) => ({ ...prev, [ymd]: fresh }));
-    } catch (e) {
-      console.error("No se pudo refrescar el día:", ymd, e);
-    }
-  }
-
-  // --------- OPTIMISMO: FLAG ---------
-  function upsertDayFlagLocal(ymd: string, turn: TurnKey, df: DayFlag, server?: SessionDTO | null) {
+  // ---------- ACTUALIZACIONES LOCALES SIN REFRESH ----------
+  function replaceDayEntries(ymd: string, predicate: (s: SessionDTO) => boolean, next?: SessionDTO) {
     setDaysMap((prev) => {
-      const list = [...(prev[ymd] || [])];
-      const idx = list.findIndex((s) => isDayFlag(s, turn));
-      if (df.kind === "NONE") {
-        if (idx >= 0) list.splice(idx, 1);
-      } else {
-        const title = buildDayFlagTitle(df);
-        const desc  = `${marker(DAYFLAG_TAG, turn)} | ${ymd}`;
-        const base: SessionDTO = server ?? {
-          id: `local-${ymd}-${turn}-flag`,
-          title,
-          description: desc,
-          date: computeISOForSlot(ymd, turn),
-          type: "GENERAL",
-        };
-        const updated: SessionDTO = { ...base, title, description: desc };
-        if (idx >= 0) list[idx] = updated; else list.push(updated);
-      }
+      const list = [...(prev[ymd] || [])].filter((s) => !predicate(s));
+      if (next) list.push(next);
       return { ...prev, [ymd]: list };
     });
   }
 
+  // --------- FLAG (Tipo) ---------
   async function setDayFlag(ymd: string, turn: TurnKey, df: DayFlag) {
-    // optimista inmediato
-    upsertDayFlagLocal(ymd, turn, df);
-
     const existing = findDayFlagSession(ymd, turn);
     const iso = computeISOForSlot(ymd, turn);
     const desc = `${marker(DAYFLAG_TAG, turn)} | ${ymd}`;
@@ -239,51 +208,26 @@ function PlanSemanalInner() {
     try {
       if (df.kind === "NONE") {
         if (existing) await deleteSession(existing.id);
-        await refreshOneDay(ymd);
+        // actualizar local
+        replaceDayEntries(ymd, (s) => isDayFlag(s, turn));
         return;
       }
+
       if (!existing) {
         const res = await createSession({ title, description: desc, date: iso, type: "GENERAL" });
-        upsertDayFlagLocal(ymd, turn, df, res.data);
+        replaceDayEntries(ymd, (s) => isDayFlag(s, turn), res.data);
       } else {
         const res = await updateSession(existing.id, { title, description: desc, date: iso });
-        upsertDayFlagLocal(ymd, turn, df, res.data);
+        replaceDayEntries(ymd, (s) => isDayFlag(s, turn), res.data);
       }
-      await refreshOneDay(ymd);
     } catch (e: any) {
       console.error(e);
       alert(e?.message || "No se pudo guardar el Tipo del día");
-      await refreshOneDay(ymd); // revertir a estado servidor
     }
   }
 
-  // --------- OPTIMISMO: NOMBRE SESIÓN ---------
-  function upsertDayNameLocal(ymd: string, turn: TurnKey, name: string, server?: SessionDTO | null) {
-    setDaysMap((prev) => {
-      const list = [...(prev[ymd] || [])];
-      const idx = list.findIndex((s) => isDayName(s, turn));
-      const title = (name || "").trim();
-      const desc  = `${marker(DAYNAME_TAG, turn)} | ${ymd}`;
-      if (!title) {
-        if (idx >= 0) list.splice(idx, 1);
-      } else {
-        const base: SessionDTO = server ?? {
-          id: `local-${ymd}-${turn}-name`,
-          title,
-          description: desc,
-          date: computeISOForSlot(ymd, turn),
-          type: "GENERAL",
-        };
-        const updated: SessionDTO = { ...base, title, description: desc };
-        if (idx >= 0) list[idx] = updated; else list.push(updated);
-      }
-      return { ...prev, [ymd]: list };
-    });
-  }
-
+  // --------- NOMBRE DE SESIÓN ---------
   async function setDayName(dayYmd: string, turn: TurnKey, name: string) {
-    upsertDayNameLocal(dayYmd, turn, name);
-
     const existing = findDayNameSession(dayYmd, turn);
     const iso = computeISOForSlot(dayYmd, turn);
     const desc = `${marker(DAYNAME_TAG, turn)} | ${dayYmd}`;
@@ -292,22 +236,20 @@ function PlanSemanalInner() {
     try {
       if (!title) {
         if (existing) await deleteSession(existing.id);
-        await refreshOneDay(dayYmd);
+        replaceDayEntries(dayYmd, (s) => isDayName(s, turn));
         return;
       }
 
       if (!existing) {
         const res = await createSession({ title, description: desc, date: iso, type: "GENERAL" });
-        upsertDayNameLocal(dayYmd, turn, title, res.data);
+        replaceDayEntries(dayYmd, (s) => isDayName(s, turn), res.data);
       } else {
         const res = await updateSession(existing.id, { title, description: desc, date: iso });
-        upsertDayNameLocal(dayYmd, turn, title, res.data);
+        replaceDayEntries(dayYmd, (s) => isDayName(s, turn), res.data);
       }
-      await refreshOneDay(dayYmd);
     } catch (e: any) {
       console.error(e);
       alert(e?.message || "No se pudo guardar el Nombre de sesión");
-      await refreshOneDay(dayYmd);
     }
   }
 
@@ -338,32 +280,24 @@ function PlanSemanalInner() {
         if (!text) {
           if (existing) {
             await deleteSession(existing.id);
-            setDaysMap((prev) => {
-              const list = [...(prev[dayYmd] || [])].filter((s) => !isCellOf(s, turn, row));
-              return { ...prev, [dayYmd]: list };
-            });
+            replaceDayEntries(dayYmd, (s) => s.id === existing.id);
+          } else {
+            // nada
           }
-          await refreshOneDay(dayYmd);
           continue;
         }
 
         if (!existing) {
           const res = await createSession({ title: text, description: `${m} | ${dayYmd}`, date: iso, type: "GENERAL" });
-          setDaysMap((prev) => ({ ...prev, [dayYmd]: [ ...(prev[dayYmd] || []), res.data ] }));
+          replaceDayEntries(dayYmd, () => false, res.data); // push
         } else {
           const res = await updateSession(existing.id, {
             title: text,
             description: existing.description?.startsWith(m) ? existing.description : `${m} | ${dayYmd}`,
             date: iso,
           });
-          setDaysMap((prev) => {
-            const list = [...(prev[dayYmd] || [])];
-            const idx = list.findIndex((s) => s.id === existing.id);
-            if (idx >= 0) list[idx] = res.data;
-            return { ...prev, [dayYmd]: list };
-          });
+          replaceDayEntries(dayYmd, (s) => s.id === existing.id, res.data);
         }
-        await refreshOneDay(dayYmd);
       }
       setPending({});
     } catch (e: any) {
@@ -578,11 +512,10 @@ function PlanSemanalInner() {
   }
 
   // =======================
-  // Tipo de día — componente aislado y controlado
+  // Tipo de día (controlado)
   // =======================
   function DayFlagCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const df = getDayFlag(ymd, turn);
-
     const [localKind, setLocalKind] = useState<DayFlagKind>(df.kind);
     const [rival, setRival] = useState(df.rival || "");
     const [logo, setLogo]   = useState(df.logoUrl || "");
@@ -598,14 +531,14 @@ function PlanSemanalInner() {
     const commit = async (next: DayFlag) => {
       setSaving(true);
       try {
-        await setDayFlag(ymd, turn, next);
+        await setDayFlag(ymd, turn, next); // actualiza local con respuesta del server
       } finally {
         setSaving(false);
       }
     };
 
     const onChangeKind = (k: DayFlagKind) => {
-      setLocalKind(k); // estable en UI
+      setLocalKind(k);
       if (k === "NONE") return commit({ kind: "NONE" });
       if (k === "LIBRE") return commit({ kind: "LIBRE" });
       return commit({ kind: "PARTIDO", rival, logoUrl: logo });
@@ -677,7 +610,7 @@ function PlanSemanalInner() {
     const commit = async () => {
       setSaving(true);
       try {
-        await setDayName(ymd, turn, text);
+        await setDayName(ymd, turn, text); // actualiza local con respuesta del server
       } finally {
         setSaving(false);
       }
