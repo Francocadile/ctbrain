@@ -1,13 +1,14 @@
 // src/app/api/planner/labels/route.ts
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { requireSessionWithRoles } from "@/lib/auth";
-import { Role } from "@prisma/client";
+// ⬇️ IMPORT CORRECTO: usa tu helper real. Si en tu code se llama distinto,
+// por ejemplo `requireSession` o `requireUserSession`, importalo con ese nombre.
+import { requireSession } from "@/lib/auth";
 
 /**
- * Devuelve/actualiza preferencias del planner por usuario:
- * - rowLabels: Record<string,string>
- * - places: string[]
+ * Preferencias del planner por usuario
+ *  - rowLabels: Record<string,string>
+ *  - places: string[]
  *
  * Métodos:
  *  GET       -> { rowLabels, places }
@@ -15,10 +16,8 @@ import { Role } from "@prisma/client";
  *  DELETE    -> ?target=labels | places | all
  */
 
-const ANY_ROLE: Role[] = [Role.ADMIN, Role.CT, Role.MEDICO, Role.JUGADOR, Role.DIRECTIVO];
-
 export async function GET() {
-  const session = await requireSessionWithRoles(ANY_ROLE);
+  const session = await requireSession();
   const userId = session.user.id;
 
   const pref = await prisma.plannerPrefs.findUnique({ where: { userId } });
@@ -30,14 +29,13 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  const session = await requireSessionWithRoles(ANY_ROLE);
+  const session = await requireSession();
   const userId = session.user.id;
 
   const body = await req.json().catch(() => ({}));
   const incomingLabels = (body?.rowLabels ?? null) as Record<string, string> | null;
   const incomingPlaces = (body?.places ?? null) as string[] | null;
 
-  // Traemos lo actual para hacer merge parcial
   const current = await prisma.plannerPrefs.findUnique({ where: { userId } });
 
   const nextLabels =
@@ -70,13 +68,12 @@ export async function PUT(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const session = await requireSessionWithRoles(ANY_ROLE);
+  const session = await requireSession();
   const userId = session.user.id;
 
   const url = new URL(req.url);
   const target = (url.searchParams.get("target") || "labels") as "labels" | "places" | "all";
 
-  // Nos aseguramos de que exista el registro
   const existing = await prisma.plannerPrefs.findUnique({ where: { userId } });
   if (!existing) {
     await prisma.plannerPrefs.create({
