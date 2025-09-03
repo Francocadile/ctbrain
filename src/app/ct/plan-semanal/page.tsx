@@ -329,23 +329,20 @@ function PlanSemanalInner() {
       );
     }
 
-    // LUGAR → TEXTO MANUAL + SUGERENCIAS (datalist)
+    // LUGAR → TEXTO MANUAL + SUGERENCIAS (datalist) — SIN HelpTip en el editor
     if (row === "LUGAR") {
       const [local, setLocal] = useState(value || "");
       useEffect(() => setLocal(value || ""), [value, k]);
 
       return (
-        <div className="flex items-center gap-1">
-          <input
-            list="places-datalist"
-            className="h-8 w-full rounded-md border px-2 text-xs"
-            placeholder="Lugar (texto libre o elegí de sugerencias)"
-            value={local}
-            onChange={(e) => setLocal(e.target.value)}
-            onBlur={() => stageCell(dayYmd, turn, row, (local || "").trim())}
-          />
-          <HelpTip text="Escribí el lugar. En Herramientas podés cargar una lista para tener sugerencias." />
-        </div>
+        <input
+          list="places-datalist"
+          className="h-8 w-full rounded-md border px-2 text-xs"
+          placeholder="Lugar (texto libre o elegí de sugerencias)"
+          value={local}
+          onChange={(e) => setLocal(e.target.value)}
+          onBlur={() => stageCell(dayYmd, turn, row, (local || "").trim())}
+        />
       );
     }
 
