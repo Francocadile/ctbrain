@@ -39,6 +39,9 @@ model User {
   // métricas
   rpeEntries       RPEEntry[]
   wellnessEntries  WellnessEntry[]
+
+  // preferencias (1 a 1)
+  plannerPrefs     PlannerPrefs?
 }
 
 model Session {
@@ -83,8 +86,6 @@ model ExerciseKind {
 }
 
 // ===== NUEVO: métricas =====
-// RPE del jugador (0..10). CT puede completar duración (min).
-// load (AU) = rpe * duration. Único por (userId, date).
 
 model RPEEntry {
   id        String   @id @default(cuid())
@@ -103,9 +104,6 @@ model RPEEntry {
   @@index([date])
   @@index([userId, date])
 }
-
-// Wellness diario (1..5 por ítem; horas de sueño opcional).
-// total = suma de las escalas. Único por (userId, date).
 
 model WellnessEntry {
   id              String   @id @default(cuid())
@@ -130,4 +128,16 @@ model WellnessEntry {
   @@unique([userId, date])
   @@index([date])
   @@index([userId, date])
+}
+
+// ===== NUEVO: preferencias del planificador por usuario =====
+
+model PlannerPrefs {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  rowLabels Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
