@@ -36,7 +36,9 @@ type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
 type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string };
 
 const DAYFLAG_TAG = "DAYFLAG";
-function dayFlagMarker(turn: TurnKey) { return `[${DAYFLAG_TAG}:${turn}]`; }
+function dayFlagMarker(turn: TurnKey) {
+  return `[${DAYFLAG_TAG}:${turn}]`;
+}
 function isDayFlag(s: SessionDTO, turn: TurnKey) {
   return typeof s.description === "string" && s.description.startsWith(dayFlagMarker(turn));
 }
@@ -54,10 +56,19 @@ function buildDayFlagTitle(df: DayFlag): string {
   return "";
 }
 
-function addDaysUTC(date: Date, days: number) { const x = new Date(date); x.setUTCDate(x.getUTCDate() + days); return x; }
+function addDaysUTC(date: Date, days: number) {
+  const x = new Date(date);
+  x.setUTCDate(x.getUTCDate() + days);
+  return x;
+}
 function humanDayUTC(ymd: string) {
   const d = new Date(`${ymd}T00:00:00.000Z`);
-  return d.toLocaleDateString(undefined, { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "UTC" });
+  return d.toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "UTC",
+  });
 }
 function computeISOForSlot(dayYmd: string, turn: TurnKey) {
   const base = new Date(`${dayYmd}T00:00:00.000Z`);
@@ -65,21 +76,39 @@ function computeISOForSlot(dayYmd: string, turn: TurnKey) {
   return base.toISOString();
 }
 
-function cellMarker(turn: TurnKey, row: string) { return `[GRID:${turn}:${row}]`; }
+function cellMarker(turn: TurnKey, row: string) {
+  return `[GRID:${turn}:${row}]`;
+}
 function isCellOf(s: SessionDTO, turn: TurnKey, row: string) {
   return typeof s.description === "string" && s.description.startsWith(cellMarker(turn, row));
 }
 function parseVideoValue(v: string | null | undefined): { label: string; url: string } {
-  const raw = (v || "").trim(); if (!raw) return { label: "", url: "" };
+  const raw = (v || "").trim();
+  if (!raw) return { label: "", url: "" };
   const [label, url] = raw.split("|").map((s) => s.trim());
   if (!url && label?.startsWith("http")) return { label: "Video", url: label };
   return { label: label || "", url: url || "" };
 }
 function joinVideoValue(label: string, url: string) {
-  const l = (label || "").trim(); const u = (url || "").trim();
-  if (!l && !u) return ""; if (!l && u) return u; return `${l}|${u}`;
+  const l = (label || "").trim();
+  const u = (url || "").trim();
+  if (!l && !u) return "";
+  if (!l && u) return u;
+  return `${l}|${u}`;
 }
-function cellKey(dayYmd: string, turn: TurnKey, row: string) { return `${dayYmd}::${turn}::${row}`; }
+function cellKey(dayYmd: string, turn: TurnKey, row: string) {
+  return `${dayYmd}::${turn}::${row}`;
+}
+
+/** ---------- Etiquetas visibles personalizables (solo UI) ---------- */
+const ROW_LABELS_STORAGE = "planner.rowLabels.v1";
+function loadRowLabels(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(ROW_LABELS_STORAGE);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return {};
+}
 
 function PlanSemanalInner() {
   const qs = useSearchParams();
@@ -110,11 +139,23 @@ function PlanSemanalInner() {
   const [weekEnd, setWeekEnd] = useState<string>("");
 
   const [places, setPlaces] = useState<string[]>([]);
-  useEffect(() => { (async () => setPlaces(await listPlaces()))(); }, []);
+  useEffect(() => {
+    (async () => setPlaces(await listPlaces()))();
+  }, []);
 
   const [pending, setPending] = useState<Record<string, string>>({});
   const [videoEditing, setVideoEditing] = useState<Record<string, boolean>>({});
   const [savingAll, setSavingAll] = useState(false);
+
+  // Etiquetas visibles personalizadas (desde Herramientas)
+  const [rowLabels, setRowLabels] = useState<Record<string, string>>({});
+  useEffect(() => {
+    setRowLabels(loadRowLabels());
+    const onUpd = () => setRowLabels(loadRowLabels());
+    window.addEventListener("planner-row-labels-updated", onUpd as any);
+    return () => window.removeEventListener("planner-row-labels-updated", onUpd as any);
+  }, []);
+  const label = (id: string) => rowLabels[id] || (id === "PRE ENTREN0" ? "Activación" : id);
 
   async function loadWeek(d: Date) {
     setLoading(true);
@@ -134,7 +175,10 @@ function PlanSemanalInner() {
       setLoading(false);
     }
   }
-  useEffect(() => { loadWeek(base); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [base]);
+  useEffect(() => {
+    loadWeek(base);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [base]);
 
   function confirmDiscardIfNeeded(action: () => void) {
     if (Object.keys(pending).length === 0) return action();
@@ -258,14 +302,23 @@ function PlanSemanalInner() {
         places.join("\n")
       );
       if (edited === null) return;
-      const list = edited.split("\n").map((s) => s.trim()).filter(Boolean);
+      const list = edited
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
       const unique = await replacePlaces(list);
       setPlaces(unique);
     })();
   }
 
-  function MetaInput({ dayYmd, turn, row }: {
-    dayYmd: string; turn: TurnKey; row: (typeof META_ROWS)[number];
+  function MetaInput({
+    dayYmd,
+    turn,
+    row,
+  }: {
+    dayYmd: string;
+    turn: TurnKey;
+    row: (typeof META_ROWS)[number];
   }) {
     const existing = findCell(dayYmd, turn, row);
     const original = (existing?.title ?? "").trim();
@@ -288,7 +341,9 @@ function PlanSemanalInner() {
           value={local}
           onChange={(e) => setLocal(e.target.value)}
           onBlur={commit}
-          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
         />
       );
     }
@@ -322,7 +377,11 @@ function PlanSemanalInner() {
             }}
           >
             <option value="">— Lugar —</option>
-            {localPlaces.map((l) => (<option key={l} value={l}>{l}</option>))}
+            {localPlaces.map((l) => (
+              <option key={l} value={l}>
+                {l}
+              </option>
+            ))}
             <option value="__add__">➕ Agregar…</option>
             <option value="__manage__">⚙️ Gestionar…</option>
           </select>
@@ -348,23 +407,45 @@ function PlanSemanalInner() {
     const isEditing = !!videoEditing[k];
     const [localLabel, setLocalLabel] = useState(parsed.label);
     const [localUrl, setLocalUrl] = useState(parsed.url);
-    useEffect(() => { setLocalLabel(parsed.label); setLocalUrl(parsed.url); /* eslint-disable-next-line */ }, [k, isEditing]);
+    useEffect(() => {
+      setLocalLabel(parsed.label);
+      setLocalUrl(parsed.url);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [k, isEditing]);
 
     if (!isEditing && (parsed.label || parsed.url)) {
       return (
         <div className="flex items-center justify-between gap-1">
           {parsed.url ? (
-            <a href={parsed.url} target="_blank" rel="noreferrer" className="text-[12px] underline text-emerald-700 truncate" title={parsed.label || "Video"}>
+            <a
+              href={parsed.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[12px] underline text-emerald-700 truncate"
+              title={parsed.label || "Video"}
+            >
               {parsed.label || "Video"}
             </a>
           ) : (
             <span className="text-[12px] text-gray-500 truncate">{parsed.label}</span>
           )}
           <div className="flex items-center gap-1">
-            <button type="button" className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
-              onClick={() => setVideoEditing((m) => ({ ...m, [k]: true }))} title="Editar">✏️</button>
-            <button type="button" className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
-              onClick={() => stageCell(dayYmd, turn, row, "")} title="Borrar">❌</button>
+            <button
+              type="button"
+              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+              onClick={() => setVideoEditing((m) => ({ ...m, [k]: true }))}
+              title="Editar"
+            >
+              ✏️
+            </button>
+            <button
+              type="button"
+              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+              onClick={() => stageCell(dayYmd, turn, row, "")}
+              title="Borrar"
+            >
+              ❌
+            </button>
           </div>
         </div>
       );
@@ -372,27 +453,59 @@ function PlanSemanalInner() {
 
     return (
       <div className="flex items-center gap-1.5">
-        <input className="h-8 w-[45%] rounded-md border px-2 text-xs" placeholder="Título"
-          value={localLabel} onChange={(e) => setLocalLabel(e.target.value)} />
-        <input type="url" className="h-8 w-[55%] rounded-md border px-2 text-xs" placeholder="https://…"
-          value={localUrl} onChange={(e) => setLocalUrl(e.target.value)} />
-        <button type="button" className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50"
-          onClick={() => { stageCell(dayYmd, turn, row, joinVideoValue(localLabel, localUrl)); setVideoEditing((m) => ({ ...m, [k]: false })); }}
-          title="Listo">✓</button>
+        <input
+          className="h-8 w-[45%] rounded-md border px-2 text-xs"
+          placeholder="Título"
+          value={localLabel}
+          onChange={(e) => setLocalLabel(e.target.value)}
+        />
+        <input
+          type="url"
+          className="h-8 w-[55%] rounded-md border px-2 text-xs"
+          placeholder="https://…"
+          value={localUrl}
+          onChange={(e) => setLocalUrl(e.target.value)}
+        />
+        <button
+          type="button"
+          className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50"
+          onClick={() => {
+            stageCell(dayYmd, turn, row, joinVideoValue(localLabel, localUrl));
+            setVideoEditing((m) => ({ ...m, [k]: false }));
+          }}
+          title="Listo"
+        >
+          ✓
+        </button>
       </div>
     );
   }
 
-  function EditableCell({ dayYmd, turn, row }: { dayYmd: string; turn: TurnKey; row: string; }) {
+  function EditableCell({
+    dayYmd,
+    turn,
+    row,
+  }: {
+    dayYmd: string;
+    turn: TurnKey;
+    row: string;
+  }) {
     const existing = findCell(dayYmd, turn, row);
     const ref = useRef<HTMLDivElement | null>(null);
     const k = cellKey(dayYmd, turn, row);
     const staged = pending[k];
     const initialText = staged !== undefined ? staged : existing?.title ?? "";
 
-    const onBlur = () => { const txt = ref.current?.innerText ?? ""; stageCell(dayYmd, turn, row, txt); };
+    const onBlur = () => {
+      const txt = ref.current?.innerText ?? "";
+      stageCell(dayYmd, turn, row, txt);
+    };
     const onKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); const txt = ref.current?.innerText ?? ""; stageCell(dayYmd, turn, row, txt); }
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        const txt = ref.current?.innerText ?? "";
+        stageCell(dayYmd, turn, row, txt);
+      }
     };
 
     const sessionHref = existing?.id ? `/ct/sessions/${existing.id}` : "";
@@ -412,7 +525,11 @@ function PlanSemanalInner() {
         <div className="flex items-center justify-between">
           <div>{flagBadge}</div>
           {sessionHref ? (
-            <a href={sessionHref} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50" title="Editar ejercicio">
+            <a
+              href={sessionHref}
+              className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50"
+              title="Editar ejercicio"
+            >
               Editar ejercicio
             </a>
           ) : null}
@@ -495,9 +612,14 @@ function PlanSemanalInner() {
 
   function DayStatusRow({ turn }: { turn: TurnKey }) {
     return (
-      <div className="grid items-center border-b bg-gray-50/60" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+      <div
+        className="grid items-center border-b bg-gray-50/60"
+        style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
+      >
         <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Tipo</div>
-        {orderedDays.map((ymd) => (<DayStatusCell key={`${ymd}-${turn}-status`} ymd={ymd} turn={turn} />))}
+        {orderedDays.map((ymd) => (
+          <DayStatusCell key={`${ymd}-${turn}-status`} ymd={ymd} turn={turn} />
+        ))}
       </div>
     );
   }
@@ -505,11 +627,16 @@ function PlanSemanalInner() {
   function TurnEditor({ turn }: { turn: TurnKey }) {
     return (
       <>
-        <div className="grid text-xs" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+        <div
+          className="grid text-xs"
+          style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
+        >
           <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600"></div>
           {orderedDays.map((ymd) => (
             <div key={`${turn}-${ymd}`} className="bg-gray-50 border-b px-2 py-1.5">
-              <div className="text-[11px] font-semibold uppercase tracking-wide">{humanDayUTC(ymd)}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide">
+                {humanDayUTC(ymd)}
+              </div>
               <div className="text-[10px] text-gray-400">{ymd}</div>
             </div>
           ))}
@@ -522,8 +649,14 @@ function PlanSemanalInner() {
             {turn === "morning" ? "TURNO MAÑANA · Meta" : "TURNO TARDE · Meta"}
           </div>
           {META_ROWS.map((rowName) => (
-            <div key={`${turn}-meta-${rowName}`} className="grid items-center" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
-              <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">{rowName}</div>
+            <div
+              key={`${turn}-meta-${rowName}`}
+              className="grid items-center"
+              style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
+            >
+              <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">
+                {label(rowName)}
+              </div>
               {orderedDays.map((ymd) => (
                 <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
                   <MetaInput dayYmd={ymd} turn={turn} row={rowName} />
@@ -538,8 +671,14 @@ function PlanSemanalInner() {
             {turn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
           </div>
           {CONTENT_ROWS.map((rowName) => (
-            <div key={`${turn}-${rowName}`} className="grid items-stretch" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
-              <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600 whitespace-pre-line">{rowName}</div>
+            <div
+              key={`${turn}-${rowName}`}
+              className="grid items-stretch"
+              style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
+            >
+              <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600 whitespace-pre-line">
+                {label(rowName)}
+              </div>
               {orderedDays.map((ymd) => (
                 <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
                   <EditableCell dayYmd={ymd} turn={turn} row={rowName} />
@@ -556,7 +695,14 @@ function PlanSemanalInner() {
 
   return (
     <div className="p-3 md:p-4 space-y-3">
-      <style jsx>{`[contenteditable][data-placeholder]:empty:before{content:attr(data-placeholder);color:#9ca3af;pointer-events:none;display:block;}`}</style>
+      <style jsx>{`
+        [contenteditable][data-placeholder]:empty:before {
+          content: attr(data-placeholder);
+          color: #9ca3af;
+          pointer-events: none;
+          display: block;
+        }
+      `}</style>
 
       {!hideHeader && (
         <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -566,36 +712,75 @@ function PlanSemanalInner() {
               Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)
             </p>
             <p className="mt-1 text-[10px] text-gray-400">
-              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd>{" "}
-              + <kbd className="rounded border px-1">Enter</kbd> para marcar una celda sin guardar aún.
+              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/
+              <kbd className="rounded border px-1">⌘</kbd> +{" "}
+              <kbd className="rounded border px-1">Enter</kbd> para marcar una celda sin guardar aún.
             </p>
           </div>
 
           {/* Botones de navegación y acciones (solo en editor) */}
           {activePane === "editor" ? (
             <div className="flex flex-wrap items-center gap-2">
-              <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">◀ Semana anterior</button>
-              <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Hoy</button>
-              <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Semana siguiente ▶</button>
+              <button
+                onClick={goPrevWeek}
+                className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
+              >
+                ◀ Semana anterior
+              </button>
+              <button
+                onClick={goTodayWeek}
+                className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
+              >
+                Hoy
+              </button>
+              <button
+                onClick={goNextWeek}
+                className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
+              >
+                Semana siguiente ▶
+              </button>
               <div className="w-px h-6 bg-gray-200 mx-1" />
               <button
                 onClick={saveAll}
                 disabled={pendingCount === 0 || savingAll}
-                className={`px-3 py-1.5 rounded-xl text-xs ${pendingCount === 0 || savingAll ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
+                className={`px-3 py-1.5 rounded-xl text-xs ${
+                  pendingCount === 0 || savingAll
+                    ? "bg-gray-200 text-gray-500"
+                    : "bg-black text-white hover:opacity-90"
+                }`}
                 title={pendingCount ? `${pendingCount} cambio(s) por guardar` : "Sin cambios"}
               >
                 {savingAll ? "Guardando..." : `Guardar cambios${pendingCount ? ` (${pendingCount})` : ""}`}
               </button>
-              <button onClick={discardAll} disabled={pendingCount === 0 || savingAll} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+              <button
+                onClick={discardAll}
+                disabled={pendingCount === 0 || savingAll}
+                className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
+              >
                 Descartar
               </button>
             </div>
           ) : (
             // En Herramientas solo mostramos navegación de semana
             <div className="flex flex-wrap items-center gap-2">
-              <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">◀ Semana anterior</button>
-              <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Hoy</button>
-              <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Semana siguiente ▶</button>
+              <button
+                onClick={goPrevWeek}
+                className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
+              >
+                ◀ Semana anterior
+              </button>
+              <button
+                onClick={goTodayWeek}
+                className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
+              >
+                Hoy
+              </button>
+              <button
+                onClick={goNextWeek}
+                className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
+              >
+                Semana siguiente ▶
+              </button>
             </div>
           )}
         </header>
@@ -605,17 +790,27 @@ function PlanSemanalInner() {
       <div className="flex items-center gap-2">
         <button
           className={`px-3 py-1.5 rounded-xl border text-xs ${
-            activePane === "editor" && activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"
+            activePane === "editor" && activeTurn === "morning"
+              ? "bg-black text-white"
+              : "hover:bg-gray-50"
           }`}
-          onClick={() => { setActivePane("editor"); setActiveTurn("morning"); }}
+          onClick={() => {
+            setActivePane("editor");
+            setActiveTurn("morning");
+          }}
         >
           Mañana
         </button>
         <button
           className={`px-3 py-1.5 rounded-xl border text-xs ${
-            activePane === "editor" && activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"
+            activePane === "editor" && activeTurn === "afternoon"
+              ? "bg-black text-white"
+              : "hover:bg-gray-50"
           }`}
-          onClick={() => { setActivePane("editor"); setActiveTurn("afternoon"); }}
+          onClick={() => {
+            setActivePane("editor");
+            setActiveTurn("afternoon");
+          }}
         >
           Tarde
         </button>
@@ -624,7 +819,7 @@ function PlanSemanalInner() {
             activePane === "tools" ? "bg-black text-white" : "hover:bg-gray-50"
           }`}
           onClick={() => setActivePane("tools")}
-          title="Exportar / Importar / Duplicar semana"
+          title="Exportar / Importar / Duplicar semana y Configurar etiquetas"
         >
           Herramientas
         </button>
