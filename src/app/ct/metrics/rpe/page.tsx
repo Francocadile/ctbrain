@@ -38,6 +38,40 @@ function mean(arr: number[]) {
   return sum(arr) / arr.length;
 }
 
+/** ---------- Mini gráficos SVG sin dependencias ---------- */
+function BarsInline({
+  values,
+  maxHint,
+  height = 60,
+  barWidth = 12,
+  gap = 4,
+  titlePrefix = "",
+}: {
+  values: number[];
+  maxHint?: number;
+  height?: number;
+  barWidth?: number;
+  gap?: number;
+  titlePrefix?: string;
+}) {
+  const max = Math.max(maxHint ?? 0, ...values, 1);
+  return (
+    <div className="flex items-end gap-1 overflow-x-auto" style={{ height }}>
+      {values.map((v, i) => {
+        const h = Math.max(2, Math.round((v / max) * (height - 10)));
+        return (
+          <div
+            key={i}
+            title={`${titlePrefix}${v}`}
+            className="rounded-sm bg-gray-300"
+            style={{ width: barWidth, height: h, marginRight: gap }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 export default function RPECT() {
   const [date, setDate] = useState<string>(toYMD(new Date()));
   const [rows, setRows] = useState<Row[]>([]);
@@ -46,6 +80,13 @@ export default function RPECT() {
   const [q, setQ] = useState("");
   const [bulkMin, setBulkMin] = useState<string>("90");
   const [saving, setSaving] = useState(false);
+
+  // Tendencias
+  const [rangeDays, setRangeDays] = useState<7 | 14 | 21>(7);
+  const [trendLoading, setTrendLoading] = useState(false);
+  const [dailyTeamSRPE, setDailyTeamSRPE] = useState<number[]>([]); // hoy, ayer, ... (rangeDays-1)
+  const [dailyLabels, setDailyLabels] = useState<string[]>([]);
+  const [histBins, setHistBins] = useState<number[]>([0, 0, 0, 0, 0]); // 0–300 | 301–600 | 601–900 | 901–1200 | >1200
 
   async function fetchDay(d: string): Promise<Row[]> {
     const res = await fetch(`/api/metrics/rpe?date=${d}`, { cache: "no-store" });
@@ -86,24 +127,19 @@ export default function RPECT() {
     const withDur = rows.filter((r) => r.duration != null);
     const pctDur = n ? Math.round((withDur.length / n) * 100) : 0;
 
-    const sToday = sum(
-      rows.map((r) =>
-        r.load != null
-          ? Number(r.load)
-          : r.duration != null
-          ? Number(r.rpe) * Number(r.duration)
-          : 0
-      )
-    );
-    const sYesterday = sum(
-      rowsYesterday.map((r) =>
-        r.load != null
-          ? Number(r.load)
-          : r.duration != null
-          ? Number(r.rpe) * Number(r.duration)
-          : 0
-      )
-    );
+    const calcSum = (arr: Row[]) =>
+      sum(
+        arr.map((r) =>
+          r.load != null
+            ? Number(r.load)
+            : r.duration != null
+            ? Number(r.rpe) * Number(r.duration)
+            : 0
+        )
+      );
+
+    const sToday = calcSum(rows);
+    const sYesterday = calcSum(rowsYesterday);
     const delta = sToday - sYesterday;
 
     const rpeVals = rows.map((r) => Number(r.rpe)).filter((v) => !Number.isNaN(v));
@@ -132,6 +168,54 @@ export default function RPECT() {
 
     return { n, pctDur, sToday, sYesterday, delta, rpeAvg, dist };
   }, [rows, rowsYesterday]);
+
+  // ----- Tendencias (últimos N días) -----
+  useEffect(() => {
+    (async () => {
+      setTrendLoading(true);
+      try {
+        const days = Array.from({ length: rangeDays }, (_, i) =>
+          toYMD(addDays(fromYMD(date), -i))
+        );
+        const data = await Promise.all(days.map((d) => fetchDay(d)));
+        // Sumatoria por día (en el mismo orden: hoy, ayer…)
+        const sums = data.map((rows) =>
+          rows.reduce((acc, r) => {
+            const srpe =
+              r.load != null
+                ? Number(r.load)
+                : r.duration != null
+                ? Number(r.rpe) * Number(r.duration)
+                : 0;
+            return acc + srpe;
+          }, 0)
+        );
+        // Histogramas de sRPE por jugador (acumulado rango)
+        const allSrpe = data.flatMap((rows) =>
+          rows.map((r) =>
+            r.load != null
+              ? Number(r.load)
+              : r.duration != null
+              ? Number(r.rpe) * Number(r.duration)
+              : 0
+          )
+        );
+        const bins = [0, 0, 0, 0, 0]; // 0–300 | 301–600 | 601–900 | 901–1200 | >1200
+        for (const v of allSrpe) {
+          if (v <= 300) bins[0]++;
+          else if (v <= 600) bins[1]++;
+          else if (v <= 900) bins[2]++;
+          else if (v <= 1200) bins[3]++;
+          else bins[4]++;
+        }
+        setDailyTeamSRPE(sums);
+        setDailyLabels(days);
+        setHistBins(bins);
+      } finally {
+        setTrendLoading(false);
+      }
+    })();
+  }, [date, rangeDays]);
 
   // ----- Acciones -----
   async function applyDefaultDuration() {
@@ -229,6 +313,18 @@ export default function RPECT() {
     URL.revokeObjectURL(url);
   }
 
+  // ----- Rolling sums -----
+  const rolling = useMemo(() => {
+    const last = dailyTeamSRPE; // hoy..hace N
+    const sumN = (n: number) => sum(last.slice(0, n));
+    return {
+      sum7: sumN(Math.min(7, last.length)),
+      sum14: sumN(Math.min(14, last.length)),
+      sum21: sumN(Math.min(21, last.length)),
+      max: Math.max(1, ...last),
+    };
+  }, [dailyTeamSRPE]);
+
   return (
     <div className="p-4 space-y-4">
       {/* Header */}
@@ -236,7 +332,7 @@ export default function RPECT() {
         <div>
           <h1 className="text-lg font-bold">
             RPE — Día (CT){" "}
-            <HelpTip text="RPE 0–10 (≈30' post-sesión). El CT define la duración; sRPE = RPE×min. KPIs y comparación con ayer para ajustar carga." />
+            <HelpTip text="RPE 0–10 (≈30' post-sesión). El CT define la duración; sRPE = RPE×min. KPIs, histograma y tendencia últimos días." />
           </h1>
           <p className="text-xs text-gray-500">
             {rows.length} registros • Ayer: {rowsYesterday.length} registros
@@ -464,6 +560,78 @@ export default function RPECT() {
             </table>
           </div>
         )}
+      </section>
+
+      {/* Tendencias (últimos N días) */}
+      <section className="rounded-2xl border bg-white px-4 py-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[12px] font-semibold uppercase">
+            Tendencias últimos{" "}
+            <select
+              className="ml-1 border rounded-md px-1 py-0.5 text-xs"
+              value={rangeDays}
+              onChange={(e) => setRangeDays(Number(e.target.value) as 7 | 14 | 21)}
+            >
+              <option value={7}>7</option>
+              <option value={14}>14</option>
+              <option value={21}>21</option>
+            </select>{" "}
+            días
+            <HelpTip text="Se calcula en cliente llamando al endpoint diario, sin dependencias nuevas." />
+          </div>
+          <div className="text-xs text-gray-500">
+            {trendLoading ? "Calculando…" : `${dailyTeamSRPE.length} día(s)`}
+          </div>
+        </div>
+
+        {/* Rolling sums */}
+        <div className="grid grid-cols-3 gap-3 mt-3">
+          <div className="rounded-xl border p-3">
+            <div className="text-[11px] uppercase text-gray-500">Rolling 7d (AU)</div>
+            <div className="mt-1 text-xl font-bold">{rolling.sum7}</div>
+          </div>
+          <div className="rounded-xl border p-3">
+            <div className="text-[11px] uppercase text-gray-500">Rolling 14d (AU)</div>
+            <div className="mt-1 text-xl font-bold">{rolling.sum14}</div>
+          </div>
+          <div className="rounded-xl border p-3">
+            <div className="text-[11px] uppercase text-gray-500">Rolling 21d (AU)</div>
+            <div className="mt-1 text-xl font-bold">{rolling.sum21}</div>
+          </div>
+        </div>
+
+        {/* Serie diaria de sRPE (barras) */}
+        <div className="mt-4">
+          <div className="text-[11px] uppercase text-gray-500 mb-1">
+            sRPE diario del equipo (hoy → {rangeDays - 1}d)
+          </div>
+          <BarsInline values={dailyTeamSRPE} maxHint={rolling.max} titlePrefix="AU: " />
+        </div>
+
+        {/* Histograma de sRPE por jugador (acumulado rango) */}
+        <div className="mt-4">
+          <div className="text-[11px] uppercase text-gray-500 mb-1">
+            Histograma sRPE por jugador (rango)
+            <HelpTip text="Bins: 0–300 | 301–600 | 601–900 | 901–1200 | >1200 AU" />
+          </div>
+          <div className="grid grid-cols-5 gap-3">
+            {[
+              { label: "0–300", v: histBins[0] },
+              { label: "301–600", v: histBins[1] },
+              { label: "601–900", v: histBins[2] },
+              { label: "901–1200", v: histBins[3] },
+              { label: ">1200", v: histBins[4] },
+            ].map((b, i) => (
+              <div key={i} className="rounded-xl border p-3">
+                <div className="text-xs text-gray-600">{b.label}</div>
+                <div className="mt-1 text-xl font-bold">{b.v}</div>
+                <div className="mt-2">
+                  <BarsInline values={[b.v]} height={40} barWidth={20} gap={0} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
     </div>
   );
