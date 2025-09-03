@@ -34,14 +34,14 @@ model User {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  sessions  Session[] @relation("UserSessions")
+  sessions       Session[]     @relation("UserSessions")
 
   // métricas
-  rpeEntries       RPEEntry[]
-  wellnessEntries  WellnessEntry[]
+  rpeEntries      RPEEntry[]
+  wellnessEntries WellnessEntry[]
 
   // preferencias (1 a 1)
-  plannerPrefs     PlannerPrefs?
+  plannerPrefs    PlannerPrefs?
 }
 
 model Session {
@@ -61,7 +61,7 @@ model Session {
   @@index([createdBy])
 }
 
-// ===== NUEVO: soporte catálogos básicos =====
+// ===== Catálogos básicos (opcionales) =====
 
 model Rival {
   id        String   @id @default(cuid())
@@ -85,7 +85,7 @@ model ExerciseKind {
   updatedAt DateTime @updatedAt
 }
 
-// ===== NUEVO: métricas =====
+// ===== Métricas =====
 
 model RPEEntry {
   id        String   @id @default(cuid())
@@ -130,12 +130,13 @@ model WellnessEntry {
   @@index([userId, date])
 }
 
-// ===== NUEVO: preferencias del planificador por usuario =====
+// ===== Preferencias del planificador por usuario =====
 
 model PlannerPrefs {
   id        String   @id @default(cuid())
   userId    String   @unique
-  rowLabels Json     @default("{}")
+  rowLabels Json     @default("{}")  // { "PRE ENTREN0": "...", ... }
+  places    Json     @default("[]")  // ["Cancha 1", "Gimnasio", ...]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
