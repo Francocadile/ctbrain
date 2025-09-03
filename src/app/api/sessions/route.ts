@@ -46,25 +46,27 @@ const sessionSelect = {
 } as const;
 
 // ---------- Validación POST ----------
-const createSchema = z.object({
-  title: z.string().optional().nullable(), // "" permitido si es DAYFLAG
-  description: z.string().optional().nullable(),
-  date: z.string().datetime({ message: "Fecha inválida (usar ISO, ej: 2025-08-27T12:00:00Z)" }),
-  type: z.enum(["GENERAL", "FUERZA", "TACTICA", "AEROBICO", "RECUPERACION"]).optional(),
-}).superRefine((data, ctx) => {
-  if (!isDayFlagDescription(data.description)) {
-    const len = (data.title || "").trim().length;
-    if (len < 2) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Título muy corto",
-        path: ["title"],
-      });
+const createSchema = z
+  .object({
+    title: z.string().optional().nullable(), // "" permitido si es DAYFLAG
+    description: z.string().optional().nullable(),
+    date: z.string().datetime({ message: "Fecha inválida (usar ISO, ej: 2025-08-27T12:00:00Z)" }),
+    type: z.enum(["GENERAL", "FUERZA", "TACTICA", "AEROBICO", "RECUPERACION"]).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (!isDayFlagDescription(data.description)) {
+      const len = (data.title || "").trim().length;
+      if (len < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Título muy corto",
+          path: ["title"],
+        });
+      }
     }
-  }
-});
+  });
 
-// GET /api/sessions?start=YYYY-MM-DD  (semana)  |  fallback: últimas 50
+// GET /api/sessions?start=YYYY-MM-DD  (semana)  |  sin start => listado histórico de sesiones (solo NOMBRE SESIÓN + DAYFLAG)
 export async function GET(req: Request) {
   try {
     await requireAuth();
@@ -79,10 +81,10 @@ export async function GET(req: Request) {
       }
 
       const monday = getMondayUTC(startDate);
-      const nextMonday = addDaysUTC(monday, 7); // <-- FIN EXCLUSIVO (arregla DOMINGO)
+      const nextMonday = addDaysUTC(monday, 7); // fin exclusivo (corrige domingo)
 
       const items = await prisma.session.findMany({
-        where: { date: { gte: monday, lt: nextMonday } }, // <-- lt en lugar de lte domingo
+        where: { date: { gte: monday, lt: nextMonday } },
         orderBy: [{ date: "asc" }, { createdAt: "asc" }],
         select: sessionSelect,
       });
@@ -101,15 +103,26 @@ export async function GET(req: Request) {
       return NextResponse.json({
         days,
         weekStart: toYYYYMMDDUTC(monday),
-        weekEnd: toYYYYMMDDUTC(addDaysUTC(monday, 6)), // solo informativo
+        weekEnd: toYYYYMMDDUTC(addDaysUTC(monday, 6)), // informativo
       });
     }
 
+    // -------- Listado histórico SOLO de sesiones (nombre) + dayflags --------
+    const NAME_ROW = "NOMBRE SESIÓN";
     const sessions = await prisma.session.findMany({
+      where: {
+        OR: [
+          { description: { startsWith: `[GRID:morning:${NAME_ROW}]` } },
+          { description: { startsWith: `[GRID:afternoon:${NAME_ROW}]` } },
+          { description: { startsWith: `[DAYFLAG:morning]` } },
+          { description: { startsWith: `[DAYFLAG:afternoon]` } },
+        ],
+      },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       select: sessionSelect,
-      take: 50,
+      // SIN take: queremos listarlas todas
     });
+
     return NextResponse.json({ data: sessions });
   } catch (err: any) {
     if (err instanceof Response) return err;
