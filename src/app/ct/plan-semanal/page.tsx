@@ -71,7 +71,8 @@ function humanDayUTC(ymd: string) {
   });
 }
 function computeISOForSlot(dayYmd: string, turn: TurnKey) {
-  const base = new Date(`${dayYmd}T00:00:00.000Z`);
+  // Fijamos siempre hora estable en UTC para evitar rarezas (DST/local)
+  const base = new Date(`${dayYmd}T12:00:00.000Z`);
   const h = turn === "morning" ? 9 : 15;
   base.setUTCHours(h, 0, 0, 0);
   return base.toISOString();
@@ -97,7 +98,7 @@ function cellKey(dayYmd: string, turn: TurnKey, row: string) {
   return `${dayYmd}::${turn}::${row}`;
 }
 
-// ---------- helpers de semana para un día arbitrario ----------
+// ---------- helpers ----------
 function mondayOfYMD(ymd: string) {
   const d = new Date(`${ymd}T00:00:00.000Z`);
   return getMonday(d);
@@ -190,7 +191,7 @@ function PlanSemanalInner() {
     return (s?.title || "").trim();
   }
 
-  // ---------- refresh de UN día (sin tocar pending) ----------
+  // ---------- refresh de UN día ----------
   async function refreshOneDay(ymd: string) {
     try {
       const monday = mondayOfYMD(ymd);
@@ -202,7 +203,7 @@ function PlanSemanalInner() {
     }
   }
 
-  // 🟢 OPTIMISTA para FLAG: actualiza daysMap antes de la IO
+  // --------- OPTIMISMO: FLAG ---------
   function upsertDayFlagLocal(ymd: string, turn: TurnKey, df: DayFlag, server?: SessionDTO | null) {
     setDaysMap((prev) => {
       const list = [...(prev[ymd] || [])];
@@ -227,7 +228,7 @@ function PlanSemanalInner() {
   }
 
   async function setDayFlag(ymd: string, turn: TurnKey, df: DayFlag) {
-    // 🔸 Optimista inmediato (evita “reset” del select, incluso en Domingo)
+    // optimista inmediato
     upsertDayFlagLocal(ymd, turn, df);
 
     const existing = findDayFlagSession(ymd, turn);
@@ -252,12 +253,11 @@ function PlanSemanalInner() {
     } catch (e: any) {
       console.error(e);
       alert(e?.message || "No se pudo guardar el Tipo del día");
-      // 🔸 Revertir a lo que diga el servidor
-      await refreshOneDay(ymd);
+      await refreshOneDay(ymd); // revertir a estado servidor
     }
   }
 
-  // 🟢 OPTIMISTA para NOMBRE de sesión
+  // --------- OPTIMISMO: NOMBRE SESIÓN ---------
   function upsertDayNameLocal(ymd: string, turn: TurnKey, name: string, server?: SessionDTO | null) {
     setDaysMap((prev) => {
       const list = [...(prev[ymd] || [])];
@@ -282,7 +282,6 @@ function PlanSemanalInner() {
   }
 
   async function setDayName(dayYmd: string, turn: TurnKey, name: string) {
-    // 🔸 optimista
     upsertDayNameLocal(dayYmd, turn, name);
 
     const existing = findDayNameSession(dayYmd, turn);
@@ -350,10 +349,7 @@ function PlanSemanalInner() {
 
         if (!existing) {
           const res = await createSession({ title: text, description: `${m} | ${dayYmd}`, date: iso, type: "GENERAL" });
-          setDaysMap((prev) => {
-            const list = [...(prev[dayYmd] || []), res.data];
-            return { ...prev, [dayYmd]: list };
-          });
+          setDaysMap((prev) => ({ ...prev, [dayYmd]: [ ...(prev[dayYmd] || []), res.data ] }));
         } else {
           const res = await updateSession(existing.id, {
             title: text,
@@ -582,7 +578,7 @@ function PlanSemanalInner() {
   }
 
   // =======================
-  // Tipo de día (Normal/Partido/Libre) — OPTIMISTA + refresh de día
+  // Tipo de día — componente aislado y controlado
   // =======================
   function DayFlagCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const df = getDayFlag(ymd, turn);
@@ -592,12 +588,10 @@ function PlanSemanalInner() {
     const [logo, setLogo]   = useState(df.logoUrl || "");
     const [saving, setSaving] = useState(false);
 
-    // Si cambia lo que viene de server para ESTE ymd/turn, sincronizamos
     useEffect(() => {
       setLocalKind(df.kind);
       setRival(df.rival || "");
       setLogo(df.logoUrl || "");
-      // solo reacciona cuando llega algo distinto desde server
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [ymd, turn, df.kind, df.rival, df.logoUrl]);
 
@@ -611,14 +605,14 @@ function PlanSemanalInner() {
     };
 
     const onChangeKind = (k: DayFlagKind) => {
-      setLocalKind(k); // mantiene el select estable inmediatamente
+      setLocalKind(k); // estable en UI
       if (k === "NONE") return commit({ kind: "NONE" });
       if (k === "LIBRE") return commit({ kind: "LIBRE" });
       return commit({ kind: "PARTIDO", rival, logoUrl: logo });
     };
 
     return (
-      <div className="p-1">
+      <div className="p-1" key={`flag-${ymd}-${turn}`}>
         <div className="flex items-center gap-1">
           <select
             className="h-7 w-[110px] rounded-md border px-1.5 text-[11px]"
@@ -664,14 +658,14 @@ function PlanSemanalInner() {
       >
         <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Tipo</div>
         {orderedDays.map((ymd) => (
-          <DayFlagCell key={`${ymd}-${turn}-flag`} ymd={ymd} turn={turn} />
+          <DayFlagCell key={`row-flag-${ymd}-${turn}`} ymd={ymd} turn={turn} />
         ))}
       </div>
     );
   }
 
   // =======================
-  // Nombre de sesión (solo guarda en blur/Enter) — OPTIMISTA + refresh día
+  // Nombre de sesión (blur/Enter)
   // =======================
   function DayNameCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const initial = getDayName(ymd, turn);
@@ -693,7 +687,7 @@ function PlanSemanalInner() {
     };
 
     return (
-      <div className="p-1">
+      <div className="p-1" key={`name-${ymd}-${turn}`}>
         <input
           className="h-8 w-full rounded-md border px-2 text-xs"
           placeholder="Nombre de sesión (ej. Sesión 1 TM)"
@@ -713,7 +707,7 @@ function PlanSemanalInner() {
         style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
       >
         <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">Nombre sesión</div>
-        {orderedDays.map((ymd) => <DayNameCell key={`${ymd}-${turn}-name`} ymd={ymd} turn={turn} />)}
+        {orderedDays.map((ymd) => <DayNameCell key={`row-name-${ymd}-${turn}`} ymd={ymd} turn={turn} />)}
       </div>
     );
   }
@@ -727,7 +721,7 @@ function PlanSemanalInner() {
         <div className="grid text-xs" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
           <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600"></div>
           {orderedDays.map((ymd) => (
-            <div key={`${turn}-${ymd}`} className="bg-gray-50 border-b px-2 py-1.5">
+            <div key={`head-${turn}-${ymd}`} className="bg-gray-50 border-b px-2 py-1.5">
               <div className="text-[11px] font-semibold uppercase tracking-wide">{humanDayUTC(ymd)}</div>
               <div className="text-[10px] text-gray-400">{ymd}</div>
             </div>
@@ -746,10 +740,10 @@ function PlanSemanalInner() {
             {turn === "morning" ? "TURNO MAÑANA · Meta" : "TURNO TARDE · Meta"}
           </div>
           {META_ROWS.map((rowName) => (
-            <div key={`${turn}-meta-${rowName}`} className="grid items-center" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+            <div key={`meta-${turn}-${rowName}`} className="grid items-center" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
               <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">{rowName}</div>
               {orderedDays.map((ymd) => (
-                <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
+                <div key={`meta-${ymd}-${turn}-${rowName}`} className="p-1">
                   <MetaInput dayYmd={ymd} turn={turn} row={rowName} />
                 </div>
               ))}
@@ -763,10 +757,10 @@ function PlanSemanalInner() {
             {turn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
           </div>
           {CONTENT_ROWS.map((rowName) => (
-            <div key={`${turn}-${rowName}`} className="grid items-stretch" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
+            <div key={`grid-${turn}-${rowName}`} className="grid items-stretch" style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}>
               <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600 whitespace-pre-line">{rowName}</div>
               {orderedDays.map((ymd) => (
-                <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
+                <div key={`grid-${ymd}-${turn}-${rowName}`} className="p-1">
                   <EditableCell dayYmd={ymd} turn={turn} row={rowName} />
                 </div>
               ))}
