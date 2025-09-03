@@ -1,7 +1,7 @@
 // src/app/jugador/wellness/page.tsx
 "use client";
 import { useEffect, useState } from "react";
-import { getPlayerIdentity } from "@/lib/player";
+import { fetchSessionUser } from "@/lib/player";
 
 function todayYMD() {
   return new Date().toISOString().slice(0, 10);
@@ -48,8 +48,13 @@ function FaceScale({
 
 export default function WellnessJugador() {
   const [date, setDate] = useState(todayYMD());
-  const [name, setName] = useState("");
 
+  // Identidad del jugador desde NextAuth
+  const [userId, setUserId] = useState<string>("");
+  const [name, setName] = useState<string>("");
+  const [loadingIdentity, setLoadingIdentity] = useState(true);
+
+  // Valores
   const [sleepQuality, setSleepQuality] = useState<number | "">("");
   const [sleepHours, setSleepHours] = useState<string>("");
   const [fatigue, setFatigue] = useState<number | "">("");
@@ -61,21 +66,32 @@ export default function WellnessJugador() {
   const [loaded, setLoaded] = useState(false);
   const [sent, setSent] = useState(false);
 
-  // Identidad
+  // Cargar identidad (id + name/email)
   useEffect(() => {
     (async () => {
-      const id = await getPlayerIdentity();
-      setName(id);
+      try {
+        const u = await fetchSessionUser();
+        setUserId(u?.id || "");
+        setName((u?.name || u?.email || "")?.trim());
+      } finally {
+        setLoadingIdentity(false);
+      }
     })();
   }, []);
 
-  // Prefill si ya envió hoy
+  // Prefill si ya envió hoy (prioriza userId; fallback playerKey)
   useEffect(() => {
     async function fetchExisting() {
-      if (!name) return;
-      const url = `/api/metrics/wellness?date=${date}&playerKey=${encodeURIComponent(name)}`;
+      if (!userId && !name) { setLoaded(true); return; }
+
+      const qp = userId
+        ? `userId=${encodeURIComponent(userId)}`
+        : `playerKey=${encodeURIComponent(name)}`;
+
+      const url = `/api/metrics/wellness?date=${date}&${qp}`;
       const res = await fetch(url, { cache: "no-store" });
       const data = res.ok ? await res.json() : [];
+
       if (Array.isArray(data) && data.length) {
         const r = data[0];
         setSleepQuality(r.sleepQuality ?? "");
@@ -94,21 +110,25 @@ export default function WellnessJugador() {
       setLoaded(true);
     }
     fetchExisting();
-  }, [date, name]);
+  }, [date, userId, name]);
 
   async function submit() {
-    if (!name.trim()) { alert("Tu sesión no trae nombre/email. Cerrá sesión y volvé a entrar."); return; }
+    if (loadingIdentity) { alert("Cargando identidad…"); return; }
+    if (!userId) { alert("userId y date requeridos"); return; }
+
     const body = {
       date,
-      playerKey: name.trim(),
+      userId,               // <- requerido por tu API
+      playerKey: name || null, // compat opcional
       sleepQuality: Number(sleepQuality || 0),
       sleepHours: sleepHours ? Number(sleepHours) : null,
       fatigue: Number(fatigue || 0),
       soreness: Number(soreness || 0),
       stress: Number(stress || 0),
       mood: Number(mood || 0),
-      notes: notes.trim() || null,
+      comment: notes.trim() || null,
     };
+
     const res = await fetch("/api/metrics/wellness", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -128,7 +148,13 @@ export default function WellnessJugador() {
     Number(mood || 0) || 0;
 
   const submitDisabled =
-    !name || sleepQuality === "" || fatigue === "" || soreness === "" || stress === "" || mood === "";
+    loadingIdentity ||
+    !userId ||
+    sleepQuality === "" ||
+    fatigue === "" ||
+    soreness === "" ||
+    stress === "" ||
+    mood === "";
 
   return (
     <div className="space-y-4">
