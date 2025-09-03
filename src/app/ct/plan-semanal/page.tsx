@@ -12,7 +12,6 @@ import {
   toYYYYMMDDUTC,
   type SessionDTO,
 } from "@/lib/api/sessions";
-import { listPlaces } from "@/lib/settings";
 import PlannerActionsBar from "./PlannerActionsBar";
 import HelpTip from "@/components/HelpTip";
 
@@ -101,62 +100,63 @@ function cellKey(dayYmd: string, turn: TurnKey, row: string) {
   return `${dayYmd}::${turn}::${row}`;
 }
 
-/** ---------- Etiquetas visibles personalizables (solo UI) ---------- */
-const ROW_LABELS_STORAGE = "planner.rowLabels.v1";
-function loadRowLabels(): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(ROW_LABELS_STORAGE);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return {};
-}
-
 function PlanSemanalInner() {
   const qs = useSearchParams();
   const router = useRouter();
   const hideHeader = qs.get("hideHeader") === "1";
 
-  // Pestañas principales
+  // Pestañas
   const initialTurn = (qs.get("turn") === "afternoon" ? "afternoon" : "morning") as TurnKey;
   const initialPane: PaneKey = qs.get("pane") === "tools" ? "tools" : "editor";
-
   const [activeTurn, setActiveTurn] = useState<TurnKey>(initialTurn);
   const [activePane, setActivePane] = useState<PaneKey>(initialPane);
 
-  // Sincronizo URL con pestañas
   useEffect(() => {
     const p = new URLSearchParams(qs.toString());
     p.set("turn", activeTurn);
     if (activePane === "tools") p.set("pane", "tools");
     else p.delete("pane");
     router.replace(`?${p.toString()}`);
-  }, [activeTurn, activePane]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTurn, activePane]);
 
+  // Estado semana
   const [base, setBase] = useState<Date>(() => getMonday(new Date()));
   const [loading, setLoading] = useState(false);
   const [daysMap, setDaysMap] = useState<Record<string, SessionDTO[]>>({});
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
-  const [places, setPlaces] = useState<string[]>([]);
-  useEffect(() => {
-    (async () => setPlaces(await listPlaces()))();
-  }, []);
-
-  const [pending, setPending] = useState<Record<string, string>>({});
-  const [savingAll, setSavingAll] = useState(false);
-
-  // Etiquetas visibles personalizadas (desde Herramientas)
+  // Preferencias de usuario (servidor): rowLabels + places
   const [rowLabels, setRowLabels] = useState<Record<string, string>>({});
-  useEffect(() => {
-    setRowLabels(loadRowLabels());
-    const onUpd = () => setRowLabels(loadRowLabels());
-    window.addEventListener("planner-row-labels-updated", onUpd as any);
-    return () => window.removeEventListener("planner-row-labels-updated", onUpd as any);
-  }, []);
-  // Si no hay personalizado, usamos el nombre original
-  const label = (id: string) => rowLabels[id] || id;
+  const [places, setPlaces] = useState<string[]>([]);
 
+  async function loadPrefs() {
+    try {
+      const r = await fetch("/api/planner/labels", { cache: "no-store" });
+      if (!r.ok) throw new Error("fail");
+      const j = await r.json();
+      setRowLabels(j.rowLabels || {});
+      setPlaces(j.places || []);
+    } catch {
+      // fallback vacío, el editor sigue funcionando
+      setRowLabels({});
+      setPlaces([]);
+    }
+  }
+
+  useEffect(() => {
+    loadPrefs();
+    const onUpd = () => loadPrefs();
+    window.addEventListener("planner-row-labels-updated", onUpd as any);
+    window.addEventListener("planner-places-updated", onUpd as any);
+    return () => {
+      window.removeEventListener("planner-row-labels-updated", onUpd as any);
+      window.removeEventListener("planner-places-updated", onUpd as any);
+    };
+  }, []);
+
+  // Carga de semana
   async function loadWeek(d: Date) {
     setLoading(true);
     try {
@@ -176,8 +176,10 @@ function PlanSemanalInner() {
   }
   useEffect(() => {
     loadWeek(base);
-  }, [base]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [base]);
 
+  // Navegación semana
   function confirmDiscardIfNeeded(action: () => void) {
     if (Object.keys(pending).length === 0) return action();
     const ok = confirm("Tenés cambios sin guardar. ¿Descartarlos?");
@@ -193,6 +195,9 @@ function PlanSemanalInner() {
     return Array.from({ length: 7 }).map((_, i) => toYYYYMMDDUTC(addDaysUTC(start, i)));
   }, [weekStart]);
 
+  const label = (id: string) => rowLabels[id] || id;
+
+  // Helpers sesiones
   function findCell(dayYmd: string, turn: TurnKey, row: string): SessionDTO | undefined {
     const list = daysMap[dayYmd] || [];
     return list.find((s) => isCellOf(s, turn, row));
@@ -211,7 +216,6 @@ function PlanSemanalInner() {
     const marker = dayFlagMarker(turn);
     const desc = `${marker} | ${dayYmd}`;
     const title = buildDayFlagTitle(df);
-
     try {
       if (df.kind === "NONE") {
         if (existing) await deleteSession(existing.id);
@@ -229,6 +233,10 @@ function PlanSemanalInner() {
       alert(e?.message || "No se pudo actualizar el estado del día");
     }
   }
+
+  // Staging & guardado
+  const [pending, setPending] = useState<Record<string, string>>({});
+  const [savingAll, setSavingAll] = useState(false);
 
   function stageCell(dayYmd: string, turn: TurnKey, row: string, text: string) {
     const k = cellKey(dayYmd, turn, row);
@@ -284,7 +292,7 @@ function PlanSemanalInner() {
     }
   }
 
-  // -------- Inputs específicos --------
+  // ---- Inputs META
   function MetaInput({
     dayYmd,
     turn,
@@ -297,10 +305,9 @@ function PlanSemanalInner() {
     const existing = findCell(dayYmd, turn, row);
     const original = (existing?.title ?? "").trim();
     const k = cellKey(dayYmd, turn, row);
-    const pendingValue = pending[k];
-    const value = pendingValue !== undefined ? pendingValue : original;
+    const value = pending[k] !== undefined ? pending[k] : original;
 
-    // NOMBRE SESIÓN → guarda en blur/Enter
+    // NOMBRE SESIÓN
     if (row === SESSION_NAME_ROW) {
       const [local, setLocal] = useState(value || "");
       useEffect(() => setLocal(value || ""), [value, k]);
@@ -322,7 +329,7 @@ function PlanSemanalInner() {
       );
     }
 
-    // LUGAR → TEXTO MANUAL + AUTOCOMPLETAR (datalist). Gestión SOLO en “Herramientas”.
+    // LUGAR → TEXTO MANUAL + SUGERENCIAS (datalist)
     if (row === "LUGAR") {
       const [local, setLocal] = useState(value || "");
       useEffect(() => setLocal(value || ""), [value, k]);
@@ -337,7 +344,7 @@ function PlanSemanalInner() {
             onChange={(e) => setLocal(e.target.value)}
             onBlur={() => stageCell(dayYmd, turn, row, (local || "").trim())}
           />
-          <HelpTip text="Escribí el lugar. Si querés una lista fija para elegir, agregá y gestioná lugares en la pestaña Herramientas." />
+          <HelpTip text="Escribí el lugar. En Herramientas podés cargar una lista para tener sugerencias." />
         </div>
       );
     }
@@ -346,67 +353,65 @@ function PlanSemanalInner() {
     if (row === "HORA") {
       const hhmm = /^[0-9]{2}:[0-9]{2}$/.test(value || "") ? value : "";
       return (
-        <div className="flex items-center gap-1">
-          <input
-            type="time"
-            className="h-8 w-full rounded-md border px-2 text-xs"
-            value={hhmm}
-            onChange={(e) => stageCell(dayYmd, turn, row, e.target.value)}
-          />
-          <HelpTip text="Hora de inicio (opcional)." />
-        </div>
+        <input
+          type="time"
+          className="h-8 w-full rounded-md border px-2 text-xs"
+          value={hhmm}
+          onChange={(e) => stageCell(dayYmd, turn, row, e.target.value)}
+        />
       );
     }
 
     // VIDEO
-    const parsed = parseVideoValue(value || "");
-    const [isEditing, setIsEditing] = useState(false);
-    const [localLabel, setLocalLabel] = useState(parsed.label);
-    const [localUrl, setLocalUrl] = useState(parsed.url);
-    useEffect(() => {
-      setLocalLabel(parsed.label);
-      setLocalUrl(parsed.url);
-    }, [k, value]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    if (!isEditing && (parsed.label || parsed.url)) {
-      return (
-        <div className="flex items-center justify-between gap-1">
-          {parsed.url ? (
-            <a
-              href={parsed.url}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[12px] underline text-emerald-700 truncate"
-              title={parsed.label || "Video"}
-            >
-              {parsed.label || "Video"}
-            </a>
-          ) : (
-            <span className="text-[12px] text-gray-500 truncate">{parsed.label}</span>
-          )}
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
-              onClick={() => setIsEditing(true)}
-              title="Editar"
-            >
-              ✏️
-            </button>
-            <button
-              type="button"
-              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
-              onClick={() => stageCell(dayYmd, turn, row, "")}
-              title="Borrar"
-            >
-              ❌
-            </button>
-          </div>
-        </div>
-      );
-    }
-
     if (row === "VIDEO") {
+      const parsed = parseVideoValue(value || "");
+      const [isEditing, setIsEditing] = useState(!(parsed.label || parsed.url));
+      const [localLabel, setLocalLabel] = useState(parsed.label);
+      const [localUrl, setLocalUrl] = useState(parsed.url);
+      useEffect(() => {
+        setLocalLabel(parsed.label);
+        setLocalUrl(parsed.url);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [k, value]);
+
+      if (!isEditing) {
+        return (
+          <div className="flex items-center justify-between gap-1">
+            {parsed.url ? (
+              <a
+                href={parsed.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[12px] underline text-emerald-700 truncate"
+                title={parsed.label || "Video"}
+              >
+                {parsed.label || "Video"}
+              </a>
+            ) : (
+              <span className="text-[12px] text-gray-500 truncate">{parsed.label}</span>
+            )}
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+                onClick={() => setIsEditing(true)}
+                title="Editar"
+              >
+                ✏️
+              </button>
+              <button
+                type="button"
+                className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+                onClick={() => stageCell(dayYmd, turn, row, "")}
+                title="Borrar"
+              >
+                ❌
+              </button>
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="flex items-center gap-1.5">
           <input
@@ -433,7 +438,6 @@ function PlanSemanalInner() {
           >
             ✓
           </button>
-          <HelpTip text="Podés pegar un enlace (YouTube, Drive, etc.). Opcionalmente agregá un título." />
         </div>
       );
     }
@@ -441,6 +445,7 @@ function PlanSemanalInner() {
     return null;
   }
 
+  // ---- Celdas de contenido
   function EditableCell({
     dayYmd,
     turn,
@@ -483,10 +488,7 @@ function PlanSemanalInner() {
     return (
       <div className="space-y-1">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1">
-            {flagBadge}
-            <HelpTip text="Escribí libremente. Tip: Ctrl/⌘ + Enter para marcar la celda sin guardar todavía." />
-          </div>
+          <div>{flagBadge}</div>
           {sessionHref ? (
             <a
               href={sessionHref}
@@ -514,7 +516,7 @@ function PlanSemanalInner() {
     );
   }
 
-  // ---- Tipo (Normal/Partido/Libre) por día — componente por celda
+  // ---- Tipo de día
   function DayStatusCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const df = getDayFlag(ymd, turn);
     const [kind, setKind] = useState<DayFlagKind>(df.kind);
@@ -526,7 +528,8 @@ function PlanSemanalInner() {
       setKind(fresh.kind);
       setRival(fresh.rival || "");
       setLogo(fresh.logoUrl || "");
-    }, [weekStart, ymd, turn]); // eslint-disable-line react-hooks/exhaustive-deps
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [weekStart, ymd, turn]);
 
     const save = (next: DayFlag) => setDayFlag(ymd, turn, next);
 
@@ -650,7 +653,7 @@ function PlanSemanalInner() {
           ))}
         </div>
 
-        {/* Autocompletar de lugares (se llena desde Herramientas) */}
+        {/* Sugerencias de lugares (se llena desde Herramientas) */}
         <datalist id="places-datalist">
           {places.map((p) => (
             <option key={p} value={p} />
@@ -678,36 +681,26 @@ function PlanSemanalInner() {
           <div>
             <h1 className="text-lg md:text-xl font-bold flex items-center gap-2">
               Plan semanal — Editor en tabla
-              <HelpTip text="Acá armás la semana. Usá Mañana/Tarde para alternar, y Herramientas para importar/duplicar y cargar lugares predefinidos." />
+              <HelpTip text="Acá armás la semana. Usá Mañana/Tarde para alternar y Herramientas para importar/duplicar y cargar la lista de Lugares." />
             </h1>
             <p className="text-xs md:text-sm text-gray-500">
               Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)
             </p>
             <p className="mt-1 text-[10px] text-gray-400">
-              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd> +{" "}
-              <kbd className="rounded border px-1">Enter</kbd> marca una celda sin guardar aún.
+              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd>{" "}
+              + <kbd className="rounded border px-1">Enter</kbd> marca una celda sin guardar aún.
             </p>
           </div>
 
-          {/* Botones de navegación y guardar (solo en editor) */}
           {activePane === "editor" ? (
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={goPrevWeek}
-                className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
-              >
+              <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
                 ◀ Semana anterior
               </button>
-              <button
-                onClick={goTodayWeek}
-                className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
-              >
+              <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
                 Hoy
               </button>
-              <button
-                onClick={goNextWeek}
-                className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
-              >
+              <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
                 Semana siguiente ▶
               </button>
               <div className="w-px h-6 bg-gray-200 mx-1" />
@@ -715,9 +708,7 @@ function PlanSemanalInner() {
                 onClick={saveAll}
                 disabled={pendingCount === 0 || savingAll}
                 className={`px-3 py-1.5 rounded-xl text-xs ${
-                  pendingCount === 0 || savingAll
-                    ? "bg-gray-200 text-gray-500"
-                    : "bg-black text-white hover:opacity-90"
+                  pendingCount === 0 || savingAll ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
                 }`}
                 title={pendingCount ? `${pendingCount} cambio(s) por guardar` : "Sin cambios"}
               >
@@ -725,24 +716,14 @@ function PlanSemanalInner() {
               </button>
             </div>
           ) : (
-            // En Herramientas solo navegación de semana
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={goPrevWeek}
-                className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
-              >
+              <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
                 ◀ Semana anterior
               </button>
-              <button
-                onClick={goTodayWeek}
-                className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
-              >
+              <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
                 Hoy
               </button>
-              <button
-                onClick={goNextWeek}
-                className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
-              >
+              <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
                 Semana siguiente ▶
               </button>
             </div>
@@ -750,13 +731,11 @@ function PlanSemanalInner() {
         </header>
       )}
 
-      {/* Pestañas: Mañana / Tarde / Herramientas */}
+      {/* Pestañas */}
       <div className="flex items-center gap-2">
         <button
           className={`px-3 py-1.5 rounded-xl border text-xs ${
-            activePane === "editor" && activeTurn === "morning"
-              ? "bg-black text-white"
-              : "hover:bg-gray-50"
+            activePane === "editor" && activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"
           }`}
           onClick={() => {
             setActivePane("editor");
@@ -767,9 +746,7 @@ function PlanSemanalInner() {
         </button>
         <button
           className={`px-3 py-1.5 rounded-xl border text-xs ${
-            activePane === "editor" && activeTurn === "afternoon"
-              ? "bg-black text-white"
-              : "hover:bg-gray-50"
+            activePane === "editor" && activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"
           }`}
           onClick={() => {
             setActivePane("editor");
@@ -789,16 +766,10 @@ function PlanSemanalInner() {
         </button>
       </div>
 
-      {/* Contenido según pestaña */}
+      {/* Contenido */}
       {activePane === "tools" ? (
         <div className="rounded-2xl border bg-white shadow-sm p-3">
-          <PlannerActionsBar onAfterChange={() => loadWeek(base)} />
-          <div className="mt-2 text-[12px] text-gray-600 flex items-center gap-1">
-            <HelpTip text="Desde Herramientas podés: importar/duplicar semanas y cargar la lista de 'Lugares' que luego se sugieren en el campo Lugar." />
-          </div>
-          <div className="mt-2 text-[12px] text-gray-600 flex items-center gap-1">
-            <HelpTip text="Los nombres de filas (Pre entreno, Físico, etc.) se pueden personalizar desde Herramientas. Hoy se guardan en este navegador; si querés que quede por usuario en cualquier dispositivo, lo activamos como siguiente paso." />
-          </div>
+          <PlannerActionsBar onAfterChange={() => { loadWeek(base); loadPrefs(); }} />
         </div>
       ) : loading ? (
         <div className="text-gray-500">Cargando semana…</div>
