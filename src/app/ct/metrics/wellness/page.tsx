@@ -1,8 +1,11 @@
 // src/app/ct/metrics/wellness/page.tsx
 "use client";
-import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import HelpTip from "@/components/HelpTip";
+
+export const dynamic = "force-dynamic";
 
 /** ---------- Tipos de datos ---------- */
 type WellnessRaw = {
@@ -195,12 +198,9 @@ function BarsInline({
 }
 
 /** ---------- Componente principal ---------- */
-export default function WellnessCT_Day() {
-  const router = useRouter();
-  const search = useSearchParams();
+function WellnessCT_Day() {
   type Tab = "respuestas" | "kpis" | "reportes";
-
-  // Estado de pestaña con persistencia en query (?tab=)
+  const search = useSearchParams();
   const initialTab = (search.get("tab") as Tab) || "respuestas";
   const [tab, setTab] = useState<Tab>(initialTab);
   function switchTab(next: Tab) {
@@ -226,7 +226,6 @@ export default function WellnessCT_Day() {
   const [rangeLoading, setRangeLoading] = useState(false);
   const [dailyAvgSDW, setDailyAvgSDW] = useState<number[]>([]); // hoy..hace N-1
   const [dailyParticipationPct, setDailyParticipationPct] = useState<number[]>([]);
-  const [dailyLabels, setDailyLabels] = useState<string[]>([]);
   const [sdwHistogram, setSdwHistogram] = useState<number[]>([0, 0, 0, 0]); // ≤2 | 2–3 | 3–4 | >4
 
   useEffect(() => {
@@ -380,7 +379,7 @@ export default function WellnessCT_Day() {
     setLoading(false);
   }
 
-  // ------ KPIs de cabecera (hoy) ------
+  // ------ KPIs del día (resumen) ------
   const kpis = useMemo(() => {
     const n = rowsToday.length;
     const sdws = rowsToday.map((r: any) => Number(r._sdw || 0)).filter((v) => v > 0);
@@ -417,7 +416,7 @@ export default function WellnessCT_Day() {
     };
   }, [rowsToday]);
 
-  // Filtro por nombre
+  // Filtro por nombre (en Respuestas)
   const [rowsTodayMemo, setRowsTodayMemo] = useState<DayRow[]>([]);
   useEffect(() => setRowsTodayMemo(rowsToday), [rowsToday]);
 
@@ -431,7 +430,7 @@ export default function WellnessCT_Day() {
     );
   }, [rowsTodayMemo, q]);
 
-  // Export CSV según especificación
+  // Export CSV (Respuestas)
   function exportCSV() {
     const header = [
       "Jugador",
@@ -450,7 +449,7 @@ export default function WellnessCT_Day() {
     const lines = [header.join(",")];
 
     for (const r of filtered) {
-      const wk = r.date; // simple; si querés ISO week exacta lo agregamos luego
+      const wk = r.date; // TODO: week exacta si querés
       const color = (r as any)._color as string;
 
       lines.push(
@@ -482,9 +481,8 @@ export default function WellnessCT_Day() {
 
   // ------- KPIs de RANGO (fetch por día, sin tocar APIs) -------
   useEffect(() => {
+    if (tab !== "kpis") return; // micro-optimización
     (async () => {
-      // solo cuando esté en tab KPIs evitamos cálculos si no se ve (micro-optimización)
-      if (tab !== "kpis") return;
       setRangeLoading(true);
       try {
         const days = Array.from({ length: rangeDays }, (_, i) =>
@@ -513,7 +511,9 @@ export default function WellnessCT_Day() {
         );
 
         // Histograma SDW (rango)
-        const allSDW = data.flatMap((rows) => rows.map((r) => computeSDW(r)).filter((v) => v > 0));
+        const allSDW = data.flatMap((rows) =>
+          rows.map((r) => computeSDW(r)).filter((v) => v > 0)
+        );
         const bins = [0, 0, 0, 0]; // ≤2 | 2–3 | 3–4 | >4
         for (const v of allSDW) {
           if (v <= 2) bins[0]++;
@@ -524,7 +524,6 @@ export default function WellnessCT_Day() {
 
         setDailyAvgSDW(dailyAvg); // hoy..hace N-1
         setDailyParticipationPct(dailyPart);
-        setDailyLabels(days);
         setSdwHistogram(bins);
       } finally {
         setRangeLoading(false);
@@ -959,7 +958,6 @@ export default function WellnessCT_Day() {
                       </button>
                       <button
                         onClick={() => {
-                          // mini-sumario rápido del jugador (placeholder)
                           alert(
                             `Resumen rápido — ${r._userName}\nSDW hoy: ${(r as any)._sdw.toFixed(
                               2
@@ -984,5 +982,14 @@ export default function WellnessCT_Day() {
         Sueño &lt;4h ⇒ ≥ amarillo; Dolor ≤2 ⇒ rojo; Estrés ≤2 ⇒ ≥ amarillo.
       </div>
     </div>
+  );
+}
+
+/** Wrapper con Suspense (requerido por useSearchParams en Next.js App Router) */
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="p-4 text-gray-500">Cargando…</div>}>
+      <WellnessCT_Day />
+    </Suspense>
   );
 }
