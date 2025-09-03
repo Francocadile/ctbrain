@@ -4,9 +4,16 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import HelpTip from "@/components/HelpTip";
+import PlayerQuickView from "@/components/PlayerQuickView";
 
 import { mean, srpeOf, type RPERow as RPERowLib } from "@/lib/metrics/rpe";
-import PlayerQuickView from "@/components/PlayerQuickView";
+import {
+  type WellnessRaw,
+  toYMD as toYMDw,
+  fromYMD as fromYMDw,
+  addDays as addDaysW,
+  computeSDW,
+} from "@/lib/metrics/wellness";
 
 export const dynamic = "force-dynamic";
 
@@ -91,15 +98,21 @@ function RPECT() {
   const [bulkMin, setBulkMin] = useState<string>("90");
   const [saving, setSaving] = useState(false);
 
-  // Drawer
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerPlayer, setDrawerPlayer] = useState<string | null>(null);
-
   // KPIs de rango
   const [rangeDays, setRangeDays] = useState<7 | 14 | 21>(7);
   const [rangeLoading, setRangeLoading] = useState(false);
   const [dailyTeamSRPE, setDailyTeamSRPE] = useState<number[]>([]); // hoy..hace N-1
   const [srpeHistBins, setSrpeHistBins] = useState<number[]>([0, 0, 0, 0, 0]); // 0–300 | 301–600 | 601–900 | 901–1200 | >1200
+
+  // QuickView
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickPlayer, setQuickPlayer] = useState<string | null>(null);
+  const [quickLoading, setQuickLoading] = useState(false);
+  const [quickSDW7, setQuickSDW7] = useState<number[]>([]); // hoy + 7 previos
+  const [quickRPE7, setQuickRPE7] = useState<{ date: string; au: number }[]>([]);
+
+  const PlayerQuickViewAny =
+    PlayerQuickView as unknown as React.ComponentType<any>;
 
   async function load() {
     setLoading(true);
@@ -248,7 +261,7 @@ function RPECT() {
     URL.revokeObjectURL(url);
   }
 
-  // ----- KPIs de rango -----
+  // ----- KPIs de rango (fetch por día, igual que Wellness) -----
   useEffect(() => {
     if (tab !== "kpis") return;
     (async () => {
@@ -273,7 +286,8 @@ function RPECT() {
           allIndividual.push(...srpes);
         }
 
-        const bins = [0, 0, 0, 0, 0];
+        // histograma individual (AU) en el rango
+        const bins = [0, 0, 0, 0, 0]; // 0–300 | 301–600 | 601–900 | 901–1200 | >1200
         for (const v of allIndividual) {
           if (v <= 300) bins[0]++;
           else if (v <= 600) bins[1]++;
@@ -282,13 +296,70 @@ function RPECT() {
           else bins[4]++;
         }
 
-        setDailyTeamSRPE(dailyTeam);
+        setDailyTeamSRPE(dailyTeam); // hoy..hace N-1
         setSrpeHistBins(bins);
       } finally {
         setRangeLoading(false);
       }
     })();
   }, [date, rangeDays, tab]);
+
+  // ------- QuickView (RPE + Wellness 7d) -------
+  async function fetchWellnessDay(d: string): Promise<WellnessRaw[]> {
+    const res = await fetch(`/api/metrics/wellness?date=${d}`, { cache: "no-store" });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  }
+
+  async function openQuickViewFor(playerName: string) {
+    setQuickPlayer(playerName);
+    setQuickOpen(true);
+    setQuickLoading(true);
+    try {
+      // SDW 7d: hoy + 7 previos
+      const daysW = Array.from({ length: 8 }, (_, i) =>
+        toYMDw(addDaysW(fromYMDw(date), -(i === 0 ? 0 : i))) // 0..7
+      );
+      const wData = await Promise.all(daysW.map((d) => fetchWellnessDay(d)));
+      const sdwSeries: number[] = [];
+      for (let i = 0; i < daysW.length; i++) {
+        const arr = wData[i] || [];
+        const row = arr.find(
+          (it) =>
+            (it.userName ||
+              it.user?.name ||
+              it.user?.email ||
+              it.playerKey ||
+              "—") === playerName
+        );
+        sdwSeries.push(row ? Number(computeSDW(row).toFixed(2)) : 0);
+      }
+      setQuickSDW7(sdwSeries);
+
+      // RPE 7d: AU por día (si existe)
+      const daysR = Array.from({ length: 7 }, (_, i) => toYMD(addDays(fromYMD(date), -i)));
+      const rpeData = await Promise.all(
+        daysR.map((d) => fetch(`/api/metrics/rpe?date=${d}`, { cache: "no-store" }))
+      );
+      const rpeJson = await Promise.all(rpeData.map((r) => (r.ok ? r.json() : [])));
+      const auList: { date: string; au: number }[] = [];
+      for (let i = 0; i < daysR.length; i++) {
+        const arr = Array.isArray(rpeJson[i]) ? rpeJson[i] : [];
+        for (const r of arr) {
+          const nm = r.userName || r.playerKey || r.user?.name || r.user?.email || "Jugador";
+          if (nm === playerName) {
+            const au = r.load ?? r.srpe ?? Number(r.rpe ?? 0) * Number(r.duration ?? 0) ?? 0;
+            auList.push({ date: daysR[i], au: Number(au) });
+            break;
+          }
+        }
+      }
+      setQuickRPE7(auList);
+    } finally {
+      setQuickLoading(false);
+    }
+  }
 
   /** -------------------- UI -------------------- */
   return (
@@ -348,9 +419,10 @@ function RPECT() {
         })}
       </nav>
 
-      {/* ----- Tab: Respuestas ----- */}
+      {/* ----- Tab: Respuestas (operativa) ----- */}
       {tab === "respuestas" && (
         <>
+          {/* Acciones rápidas */}
           <section className="rounded-xl border bg-white p-3 flex flex-wrap items-center gap-2">
             <div className="text-sm font-medium mr-2">
               Acciones:{" "}
@@ -447,20 +519,18 @@ function RPECT() {
                         <td className="px-3 py-2">
                           <div className="flex justify-end gap-2">
                             <button
+                              onClick={() =>
+                                openQuickViewFor(r.userName || r.playerKey || "Jugador")
+                              }
+                              className="rounded-lg border px-2 py-1 text-[11px] hover:bg-gray-50"
+                            >
+                              Ver
+                            </button>
+                            <button
                               onClick={() => saveOne(r, "")}
                               className="rounded-lg border px-2 py-1 text-[11px] hover:bg-gray-50"
                             >
                               Vaciar
-                            </button>
-                            <button
-                              onClick={() => {
-                                const nm = r.userName || r.playerKey || r.user?.name || r.user?.email || "Jugador";
-                                setDrawerPlayer(nm);
-                                setDrawerOpen(true);
-                              }}
-                              className="rounded-lg border px-2 py-1 text-[11px] hover:bg-gray-50"
-                            >
-                              Resumen
                             </button>
                           </div>
                         </td>
@@ -551,10 +621,7 @@ function RPECT() {
                 />
                 <div className="mt-2 text-xs text-gray-600">
                   Promedio:{" "}
-                  <b>
-                    {dailyTeamSRPE.length ? Math.round(mean(dailyTeamSRPE)) : "—"}
-                  </b>{" "}
-                  AU/día
+                  <b>{dailyTeamSRPE.length ? Math.round(mean(dailyTeamSRPE)) : "—"}</b> AU/día
                 </div>
               </div>
 
@@ -585,13 +652,13 @@ function RPECT() {
         </>
       )}
 
-      {/* ----- Tab: Reportes ----- */}
+      {/* ----- Tab: Reportes (con QuickView) ----- */}
       {tab === "reportes" && (
         <section className="rounded-2xl border bg-white p-3">
           <div className="flex items-center justify-between">
             <div className="text-[12px] font-semibold uppercase">
               Reportes individuales
-              <HelpTip text="MVP: listado por jugador con sRPE del día. Drawer con SDW 7d + RPE recientes." />
+              <HelpTip text="MVP: listado por jugador con sRPE del día. Luego linkeamos al Perfil de Jugador unificado." />
             </div>
             <div className="text-xs text-gray-500">{rows.length} jugador(es)</div>
           </div>
@@ -611,25 +678,20 @@ function RPECT() {
                 )
                 .map((r) => {
                   const au = srpeOf(r);
-                  const nm =
-                    r.userName || r.playerKey || r.user?.name || r.user?.email || "Jugador";
+                  const nm = r.userName || r.playerKey || "Jugador";
                   return (
                     <li key={r.id} className="rounded-lg border p-3">
                       <div className="font-medium">{nm}</div>
                       <div className="text-xs text-gray-500">
-                        RPE: <b>{r.rpe}</b> • Min:{" "}
-                        <b>{r.duration != null ? r.duration : "—"}</b> • sRPE:{" "}
+                        RPE: <b>{r.rpe}</b> • Min: <b>{r.duration ?? "—"}</b> • sRPE:{" "}
                         <b>{au ? Math.round(au) : "—"} AU</b>
                       </div>
                       <div className="mt-2 flex gap-2">
                         <button
-                          onClick={() => {
-                            setDrawerPlayer(nm);
-                            setDrawerOpen(true);
-                          }}
+                          onClick={() => openQuickViewFor(nm)}
                           className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
                         >
-                          Resumen rápido
+                          Ver
                         </button>
                         <button
                           disabled
@@ -647,13 +709,18 @@ function RPECT() {
         </section>
       )}
 
-      {/* Drawer */}
-      <PlayerQuickView
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        playerName={drawerPlayer}
-        date={date}
-      />
+      {/* QUICK VIEW */}
+      {quickPlayer && (
+        <PlayerQuickViewAny
+          open={quickOpen}
+          onClose={() => setQuickOpen(false)}
+          loading={quickLoading}
+          playerName={quickPlayer}
+          date={date}
+          sdw7={quickSDW7}
+          rpeRecent={quickRPE7}
+        />
+      )}
     </div>
   );
 }
