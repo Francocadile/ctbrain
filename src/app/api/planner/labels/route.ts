@@ -1,22 +1,22 @@
 // src/app/api/planner/labels/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { requireSessionWithRoles } from "@/lib/auth-helpers";
+import prisma from "@/lib/prisma";
+import { requireSessionWithRoles } from "@/lib/auth";
 import { Role } from "@prisma/client";
 
-// Aceptamos a cualquier usuario autenticado
-const ANY_ROLE: Role[] = [
-  Role.ADMIN,
-  Role.CT,
-  Role.MEDICO,
-  Role.JUGADOR,
-  Role.DIRECTIVO,
-];
-
 /**
- * GET -> devuelve preferencias del usuario:
- * { rowLabels: Record<string,string> | null }
+ * Devuelve/actualiza preferencias del planner por usuario:
+ * - rowLabels: Record<string,string>
+ * - places: string[]
+ *
+ * Métodos:
+ *  GET       -> { rowLabels, places }
+ *  PUT       -> body { rowLabels?, places? } (parcial)
+ *  DELETE    -> ?target=labels | places | all
  */
+
+const ANY_ROLE: Role[] = [Role.ADMIN, Role.CT, Role.MEDICO, Role.JUGADOR, Role.DIRECTIVO];
+
 export async function GET() {
   const session = await requireSessionWithRoles(ANY_ROLE);
   const userId = session.user.id;
@@ -25,40 +25,79 @@ export async function GET() {
 
   return NextResponse.json({
     rowLabels: (pref?.rowLabels as Record<string, string> | null) ?? null,
+    places: (pref?.places as string[] | null) ?? [],
   });
 }
 
-/**
- * POST -> guarda preferencias del usuario.
- * Body JSON:
- * - rowLabels?: Record<string,string>
- *
- * Respuesta: { ok: true, rowLabels }
- */
-export async function POST(req: Request) {
+export async function PUT(req: Request) {
   const session = await requireSessionWithRoles(ANY_ROLE);
   const userId = session.user.id;
 
-  let body: any = {};
-  try {
-    body = await req.json();
-  } catch {
-    body = {};
+  const body = await req.json().catch(() => ({}));
+  const incomingLabels = (body?.rowLabels ?? null) as Record<string, string> | null;
+  const incomingPlaces = (body?.places ?? null) as string[] | null;
+
+  // Traemos lo actual para hacer merge parcial
+  const current = await prisma.plannerPrefs.findUnique({ where: { userId } });
+
+  const nextLabels =
+    incomingLabels !== null
+      ? incomingLabels
+      : ((current?.rowLabels as Record<string, string> | null) ?? {});
+
+  const nextPlaces =
+    incomingPlaces !== null
+      ? Array.from(
+          new Set(
+            (incomingPlaces as string[])
+              .map((s) => (s || "").trim())
+              .filter(Boolean)
+          )
+        )
+      : ((current?.places as string[] | null) ?? []);
+
+  const saved = await prisma.plannerPrefs.upsert({
+    where: { userId },
+    update: { rowLabels: nextLabels as any, places: nextPlaces as any },
+    create: { userId, rowLabels: nextLabels as any, places: nextPlaces as any },
+  });
+
+  return NextResponse.json({
+    ok: true,
+    rowLabels: saved.rowLabels,
+    places: saved.places,
+  });
+}
+
+export async function DELETE(req: Request) {
+  const session = await requireSessionWithRoles(ANY_ROLE);
+  const userId = session.user.id;
+
+  const url = new URL(req.url);
+  const target = (url.searchParams.get("target") || "labels") as "labels" | "places" | "all";
+
+  // Nos aseguramos de que exista el registro
+  const existing = await prisma.plannerPrefs.findUnique({ where: { userId } });
+  if (!existing) {
+    await prisma.plannerPrefs.create({
+      data: { userId, rowLabels: {}, places: [] },
+    });
   }
 
-  const { rowLabels } = body as { rowLabels?: Record<string, string> };
+  const clearLabels = target === "labels" || target === "all";
+  const clearPlaces = target === "places" || target === "all";
 
-  const pref = await prisma.plannerPrefs.upsert({
+  const updated = await prisma.plannerPrefs.update({
     where: { userId },
-    update: rowLabels !== undefined ? { rowLabels } : {},
-    create: {
-      userId,
-      rowLabels: rowLabels ?? {},
+    data: {
+      ...(clearLabels ? { rowLabels: {} as any } : {}),
+      ...(clearPlaces ? { places: [] as any } : {}),
     },
   });
 
   return NextResponse.json({
     ok: true,
-    rowLabels: pref.rowLabels as Record<string, string>,
+    rowLabels: updated.rowLabels,
+    places: updated.places,
   });
 }
