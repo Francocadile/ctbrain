@@ -151,6 +151,48 @@ function Sparkline({ vals }: { vals: number[] }) {
   );
 }
 
+/** Barras inline (reutilizable para KPIs de rango) */
+function BarsInline({
+  values,
+  maxHint,
+  height = 60,
+  barWidth = 12,
+  gap = 4,
+  titlePrefix = "",
+  tone = "gray",
+}: {
+  values: number[];
+  maxHint?: number;
+  height?: number;
+  barWidth?: number;
+  gap?: number;
+  titlePrefix?: string;
+  tone?: "gray" | "emerald" | "amber" | "red";
+}) {
+  const max = Math.max(maxHint ?? 0, ...values, 1);
+  const toneCls: Record<string, string> = {
+    gray: "bg-gray-300",
+    emerald: "bg-emerald-400/80",
+    amber: "bg-amber-400/80",
+    red: "bg-red-400/80",
+  };
+  return (
+    <div className="flex items-end gap-1 overflow-x-auto" style={{ height }}>
+      {values.map((v, i) => {
+        const h = Math.max(2, Math.round((v / max) * (height - 10)));
+        return (
+          <div
+            key={i}
+            title={`${titlePrefix}${v}`}
+            className={`rounded-sm ${toneCls[tone]}`}
+            style={{ width: barWidth, height: h, marginRight: gap }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 /** ---------- Componente principal ---------- */
 export default function WellnessCT_Day() {
   const [date, setDate] = useState<string>(toYMD(new Date()));
@@ -163,6 +205,14 @@ export default function WellnessCT_Day() {
 
   // Cache 21d previos por jugador para baseline
   const [baselineMap, setBaselineMap] = useState<Record<string, Baseline>>({});
+
+  // ----- KPIs de RANGO (7/14/21d) -----
+  const [rangeDays, setRangeDays] = useState<7 | 14 | 21>(7);
+  const [rangeLoading, setRangeLoading] = useState(false);
+  const [dailyAvgSDW, setDailyAvgSDW] = useState<number[]>([]); // hoy..hace N-1
+  const [dailyParticipationPct, setDailyParticipationPct] = useState<number[]>([]);
+  const [dailyLabels, setDailyLabels] = useState<string[]>([]);
+  const [sdwHistogram, setSdwHistogram] = useState<number[]>([0, 0, 0, 0]); // ≤2 | 2–3 | 3–4 | >4
 
   useEffect(() => {
     loadAll();
@@ -183,7 +233,7 @@ export default function WellnessCT_Day() {
     if (!Array.isArray(arr)) return [];
     return arr.map((r: any) => {
       const srpeVal =
-        r.load ?? r.srpe ?? Number(r.rpe ?? 0) * Number(r.duration ?? 0) ?? 0; // usar nullish, sin mezclar ||
+        r.load ?? r.srpe ?? Number(r.rpe ?? 0) * Number(r.duration ?? 0) ?? 0;
       return {
         userName:
           r.userName || r.playerKey || r.user?.name || r.user?.email || "Jugador",
@@ -268,7 +318,6 @@ export default function WellnessCT_Day() {
 
       const srpe = srpeYesterday[r._userName] ?? 0;
 
-      // Reglas de severidad (prioridad baja = más urgente)
       if (color === "red") {
         alertsList.push({
           kind: "CRITICO",
@@ -343,7 +392,6 @@ export default function WellnessCT_Day() {
       yellows,
       greens,
       zAvg,
-      // distribución (porcentaje)
       dist: n
         ? {
             red: Math.round((reds / n) * 100),
@@ -355,15 +403,18 @@ export default function WellnessCT_Day() {
   }, [rowsToday]);
 
   // Filtro por nombre
+  const [rowsTodayMemo, setRowsTodayMemo] = useState<DayRow[]>([]);
+  useEffect(() => setRowsTodayMemo(rowsToday), [rowsToday]);
+
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
-    if (!t) return rowsToday;
-    return rowsToday.filter(
+    if (!t) return rowsTodayMemo;
+    return rowsTodayMemo.filter(
       (r) =>
         r._userName.toLowerCase().includes(t) ||
         (r.comment || "").toLowerCase().includes(t)
     );
-  }, [rowsToday, q]);
+  }, [rowsTodayMemo, q]);
 
   // Export CSV según especificación
   function exportCSV() {
@@ -413,6 +464,56 @@ export default function WellnessCT_Day() {
     a.click();
     URL.revokeObjectURL(url);
   }
+
+  // ------- KPIs de RANGO (fetch por día, sin tocar APIs) -------
+  useEffect(() => {
+    (async () => {
+      setRangeLoading(true);
+      try {
+        const days = Array.from({ length: rangeDays }, (_, i) =>
+          toYMD(addDays(fromYMD(date), -i))
+        );
+        const data = await Promise.all(days.map((d) => fetchWellnessDay(d)));
+
+        // Universo de jugadores que reportaron en el rango (proxy de "plantel activo")
+        const universe = new Set<string>();
+        for (const rows of data) {
+          for (const it of rows) {
+            const nm =
+              it.userName || it.user?.name || it.user?.email || it.playerKey || "—";
+            universe.add(nm);
+          }
+        }
+        const universeSize = universe.size || 1;
+
+        // Por día: promedio SDW + participación %
+        const dailyAvg = data.map((rows) => {
+          const vals = rows.map((r) => computeSDW(r)).filter((v) => v > 0);
+          return vals.length ? Number(mean(vals).toFixed(2)) : 0;
+        });
+        const dailyPart = data.map((rows) =>
+          Math.round(((rows.length || 0) / universeSize) * 100)
+        );
+
+        // Histograma SDW en el rango (valores absolutos como proxy rápida)
+        const allSDW = data.flatMap((rows) => rows.map((r) => computeSDW(r)).filter((v) => v > 0));
+        const bins = [0, 0, 0, 0]; // ≤2 | 2–3 | 3–4 | >4
+        for (const v of allSDW) {
+          if (v <= 2) bins[0]++;
+          else if (v <= 3) bins[1]++;
+          else if (v <= 4) bins[2]++;
+          else bins[3]++;
+        }
+
+        setDailyAvgSDW(dailyAvg); // hoy..hace N-1
+        setDailyParticipationPct(dailyPart);
+        setDailyLabels(days);
+        setSdwHistogram(bins);
+      } finally {
+        setRangeLoading(false);
+      }
+    })();
+  }, [date, rangeDays]);
 
   return (
     <div className="p-4 space-y-4">
@@ -480,7 +581,6 @@ export default function WellnessCT_Day() {
               <span className="text-gray-400">/</span>{" "}
               <span className="text-red-700">{kpis.reds}</span>
             </div>
-            {/* Barra de distribución (SVG inline) */}
             <div className="mt-2 h-2 w-full rounded bg-gray-100 overflow-hidden">
               <div
                 className="h-2 bg-emerald-400/80 inline-block"
@@ -511,7 +611,7 @@ export default function WellnessCT_Day() {
           <div className="rounded-xl border p-3">
             <div className="text-[11px] uppercase text-gray-500 flex items-center gap-1">
               Nota del día
-              <HelpTip text="Lectura rápida: priorizar rojos, luego amarillos; chequear causas (dolor, sueño, estrés)." />
+              <HelpTip text="Priorizar rojos, luego amarillos; chequear causas (dolor, sueño, estrés)." />
             </div>
             <div className="mt-1 text-sm text-gray-700">
               {kpis.reds > 0
@@ -629,13 +729,11 @@ export default function WellnessCT_Day() {
                 {filtered
                   .slice()
                   .sort((a, b) => {
-                    // Orden por severidad: red -> yellow -> green
                     const colorRank = (c: "green" | "yellow" | "red") =>
                       c === "red" ? 0 : c === "yellow" ? 1 : 2;
                     const ac = (a as any)._color as "green" | "yellow" | "red";
                     const bc = (b as any)._color as "green" | "yellow" | "red";
                     if (colorRank(ac) !== colorRank(bc)) return colorRank(ac) - colorRank(bc);
-                    // Luego por Z más bajo primero
                     const az = (a as any)._z as number | null;
                     const bz = (b as any)._z as number | null;
                     if (az != null && bz != null) return az - bz;
@@ -696,6 +794,82 @@ export default function WellnessCT_Day() {
             </table>
           </div>
         )}
+      </section>
+
+      {/* KPIs de RANGO (7/14/21 días) */}
+      <section className="rounded-2xl border bg-white px-4 py-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[12px] font-semibold uppercase">
+            KPIs últimos{" "}
+            <select
+              className="ml-1 border rounded-md px-1 py-0.5 text-xs"
+              value={rangeDays}
+              onChange={(e) => setRangeDays(Number(e.target.value) as 7 | 14 | 21)}
+            >
+              <option value={7}>7</option>
+              <option value={14}>14</option>
+              <option value={21}>21</option>
+            </select>{" "}
+            días
+            <HelpTip text="Se calcula en cliente llamando al endpoint por día. 'Participación' usa como denominador el universo de jugadores que reportaron al menos una vez en el rango." />
+          </div>
+          <div className="text-xs text-gray-500">
+            {rangeLoading ? "Calculando…" : `${dailyAvgSDW.length} día(s)`}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+          <div className="rounded-xl border p-3">
+            <div className="text-[11px] uppercase text-gray-500">SDW promedio (rango)</div>
+            <div className="mt-1 text-xl font-bold">
+              {dailyAvgSDW.length ? mean(dailyAvgSDW).toFixed(2) : "—"}
+            </div>
+            <div className="mt-2">
+              <div className="text-[11px] text-gray-500 mb-1">Serie diaria</div>
+              <BarsInline values={dailyAvgSDW} maxHint={5} titlePrefix="SDW: " tone="emerald" />
+            </div>
+          </div>
+
+          <div className="rounded-xl border p-3">
+            <div className="text-[11px] uppercase text-gray-500">Participación media</div>
+            <div className="mt-1 text-xl font-bold">
+              {dailyParticipationPct.length ? `${Math.round(mean(dailyParticipationPct))}%` : "—"}
+            </div>
+            <div className="mt-2">
+              <div className="text-[11px] text-gray-500 mb-1">% por día</div>
+              <BarsInline
+                values={dailyParticipationPct}
+                maxHint={100}
+                titlePrefix="% "
+                tone="amber"
+              />
+            </div>
+          </div>
+
+          <div className="rounded-xl border p-3 col-span-2">
+            <div className="text-[11px] uppercase text-gray-500">Histograma SDW (rango)</div>
+            <div className="mt-1 grid grid-cols-4 gap-3">
+              {[
+                { label: "≤2", v: sdwHistogram[0], tone: "red" as const },
+                { label: "2–3", v: sdwHistogram[1], tone: "amber" as const },
+                { label: "3–4", v: sdwHistogram[2], tone: "emerald" as const },
+                { label: ">4", v: sdwHistogram[3], tone: "emerald" as const },
+              ].map((b, i) => (
+                <div key={i} className="rounded-xl border p-3">
+                  <div className="text-xs text-gray-600">{b.label}</div>
+                  <div className="mt-1 text-xl font-bold">{b.v}</div>
+                  <div className="mt-2">
+                    <BarsInline values={[b.v]} height={40} barWidth={20} gap={0} tone={b.tone} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 text-[11px] text-gray-500">
+              Nota: bins absolutos como proxy; el color por Z exacto se calcula arriba a nivel del
+              día con baseline 21d.
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* Leyenda simple */}
