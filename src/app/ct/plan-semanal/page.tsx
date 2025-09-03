@@ -155,7 +155,8 @@ function PlanSemanalInner() {
     window.addEventListener("planner-row-labels-updated", onUpd as any);
     return () => window.removeEventListener("planner-row-labels-updated", onUpd as any);
   }, []);
-  const label = (id: string) => rowLabels[id] || (id === "PRE ENTREN0" ? "Activación" : id);
+  // ✅ Si no hay personalizado, usamos el nombre original (sin "Activación" por defecto)
+  const label = (id: string) => rowLabels[id] || id;
 
   async function loadWeek(d: Date) {
     setLoading(true);
@@ -654,8 +655,9 @@ function PlanSemanalInner() {
               className="grid items-center"
               style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
             >
+              {/* Meta: NO se renombran, se muestran tal cual */}
               <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">
-                {label(rowName)}
+                {rowName}
               </div>
               {orderedDays.map((ymd) => (
                 <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
@@ -676,6 +678,7 @@ function PlanSemanalInner() {
               className="grid items-stretch"
               style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
             >
+              {/* Contenido: SÍ usan nombres personalizados */}
               <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600 whitespace-pre-line">
                 {label(rowName)}
               </div>
