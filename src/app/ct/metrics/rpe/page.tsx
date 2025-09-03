@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import HelpTip from "@/components/HelpTip";
 
 import { mean, srpeOf, type RPERow as RPERowLib } from "@/lib/metrics/rpe";
+import PlayerQuickView from "@/components/PlayerQuickView";
 
 export const dynamic = "force-dynamic";
 
@@ -74,8 +75,6 @@ function BarsInline({
 function RPECT() {
   type Tab = "respuestas" | "kpis" | "reportes";
   const search = useSearchParams();
-  theLoop: {
-  }
   const initialTab = (search.get("tab") as Tab) || "respuestas";
   const [tab, setTab] = useState<Tab>(initialTab);
   function switchTab(next: Tab) {
@@ -91,6 +90,10 @@ function RPECT() {
   const [q, setQ] = useState("");
   const [bulkMin, setBulkMin] = useState<string>("90");
   const [saving, setSaving] = useState(false);
+
+  // Drawer
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerPlayer, setDrawerPlayer] = useState<string | null>(null);
 
   // KPIs de rango
   const [rangeDays, setRangeDays] = useState<7 | 14 | 21>(7);
@@ -245,7 +248,7 @@ function RPECT() {
     URL.revokeObjectURL(url);
   }
 
-  // ----- KPIs de rango (fetch por día, igual que Wellness) -----
+  // ----- KPIs de rango -----
   useEffect(() => {
     if (tab !== "kpis") return;
     (async () => {
@@ -270,8 +273,7 @@ function RPECT() {
           allIndividual.push(...srpes);
         }
 
-        // histograma individual (AU) en el rango
-        const bins = [0, 0, 0, 0, 0]; // 0–300 | 301–600 | 601–900 | 901–1200 | >1200
+        const bins = [0, 0, 0, 0, 0];
         for (const v of allIndividual) {
           if (v <= 300) bins[0]++;
           else if (v <= 600) bins[1]++;
@@ -280,7 +282,7 @@ function RPECT() {
           else bins[4]++;
         }
 
-        setDailyTeamSRPE(dailyTeam); // hoy..hace N-1
+        setDailyTeamSRPE(dailyTeam);
         setSrpeHistBins(bins);
       } finally {
         setRangeLoading(false);
@@ -346,10 +348,9 @@ function RPECT() {
         })}
       </nav>
 
-      {/* ----- Tab: Respuestas (operativa) ----- */}
+      {/* ----- Tab: Respuestas ----- */}
       {tab === "respuestas" && (
         <>
-          {/* Acciones rápidas */}
           <section className="rounded-xl border bg-white p-3 flex flex-wrap items-center gap-2">
             <div className="text-sm font-medium mr-2">
               Acciones:{" "}
@@ -444,12 +445,22 @@ function RPECT() {
                           {(r.load ?? null) !== null ? Math.round(Number(r.load)) : "—"}
                         </td>
                         <td className="px-3 py-2">
-                          <div className="flex justify-end">
+                          <div className="flex justify-end gap-2">
                             <button
                               onClick={() => saveOne(r, "")}
                               className="rounded-lg border px-2 py-1 text-[11px] hover:bg-gray-50"
                             >
                               Vaciar
+                            </button>
+                            <button
+                              onClick={() => {
+                                const nm = r.userName || r.playerKey || r.user?.name || r.user?.email || "Jugador";
+                                setDrawerPlayer(nm);
+                                setDrawerOpen(true);
+                              }}
+                              className="rounded-lg border px-2 py-1 text-[11px] hover:bg-gray-50"
+                            >
+                              Resumen
                             </button>
                           </div>
                         </td>
@@ -574,13 +585,13 @@ function RPECT() {
         </>
       )}
 
-      {/* ----- Tab: Reportes (skeleton) ----- */}
+      {/* ----- Tab: Reportes ----- */}
       {tab === "reportes" && (
         <section className="rounded-2xl border bg-white p-3">
           <div className="flex items-center justify-between">
             <div className="text-[12px] font-semibold uppercase">
               Reportes individuales
-              <HelpTip text="MVP: listado por jugador con sRPE del día. Luego linkeamos al Perfil de Jugador unificado." />
+              <HelpTip text="MVP: listado por jugador con sRPE del día. Drawer con SDW 7d + RPE recientes." />
             </div>
             <div className="text-xs text-gray-500">{rows.length} jugador(es)</div>
           </div>
@@ -600,11 +611,11 @@ function RPECT() {
                 )
                 .map((r) => {
                   const au = srpeOf(r);
+                  const nm =
+                    r.userName || r.playerKey || r.user?.name || r.user?.email || "Jugador";
                   return (
                     <li key={r.id} className="rounded-lg border p-3">
-                      <div className="font-medium">
-                        {r.userName || r.playerKey || "Jugador"}
-                      </div>
+                      <div className="font-medium">{nm}</div>
                       <div className="text-xs text-gray-500">
                         RPE: <b>{r.rpe}</b> • Min:{" "}
                         <b>{r.duration != null ? r.duration : "—"}</b> • sRPE:{" "}
@@ -612,23 +623,20 @@ function RPECT() {
                       </div>
                       <div className="mt-2 flex gap-2">
                         <button
+                          onClick={() => {
+                            setDrawerPlayer(nm);
+                            setDrawerOpen(true);
+                          }}
+                          className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
+                        >
+                          Resumen rápido
+                        </button>
+                        <button
                           disabled
                           className="rounded-lg border px-2 py-1 text-xs text-gray-400 cursor-not-allowed"
                           title="Próximamente"
                         >
                           Abrir perfil
-                        </button>
-                        <button
-                          onClick={() => {
-                            alert(
-                              `Resumen rápido — ${r.userName || r.playerKey || "Jugador"}\nRPE: ${
-                                r.rpe
-                              }\nMin: ${r.duration ?? "—"}\nsRPE: ${au ? Math.round(au) : "—"} AU`
-                            );
-                          }}
-                          className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
-                        >
-                          Resumen rápido
                         </button>
                       </div>
                     </li>
@@ -638,6 +646,14 @@ function RPECT() {
           )}
         </section>
       )}
+
+      {/* Drawer */}
+      <PlayerQuickView
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        playerName={drawerPlayer}
+        date={date}
+      />
     </div>
   );
 }
