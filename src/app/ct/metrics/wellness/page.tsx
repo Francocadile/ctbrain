@@ -5,33 +5,25 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import HelpTip from "@/components/HelpTip";
 
-export const dynamic = "force-dynamic";
+import {
+  type WellnessRaw,
+  type Baseline,
+  toYMD,
+  fromYMD,
+  addDays,
+  yesterday,
+  mean,
+  sdSample,
+  computeSDW,
+  zToColor,
+  applyOverrides,
+} from "@/lib/metrics/wellness";
 
-/** ---------- Tipos de datos ---------- */
-type WellnessRaw = {
-  id: string;
-  user?: { name?: string; email?: string };
-  userName?: string | null; // compat
-  playerKey?: string | null; // compat
-  date: string; // YYYY-MM-DD
-  sleepQuality: number; // 1..5 (5 = mejor)
-  sleepHours?: number | null; // 0..14 (opcional)
-  fatigue: number; // 1..5 (5 = mejor)
-  muscleSoreness: number; // 1..5 (5 = mejor → menor dolor)
-  stress: number; // 1..5 (5 = mejor → menor estrés)
-  mood: number; // 1..5 (5 = mejor)
-  comment?: string | null;
-};
+export const dynamic = "force-dynamic";
 
 type DayRow = WellnessRaw & {
   _userName: string; // resuelto
   _sdw: number; // 1..5
-};
-
-type Baseline = {
-  mean: number; // media SDW (21d)
-  sd: number; // desvío estándar SDW (21d)
-  n: number; // días válidos
 };
 
 type Alert = {
@@ -46,55 +38,6 @@ type RPERow = {
   srpe: number; // AU
 };
 
-/** ---------- Utilidades de fecha ---------- */
-function toYMD(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
-function fromYMD(s: string) {
-  const [y, m, dd] = s.split("-").map(Number);
-  return new Date(y, m - 1, dd);
-}
-function addDays(d: Date, days: number) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + days);
-  return x;
-}
-function yesterday(ymd: string) {
-  return toYMD(addDays(fromYMD(ymd), -1));
-}
-
-/** ---------- Cálculos estadísticos ---------- */
-function mean(arr: number[]) {
-  if (!arr.length) return 0;
-  return arr.reduce((a, b) => a + b, 0) / arr.length;
-}
-function sdSample(arr: number[]) {
-  const n = arr.length;
-  if (n < 2) return 0;
-  const m = mean(arr);
-  const v = arr.reduce((acc, v) => acc + (v - m) * (v - m), 0) / (n - 1);
-  return Math.sqrt(v);
-}
-/** SDW = promedio (1..5) de los 5 ítems orientados a 5=mejor */
-function computeSDW(r: WellnessRaw) {
-  const vals = [
-    Number(r.sleepQuality ?? 0),
-    Number(r.fatigue ?? 0),
-    Number(r.muscleSoreness ?? 0),
-    Number(r.stress ?? 0),
-    Number(r.mood ?? 0),
-  ];
-  const valid = vals.filter((v) => v > 0);
-  if (!valid.length) return 0;
-  return valid.reduce((a, b) => a + b, 0) / valid.length;
-}
-/** Semáforo por Z-score según especificación */
-function zToColor(z: number | null): "green" | "yellow" | "red" {
-  if (z === null) return "yellow"; // sin baseline suficiente → atención leve
-  if (z >= -0.5) return "green";
-  if (z >= -1.0) return "yellow";
-  return "red";
-}
 /** CSS de badges */
 function Badge({
   children,
@@ -118,21 +61,7 @@ function Badge({
     </span>
   );
 }
-/** Eleva severidad de color según overrides clínicos */
-function applyOverrides(base: "green" | "yellow" | "red", r: DayRow) {
-  let level = base; // green < yellow < red
-  const sleepH = r.sleepHours ?? null;
-  if (sleepH !== null && sleepH < 4) {
-    level = level === "green" ? "yellow" : level;
-  }
-  if (r.muscleSoreness <= 2) {
-    level = "red";
-  }
-  if (r.stress <= 2) {
-    level = level === "green" ? "yellow" : level;
-  }
-  return level;
-}
+
 /** Mini sparkline (7 días) usando bloques */
 function Sparkline({ vals }: { vals: number[] }) {
   if (!vals.length) return <span className="text-gray-400">—</span>;
@@ -155,7 +84,7 @@ function Sparkline({ vals }: { vals: number[] }) {
   );
 }
 
-/** Barras inline (reutilizable para KPIs de rango) */
+/** Barras inline (para KPIs de rango) */
 function BarsInline({
   values,
   maxHint,
@@ -985,7 +914,7 @@ function WellnessCT_Day() {
   );
 }
 
-/** Wrapper con Suspense (requerido por useSearchParams en Next.js App Router) */
+/** Wrapper con Suspense (requerido por useSearchParams) */
 export default function Page() {
   return (
     <Suspense fallback={<div className="p-4 text-gray-500">Cargando…</div>}>
