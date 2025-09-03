@@ -1,154 +1,135 @@
-// src/app/ct/plan-semanal/PlannerActionsBar.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { toYYYYMMDDUTC, getMonday } from "@/lib/api/sessions";
+import {
+  fetchRowLabels,
+  saveRowLabels,
+  resetRowLabels,
+  type RowLabels,
+} from "@/lib/planner-prefs";
 
-/**
- * Herramientas del planner.
- * En esta versión nos enfocamos en RENOMBRAR las filas visibles del editor semanal.
- * - Cambios solo afectan a tu dispositivo (se guardan localmente).
- * - Podés volver a los nombres iniciales cuando quieras.
- */
+type Props = { onAfterChange?: () => void };
 
-type Props = {
-  onAfterChange?: () => void;
+// valores por defecto de filas visibles
+const DEFAULT_LABELS: RowLabels = {
+  "PRE ENTREN0": "PRE ENTREN0",
+  "FÍSICO": "FÍSICO",
+  "TÉCNICO–TÁCTICO": "TÉCNICO–TÁCTICO",
+  "COMPENSATORIO": "COMPENSATORIO",
+  "LUGAR": "LUGAR",
+  "HORA": "HORA",
+  "VIDEO": "VIDEO",
+  "NOMBRE SESIÓN": "NOMBRE SESIÓN",
 };
 
-// IDs fijos de las filas de contenido en el editor (no cambian en BD)
-const CONTENT_ROW_IDS = [
-  "PRE ENTREN0",
-  "FÍSICO",
-  "TÉCNICO–TÁCTICO",
-  "COMPENSATORIO",
-] as const;
-
-const STORAGE_KEY = "planner.rowLabels.v1";
-const UPDATED_EVENT = "planner-row-labels-updated";
-
-type RowLabels = Record<string, string>;
-
-function loadLabels(): RowLabels {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return {};
-}
-
-function saveLabelsSafe(labels: RowLabels) {
-  // Guardamos SOLO lo que sea distinto al nombre original
-  const compact: RowLabels = {};
-  for (const id of CONTENT_ROW_IDS) {
-    const v = (labels[id] ?? "").trim();
-    if (v && v !== id) compact[id] = v;
-  }
-  if (Object.keys(compact).length === 0) {
-    localStorage.removeItem(STORAGE_KEY);
-  } else {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(compact));
-  }
-  window.dispatchEvent(new CustomEvent(UPDATED_EVENT));
-}
-
 export default function PlannerActionsBar({ onAfterChange }: Props) {
-  const [labels, setLabels] = useState<RowLabels>({});
+  const [weekRef, setWeekRef] = useState<string>(() => toYYYYMMDDUTC(getMonday(new Date())));
+  const [loading, setLoading] = useState(false);
 
+  // Etiquetas por usuario (servidor)
+  const [labels, setLabels] = useState<RowLabels>(DEFAULT_LABELS);
+  const computed = useMemo<RowLabels>(() => ({ ...DEFAULT_LABELS, ...labels }), [labels]);
+
+  // cargar desde servidor
   useEffect(() => {
-    setLabels(loadLabels());
+    (async () => {
+      const server = await fetchRowLabels();
+      setLabels((prev) => ({ ...prev, ...server }));
+    })();
   }, []);
 
-  const merged = useMemo(() => {
-    // Lo que se ve: si no hay personalizado, se muestra el original
-    const m: RowLabels = {};
-    for (const id of CONTENT_ROW_IDS) {
-      m[id] = labels[id] ?? id;
+  // Exportar/Importar/Duplicar los dejás como ya los tenías si corresponde…
+  // Acá nos enfocamos en la sección de “Nombres de filas”
+
+  async function handleSaveLabels() {
+    setLoading(true);
+    try {
+      await saveRowLabels(labels);
+      // Notificar al editor para que se refresque las etiquetas
+      window.dispatchEvent(new Event("planner-row-labels-updated"));
+      onAfterChange?.();
+      alert("Nombres guardados.");
+    } catch (e: any) {
+      alert(e?.message || "No se pudo guardar");
+    } finally {
+      setLoading(false);
     }
-    return m;
-  }, [labels]);
-
-  function handleChange(id: string, value: string) {
-    setLabels((prev) => ({ ...prev, [id]: value }));
   }
 
-  function handleSave() {
-    saveLabelsSafe(labels);
-    onAfterChange?.();
-    alert("Listo. Los nombres se actualizaron en el editor.");
-  }
-
-  function handleReset() {
-    setLabels({});
-    localStorage.removeItem(STORAGE_KEY);
-    window.dispatchEvent(new CustomEvent(UPDATED_EVENT));
-    onAfterChange?.();
-    alert("Se restablecieron los nombres iniciales.");
+  async function handleResetLabels() {
+    const ok = confirm("¿Restaurar nombres originales?");
+    if (!ok) return;
+    setLoading(true);
+    try {
+      await resetRowLabels();
+      setLabels({});
+      window.dispatchEvent(new Event("planner-row-labels-updated"));
+      onAfterChange?.();
+      alert("Restaurado.");
+    } catch (e: any) {
+      alert(e?.message || "No se pudo restaurar");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <div className="space-y-4">
-      {/* Encabezado simple */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-semibold">Herramientas del editor semanal</h2>
-          <p className="text-sm text-gray-500">
-            Acá podés ajustar cómo se llaman las filas que ves en el editor.{" "}
-            <span title="Los cambios son solo para tu dispositivo (se guardan localmente). Podés volver a los nombres iniciales cuando quieras.">
-              ❓
-            </span>
-          </p>
-        </div>
-      </div>
-
-      {/* Card: Renombrar filas */}
-      <section className="rounded-xl border bg-white">
-        <div className="border-b bg-gray-50 px-3 py-2 text-[12px] font-semibold uppercase">
-          Nombres de filas del editor
+      {/* --- Sección simple: Nombres de filas --- */}
+      <section className="rounded-xl border p-3">
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-sm font-semibold">Nombres de filas (tu preferencia)</h3>
+          <div className="text-[11px] text-gray-500">
+            Se guardan en tu usuario y se aplican en el Editor.
+          </div>
         </div>
 
-        <div className="p-3 space-y-3">
-          <p className="text-sm text-gray-700">
-            Cambiá los nombres para que se adapten a tu forma de trabajar. Si dejás un campo vacío,
-            se usará el nombre original.
-          </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {Object.entries(DEFAULT_LABELS).map(([key, _]) => {
+            // mostramos sólo las filas que el editor usa
+            const isEditable =
+              key === "PRE ENTREN0" ||
+              key === "FÍSICO" ||
+              key === "TÉCNICO–TÁCTICO" ||
+              key === "COMPENSATORIO";
+            if (!isEditable) return null;
 
-          <div className="grid gap-2 md:grid-cols-2">
-            {CONTENT_ROW_IDS.map((id) => (
-              <div key={id} className="space-y-1">
-                <label className="block text-xs text-gray-600">
-                  Nombre para <b>{id}</b>
-                </label>
+            return (
+              <div key={key} className="flex flex-col gap-1">
+                <label className="text-[11px] text-gray-600">{key}</label>
                 <input
-                  className="w-full rounded-md border px-2 py-1.5 text-sm"
-                  placeholder={id}
-                  value={labels[id] ?? ""}
-                  onChange={(e) => handleChange(id, e.target.value)}
+                  className="h-9 rounded-md border px-2 text-sm"
+                  value={computed[key]}
+                  onChange={(e) =>
+                    setLabels((prev) => ({ ...prev, [key]: e.target.value }))
+                  }
+                  placeholder={key}
                 />
-                <div className="text-[11px] text-gray-500">
-                  Se verá en el editor como: <b>{(labels[id] ?? "").trim() || id}</b>
-                </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
+        </div>
 
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <button
-              onClick={handleSave}
-              className="rounded-lg bg-black text-white px-3 py-1.5 text-sm hover:opacity-90"
-            >
-              Guardar nombres
-            </button>
-            <button
-              onClick={handleReset}
-              className="rounded-lg border px-3 py-1.5 text-sm hover:bg-gray-50"
-            >
-              Volver a los nombres iniciales
-            </button>
-            <span className="text-xs text-gray-500">
-              (Solo cambia lo que ves en tu compu)
-            </span>
-          </div>
+        <div className="mt-3 flex gap-2">
+          <button
+            onClick={handleSaveLabels}
+            disabled={loading}
+            className="px-3 py-1.5 rounded-lg bg-black text-white text-xs hover:opacity-90"
+          >
+            Guardar
+          </button>
+          <button
+            onClick={handleResetLabels}
+            disabled={loading}
+            className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50"
+          >
+            Restaurar originales
+          </button>
         </div>
       </section>
+
+      {/* Podés mantener acá tus otras herramientas (exportar, duplicar, CSV, etc.) */}
     </div>
   );
 }
