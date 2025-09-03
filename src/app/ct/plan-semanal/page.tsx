@@ -184,18 +184,12 @@ function PlanSemanalInner() {
     const iso = computeISOForSlot(dayYmd, turn);
     const desc = `${marker(DAYFLAG_TAG, turn)} | ${dayYmd}`;
     const title = buildDayFlagTitle(df);
-    try {
-      if (df.kind === "NONE") {
-        if (existing) await deleteSession(existing.id);
-      } else if (!existing) {
-        await createSession({ title, description: desc, date: iso, type: "GENERAL" });
-      } else {
-        await updateSession(existing.id, { title, description: desc, date: iso });
-      }
-      await loadWeek(base);
-    } catch (e: any) {
-      console.error(e);
-      alert(e?.message || "No se pudo actualizar el tipo de día");
+    if (df.kind === "NONE") {
+      if (existing) await deleteSession(existing.id);
+    } else if (!existing) {
+      await createSession({ title, description: desc, date: iso, type: "GENERAL" });
+    } else {
+      await updateSession(existing.id, { title, description: desc, date: iso });
     }
   }
 
@@ -208,18 +202,12 @@ function PlanSemanalInner() {
     const iso = computeISOForSlot(dayYmd, turn);
     const desc = `${marker(DAYNAME_TAG, turn)} | ${dayYmd}`;
     const title = (name || "").trim();
-    try {
-      if (!title) {
-        if (existing) await deleteSession(existing.id);
-      } else if (!existing) {
-        await createSession({ title, description: desc, date: iso, type: "GENERAL" });
-      } else {
-        await updateSession(existing.id, { title, description: desc, date: iso });
-      }
-      await loadWeek(base);
-    } catch (e: any) {
-      console.error(e);
-      alert(e?.message || "No se pudo actualizar el nombre de la sesión");
+    if (!title) {
+      if (existing) await deleteSession(existing.id);
+    } else if (!existing) {
+      await createSession({ title, description: desc, date: iso, type: "GENERAL" });
+    } else {
+      await updateSession(existing.id, { title, description: desc, date: iso });
     }
   }
 
@@ -233,13 +221,6 @@ function PlanSemanalInner() {
       else next[k] = text;
       return next;
     });
-  }
-
-  function forceCommitActiveField() {
-    if (typeof document !== "undefined") {
-      const el = document.activeElement as HTMLElement | null;
-      el?.blur?.();
-    }
   }
 
   async function saveAll() {
@@ -481,25 +462,44 @@ function PlanSemanalInner() {
   }
 
   // =======================
-  // Tipo de día (Normal/Partido/Libre) — CONTROLADO
+  // Tipo de día (Normal/Partido/Libre) — **OPTIMISTA**
   // =======================
   function DayFlagCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
-    // Valor SIEMPRE viene de daysMap (sin estados locales de kind que se reseteen)
+    // Estado real desde store
     const df = getDayFlag(ymd, turn);
+
+    // 🟢 Estado optimista local (evita el “salto” mientras guardamos y recargamos)
+    const [localKind, setLocalKind] = useState<DayFlagKind>(df.kind);
     const [rival, setRival] = useState(df.rival || "");
     const [logo, setLogo]   = useState(df.logoUrl || "");
+    const [saving, setSaving] = useState(false);
 
-    // Sincronizar campos extra cuando cambie desde servidor (incluye domingo)
+    // Sincronizar cuando venga un cambio real del server (incluye Domingo)
     useEffect(() => {
+      setLocalKind(df.kind);
       setRival(df.rival || "");
       setLogo(df.logoUrl || "");
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [df.rival, df.logoUrl, ymd, turn]);
+    }, [df.kind, df.rival, df.logoUrl, ymd, turn]);
 
-    const onChangeKind = async (k: DayFlagKind) => {
-      if (k === "NONE") await setDayFlag(ymd, turn, { kind: "NONE" });
-      if (k === "LIBRE") await setDayFlag(ymd, turn, { kind: "LIBRE" });
-      if (k === "PARTIDO") await setDayFlag(ymd, turn, { kind: "PARTIDO", rival, logoUrl: logo });
+    const commit = async (next: DayFlag) => {
+      try {
+        setSaving(true);
+        await setDayFlag(ymd, turn, next);
+        // Recargar semana al final para reflejar DB
+        await loadWeek(base);
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    const onChangeKind = (k: DayFlagKind) => {
+      // Actualizo UI al instante (optimista)
+      setLocalKind(k);
+      if (k === "NONE") return commit({ kind: "NONE" });
+      if (k === "LIBRE") return commit({ kind: "LIBRE" });
+      // PARTIDO mantiene los campos actuales
+      return commit({ kind: "PARTIDO", rival, logoUrl: logo });
     };
 
     return (
@@ -507,29 +507,32 @@ function PlanSemanalInner() {
         <div className="flex items-center gap-1">
           <select
             className="h-7 w-[110px] rounded-md border px-1.5 text-[11px]"
-            value={df.kind /* ← controlado por store */}
+            value={localKind /* ← controlado por estado optimista */}
             onChange={(e) => onChangeKind(e.target.value as DayFlagKind)}
+            disabled={saving}
           >
             <option value="NONE">Normal</option>
             <option value="PARTIDO">Partido</option>
             <option value="LIBRE">Libre</option>
           </select>
 
-          {df.kind === "PARTIDO" && (
+          {localKind === "PARTIDO" && (
             <>
               <input
                 className="h-7 flex-1 rounded-md border px-2 text-[11px]"
                 placeholder="Rival"
                 value={rival}
                 onChange={(e) => setRival(e.target.value)}
-                onBlur={() => setDayFlag(ymd, turn, { kind: "PARTIDO", rival, logoUrl: logo })}
+                onBlur={() => commit({ kind: "PARTIDO", rival, logoUrl: logo })}
+                disabled={saving}
               />
               <input
                 className="h-7 w-[120px] rounded-md border px-2 text-[11px]"
                 placeholder="Logo URL"
                 value={logo}
                 onChange={(e) => setLogo(e.target.value)}
-                onBlur={() => setDayFlag(ymd, turn, { kind: "PARTIDO", rival, logoUrl: logo })}
+                onBlur={() => commit({ kind: "PARTIDO", rival, logoUrl: logo })}
+                disabled={saving}
               />
             </>
           )}
@@ -560,7 +563,7 @@ function PlanSemanalInner() {
     const [text, setText] = useState(initial);
     useEffect(() => { setText(initial); }, [initial, ymd, turn]);
 
-    const commit = async () => { await setDayName(ymd, turn, text); };
+    const commit = async () => { await setDayName(ymd, turn, text); await loadWeek(base); };
     const onKeyDown: React.KeyboardEventHandler<HTMLInputElement> = (e) => {
       if (e.key === "Enter") { e.preventDefault(); (e.currentTarget as HTMLInputElement).blur(); }
     };
@@ -670,9 +673,9 @@ function PlanSemanalInner() {
             <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Semana siguiente ▶</button>
             <div className="w-px h-6 bg-gray-200 mx-1" />
             <button
-              onClick={() => { 
-                // forzar blur antes de guardar para no perder el último cambio tipeado
-                if (typeof document !== "undefined") (document.activeElement as HTMLElement | null)?.blur?.(); 
+              onClick={() => {
+                // forzar blur antes de guardar
+                if (typeof document !== "undefined") (document.activeElement as HTMLElement | null)?.blur?.();
                 setTimeout(saveAll, 0);
               }}
               disabled={pendingCount === 0 || savingAll}
