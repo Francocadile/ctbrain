@@ -49,7 +49,7 @@ function parseDayFlagTitle(title: string | null | undefined): DayFlag {
 function buildDayFlagTitle(df: DayFlag): string {
   if (df.kind === "PARTIDO") return `PARTIDO|${df.rival ?? ""}|${df.logoUrl ?? ""}`;
   if (df.kind === "LIBRE") return "LIBRE";
-  return "";
+  return ""; // NONE => string vacío
 }
 
 function addDaysUTC(date: Date, days: number) {
@@ -103,7 +103,6 @@ function PlanSemanalInner() {
   const router = useRouter();
   const hideHeader = qs.get("hideHeader") === "1";
 
-  // pestañas turno
   const initialTurn = (qs.get("turn") === "afternoon" ? "afternoon" : "morning") as TurnKey;
   const [activeTurn, setActiveTurn] = useState<TurnKey>(initialTurn);
   useEffect(() => {
@@ -119,13 +118,11 @@ function PlanSemanalInner() {
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
-  // Lugares
   const [places, setPlaces] = useState<string[]>([]);
   useEffect(() => {
     (async () => setPlaces(await listPlaces()))();
   }, []);
 
-  // Cambios pendientes (solo para celdas de bloques/meta)
   const [pending, setPending] = useState<Record<string, string>>({});
   const [videoEditing, setVideoEditing] = useState<Record<string, boolean>>({});
   const [savingAll, setSavingAll] = useState(false);
@@ -179,28 +176,27 @@ function PlanSemanalInner() {
     const s = findDayFlagSession(dayYmd, turn);
     return parseDayFlagTitle(s?.title ?? "");
   }
+
+  // ✅ FIX CENTRAL: Persistimos "Normal" como DAYFLAG con title:"" (no borramos)
   async function setDayFlag(dayYmd: string, turn: TurnKey, df: DayFlag) {
     const existing = findDayFlagSession(dayYmd, turn);
     const iso = computeISOForSlot(dayYmd, turn);
     const marker = dayFlagMarker(turn);
     const desc = `${marker} | ${dayYmd}`;
-    const title = buildDayFlagTitle(df);
+    const title = buildDayFlagTitle(df); // "" si NONE
 
     try {
-      if (df.kind === "NONE") {
-        if (existing) await deleteSession(existing.id);
-        await loadWeek(base);
-        return;
-      }
       if (!existing) {
+        // Creamos siempre el registro DAYFLAG
         await createSession({ title, description: desc, date: iso, type: "GENERAL" });
       } else {
+        // Actualizamos título según selección (NONE => "")
         await updateSession(existing.id, { title, description: desc, date: iso });
       }
       await loadWeek(base);
     } catch (e: any) {
       console.error(e);
-      alert(e?.message || "No se pudo actualizar el estado del día");
+      alert(e?.message || "No se pudo actualizar el tipo del día");
     }
   }
 
@@ -303,7 +299,6 @@ function PlanSemanalInner() {
     const pendingValue = pending[k];
     const value = pendingValue !== undefined ? pendingValue : original;
 
-    // LUGAR (select con Agregar / Gestionar)
     if (row === "LUGAR") {
       const [localPlaces, setLocalPlaces] = useState<string[]>(places);
       useEffect(() => setLocalPlaces(places), [places]);
@@ -350,7 +345,6 @@ function PlanSemanalInner() {
       );
     }
 
-    // HORA (HH:mm)
     if (row === "HORA") {
       const hhmm = /^[0-9]{2}:[0-9]{2}$/.test(value || "") ? value : "";
       return (
@@ -363,7 +357,6 @@ function PlanSemanalInner() {
       );
     }
 
-    // VIDEO — edición local
     const parsed = parseVideoValue(value || "");
     const isEditing = !!videoEditing[k];
 
@@ -390,9 +383,7 @@ function PlanSemanalInner() {
               {parsed.label || "Video"}
             </a>
           ) : (
-            <span className="text-[12px] text-gray-500 truncate">
-              {parsed.label}
-            </span>
+            <span className="text-[12px] text-gray-500 truncate">{parsed.label}</span>
           )}
           <div className="flex items-center gap-1">
             <button
@@ -446,9 +437,6 @@ function PlanSemanalInner() {
     );
   }
 
-  // =======================
-  // Celda de contenido
-  // =======================
   function EditableCell({
     dayYmd,
     turn,
@@ -478,13 +466,10 @@ function PlanSemanalInner() {
 
     const sessionHref = existing?.id ? `/ct/sessions/${existing.id}` : "";
 
-    // Mostrar estado del día (si aplica)
     const flag = getDayFlag(dayYmd, turn);
     const flagBadge =
       flag.kind === "LIBRE" ? (
-        <span className="text-[10px] bg-gray-100 border px-1.5 py-0.5 rounded">
-          DÍA LIBRE
-        </span>
+        <span className="text-[10px] bg-gray-100 border px-1.5 py-0.5 rounded">DÍA LIBRE</span>
       ) : flag.kind === "PARTIDO" ? (
         <span className="text-[10px] bg-amber-100 border px-1.5 py-0.5 rounded">
           PARTIDO {flag.rival ? `vs ${flag.rival}` : ""}
@@ -513,14 +498,10 @@ function PlanSemanalInner() {
           onBlur={onBlur}
           onKeyDown={onKeyDown}
           className={`min-h-[90px] w-full rounded-xl border p-2 text-[13px] leading-5 outline-none focus:ring-2 ${
-            staged !== undefined
-              ? "border-emerald-400 ring-emerald-200"
-              : "focus:ring-emerald-400"
+            staged !== undefined ? "border-emerald-400 ring-emerald-200" : "focus:ring-emerald-400"
           } whitespace-pre-wrap`}
           data-placeholder="Escribir…"
-          dangerouslySetInnerHTML={{
-            __html: (initialText || "").replace(/\n/g, "<br/>"),
-          }}
+          dangerouslySetInnerHTML={{ __html: (initialText || "").replace(/\n/g, "<br/>") }}
         />
       </div>
     );
@@ -528,18 +509,15 @@ function PlanSemanalInner() {
 
   const pendingCount = Object.keys(pending).length;
 
-  // ===== FIX: Fila "Tipo" sin estados locales por día =====
   function DayStatusRow({ turn }: { turn: TurnKey }) {
     return (
       <div
         className="grid items-center border-b bg-gray-50/60"
         style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
       >
-        <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">
-          Tipo
-        </div>
+        <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Tipo</div>
         {orderedDays.map((ymd) => {
-          const df = getDayFlag(ymd, turn); // fuente de verdad
+          const df = getDayFlag(ymd, turn);
           const save = (next: DayFlag) => setDayFlag(ymd, turn, next);
 
           return (
@@ -552,7 +530,8 @@ function PlanSemanalInner() {
                     const k = e.target.value as DayFlagKind;
                     if (k === "NONE") save({ kind: "NONE" });
                     if (k === "LIBRE") save({ kind: "LIBRE" });
-                    if (k === "PARTIDO") save({ kind: "PARTIDO", rival: df.rival || "", logoUrl: df.logoUrl || "" });
+                    if (k === "PARTIDO")
+                      save({ kind: "PARTIDO", rival: df.rival || "", logoUrl: df.logoUrl || "" });
                   }}
                 >
                   <option value="NONE">Normal</option>
@@ -566,17 +545,13 @@ function PlanSemanalInner() {
                       className="h-7 flex-1 rounded-md border px-2 text-[11px]"
                       placeholder="Rival"
                       defaultValue={df.rival || ""}
-                      onBlur={(e) =>
-                        save({ kind: "PARTIDO", rival: e.currentTarget.value, logoUrl: df.logoUrl || "" })
-                      }
+                      onBlur={(e) => save({ kind: "PARTIDO", rival: e.currentTarget.value, logoUrl: df.logoUrl || "" })}
                     />
                     <input
                       className="h-7 w-[120px] rounded-md border px-2 text-[11px]"
                       placeholder="Logo URL"
                       defaultValue={df.logoUrl || ""}
-                      onBlur={(e) =>
-                        save({ kind: "PARTIDO", rival: df.rival || "", logoUrl: e.currentTarget.value })
-                      }
+                      onBlur={(e) => save({ kind: "PARTIDO", rival: df.rival || "", logoUrl: e.currentTarget.value })}
                     />
                   </>
                 )}
@@ -588,33 +563,24 @@ function PlanSemanalInner() {
     );
   }
 
-  // Sección por turno
   function TurnEditor({ turn }: { turn: TurnKey }) {
     return (
       <>
-        {/* Cabecera días */}
         <div
           className="grid text-xs"
           style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
         >
           <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600"></div>
           {orderedDays.map((ymd) => (
-            <div
-              key={`${turn}-${ymd}`}
-              className="bg-gray-50 border-b px-2 py-1.5"
-            >
-              <div className="text-[11px] font-semibold uppercase tracking-wide">
-                {humanDayUTC(ymd)}
-              </div>
+            <div key={`${turn}-${ymd}`} className="bg-gray-50 border-b px-2 py-1.5">
+              <div className="text-[11px] font-semibold uppercase tracking-wide">{humanDayUTC(ymd)}</div>
               <div className="text-[10px] text-gray-400">{ymd}</div>
             </div>
           ))}
         </div>
 
-        {/* Tipo del día */}
         <DayStatusRow turn={turn} />
 
-        {/* META */}
         <div className="border-t">
           <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
             {turn === "morning" ? "TURNO MAÑANA · Meta" : "TURNO TARDE · Meta"}
@@ -637,7 +603,6 @@ function PlanSemanalInner() {
           ))}
         </div>
 
-        {/* BLOQUES */}
         <div className="border-t">
           <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
             {turn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
@@ -675,10 +640,8 @@ function PlanSemanalInner() {
               Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)
             </p>
             <p className="mt-1 text-[10px] text-gray-400">
-              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/
-              <kbd className="rounded border px-1">⌘</kbd> +{" "}
-              <kbd className="rounded border px-1">Enter</kbd> para “marcar” una celda sin
-              guardar aún.
+              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd>{" "}
+              + <kbd className="rounded border px-1">Enter</kbd> para “marcar” una celda sin guardar aún.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -713,7 +676,6 @@ function PlanSemanalInner() {
         </header>
       )}
 
-      {/* Pestañas turno */}
       <div className="flex items-center gap-2">
         <button
           className={`px-3 py-1.5 rounded-xl border text-xs ${
