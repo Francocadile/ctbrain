@@ -5,9 +5,13 @@ import prisma from "@/lib/prisma";
 import { requireAuth, requireSessionWithRoles } from "@/lib/auth-helpers";
 import { Role } from "@prisma/client";
 
+// --- Tags (coherentes con el editor) ---
+const DAYFLAG_TAG = "DAYFLAG";   // description = `[DAYFLAG:<turn>] | YYYY-MM-DD`
+const DAYNAME_TAG = "DAYNAME";   // description = `[DAYNAME:<turn>] | YYYY-MM-DD`
+
 // --- Validaciones ---
 const createSessionSchema = z.object({
-  title: z.string().min(2, "Título muy corto"),
+  title: z.string().min(1, "Título vacío"),
   description: z.string().optional().nullable(),
   date: z
     .string()
@@ -26,18 +30,19 @@ function toYYYYMMDDUTC(d: Date) {
 }
 function getMondayUTC(d: Date) {
   const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  const day = x.getUTCDay() || 7; // 1..7 (Dom=7)
-  if (day !== 1) x.setUTCDate(x.getUTCDate() - (day - 1)); // ir a lunes
+  const dow = x.getUTCDay() || 7; // 1..7 (Lun=1)
+  if (dow !== 1) x.setUTCDate(x.getUTCDate() - (dow - 1));
   x.setUTCHours(0, 0, 0, 0);
   return x;
 }
 function addDaysUTC(d: Date, n: number) {
   const x = new Date(d);
+  x.setUTCHours(0, 0, 0, 0);
   x.setUTCDate(x.getUTCDate() + n);
   return x;
 }
 
-// --- Select ---
+// --- Select común ---
 const sessionSelect = {
   id: true,
   title: true,
@@ -50,7 +55,8 @@ const sessionSelect = {
   user: { select: { id: true, name: true, email: true, role: true } },
 } as const;
 
-// GET /api/sessions?start=YYYY-MM-DD  (semana)  |  fallback: últimas 50 (SOLO DAYNAME)
+// GET /api/sessions?start=YYYY-MM-DD  -> semana [lunes, próximo lunes)
+// GET /api/sessions                   -> listado para “Sesiones” (solo nombres de sesión)
 export async function GET(req: Request) {
   try {
     await requireAuth();
@@ -59,7 +65,7 @@ export async function GET(req: Request) {
     const start = url.searchParams.get("start");
 
     if (start) {
-      // ------- SEMANA (editor) -------
+      // -------- Semana (Editor) --------
       const startDate = new Date(`${start}T00:00:00.000Z`);
       if (Number.isNaN(startDate.valueOf())) {
         return NextResponse.json(
@@ -68,45 +74,42 @@ export async function GET(req: Request) {
         );
       }
 
-      const monday = getMondayUTC(startDate);
-      const nextMonday = addDaysUTC(monday, 7); // fin EXCLUSIVO
+      const monday = getMondayUTC(startDate);      // lunes 00:00 UTC
+      const nextMonday = addDaysUTC(monday, 7);    // lunes siguiente 00:00 UTC
 
+      // 🔧 FIX Domingo: usamos rango [monday, nextMonday) (lt, no lte)
       const items = await prisma.session.findMany({
         where: { date: { gte: monday, lt: nextMonday } },
         orderBy: [{ date: "asc" }, { createdAt: "asc" }],
         select: sessionSelect,
       });
 
-      // Inicializar mapa Lun..Dom
+      // Mapa Lun..Dom garantizado
       const days: Record<string, typeof items> = {};
-      for (let i = 0; i < 7; i++) {
-        const key = toYYYYMMDDUTC(addDaysUTC(monday, i));
-        days[key] = [];
-      }
+      for (let i = 0; i < 7; i++) days[toYYYYMMDDUTC(addDaysUTC(monday, i))] = [];
       for (const s of items) {
         const k = toYYYYMMDDUTC(new Date(s.date));
-        if (!days[k]) days[k] = [];
-        days[k].push(s);
+        (days[k] ||= []).push(s);
       }
 
       return NextResponse.json({
         days,
         weekStart: toYYYYMMDDUTC(monday),
-        weekEnd: toYYYYMMDDUTC(addDaysUTC(monday, 6)), // Domingo (informativo)
+        weekEnd: toYYYYMMDDUTC(addDaysUTC(monday, 6)), // domingo (solo informativo)
       });
     }
 
-    // ------- LISTADO GENERAL (pantalla "Sesiones") -------
-    // Devolvemos SOLO las sesiones "reales": description que empieza con [DAYNAME:...]
+    // -------- Listado “Sesiones” (solo los nombres de sesión del editor) --------
+    // Mostramos únicamente las sesiones marcadas como DAYNAME (un nombre por día+turno)
     const sessions = await prisma.session.findMany({
       where: {
         description: {
-          startsWith: "[DAYNAME:",
+          startsWith: `[${DAYNAME_TAG}:`, // evita mostrar bloques/flags/ejercicios
         },
       },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       select: sessionSelect,
-      take: 50,
+      take: 200,
     });
 
     return NextResponse.json({ data: sessions });
