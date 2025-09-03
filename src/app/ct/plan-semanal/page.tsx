@@ -26,6 +26,7 @@ export default function Page() {
 }
 
 type TurnKey = "morning" | "afternoon";
+type PaneKey = "editor" | "tools";
 
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 const SESSION_NAME_ROW = "NOMBRE SESIÓN";
@@ -85,14 +86,22 @@ function PlanSemanalInner() {
   const router = useRouter();
   const hideHeader = qs.get("hideHeader") === "1";
 
+  // Pestañas principales
   const initialTurn = (qs.get("turn") === "afternoon" ? "afternoon" : "morning") as TurnKey;
+  const initialPane: PaneKey = qs.get("pane") === "tools" ? "tools" : "editor";
+
   const [activeTurn, setActiveTurn] = useState<TurnKey>(initialTurn);
+  const [activePane, setActivePane] = useState<PaneKey>(initialPane);
+
+  // Sincronizo URL con pestañas
   useEffect(() => {
     const p = new URLSearchParams(qs.toString());
     p.set("turn", activeTurn);
+    if (activePane === "tools") p.set("pane", "tools");
+    else p.delete("pane");
     router.replace(`?${p.toString()}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTurn]);
+  }, [activeTurn, activePane]);
 
   const [base, setBase] = useState<Date>(() => getMonday(new Date()));
   const [loading, setLoading] = useState(false);
@@ -561,39 +570,72 @@ function PlanSemanalInner() {
               + <kbd className="rounded border px-1">Enter</kbd> para marcar una celda sin guardar aún.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">◀ Semana anterior</button>
-            <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Hoy</button>
-            <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Semana siguiente ▶</button>
-            <div className="w-px h-6 bg-gray-200 mx-1" />
-            <button
-              onClick={saveAll}
-              disabled={pendingCount === 0 || savingAll}
-              className={`px-3 py-1.5 rounded-xl text-xs ${pendingCount === 0 || savingAll ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
-              title={pendingCount ? `${pendingCount} cambio(s) por guardar` : "Sin cambios"}
-            >
-              {savingAll ? "Guardando..." : `Guardar cambios${pendingCount ? ` (${pendingCount})` : ""}`}
-            </button>
-            <button onClick={discardAll} disabled={pendingCount === 0 || savingAll} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-              Descartar
-            </button>
-          </div>
+
+          {/* Botones de navegación y acciones (solo en editor) */}
+          {activePane === "editor" ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">◀ Semana anterior</button>
+              <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Hoy</button>
+              <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Semana siguiente ▶</button>
+              <div className="w-px h-6 bg-gray-200 mx-1" />
+              <button
+                onClick={saveAll}
+                disabled={pendingCount === 0 || savingAll}
+                className={`px-3 py-1.5 rounded-xl text-xs ${pendingCount === 0 || savingAll ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
+                title={pendingCount ? `${pendingCount} cambio(s) por guardar` : "Sin cambios"}
+              >
+                {savingAll ? "Guardando..." : `Guardar cambios${pendingCount ? ` (${pendingCount})` : ""}`}
+              </button>
+              <button onClick={discardAll} disabled={pendingCount === 0 || savingAll} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+                Descartar
+              </button>
+            </div>
+          ) : (
+            // En Herramientas solo mostramos navegación de semana
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">◀ Semana anterior</button>
+              <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Hoy</button>
+              <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Semana siguiente ▶</button>
+            </div>
+          )}
         </header>
       )}
 
-      {/* Barra de acciones: Exportar / Importar / Duplicar semana */}
-      <PlannerActionsBar onAfterChange={() => loadWeek(base)} />
-
+      {/* Pestañas: Mañana / Tarde / Herramientas */}
       <div className="flex items-center gap-2">
-        <button className={`px-3 py-1.5 rounded-xl border text-xs ${activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={() => setActiveTurn("morning")}>
+        <button
+          className={`px-3 py-1.5 rounded-xl border text-xs ${
+            activePane === "editor" && activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"
+          }`}
+          onClick={() => { setActivePane("editor"); setActiveTurn("morning"); }}
+        >
           Mañana
         </button>
-        <button className={`px-3 py-1.5 rounded-xl border text-xs ${activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={() => setActiveTurn("afternoon")}>
+        <button
+          className={`px-3 py-1.5 rounded-xl border text-xs ${
+            activePane === "editor" && activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"
+          }`}
+          onClick={() => { setActivePane("editor"); setActiveTurn("afternoon"); }}
+        >
           Tarde
+        </button>
+        <button
+          className={`px-3 py-1.5 rounded-xl border text-xs ${
+            activePane === "tools" ? "bg-black text-white" : "hover:bg-gray-50"
+          }`}
+          onClick={() => setActivePane("tools")}
+          title="Exportar / Importar / Duplicar semana"
+        >
+          Herramientas
         </button>
       </div>
 
-      {loading ? (
+      {/* Contenido según pestaña */}
+      {activePane === "tools" ? (
+        <div className="rounded-2xl border bg-white shadow-sm p-3">
+          <PlannerActionsBar onAfterChange={() => loadWeek(base)} />
+        </div>
+      ) : loading ? (
         <div className="text-gray-500">Cargando semana…</div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
