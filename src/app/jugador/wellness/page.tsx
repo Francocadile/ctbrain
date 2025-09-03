@@ -7,32 +7,49 @@ function todayYMD() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function Select({
+type Face = { value: 1|2|3|4|5; emoji: string; label: string; tone: string };
+
+const FACES: Face[] = [
+  { value: 1, emoji: "😞", label: "Muy mal",   tone: "bg-red-50  border-red-200  text-red-700" },
+  { value: 2, emoji: "🙁", label: "Mal",       tone: "bg-orange-50 border-orange-200 text-orange-700" },
+  { value: 3, emoji: "😐", label: "Normal",    tone: "bg-gray-50 border-gray-200 text-gray-700" },
+  { value: 4, emoji: "🙂", label: "Bien",      tone: "bg-lime-50 border-lime-200 text-lime-700" },
+  { value: 5, emoji: "😄", label: "Excelente", tone: "bg-emerald-50 border-emerald-200 text-emerald-700" },
+];
+
+function FaceScale({
   value,
   onChange,
 }: {
-  value: any;
-  onChange: (v: number) => void;
+  value: number | "";
+  onChange: (v: 1|2|3|4|5) => void;
 }) {
   return (
-    <select
-      className="w-full rounded-md border px-2 py-1.5"
-      value={String(value)}
-      onChange={(e) => onChange(Number(e.target.value))}
-    >
-      <option value="">Elegí…</option>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <option key={n} value={n}>
-          {n}
-        </option>
-      ))}
-    </select>
+    <div className="flex gap-2">
+      {FACES.map((f) => {
+        const active = value === f.value;
+        return (
+          <button
+            key={f.value}
+            type="button"
+            className={`flex-1 rounded-lg border px-2 py-2 text-sm text-center
+              ${active ? f.tone + " ring-2 ring-black/30" : "bg-white"}`}
+            onClick={() => onChange(f.value)}
+            title={`${f.value} — ${f.label}`}
+          >
+            <div className="text-xl">{f.emoji}</div>
+            <div className="mt-1 text-xs font-medium">{f.value} · {f.label}</div>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
 export default function WellnessJugador() {
   const [date, setDate] = useState(todayYMD());
   const [name, setName] = useState("");
+
   const [sleepQuality, setSleepQuality] = useState<number | "">("");
   const [sleepHours, setSleepHours] = useState<string>("");
   const [fatigue, setFatigue] = useState<number | "">("");
@@ -40,13 +57,14 @@ export default function WellnessJugador() {
   const [stress, setStress] = useState<number | "">("");
   const [mood, setMood] = useState<number | "">("");
   const [notes, setNotes] = useState("");
+
   const [loaded, setLoaded] = useState(false);
   const [sent, setSent] = useState(false);
 
-  // Cargar nombre desde la SESIÓN (login)
+  // Identidad
   useEffect(() => {
     (async () => {
-      const id = await getPlayerIdentity(); // name || email
+      const id = await getPlayerIdentity();
       setName(id);
     })();
   }, []);
@@ -69,14 +87,9 @@ export default function WellnessJugador() {
         setNotes(r.comment ?? r.notes ?? "");
         setSent(true);
       } else {
-        setSleepQuality("");
-        setSleepHours("");
-        setFatigue("");
-        setSoreness("");
-        setStress("");
-        setMood("");
-        setNotes("");
-        setSent(false);
+        setSleepQuality(""); setSleepHours("");
+        setFatigue(""); setSoreness(""); setStress(""); setMood("");
+        setNotes(""); setSent(false);
       }
       setLoaded(true);
     }
@@ -84,10 +97,7 @@ export default function WellnessJugador() {
   }, [date, name]);
 
   async function submit() {
-    if (!name.trim()) {
-      alert("Tu sesión no trae nombre/email. Cerrá sesión y volvé a entrar.");
-      return;
-    }
+    if (!name.trim()) { alert("Tu sesión no trae nombre/email. Cerrá sesión y volvé a entrar."); return; }
     const body = {
       date,
       playerKey: name.trim(),
@@ -105,68 +115,59 @@ export default function WellnessJugador() {
       body: JSON.stringify(body),
       cache: "no-store",
     });
-    if (!res.ok) {
-      alert((await res.text()) || "Error");
-      return;
-    }
+    if (!res.ok) { alert((await res.text()) || "Error"); return; }
     setSent(true);
     alert("¡Wellness enviado!");
   }
 
-  function signOut() {
-    location.href = "/jugador";
-  }
-
   const partial =
     Number(sleepQuality || 0) +
-      Number(fatigue || 0) +
-      Number(soreness || 0) +
-      Number(stress || 0) +
-      Number(mood || 0) || 0;
+    Number(fatigue || 0) +
+    Number(soreness || 0) +
+    Number(stress || 0) +
+    Number(mood || 0) || 0;
 
   const submitDisabled =
-    !name ||
-    sleepQuality === "" ||
-    fatigue === "" ||
-    soreness === "" ||
-    stress === "" ||
-    mood === "";
+    !name || sleepQuality === "" || fatigue === "" || soreness === "" || stress === "" || mood === "";
 
   return (
     <div className="space-y-4">
+      {/* Top bar */}
       <div className="flex items-center justify-between">
-        <button onClick={() => history.back()} className="text-sm">
-          &larr; Volver
-        </button>
-        <button onClick={signOut} className="text-sm underline">
-          Salir
-        </button>
+        <button onClick={() => history.back()} className="text-sm">&larr; Volver</button>
+        <a href="/api/auth/signout?callbackUrl=/jugador" className="text-sm underline">Salir</a>
       </div>
 
       <h1 className="text-xl font-bold">Wellness diario</h1>
-      <p className="text-sm text-gray-600">Escala 1–5. Completá una vez por día.</p>
+      <p className="text-sm text-gray-600">Elegí una carita (1–5) para cada ítem. 5 = mejor.</p>
 
+      {/* Fecha + identidad */}
+      <div className="grid md:grid-cols-2 gap-3">
+        <div>
+          <label className="text-[12px] text-gray-500">Fecha</label>
+          <input
+            type="date"
+            className="w-full rounded-md border px-2 py-1.5"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="text-[12px] text-gray-500">Tu nombre (login)</label>
+          <input className="w-full rounded-md border px-2 py-1.5" value={name} disabled />
+        </div>
+      </div>
+
+      {/* Tarjeta con caritas */}
       <div className="rounded-2xl border bg-white p-4 space-y-4">
-        <div className="grid md:grid-cols-2 gap-3">
+        <div>
+          <div className="text-[12px] text-gray-500 mb-1">Calidad de sueño</div>
+          <FaceScale value={sleepQuality} onChange={(v) => setSleepQuality(v)} />
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-3 items-end">
           <div>
-            <label className="text-[12px] text-gray-500">Fecha</label>
-            <input
-              type="date"
-              className="w-full rounded-md border px-2 py-1.5"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="text-[12px] text-gray-500">Tu nombre (login)</label>
-            <input className="w-full rounded-md border px-2 py-1.5" value={name} disabled />
-          </div>
-          <div>
-            <label className="text-[12px] text-gray-500">Calidad de sueño (1–5)</label>
-            <Select value={sleepQuality} onChange={setSleepQuality} />
-          </div>
-          <div>
-            <label className="text-[12px] text-gray-500">Horas de sueño</label>
+            <div className="text-[12px] text-gray-500 mb-1">Horas de sueño</div>
             <input
               className="w-full rounded-md border px-2 py-1.5"
               placeholder="Ej: 7.5"
@@ -174,37 +175,42 @@ export default function WellnessJugador() {
               onChange={(e) => setSleepHours(e.target.value)}
             />
           </div>
-          <div>
-            <label className="text-[12px] text-gray-500">Fatiga (1–5)</label>
-            <Select value={fatigue} onChange={setFatigue} />
-          </div>
-          <div>
-            <label className="text-[12px] text-gray-500">Dolor muscular (1–5)</label>
-            <Select value={soreness} onChange={setSoreness} />
-          </div>
-          <div>
-            <label className="text-[12px] text-gray-500">Estrés (1–5)</label>
-            <Select value={stress} onChange={setStress} />
-          </div>
-          <div>
-            <label className="text-[12px] text-gray-500">Ánimo (1–5)</label>
-            <Select value={mood} onChange={setMood} />
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-[12px] text-gray-500">Comentario (opcional)</label>
-            <textarea
-              className="w-full rounded-md border px-2 py-1.5"
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </div>
         </div>
 
+        <div>
+          <div className="text-[12px] text-gray-500 mb-1">Fatiga</div>
+          <FaceScale value={fatigue} onChange={(v) => setFatigue(v)} />
+        </div>
+
+        <div>
+          <div className="text-[12px] text-gray-500 mb-1">Dolor muscular</div>
+          <FaceScale value={soreness} onChange={(v) => setSoreness(v)} />
+        </div>
+
+        <div>
+          <div className="text-[12px] text-gray-500 mb-1">Estrés</div>
+          <FaceScale value={stress} onChange={(v) => setStress(v)} />
+        </div>
+
+        <div>
+          <div className="text-[12px] text-gray-500 mb-1">Ánimo</div>
+          <FaceScale value={mood} onChange={(v) => setMood(v)} />
+        </div>
+
+        <div>
+          <div className="text-[12px] text-gray-500 mb-1">Comentario (opcional)</div>
+          <textarea
+            className="w-full rounded-md border px-2 py-1.5"
+            rows={3}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </div>
+
+        {/* Totales + enviado */}
         <div className="text-sm text-gray-600">
           Puntaje parcial (sin horas): <b>{partial ? partial : "—"}</b>
         </div>
-
         {loaded && sent && (
           <div className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-1">
             Ya enviaste tu Wellness hoy. Podés editar y volver a <b>Guardar</b>.
@@ -215,9 +221,7 @@ export default function WellnessJugador() {
           onClick={submit}
           disabled={submitDisabled}
           className={`px-3 py-1.5 rounded-xl text-sm ${
-            submitDisabled
-              ? "bg-gray-200 text-gray-500"
-              : "bg-black text-white hover:opacity-90"
+            submitDisabled ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
           }`}
         >
           {sent ? "Guardar cambios" : "Enviar Wellness"}
