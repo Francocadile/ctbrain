@@ -4,6 +4,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import HelpTip from "@/components/HelpTip";
+import PlayerQuickView from "@/components/PlayerQuickView";
 
 import {
   type WellnessRaw,
@@ -21,6 +22,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
+/** ---------- Tipos locales ---------- */
 type DayRow = WellnessRaw & {
   _userName: string; // resuelto
   _sdw: number; // 1..5
@@ -144,7 +146,7 @@ function WellnessCT_Day() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [alerts, setAlerts] = useState<Alert[]>([]);
-  const [last7, setLast7] = useState<Record<string, number[]>>({}); // userName -> últimos 7 SDW
+  const [last7, setLast7] = useState<Record<string, number[]>>({}); // userName -> últimos 7 SDW (ayer..hace 7)
   const [srpeYesterday, setSrpeYesterday] = useState<Record<string, number>>({}); // userName -> AU
 
   // Cache 21d previos por jugador para baseline
@@ -156,6 +158,17 @@ function WellnessCT_Day() {
   const [dailyAvgSDW, setDailyAvgSDW] = useState<number[]>([]); // hoy..hace N-1
   const [dailyParticipationPct, setDailyParticipationPct] = useState<number[]>([]);
   const [sdwHistogram, setSdwHistogram] = useState<number[]>([0, 0, 0, 0]); // ≤2 | 2–3 | 3–4 | >4
+
+  // ----- Quick View (drawer/modal) -----
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickPlayer, setQuickPlayer] = useState<string | null>(null);
+  const [quickLoading, setQuickLoading] = useState(false);
+  const [quickSDW7, setQuickSDW7] = useState<number[]>([]); // hoy + ayer..hace 7 (8 barras)
+  const [quickRPE7, setQuickRPE7] = useState<{ date: string; au: number }[]>([]);
+
+  // cast laxo para no forzar la firma del componente del usuario
+  const PlayerQuickViewAny =
+    PlayerQuickView as unknown as React.ComponentType<any>;
 
   useEffect(() => {
     loadAll();
@@ -378,7 +391,7 @@ function WellnessCT_Day() {
     const lines = [header.join(",")];
 
     for (const r of filtered) {
-      const wk = r.date; // TODO: week exacta si querés
+      const wk = r.date; // TODO: ISO week exacta si querés
       const color = (r as any)._color as string;
 
       lines.push(
@@ -459,6 +472,40 @@ function WellnessCT_Day() {
       }
     })();
   }, [date, rangeDays, tab]);
+
+  // ----- QuickView helpers -----
+  async function openQuickViewFor(playerName: string) {
+    setQuickPlayer(playerName);
+    setQuickOpen(true);
+    setQuickLoading(true);
+    try {
+      // SDW 7d: tomamos hoy + (ayer..hace7)
+      const sdw7 = [
+        (rowsToday.find((r) => r._userName === playerName)?._sdw ?? 0) as number,
+        ...(last7[playerName] || []),
+      ];
+      setQuickSDW7(sdw7);
+
+      // RPE 7d: llamamos por día y filtramos jugador
+      const days = Array.from({ length: 7 }, (_, i) => toYMD(addDays(fromYMD(date), -i)));
+      const rpeData = await Promise.all(days.map((d) => fetchRPE(d)));
+
+      const rpeList: { date: string; au: number }[] = [];
+      for (let i = 0; i < days.length; i++) {
+        const day = days[i];
+        const arr = rpeData[i] || [];
+        for (const r of arr) {
+          if (r.userName === playerName) {
+            rpeList.push({ date: day, au: r.srpe || 0 });
+            break;
+          }
+        }
+      }
+      setQuickRPE7(rpeList);
+    } finally {
+      setQuickLoading(false);
+    }
+  }
 
   /** -------------------- UI -------------------- */
   return (
@@ -551,6 +598,14 @@ function WellnessCT_Day() {
                       <span className="font-medium">{a.userName}</span>
                       <span className="text-sm text-gray-700">— {a.reason}</span>
                     </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => openQuickViewFor(a.userName)}
+                        className="rounded-md border px-2 py-0.5 text-xs hover:bg-gray-50"
+                      >
+                        Ver
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -618,6 +673,7 @@ function WellnessCT_Day() {
                       <th className="text-left px-3 py-2">
                         Comentario <HelpTip text="Texto libre del jugador para contexto cualitativo." />
                       </th>
+                      <th className="text-right px-3 py-2">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -681,6 +737,16 @@ function WellnessCT_Day() {
                             </td>
                             <td className="px-3 py-2">
                               <span className="text-gray-600">{r.comment || "—"}</span>
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex justify-end">
+                                <button
+                                  onClick={() => openQuickViewFor(r._userName)}
+                                  className="rounded-md border px-2 py-1 text-xs hover:bg-gray-50"
+                                >
+                                  Ver
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -850,13 +916,13 @@ function WellnessCT_Day() {
         </>
       )}
 
-      {/* ----- Tab: Reportes (skeleton) ----- */}
+      {/* ----- Tab: Reportes (skeleton con QuickView) ----- */}
       {tab === "reportes" && (
         <section className="rounded-2xl border bg-white p-3">
           <div className="flex items-center justify-between">
             <div className="text-[12px] font-semibold uppercase">
               Reportes individuales
-              <HelpTip text="MVP: listado de jugadores del día. Próximamente, link al Perfil de Jugador unificado (lesiones, RPE, Wellness, etc.)." />
+              <HelpTip text="MVP: listado de jugadores del día. Próximamente, link al Perfil de Jugador unificado (lesiones, GPS, estadísticas, RPE, Wellness)." />
             </div>
             <div className="text-xs text-gray-500">{rowsToday.length} jugador(es)</div>
           </div>
@@ -879,23 +945,17 @@ function WellnessCT_Day() {
                     </div>
                     <div className="mt-2 flex gap-2">
                       <button
+                        onClick={() => openQuickViewFor(r._userName)}
+                        className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
+                      >
+                        Ver
+                      </button>
+                      <button
                         disabled
                         className="rounded-lg border px-2 py-1 text-xs text-gray-400 cursor-not-allowed"
                         title="Próximamente"
                       >
                         Abrir perfil
-                      </button>
-                      <button
-                        onClick={() => {
-                          alert(
-                            `Resumen rápido — ${r._userName}\nSDW hoy: ${(r as any)._sdw.toFixed(
-                              2
-                            )}\nColor: ${(r as any)._color.toUpperCase()}`
-                          );
-                        }}
-                        className="rounded-lg border px-2 py-1 text-xs hover:bg-gray-50"
-                      >
-                        Resumen rápido
                       </button>
                     </div>
                   </li>
@@ -910,6 +970,25 @@ function WellnessCT_Day() {
         <b>Semáforo por Z:</b> verde ≥ −0.5, amarillo [−1.0, −0.5), rojo &lt; −1.0. Overrides:
         Sueño &lt;4h ⇒ ≥ amarillo; Dolor ≤2 ⇒ rojo; Estrés ≤2 ⇒ ≥ amarillo.
       </div>
+
+      {/* Drawer / Modal de QuickView */}
+      {quickPlayer && (
+        <PlayerQuickViewAny
+          open={quickOpen}
+          onClose={() => setQuickOpen(false)}
+          loading={quickLoading}
+          playerName={quickPlayer}
+          date={date}
+          // wellness
+          sdw7={quickSDW7} // [hoy, ayer..hace7]
+          // rpe
+          rpeRecent={quickRPE7} // [{date, au}]
+          // libre: extras pensados para futuro
+          context={{
+            baseline: baselineMap[quickPlayer] || null,
+          }}
+        />
+      )}
     </div>
   );
 }
