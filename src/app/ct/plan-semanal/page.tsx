@@ -54,6 +54,55 @@ function buildDayFlagTitle(df: DayFlag): string {
   return "";
 }
 
+/* ========= MD± (intensidad de la jornada) ========= */
+type MdCode = "NONE" | "MD+1" | "MD+2" | "MD-4" | "MD-3" | "MD-2" | "MD-1";
+type MdPlan = { code: Exclude<MdCode, "NONE">; desc: string; color: string };
+
+const MD_TAG = "MDPLAN";
+const mdMarker = (turn: TurnKey) => `[${MD_TAG}:${turn}]`;
+const isMdPlan = (s: SessionDTO, turn: TurnKey) =>
+  typeof s.description === "string" && s.description.startsWith(mdMarker(turn));
+const buildMdTitle = (code: Exclude<MdCode, "NONE">) => code;
+function parseMdTitle(title?: string | null): MdCode {
+  const t = (title || "").trim();
+  if (!t) return "NONE";
+  const valid = ["MD+1", "MD+2", "MD-4", "MD-3", "MD-2", "MD-1"] as const;
+  return (valid as readonly string[]).includes(t) ? (t as MdCode) : "NONE";
+}
+
+const MD_OPTIONS: MdPlan[] = [
+  {
+    code: "MD+1",
+    desc: "Recup titulares / compensatorio suplentes. Intensidad muy baja.",
+    color: "bg-sky-100 text-sky-900 border-sky-200",
+  },
+  {
+    code: "MD+2",
+    desc: "Reintro carga general, fuerza, vol. medio. Intensidad media.",
+    color: "bg-yellow-100 text-yellow-900 border-yellow-200",
+  },
+  {
+    code: "MD-4",
+    desc: "Pico de carga: físico muy intenso y TT exigente. Intens. muy alta.",
+    color: "bg-red-100 text-red-900 border-red-200",
+  },
+  {
+    code: "MD-3",
+    desc: "Orientación táctica específica, transiciones. Intensidad alta.",
+    color: "bg-orange-100 text-orange-900 border-orange-200",
+  },
+  {
+    code: "MD-2",
+    desc: "Sesión estratégica, plan de partido y BP. Intensidad media-baja.",
+    color: "bg-green-100 text-green-900 border-green-200",
+  },
+  {
+    code: "MD-1",
+    desc: "Activación corta y ligera. Confianza y repaso final. Muy baja.",
+    color: "bg-gray-100 text-gray-800 border-gray-200",
+  },
+];
+
 function addDaysUTC(date: Date, days: number) {
   const x = new Date(date);
   x.setUTCDate(x.getUTCDate() + days);
@@ -231,6 +280,38 @@ function PlanSemanalInner() {
     }
   }
 
+  // ---- MD± helpers
+  function findMdSession(dayYmd: string, turn: TurnKey) {
+    const list = daysMap[dayYmd] || [];
+    return list.find((s) => isMdPlan(s, turn));
+  }
+  function getMd(dayYmd: string, turn: TurnKey): MdCode {
+    const s = findMdSession(dayYmd, turn);
+    return parseMdTitle(s?.title);
+  }
+  async function setMd(dayYmd: string, turn: TurnKey, code: MdCode) {
+    const existing = findMdSession(dayYmd, turn);
+    const iso = computeISOForSlot(dayYmd, turn);
+    const desc = `${mdMarker(turn)} | ${dayYmd}`;
+    try {
+      if (code === "NONE") {
+        if (existing) await deleteSession(existing.id);
+        await loadWeek(base);
+        return;
+      }
+      const title = buildMdTitle(code);
+      if (!existing) {
+        await createSession({ title, description: desc, date: iso, type: "GENERAL" });
+      } else {
+        await updateSession(existing.id, { title, description: desc, date: iso });
+      }
+      await loadWeek(base);
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message || "No se pudo actualizar MD±");
+    }
+  }
+
   // Staging & guardado
   const [pending, setPending] = useState<Record<string, string>>({});
   const [savingAll, setSavingAll] = useState(false);
@@ -326,7 +407,7 @@ function PlanSemanalInner() {
       );
     }
 
-    // LUGAR → TEXTO + SUGERENCIAS (datalist). Sin "?" en el editor.
+    // LUGAR
     if (row === "LUGAR") {
       const [local, setLocal] = useState(value || "");
       useEffect(() => setLocal(value || ""), [value, k]);
@@ -439,7 +520,7 @@ function PlanSemanalInner() {
     return null;
   }
 
-  // ---- Celdas de contenido (sin ? en editor)
+  // ---- Celdas de contenido
   function EditableCell({
     dayYmd,
     turn,
@@ -583,6 +664,71 @@ function PlanSemanalInner() {
     );
   }
 
+  /* ======= Fila nueva: MD (intensidad) ======= */
+  function MdStatusCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
+    const current = getMd(ymd, turn);
+    const [code, setCode] = useState<MdCode>(current);
+
+    useEffect(() => {
+      setCode(getMd(ymd, turn));
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [weekStart, ymd, turn]);
+
+    const selected = MD_OPTIONS.find((o) => o.code === code);
+
+    return (
+      <div className="p-1">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1">
+            <select
+              className="h-7 w-[120px] rounded-md border px-1.5 text-[11px]"
+              value={code}
+              onChange={(e) => {
+                const c = e.target.value as MdCode;
+                setCode(c);
+                setMd(ymd, turn, c);
+              }}
+            >
+              <option value="NONE">—</option>
+              {MD_OPTIONS.map((o) => (
+                <option key={o.code} value={o.code}>
+                  {o.code}
+                </option>
+              ))}
+            </select>
+
+            {selected ? (
+              <span
+                className={`text-[10px] rounded border px-2 py-0.5 ${selected.color}`}
+                title={selected.desc}
+              >
+                {selected.code}
+              </span>
+            ) : null}
+          </div>
+
+          {selected ? (
+            <div className="text-[10px] text-gray-500 leading-4">{selected.desc}</div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  function MdStatusRow({ turn }: { turn: TurnKey }) {
+    return (
+      <div
+        className="grid items-start border-b bg-gray-50/60"
+        style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
+      >
+        <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">MD (intensidad)</div>
+        {orderedDays.map((ymd) => (
+          <MdStatusCell key={`${ymd}-${turn}-md`} ymd={ymd} turn={turn} />
+        ))}
+      </div>
+    );
+  }
+
   function TurnEditor({ turn }: { turn: TurnKey }) {
     return (
       <>
@@ -602,6 +748,7 @@ function PlanSemanalInner() {
         </div>
 
         <DayStatusRow turn={turn} />
+        <MdStatusRow turn={turn} /> {/* ← NUEVA FILA DEBAJO DE TIPO */}
 
         <div className="border-t">
           <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
