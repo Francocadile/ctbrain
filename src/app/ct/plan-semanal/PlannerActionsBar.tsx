@@ -17,10 +17,6 @@ const DEFAULT_LABELS: RowLabels = {
   "FÍSICO": "FÍSICO",
   "TÉCNICO–TÁCTICO": "TÉCNICO–TÁCTICO",
   "COMPENSATORIO": "COMPENSATORIO",
-  "LUGAR": "LUGAR",
-  "HORA": "HORA",
-  "VIDEO": "VIDEO",
-  "NOMBRE SESIÓN": "NOMBRE SESIÓN",
 };
 
 type Props = { onAfterChange?: () => void };
@@ -28,19 +24,19 @@ type Props = { onAfterChange?: () => void };
 export default function PlannerActionsBar({ onAfterChange }: Props) {
   const [loading, setLoading] = useState(false);
 
-  // Nombres de filas
+  // lo que el usuario escribe (sin defaults)
   const [labels, setLabels] = useState<RowLabels>({});
-  const computed = useMemo<RowLabels>(() => ({ ...DEFAULT_LABELS, ...labels }), [labels]);
-
-  // Lugares (textarea)
   const [placesText, setPlacesText] = useState("");
   const [placesCount, setPlacesCount] = useState(0);
+
+  // para mostrar “Actual: …”
+  const [current, setCurrent] = useState<RowLabels>({});
 
   useEffect(() => {
     (async () => {
       try {
         const server = await fetchRowLabels();
-        setLabels(server);
+        setCurrent(server || {});
       } catch {}
       try {
         const list = await fetchPlaces();
@@ -53,13 +49,16 @@ export default function PlannerActionsBar({ onAfterChange }: Props) {
   async function handleSaveLabels() {
     setLoading(true);
     try {
-      await saveRowLabels({
-        "PRE ENTREN0": computed["PRE ENTREN0"],
-        "FÍSICO": computed["FÍSICO"],
-        "TÉCNICO–TÁCTICO": computed["TÉCNICO–TÁCTICO"],
-        "COMPENSATORIO": computed["COMPENSATORIO"],
-      });
+      // solo enviamos las claves que el usuario escribió (no vacíos)
+      const payload: RowLabels = {};
+      for (const k of Object.keys(DEFAULT_LABELS)) {
+        const v = (labels[k] || "").trim();
+        if (v) payload[k] = v;
+      }
+      await saveRowLabels(payload);
       window.dispatchEvent(new Event("planner-row-labels-updated"));
+      setCurrent({ ...current, ...payload });
+      setLabels({});
       onAfterChange?.();
       alert("Nombres guardados.");
     } catch (e: any) {
@@ -76,6 +75,7 @@ export default function PlannerActionsBar({ onAfterChange }: Props) {
     try {
       await resetRowLabels();
       setLabels({});
+      setCurrent({});
       window.dispatchEvent(new Event("planner-row-labels-updated"));
       onAfterChange?.();
       alert("Restaurado.");
@@ -124,53 +124,29 @@ export default function PlannerActionsBar({ onAfterChange }: Props) {
       <section className="rounded-xl border p-3">
         <div className="mb-2 flex items-center gap-2">
           <h3 className="text-sm font-semibold">Nombres de filas (tu preferencia)</h3>
-          <HelpTip text="Se guardan en tu usuario y se aplican en el Editor." />
+          <HelpTip text="Escribí solo si querés cambiar el nombre visible. Se guarda en tu usuario." />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] text-gray-600">Actual: PRE ENTREN0</label>
-            <input
-              className="h-9 rounded-md border px-2 text-sm"
-              value={computed["PRE ENTREN0"]}
-              onChange={(e) => setLabels((prev) => ({ ...prev, ["PRE ENTREN0"]: e.target.value }))}
-              placeholder="Ej: Activación"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] text-gray-600">Actual: FÍSICO</label>
-            <input
-              className="h-9 rounded-md border px-2 text-sm"
-              value={computed["FÍSICO"]}
-              onChange={(e) => setLabels((prev) => ({ ...prev, ["FÍSICO"]: e.target.value }))}
-              placeholder="Ej: Entrada en calor"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] text-gray-600">Actual: TÉCNICO–TÁCTICO</label>
-            <input
-              className="h-9 rounded-md border px-2 text-sm"
-              value={computed["TÉCNICO–TÁCTICO"]}
-              onChange={(e) =>
-                setLabels((prev) => ({ ...prev, ["TÉCNICO–TÁCTICO"]: e.target.value }))
-              }
-              placeholder="Ej: Principal"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] text-gray-600">Actual: COMPENSATORIO</label>
-            <input
-              className="h-9 rounded-md border px-2 text-sm"
-              value={computed["COMPENSATORIO"]}
-              onChange={(e) =>
-                setLabels((prev) => ({ ...prev, ["COMPENSATORIO"]: e.target.value }))
-              }
-              placeholder="Ej: Post entreno"
-            />
-          </div>
+          {Object.keys(DEFAULT_LABELS).map((key) => (
+            <div key={key} className="flex flex-col gap-1">
+              <label className="text-[11px] text-gray-600">Actual: {current[key] || key}</label>
+              <input
+                className="h-9 rounded-md border px-2 text-sm"
+                value={labels[key] || ""}
+                onChange={(e) => setLabels((prev) => ({ ...prev, [key]: e.target.value }))}
+                placeholder={
+                  key === "PRE ENTREN0"
+                    ? "Ej: Activación"
+                    : key === "FÍSICO"
+                    ? "Ej: Entrada en calor"
+                    : key === "TÉCNICO–TÁCTICO"
+                    ? "Ej: Principal"
+                    : "Ej: Post entreno"
+                }
+              />
+            </div>
+          ))}
         </div>
 
         <div className="mt-3 flex gap-2">
@@ -199,21 +175,19 @@ export default function PlannerActionsBar({ onAfterChange }: Props) {
           <span className="ml-auto text-[11px] text-gray-500">{placesCount} guardados</span>
         </div>
 
-        <div className="space-y-2">
-          <div className="text-[11px] text-gray-500">Ejemplos:</div>
-          <div className="rounded-md border p-2 text-[12px] text-gray-600 bg-gray-50">
-            Cancha 1<br />
-            Complejo Deportivo<br />
-            Gimnasio
-          </div>
+        <div className="text-[11px] text-gray-500 mb-1">Ejemplos:</div>
+        <div className="rounded-md border p-2 text-[12px] text-gray-600 bg-gray-50 mb-2">
+          Cancha 1<br />
+          Complejo Deportivo<br />
+          Gimnasio
+        </div>
 
         <textarea
-          className="mt-2 w-full min-h-[120px] rounded-md border p-2 text-sm"
+          className="w-full min-h-[120px] rounded-md border p-2 text-sm"
           placeholder="Escribí los lugares (uno por línea)…"
           value={placesText}
           onChange={(e) => setPlacesText(e.target.value)}
         />
-        </div>
 
         <div className="mt-3 flex gap-2">
           <button
