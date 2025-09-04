@@ -150,8 +150,7 @@ function PlanSemanalInner() {
     if (activePane === "tools") p.set("pane", "tools");
     else p.delete("pane");
     router.replace(`?${p.toString()}`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTurn, activePane]);
+  }, [activeTurn, activePane]); // eslint-disable-line
 
   // Estado semana
   const [base, setBase] = useState<Date>(() => getMonday(new Date()));
@@ -208,8 +207,7 @@ function PlanSemanalInner() {
   }
   useEffect(() => {
     loadWeek(base);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [base]);
+  }, [base]); // eslint-disable-line
 
   // Navegación semana
   function confirmDiscardIfNeeded(action: () => void) {
@@ -452,6 +450,7 @@ function PlanSemanalInner() {
     const ref = useRef<HTMLDivElement | null>(null);
     const k = cellKey(dayYmd, turn, row);
     const staged = pending[k];
+    theconst; // <- remove if accidentally left
     const initialText = staged !== undefined ? staged : existing?.title ?? "";
 
     const onBlur = () => {
@@ -503,29 +502,28 @@ function PlanSemanalInner() {
     );
   }
 
-  // ---- Tipo de día (fila)
+  // ---- Tipo de día (fila) — sólo selector
   function DayStatusCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const df = getDayFlag(ymd, turn);
     const [kind, setKind] = useState<DayFlagKind>(df.kind);
 
     useEffect(() => {
       setKind(getDayFlag(ymd, turn).kind);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [weekStart, ymd, turn]);
+    }, [weekStart, ymd, turn]); // eslint-disable-line
 
     const save = (next: DayFlag) => setDayFlag(ymd, turn, next);
 
     return (
       <div className="p-1">
         <select
-          className="h-7 w-[120px] rounded-md border px-1.5 text-[11px]"
+          className="h-7 w-[140px] rounded-md border px-1.5 text-[11px]"
           value={kind}
           onChange={(e) => {
             const k = e.target.value as DayFlagKind;
             setKind(k);
-            if (k === "NONE") save({ kind: "NONE" });
-            if (k === "LIBRE") save({ kind: "LIBRE" });
-            if (k === "PARTIDO") save({ kind: "PARTIDO" });
+            if (k === "NONE") return save({ kind: "NONE" });
+            if (k === "LIBRE") return save({ kind: "LIBRE" });
+            if (k === "PARTIDO") return save({ kind: "PARTIDO", rival: "", logoUrl: "" });
           }}
         >
           <option value="NONE">Normal</option>
@@ -535,47 +533,126 @@ function PlanSemanalInner() {
       </div>
     );
   }
+
   function DayStatusRow({ turn }: { turn: TurnKey }) {
     return (
-      <div className="grid items-center border-b bg-gray-50/60" style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}>
+      <div
+        className="grid items-center border-b bg-gray-50/60"
+        style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
+      >
         <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Tipo</div>
-        {orderedDays.map((ymd) => <DayStatusCell key={`${ymd}-${turn}-status`} ymd={ymd} turn={turn} />)}
+        {orderedDays.map((ymd) => (
+          <DayStatusCell key={`${ymd}-${turn}-status`} ymd={ymd} turn={turn} />
+        ))}
       </div>
     );
   }
 
-  // ---- Partido (extras) fila
-  function PartidoExtraCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
-    const f = getDayFlag(ymd, turn);
-    const [rival, setRival] = useState(f.rival || "");
-    const [logo, setLogo] = useState(f.logoUrl || "");
+  // ---- Partido (Rival + Logo) — UI igual a VIDEO
+  function PartidoCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
+    const df = getDayFlag(ymd, turn);
+    const isMatch = df.kind === "PARTIDO";
+
+    if (!isMatch) {
+      return <div className="h-6 text-[11px] text-gray-400 italic px-1 flex items-center">—</div>;
+    }
+
+    const [isEditing, setIsEditing] = useState(!(df.rival || df.logoUrl));
+    const [localRival, setLocalRival] = useState(df.rival || "");
+    const [localLogo, setLocalLogo] = useState(df.logoUrl || "");
 
     useEffect(() => {
       const fresh = getDayFlag(ymd, turn);
-      setRival(fresh.rival || "");
-      setLogo(fresh.logoUrl || "");
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [weekStart, ymd, turn]);
+      setIsEditing(!(fresh.rival || fresh.logoUrl));
+      setLocalRival(fresh.rival || "");
+      setLocalLogo(fresh.logoUrl || "");
+    }, [weekStart, ymd, turn]); // eslint-disable-line
 
-    if (f.kind !== "PARTIDO") return <div className="p-1 text-[11px] text-gray-400">—</div>;
+    const commit = async () => {
+      await setDayFlag(ymd, turn, {
+        kind: "PARTIDO",
+        rival: (localRival || "").trim(),
+        logoUrl: (localLogo || "").trim(),
+      });
+      setIsEditing(false);
+    };
 
-    const save = () => setDayFlag(ymd, turn, { kind: "PARTIDO", rival, logoUrl: logo });
-
-    return (
-      <div className="p-1">
-        <div className="flex items-center gap-1.5">
-          <input className="h-7 flex-1 rounded-md border px-2 text-[11px]" placeholder="Rival" value={rival} onChange={(e) => setRival(e.target.value)} onBlur={save} />
-          <input className="h-7 w-[160px] rounded-md border px-2 text-[11px]" placeholder="Logo URL" value={logo} onChange={(e) => setLogo(e.target.value)} onBlur={save} />
-          {logo ? ( /* eslint-disable-next-line @next/next/no-img-element */ <img src={logo} alt="Logo" className="h-7 w-7 object-contain rounded border" /> ) : null}
+    if (!isEditing) {
+      return (
+        <div className="flex items-center justify-between gap-1">
+          <div className="h-6 text-[11px] px-1 flex items-center truncate gap-1">
+            {localLogo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={localLogo} alt="Logo" className="w-[16px] h-[16px] object-contain rounded" />
+            ) : null}
+            <span className="truncate">{localRival || "—"}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+              onClick={() => setIsEditing(true)}
+              title="Editar"
+            >
+              ✏️
+            </button>
+            <button
+              type="button"
+              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+              onClick={async () => {
+                setLocalRival("");
+                setLocalLogo("");
+                await setDayFlag(ymd, turn, { kind: "PARTIDO", rival: "", logoUrl: "" });
+              }}
+              title="Borrar"
+            >
+              ❌
+            </button>
+          </div>
         </div>
+      );
+    }
+
+    // Modo edición — exactamente como VIDEO: dos inputs + ✓ (mismos tamaños)
+    return (
+      <div className="flex items-center gap-1.5">
+        <input
+          className="h-8 w-[45%] rounded-md border px-2 text-xs"
+          placeholder="Rival"
+          value={localRival}
+          onChange={(e) => setLocalRival(e.target.value)}
+        />
+        <input
+          type="url"
+          className="h-8 w-[55%] rounded-md border px-2 text-xs"
+          placeholder="Logo URL"
+          value={localLogo}
+          onChange={(e) => setLocalLogo(e.target.value)}
+        />
+        <button
+          type="button"
+          className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50"
+          onClick={commit}
+          title="Listo"
+        >
+          ✓
+        </button>
       </div>
     );
   }
-  function PartidoExtraRow({ turn }: { turn: TurnKey }) {
+
+  function PartidoRow({ turn }: { turn: TurnKey }) {
     return (
-      <div className="grid items-center border-b bg-amber-50/20" style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}>
+      <div
+        className="grid items-center border-b"
+        style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
+      >
         <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Partido</div>
-        {orderedDays.map((ymd) => <PartidoExtraCell key={`${ymd}-${turn}-partido`} ymd={ymd} turn={turn} />)}
+        {orderedDays.map((ymd) => (
+          <div key={`${ymd}-${turn}-partido`} className="p-1">
+            <PartidoCell ymd={ymd} turn={turn} />
+          </div>
+        ))}
       </div>
     );
   }
@@ -583,7 +660,7 @@ function PlanSemanalInner() {
   // ---- Intensidad (MICRO) fila
   function MicroCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const [val, setVal] = useState<MicroKey>(getMicroValue(ymd, turn));
-    useEffect(() => { setVal(getMicroValue(ymd, turn)); /* eslint-disable-next-line */ }, [weekStart, ymd, turn]);
+    useEffect(() => { setVal(getMicroValue(ymd, turn)); }, [weekStart, ymd, turn]); // eslint-disable-line
     const cls = MICRO_CHOICES.find((c) => c.value === val)?.colorClass || "";
     return (
       <div className={`p-1 ${cls}`}>
@@ -607,7 +684,10 @@ function PlanSemanalInner() {
   }
   function MicroRow({ turn }: { turn: TurnKey }) {
     return (
-      <div className="grid items-center border-b" style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}>
+      <div
+        className="grid items-center border-b"
+        style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
+      >
         <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Intensidad</div>
         {orderedDays.map((ymd) => <MicroCell key={`${ymd}-${turn}-micro`} ymd={ymd} turn={turn} />)}
       </div>
@@ -626,7 +706,10 @@ function PlanSemanalInner() {
     return (
       <>
         {/* Encabezado de días */}
-        <div className="grid text-xs" style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}>
+        <div
+          className="grid text-xs"
+          style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
+        >
           <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600"></div>
           {orderedDays.map((ymd) => (
             <div key={`${turn}-${ymd}`} className="bg-gray-50 border-b px-2 py-1.5">
@@ -640,13 +723,19 @@ function PlanSemanalInner() {
         <SectionLabel>MICROCICLO</SectionLabel>
         <DayStatusRow turn={turn} />
         <MicroRow turn={turn} />
-        <PartidoExtraRow turn={turn} />
+        <PartidoRow turn={turn} />
 
         {/* DETALLES */}
         <SectionLabel>DETALLES</SectionLabel>
         {META_ROWS.map((rowName) => (
-          <div key={`${turn}-meta-${rowName}`} className="grid items-center" style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}>
-            <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">{rowName}</div>
+          <div
+            key={`${turn}-meta-${rowName}`}
+            className="grid items-center"
+            style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
+          >
+            <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">
+              {rowName}
+            </div>
             {orderedDays.map((ymd) => (
               <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
                 <MetaInput dayYmd={ymd} turn={turn} row={rowName} />
@@ -664,7 +753,11 @@ function PlanSemanalInner() {
             {turn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
           </div>
           {CONTENT_ROWS.map((rowName) => (
-            <div key={`${turn}-${rowName}`} className="grid items-stretch" style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}>
+            <div
+              key={`${turn}-${rowName}`}
+              className="grid items-stretch"
+              style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
+            >
               <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600 whitespace-pre-line">
                 {label(rowName)}
               </div>
