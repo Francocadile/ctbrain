@@ -12,6 +12,7 @@ import {
   type SessionDTO,
 } from "@/lib/api/sessions";
 import PlannerActionsBar from "./PlannerActionsBar";
+import HelpTip from "@/components/HelpTip";
 
 export const dynamic = "force-dynamic";
 
@@ -54,8 +55,8 @@ function buildDayFlagTitle(df: DayFlag): string {
   return "";
 }
 
-/* ========= MD± (intensidad de la jornada) ========= */
-type MdCode = "NONE" | "MD+1" | "MD+2" | "MD-4" | "MD-3" | "MD-2" | "MD-1";
+/* ========= MD± (intensidad/jornada) ========= */
+type MdCode = "NONE" | "MD" | "DESCANSO" | "MD+1" | "MD+2" | "MD-4" | "MD-3" | "MD-2" | "MD-1";
 type MdPlan = { code: Exclude<MdCode, "NONE">; desc: string; color: string };
 
 const MD_TAG = "MDPLAN";
@@ -66,39 +67,49 @@ const buildMdTitle = (code: Exclude<MdCode, "NONE">) => code;
 function parseMdTitle(title?: string | null): MdCode {
   const t = (title || "").trim();
   if (!t) return "NONE";
-  const valid = ["MD+1", "MD+2", "MD-4", "MD-3", "MD-2", "MD-1"] as const;
-  return (valid as readonly string[]).includes(t) ? (t as MdCode) : "NONE";
+  const valid = ["MD", "DESCANSO", "MD+1", "MD+2", "MD-4", "MD-3", "MD-2", "MD-1"] as const;
+  return (valid as readonly string[]).includes(t as any) ? (t as MdCode) : "NONE";
 }
 
 const MD_OPTIONS: MdPlan[] = [
   {
     code: "MD+1",
-    desc: "Recup titulares / compensatorio suplentes. Intensidad muy baja.",
+    desc: "Día post-partido: recup titulares / compensatorio suplentes. Intensidad muy baja.",
     color: "bg-sky-100 text-sky-900 border-sky-200",
   },
   {
     code: "MD+2",
-    desc: "Reintro carga general, fuerza, vol. medio. Intensidad media.",
+    desc: "Reintro carga general, fuerza y volumen medio. Intensidad media.",
     color: "bg-yellow-100 text-yellow-900 border-yellow-200",
   },
   {
     code: "MD-4",
-    desc: "Pico de carga: físico muy intenso y TT exigente. Intens. muy alta.",
+    desc: "Pico de carga: físico muy intenso y técnico–táctico exigente. Intensidad muy alta.",
     color: "bg-red-100 text-red-900 border-red-200",
   },
   {
     code: "MD-3",
-    desc: "Orientación táctica específica, transiciones. Intensidad alta.",
+    desc: "Orientación táctica específica y transiciones. Intensidad alta.",
     color: "bg-orange-100 text-orange-900 border-orange-200",
   },
   {
     code: "MD-2",
-    desc: "Sesión estratégica, plan de partido y BP. Intensidad media-baja.",
+    desc: "Sesión estratégica, plan de partido y balón parado. Intensidad media-baja.",
     color: "bg-green-100 text-green-900 border-green-200",
   },
   {
     code: "MD-1",
-    desc: "Activación corta y ligera. Confianza y repaso final. Muy baja.",
+    desc: "Activación previa, corta y ligera. Confianza y repaso final. Intensidad muy baja.",
+    color: "bg-gray-100 text-gray-800 border-gray-200",
+  },
+  {
+    code: "MD",
+    desc: "Match day – día de partido. Intensidad competitiva.",
+    color: "bg-amber-100 text-amber-900 border-amber-200",
+  },
+  {
+    code: "DESCANSO",
+    desc: "Día libre / descanso. Sin carga.",
     color: "bg-gray-100 text-gray-800 border-gray-200",
   },
 ];
@@ -154,7 +165,7 @@ function PlanSemanalInner() {
 
   // Pestañas
   const initialTurn = (qs.get("turn") === "afternoon" ? "afternoon" : "morning") as TurnKey;
-  const initialPane: PaneKey = qs.get("pane") === "tools" ? "tools" : "editor";
+  the const initialPane: PaneKey = qs.get("pane") === "tools" ? "tools" : "editor";
   const [activeTurn, setActiveTurn] = useState<TurnKey>(initialTurn);
   const [activePane, setActivePane] = useState<PaneKey>(initialPane);
 
@@ -164,8 +175,7 @@ function PlanSemanalInner() {
     if (activePane === "tools") p.set("pane", "tools");
     else p.delete("pane");
     router.replace(`?${p.toString()}`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTurn, activePane]);
+  }, [activeTurn, activePane]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Estado semana
   const [base, setBase] = useState<Date>(() => getMonday(new Date()));
@@ -174,7 +184,7 @@ function PlanSemanalInner() {
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
-  // Preferencias de usuario (servidor): rowLabels + places
+  // Preferencias (labels + lugares)
   const [rowLabels, setRowLabels] = useState<Record<string, string>>({});
   const [places, setPlaces] = useState<string[]>([]);
 
@@ -222,8 +232,7 @@ function PlanSemanalInner() {
   }
   useEffect(() => {
     loadWeek(base);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [base]);
+  }, [base]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Navegación semana
   function confirmDiscardIfNeeded(action: () => void) {
@@ -273,6 +282,11 @@ function PlanSemanalInner() {
       } else {
         await updateSession(existing.id, { title, description: desc, date: iso });
       }
+
+      // ajuste de MD según tipo
+      if (df.kind === "PARTIDO") await setMd(dayYmd, turn, "MD");
+      if (df.kind === "LIBRE") await setMd(dayYmd, turn, "DESCANSO");
+
       await loadWeek(base);
     } catch (e: any) {
       console.error(e);
@@ -299,7 +313,7 @@ function PlanSemanalInner() {
         await loadWeek(base);
         return;
       }
-      const title = buildMdTitle(code);
+      const title = buildMdTitle(code as Exclude<MdCode, "NONE">);
       if (!existing) {
         await createSession({ title, description: desc, date: iso, type: "GENERAL" });
       } else {
@@ -446,8 +460,7 @@ function PlanSemanalInner() {
       useEffect(() => {
         setLocalLabel(parsed.label);
         setLocalUrl(parsed.url);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, [k, value]);
+      }, [k, value]); // eslint-disable-line
 
       if (!isEditing) {
         return (
@@ -603,8 +616,7 @@ function PlanSemanalInner() {
       setKind(fresh.kind);
       setRival(fresh.rival || "");
       setLogo(fresh.logoUrl || "");
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [weekStart, ymd, turn]);
+    }, [weekStart, ymd, turn]); // eslint-disable-line
 
     const save = (next: DayFlag) => setDayFlag(ymd, turn, next);
 
@@ -614,12 +626,13 @@ function PlanSemanalInner() {
           <select
             className="h-7 w-[110px] rounded-md border px-1.5 text-[11px]"
             value={kind}
-            onChange={(e) => {
+            onChange={async (e) => {
               const k = e.target.value as DayFlagKind;
               setKind(k);
-              if (k === "NONE") save({ kind: "NONE" });
-              if (k === "LIBRE") save({ kind: "LIBRE" });
-              if (k === "PARTIDO") save({ kind: "PARTIDO", rival, logoUrl: logo });
+              if (k === "NONE") await save({ kind: "NONE" });
+              if (k === "LIBRE") await save({ kind: "LIBRE" });
+              if (k === "PARTIDO") await save({ kind: "PARTIDO", rival, logoUrl: logo });
+              // setMd automático según tipo (también se hace dentro de save)
             }}
           >
             <option value="NONE">Normal</option>
@@ -664,51 +677,44 @@ function PlanSemanalInner() {
     );
   }
 
-  /* ======= Fila nueva: MD (intensidad) ======= */
+  /* ======= Fila: MD (intensidad) ======= */
   function MdStatusCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const current = getMd(ymd, turn);
     const [code, setCode] = useState<MdCode>(current);
 
     useEffect(() => {
       setCode(getMd(ymd, turn));
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [weekStart, ymd, turn]);
+    }, [weekStart, ymd, turn]); // eslint-disable-line
 
     const selected = MD_OPTIONS.find((o) => o.code === code);
 
     return (
       <div className="p-1">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-1">
-            <select
-              className="h-7 w-[120px] rounded-md border px-1.5 text-[11px]"
-              value={code}
-              onChange={(e) => {
-                const c = e.target.value as MdCode;
-                setCode(c);
-                setMd(ymd, turn, c);
-              }}
-            >
-              <option value="NONE">—</option>
-              {MD_OPTIONS.map((o) => (
-                <option key={o.code} value={o.code}>
-                  {o.code}
-                </option>
-              ))}
-            </select>
-
-            {selected ? (
-              <span
-                className={`text-[10px] rounded border px-2 py-0.5 ${selected.color}`}
-                title={selected.desc}
-              >
-                {selected.code}
-              </span>
-            ) : null}
-          </div>
+        <div className="flex items-center gap-1.5">
+          <select
+            className="h-7 w-[120px] rounded-md border px-1.5 text-[11px]"
+            value={code}
+            onChange={(e) => {
+              const c = e.target.value as MdCode;
+              setCode(c);
+              setMd(ymd, turn, c);
+            }}
+          >
+            <option value="NONE">—</option>
+            {MD_OPTIONS.map((o) => (
+              <option key={o.code} value={o.code}>
+                {o.code}
+              </option>
+            ))}
+          </select>
 
           {selected ? (
-            <div className="text-[10px] text-gray-500 leading-4">{selected.desc}</div>
+            <>
+              <span className={`text-[10px] rounded border px-2 py-0.5 ${selected.color}`}>
+                {selected.code}
+              </span>
+              <HelpTip text={selected.desc} />
+            </>
           ) : null}
         </div>
       </div>
@@ -716,12 +722,16 @@ function PlanSemanalInner() {
   }
 
   function MdStatusRow({ turn }: { turn: TurnKey }) {
+    const help =
+      "MD+1: recuperación / compensatorio (muy baja) · MD+2: fuerza y volumen medio (media) · MD-4: pico de carga (muy alta) · MD-3: táctica específica (alta) · MD-2: plan de partido/BP (media-baja) · MD-1: activación corta (muy baja) · MD: día de partido · DESCANSO: libre/sin carga.";
     return (
       <div
-        className="grid items-start border-b bg-gray-50/60"
+        className="grid items-center border-b bg-gray-50/60"
         style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
       >
-        <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">MD (intensidad)</div>
+        <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600 flex items-center gap-1">
+          MD (intensidad) <HelpTip text={help} />
+        </div>
         {orderedDays.map((ymd) => (
           <MdStatusCell key={`${ymd}-${turn}-md`} ymd={ymd} turn={turn} />
         ))}
@@ -748,7 +758,7 @@ function PlanSemanalInner() {
         </div>
 
         <DayStatusRow turn={turn} />
-        <MdStatusRow turn={turn} /> {/* ← NUEVA FILA DEBAJO DE TIPO */}
+        <MdStatusRow turn={turn} /> {/* ← debajo de Tipo */}
 
         <div className="border-t">
           <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
