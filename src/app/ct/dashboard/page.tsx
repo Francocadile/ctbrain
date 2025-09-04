@@ -36,6 +36,33 @@ function parseDayFlagTitle(title?: string | null): DayFlag {
 }
 
 /* =========================================================
+   MICROCICLO (Intensidad)
+========================================================= */
+type MicroKey = "" | "MD+1" | "MD+2" | "MD-4" | "MD-3" | "MD-2" | "MD-1" | "MD" | "DESCANSO";
+const MICRO_TAG = "MICRO";
+const microMarker = (turn: TurnKey) => `[${MICRO_TAG}:${turn}]`;
+const isMicrocycle = (s: SessionDTO, turn: TurnKey) =>
+  typeof s.description === "string" && s.description.startsWith(microMarker(turn));
+function parseMicroTitle(title?: string | null): MicroKey {
+  const t = (title || "").trim();
+  const allowed = new Set<MicroKey>(["", "MD+1", "MD+2", "MD-4", "MD-3", "MD-2", "MD-1", "MD", "DESCANSO"]);
+  return (allowed.has(t as MicroKey) ? (t as MicroKey) : "") as MicroKey;
+}
+function microColorClass(v: MicroKey): string {
+  switch (v) {
+    case "MD+1": return "bg-blue-50";
+    case "MD+2": return "bg-yellow-50";
+    case "MD-4": return "bg-red-50";
+    case "MD-3": return "bg-orange-50";
+    case "MD-2": return "bg-green-50";
+    case "MD-1": return "bg-gray-50";
+    case "MD": return "bg-amber-50";
+    case "DESCANSO": return "bg-gray-100";
+    default: return "";
+  }
+}
+
+/* =========================================================
    Utils fecha / texto
 ========================================================= */
 function addDaysUTC(date: Date, days: number) {
@@ -117,14 +144,45 @@ function DashboardSemanaInner() {
     return Array.from({ length: 7 }, (_, i) => toYYYYMMDDUTC(addDaysUTC(start, i)));
   }, [weekStart]);
 
+  function listFor(ymd: string) {
+    return daysMap[ymd] || [];
+  }
   function findCell(ymd: string, turn: TurnKey, row: string) {
-    const list = daysMap[ymd] || [];
-    return list.find((s) => isCellOf(s, turn, row));
+    return listFor(ymd).find((s) => isCellOf(s, turn, row));
   }
   function getDayFlag(ymd: string, turn: TurnKey): DayFlag {
-    const list = daysMap[ymd] || [];
-    const f = list.find((s) => isDayFlag(s, turn));
+    const f = listFor(ymd).find((s) => isDayFlag(s, turn));
     return parseDayFlagTitle(f?.title);
+  }
+  function getMicro(ymd: string, turn: TurnKey): MicroKey {
+    const m = listFor(ymd).find((s) => isMicrocycle(s, turn));
+    return parseMicroTitle(m?.title);
+  }
+
+  // ===== helpers visuales: Tipo & Intensidad (compacto) =====
+  function TipoBadge({ ymd }: { ymd: string }) {
+    const flag = getDayFlag(ymd, activeTurn);
+    if (flag.kind === "LIBRE") {
+      return <span className="text-[10px] rounded border bg-gray-100 px-1.5 py-0.5">Descanso</span>;
+    }
+    if (flag.kind === "PARTIDO") {
+      return (
+        <span className="text-[10px] rounded border bg-amber-100 px-1.5 py-0.5">
+          Partido {flag.rival ? `vs ${flag.rival}` : "(MD)"}
+        </span>
+      );
+    }
+    return <span className="text-[10px] rounded border bg-gray-50 px-1.5 py-0.5">Normal</span>;
+  }
+
+  function ReadonlyMicroCell({ ymd }: { ymd: string }) {
+    const v = getMicro(ymd, activeTurn);
+    const cls = microColorClass(v);
+    return (
+      <div className={`h-6 text-[11px] px-1 flex items-center rounded ${cls}`}>
+        {v || "—"}
+      </div>
+    );
   }
 
   // ===== META (solo lectura) =====
@@ -338,6 +396,36 @@ function DashboardSemanaInner() {
       ) : (
         <div className="rounded-2xl border bg-white shadow-sm">
           <div className="p-3">
+            {/* MICROCICLO compacto */}
+            <div className="mb-2">
+              <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-0.5 border rounded-md uppercase tracking-wide text-[11px] inline-block">
+                MICROCICLO
+              </div>
+              <div
+                className="mt-2 grid gap-[6px]"
+                style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
+              >
+                {/* Tipo */}
+                <div className="bg-gray-50/60 border rounded-md px-2 py-1 text-[10px] font-medium text-gray-600">
+                  Tipo
+                </div>
+                {orderedDays.map((ymd) => (
+                  <div key={`tipo-${ymd}`} className="rounded-md border px-1 py-0.5 flex items-center">
+                    <TipoBadge ymd={ymd} />
+                  </div>
+                ))}
+                {/* Intensidad */}
+                <div className="bg-gray-50/60 border rounded-md px-2 py-1 text-[10px] font-medium text-gray-600">
+                  Intensidad
+                </div>
+                {orderedDays.map((ymd) => (
+                  <div key={`micro-${ymd}`} className="rounded-md border px-1 py-0.5">
+                    <ReadonlyMicroCell ymd={ymd} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* META compacta */}
             <div className="mb-2">
               <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-0.5 border rounded-md uppercase tracking-wide text-[11px] inline-block">
