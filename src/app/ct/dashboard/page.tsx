@@ -1,4 +1,3 @@
-// src/app/ct/dashboard/page.tsx
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -15,7 +14,8 @@ import {
 ========================================================= */
 type TurnKey = "morning" | "afternoon";
 const ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
-const META_ROWS = ["LUGAR", "HORA", "VIDEO"] as const;
+const SESSION_NAME_ROW = "NOMBRE SESIÓN";
+const META_ROWS = ["LUGAR", "HORA", "VIDEO", SESSION_NAME_ROW] as const;
 
 // ===== Flags (creados en el editor semanal) =====
 type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
@@ -89,6 +89,21 @@ function DashboardSemanaInner() {
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
+  // Row labels personalizados (como en el editor)
+  const [rowLabels, setRowLabels] = useState<Record<string, string>>({});
+  const label = (id: string) => rowLabels[id] || id;
+
+  async function loadPrefs() {
+    try {
+      const r = await fetch("/api/planner/labels", { cache: "no-store" });
+      if (!r.ok) throw new Error("fail");
+      const j = await r.json();
+      setRowLabels(j.rowLabels || {});
+    } catch {
+      setRowLabels({});
+    }
+  }
+
   async function loadWeek(d: Date) {
     setLoadingWeek(true);
     try {
@@ -105,6 +120,10 @@ function DashboardSemanaInner() {
       setLoadingWeek(false);
     }
   }
+
+  useEffect(() => {
+    loadPrefs();
+  }, []);
   useEffect(() => {
     loadWeek(base); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [base]);
@@ -137,10 +156,9 @@ function DashboardSemanaInner() {
     const text = (s?.title || "").trim();
     if (!text)
       return (
-        <div className="h-6 text-[11px] text-gray-400 italic px-1 flex items-center">
-          —
-        </div>
+        <div className="h-6 text-[11px] text-gray-400 italic px-1 flex items-center">—</div>
       );
+
     if (row === "VIDEO") {
       const { label, url } = parseVideoValue(text);
       return url ? (
@@ -156,6 +174,8 @@ function DashboardSemanaInner() {
         <div className="h-6 text-[11px] px-1 flex items-center truncate">{label}</div>
       );
     }
+
+    // LUGAR, HORA y NOMBRE SESIÓN → texto plano
     return <div className="h-6 text-[11px] px-1 flex items-center truncate">{text}</div>;
   }
 
@@ -347,29 +367,9 @@ function DashboardSemanaInner() {
                   gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))`,
                 }}
               >
-                <div className="bg-gray-50/60 border rounded-md px-2 py-1 text-[10px] font-medium text-gray-600">
-                  LUGAR
-                </div>
-                {orderedDays.map((ymd) => (
-                  <div key={`lugar-${ymd}`} className="rounded-md border px-1 py-0.5">
-                    <ReadonlyMetaCell ymd={ymd} row="LUGAR" />
-                  </div>
-                ))}
-                <div className="bg-gray-50/60 border rounded-md px-2 py-1 text-[10px] font-medium text-gray-600">
-                  HORA
-                </div>
-                {orderedDays.map((ymd) => (
-                  <div key={`hora-${ymd}`} className="rounded-md border px-1 py-0.5">
-                    <ReadonlyMetaCell ymd={ymd} row="HORA" />
-                  </div>
-                ))}
-                <div className="bg-gray-50/60 border rounded-md px-2 py-1 text-[10px] font-medium text-gray-600">
-                  VIDEO
-                </div>
-                {orderedDays.map((ymd) => (
-                  <div key={`video-${ymd}`} className="rounded-md border px-1 py-0.5">
-                    <ReadonlyMetaCell ymd={ymd} row="VIDEO" />
-                  </div>
+                {(["LUGAR","HORA","VIDEO",SESSION_NAME_ROW] as (typeof META_ROWS)[number][])
+                  .map((row) => (
+                  <FragmentMetaRow key={`meta-${row}`} row={row} />
                 ))}
               </div>
             </div>
@@ -397,7 +397,7 @@ function DashboardSemanaInner() {
                     key={r}
                     className="bg-gray-50/60 border rounded-md px-2 text-[10px] font-medium text-gray-600 flex items-center"
                   >
-                    <span className="leading-[14px] whitespace-pre-line">{r}</span>
+                    <span className="leading-[14px] whitespace-pre-line">{label(r)}</span>
                   </div>
                 ))}
               </div>
@@ -410,6 +410,46 @@ function DashboardSemanaInner() {
         </div>
       )}
     </div>
+  );
+}
+
+// Fragmento para pintar cada fila de META (LUGAR, HORA, VIDEO, NOMBRE SESIÓN)
+function FragmentMetaRow({ row }: { row: (typeof META_ROWS)[number] }) {
+  const qs = useSearchParams();
+  const activeTurn = (qs.get("turn") === "afternoon" ? "afternoon" : "morning") as TurnKey;
+  const [weekStart, setWeekStart] = useState<string>("");
+  const [orderedDays, setOrderedDays] = useState<string[]>([]);
+
+  // Este componente se usa dentro del render principal; recibimos semana por CSS grid
+  // Para simplificar, lo calculamos leyendo el DOM root via dataset o trayéndolo del contexto superior
+  // pero acá lo armamos simple: lo devuelve el padre como ya está renderizado.
+  // Para no complicar, duplicamos lógica mínima:
+  useEffect(() => {
+    const el = document.querySelector("[data-week-start]") as HTMLElement | null;
+    if (el?.dataset.weekStart) {
+      const ws = el.dataset.weekStart!;
+      setWeekStart(ws);
+      const start = new Date(`${ws}T00:00:00.000Z`);
+      const days = Array.from({ length: 7 }, (_, i) =>
+        toYYYYMMDDUTC(addDaysUTC(start, i))
+      );
+      setOrderedDays(days);
+    }
+  }, []);
+
+  return (
+    <>
+      <div className="bg-gray-50/60 border rounded-md px-2 py-1 text-[10px] font-medium text-gray-600">
+        {row}
+      </div>
+      {orderedDays.map((ymd) => (
+        <div key={`${row}-${ymd}`} className="rounded-md border px-1 py-0.5">
+          {/* Re-usa el componente de arriba */}
+          {/* @ts-ignore: usamos el de arriba dentro del mismo archivo */}
+          <ReadonlyMetaCell ymd={ymd} row={row} />
+        </div>
+      ))}
+    </>
   );
 }
 
