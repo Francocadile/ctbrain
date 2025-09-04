@@ -251,21 +251,22 @@ function DashboardSemanaInner() {
               {humanDayUTC(ymd)}
             </div>
           </div>
-          <div className="mt-1 flex items-center justify-between gap-2">
-            <MicroBadge ymd={ymd} />
-            {flag.kind === "LIBRE" ? (
-              <span className="text-[9px] rounded border bg-gray-100 px-1.5 py-0.5 whitespace-nowrap">
-                {librePill}
-              </span>
-            ) : (
-              <a
-                href={headerHref}
-                className="text-[9px] rounded border px-1.5 py-0.5 hover:bg-gray-100 whitespace-nowrap"
-              >
-                sesión
-              </a>
-            )}
-          </div>
+          
+          <div
+  className={`mt-1 flex items-center ${
+    flag.kind === "LIBRE" ? "justify-start" : "justify-between"
+  } gap-2`}
+>
+  <MicroBadge ymd={ymd} />
+  {flag.kind === "LIBRE" ? null : (
+    <a
+      href={headerHref}
+      className="text-[9px] rounded border px-1.5 py-0.5 hover:bg-gray-100 whitespace-nowrap"
+    >
+      sesión
+    </a>
+  )}
+</div>
         </div>
 
         <div className="p-2">
