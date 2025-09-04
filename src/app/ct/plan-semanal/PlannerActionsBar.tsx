@@ -1,18 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { toYYYYMMDDUTC, getMonday } from "@/lib/api/sessions";
 import {
   fetchRowLabels,
   saveRowLabels,
   resetRowLabels,
+  fetchPlaces,
+  savePlacesFromTextarea,
+  clearPlaces,
   type RowLabels,
 } from "@/lib/planner-prefs";
 import HelpTip from "@/components/HelpTip";
 
-type Props = { onAfterChange?: () => void };
-
-// Nombres por defecto
 const DEFAULT_LABELS: RowLabels = {
   "PRE ENTREN0": "PRE ENTREN0",
   "FÍSICO": "FÍSICO",
@@ -24,53 +23,52 @@ const DEFAULT_LABELS: RowLabels = {
   "NOMBRE SESIÓN": "NOMBRE SESIÓN",
 };
 
+type Props = { onAfterChange?: () => void };
+
 export default function PlannerActionsBar({ onAfterChange }: Props) {
-  const [weekRef] = useState<string>(() => toYYYYMMDDUTC(getMonday(new Date())));
   const [loading, setLoading] = useState(false);
 
-  // Etiquetas
-  const [labels, setLabels] = useState<RowLabels>(DEFAULT_LABELS);
+  // Nombres de filas
+  const [labels, setLabels] = useState<RowLabels>({});
   const computed = useMemo<RowLabels>(() => ({ ...DEFAULT_LABELS, ...labels }), [labels]);
 
-  // Lugares
-  const [placesText, setPlacesText] = useState<string>("");
-  const [placesCount, setPlacesCount] = useState<number>(0);
+  // Lugares (textarea)
+  const [placesText, setPlacesText] = useState("");
+  const [placesCount, setPlacesCount] = useState(0);
 
-  // Carga inicial desde API
   useEffect(() => {
     (async () => {
       try {
-        const server = await fetchRowLabels(); // mantiene compatibilidad
-        setLabels((prev) => ({ ...prev, ...server }));
+        const server = await fetchRowLabels();
+        setLabels(server);
       } catch {}
       try {
-        const r = await fetch("/api/planner/labels", { cache: "no-store" });
-        if (r.ok) {
-          const j = await r.json();
-          const arr: string[] = Array.isArray(j.places) ? j.places : [];
-          setPlacesText(arr.join("\n"));
-          setPlacesCount(arr.length);
-        }
+        const list = await fetchPlaces();
+        setPlacesText((list || []).join("\n"));
+        setPlacesCount(list.length);
       } catch {}
     })();
   }, []);
 
-  // Guardar etiquetas
   async function handleSaveLabels() {
     setLoading(true);
     try {
-      await saveRowLabels(labels);
+      await saveRowLabels({
+        "PRE ENTREN0": computed["PRE ENTREN0"],
+        "FÍSICO": computed["FÍSICO"],
+        "TÉCNICO–TÁCTICO": computed["TÉCNICO–TÁCTICO"],
+        "COMPENSATORIO": computed["COMPENSATORIO"],
+      });
       window.dispatchEvent(new Event("planner-row-labels-updated"));
       onAfterChange?.();
       alert("Nombres guardados.");
     } catch (e: any) {
-      alert(e?.message || "No se pudo guardar");
+      alert(e?.message || "No se pudieron guardar los nombres");
     } finally {
       setLoading(false);
     }
   }
 
-  // Restaurar etiquetas
   async function handleResetLabels() {
     const ok = confirm("¿Restaurar nombres originales?");
     if (!ok) return;
@@ -82,35 +80,18 @@ export default function PlannerActionsBar({ onAfterChange }: Props) {
       onAfterChange?.();
       alert("Restaurado.");
     } catch (e: any) {
-      alert(e?.message || "No se pudo restaurar");
+      alert(e?.message || "No se pudo resetear");
     } finally {
       setLoading(false);
     }
   }
 
-  // Guardar lugares
   async function handleSavePlaces() {
     setLoading(true);
     try {
-      const list = Array.from(
-        new Set(
-          placesText
-            .split("\n")
-            .map((s) => (s || "").trim())
-            .filter(Boolean)
-        )
-      );
-      const r = await fetch("/api/planner/labels", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ places: list }),
-      });
-      if (!r.ok) throw new Error("No se pudo guardar los lugares");
-      const j = await r.json();
-      const arr: string[] = Array.isArray(j.places) ? j.places : [];
-      setPlacesText(arr.join("\n"));
-      setPlacesCount(arr.length);
-      window.dispatchEvent(new Event("planner-places-updated"));
+      const saved = await savePlacesFromTextarea(placesText);
+      setPlacesText(saved.join("\n"));
+      setPlacesCount(saved.length);
       onAfterChange?.();
       alert("Lugares guardados.");
     } catch (e: any) {
@@ -120,38 +101,35 @@ export default function PlannerActionsBar({ onAfterChange }: Props) {
     }
   }
 
-  // Vaciar lugares
   async function handleClearPlaces() {
-    const ok = confirm("¿Vaciar toda la lista de lugares?");
+    const ok = confirm("¿Vaciar la lista de lugares?");
     if (!ok) return;
     setLoading(true);
     try {
-      const r = await fetch("/api/planner/labels?target=places", { method: "DELETE" });
-      if (!r.ok) throw new Error("No se pudo vaciar");
+      await clearPlaces();
       setPlacesText("");
       setPlacesCount(0);
-      window.dispatchEvent(new Event("planner-places-updated"));
       onAfterChange?.();
-      alert("Lista de lugares vaciada.");
+      alert("Lista vaciada.");
     } catch (e: any) {
-      alert(e?.message || "No se pudo vaciar la lista");
+      alert(e?.message || "No se pudo vaciar");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="space-y-4">
-      {/* Nombres de filas */}
+    <div className="space-y-6">
+      {/* NOMBRES DE FILAS */}
       <section className="rounded-xl border p-3">
         <div className="mb-2 flex items-center gap-2">
           <h3 className="text-sm font-semibold">Nombres de filas (tu preferencia)</h3>
-          <HelpTip text="Personalizá cómo llamás a cada bloque. Afecta solo a tu usuario." />
+          <HelpTip text="Se guardan en tu usuario y se aplican en el Editor." />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] text-gray-600">PRE ENTREN0</label>
+            <label className="text-[11px] text-gray-600">Actual: PRE ENTREN0</label>
             <input
               className="h-9 rounded-md border px-2 text-sm"
               value={computed["PRE ENTREN0"]}
@@ -161,7 +139,7 @@ export default function PlannerActionsBar({ onAfterChange }: Props) {
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] text-gray-600">FÍSICO</label>
+            <label className="text-[11px] text-gray-600">Actual: FÍSICO</label>
             <input
               className="h-9 rounded-md border px-2 text-sm"
               value={computed["FÍSICO"]}
@@ -171,7 +149,7 @@ export default function PlannerActionsBar({ onAfterChange }: Props) {
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] text-gray-600">TÉCNICO–TÁCTICO</label>
+            <label className="text-[11px] text-gray-600">Actual: TÉCNICO–TÁCTICO</label>
             <input
               className="h-9 rounded-md border px-2 text-sm"
               value={computed["TÉCNICO–TÁCTICO"]}
@@ -183,11 +161,13 @@ export default function PlannerActionsBar({ onAfterChange }: Props) {
           </div>
 
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] text-gray-600">COMPENSATORIO</label>
+            <label className="text-[11px] text-gray-600">Actual: COMPENSATORIO</label>
             <input
               className="h-9 rounded-md border px-2 text-sm"
               value={computed["COMPENSATORIO"]}
-              onChange={(e) => setLabels((prev) => ({ ...prev, ["COMPENSATORIO"]: e.target.value }))}
+              onChange={(e) =>
+                setLabels((prev) => ({ ...prev, ["COMPENSATORIO"]: e.target.value }))
+              }
               placeholder="Ej: Post entreno"
             />
           </div>
@@ -211,20 +191,29 @@ export default function PlannerActionsBar({ onAfterChange }: Props) {
         </div>
       </section>
 
-      {/* Lugares */}
+      {/* LUGARES */}
       <section className="rounded-xl border p-3">
         <div className="mb-2 flex items-center gap-2">
           <h3 className="text-sm font-semibold">Lugares</h3>
-          <HelpTip text="Escribí un lugar por línea. Luego aparecerán como sugerencias en el campo LUGAR del Editor." />
+          <HelpTip text="Un lugar por línea. Se usan como sugerencias en el campo 'Lugar' del Editor." />
           <span className="ml-auto text-[11px] text-gray-500">{placesCount} guardados</span>
         </div>
 
+        <div className="space-y-2">
+          <div className="text-[11px] text-gray-500">Ejemplos:</div>
+          <div className="rounded-md border p-2 text-[12px] text-gray-600 bg-gray-50">
+            Cancha 1<br />
+            Complejo Deportivo<br />
+            Gimnasio
+          </div>
+
         <textarea
-          className="w-full min-h-[120px] rounded-md border p-2 text-sm"
+          className="mt-2 w-full min-h-[120px] rounded-md border p-2 text-sm"
+          placeholder="Escribí los lugares (uno por línea)…"
           value={placesText}
           onChange={(e) => setPlacesText(e.target.value)}
-          placeholder={"Ejemplos:\nCancha 1\nComplejo Deportivo\nGimnasio"}
         />
+        </div>
 
         <div className="mt-3 flex gap-2">
           <button
