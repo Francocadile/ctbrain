@@ -62,6 +62,21 @@ export default function CTSessionsPage() {
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState<string>(""); // YYYY-MM-DD
 
+  // helpers de navegación semanal (para el pill)
+  const goPrevWeek = () =>
+    setBase((d) => {
+      const x = new Date(d);
+      x.setUTCDate(x.getUTCDate() - 7);
+      return x;
+    });
+  const goToday = () => setBase(getMonday(new Date()));
+  const goNextWeek = () =>
+    setBase((d) => {
+      const x = new Date(d);
+      x.setUTCDate(x.getUTCDate() + 7);
+      return x;
+    });
+
   async function loadWeek(d: Date) {
     setLoading(true);
     try {
@@ -155,40 +170,44 @@ export default function CTSessionsPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setBase((d) => {
-              const x = new Date(d); x.setUTCDate(x.getUTCDate() - 7); return x;
-            })}
-            className="text-sm px-3 py-1.5 rounded-lg border hover:bg-gray-50"
-          >
-            ◀ Semana anterior
-          </button>
-          <button
-            onClick={() => setBase(getMonday(new Date()))}
-            className="text-sm px-3 py-1.5 rounded-lg border hover:bg-gray-50"
-          >
-            Hoy
-          </button>
-          <button
-            onClick={() => setBase((d) => {
-              const x = new Date(d); x.setUTCDate(x.getUTCDate() + 7); return x;
-            })}
-            className="text-sm px-3 py-1.5 rounded-lg border hover:bg-gray-50"
-          >
-            Semana siguiente ▶
-          </button>
+          {/* === Navegación semanal – estilo pill segmentado === */}
+          <div className="inline-flex rounded-xl border overflow-hidden">
+            <button
+              onClick={goPrevWeek}
+              className="px-2.5 py-1.5 text-xs hover:bg-gray-50"
+              title="Semana anterior"
+            >
+              ◀ Semana anterior
+            </button>
+            <div className="w-px bg-gray-200" />
+            <button
+              onClick={goToday}
+              className="px-2.5 py-1.5 text-xs hover:bg-gray-50"
+              title="Volver a esta semana"
+            >
+              Hoy
+            </button>
+            <div className="w-px bg-gray-200" />
+            <button
+              onClick={goNextWeek}
+              className="px-2.5 py-1.5 text-xs hover:bg-gray-50"
+              title="Semana siguiente"
+            >
+              Semana siguiente ▶
+            </button>
+          </div>
 
-          <div className="w-px h-6 bg-gray-200 mx-1" />
+          {/* Filtro por fecha */}
           <input
             type="date"
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
-            className="rounded-lg border px-2 py-1.5 text-sm"
+            className="rounded-xl border px-2 py-1.5 text-sm"
             title="Filtrar por fecha"
           />
           <button
             onClick={() => setDateFilter("")}
-            className="text-sm px-3 py-1.5 rounded-lg border hover:bg-gray-50"
+            className="text-sm px-3 py-1.5 rounded-xl border hover:bg-gray-50"
             disabled={!dateFilter}
             title="Quitar filtro"
           >
@@ -214,7 +233,11 @@ export default function CTSessionsPage() {
               >
                 <div>
                   <h3 className="font-semibold text-[15px]">
-                    <a href={byDayHref} className="hover:underline" title="Abrir sesión (día/turno)">
+                    <a
+                      href={byDayHref}
+                      className="hover:underline"
+                      title="Abrir sesión (día/turno)"
+                    >
                       {s.title}
                     </a>
                   </h3>
