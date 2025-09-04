@@ -80,7 +80,6 @@ function addDaysUTC(date: Date, days: number) {
 }
 function humanDayUTC(ymd: string) {
   const d = new Date(`${ymd}T00:00:00.000Z`);
-  // ej: "lun, 01/09"
   const wd = d.toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" });
   const dd = d.toLocaleDateString(undefined, { day: "2-digit", month: "2-digit", timeZone: "UTC" });
   return `${wd.toUpperCase()}, ${dd}`;
@@ -102,14 +101,14 @@ function parseVideoValue(v?: string | null) {
 /* =========================================================
    Layout (planner semanal)
 ========================================================= */
-const COL_LABEL_W = 110;  // ancho columna izquierda
-const DAY_MIN_W   = 116;  // ancho mín por día
-const ROW_H       = 64;   // alto de cada fila
-const DAY_HEADER_H = 64;  // altura encabezado de cada tarjeta (ajustado)
+const COL_LABEL_W = 110;   // ancho columna izquierda
+const DAY_MIN_W   = 116;   // ancho mín por día
+const ROW_H       = 64;    // alto de cada fila
+const DAY_HEADER_H = 60;   // altura header compacta
 const CELL_GAP    = 6;
 
 /* =========================================================
-   Inner (envuelto en Suspense para useSearchParams)
+   Inner
 ========================================================= */
 function DashboardSemanaInner() {
   const qs = useSearchParams();
@@ -117,7 +116,6 @@ function DashboardSemanaInner() {
   const initialTurn = (qs.get("turn") === "afternoon" ? "afternoon" : "morning") as TurnKey;
   const [activeTurn, setActiveTurn] = useState<TurnKey>(initialTurn);
 
-  // ====== Estado Planner semanal ======
   const [base, setBase] = useState<Date>(() => getMonday(new Date()));
   const [loadingWeek, setLoadingWeek] = useState(false);
   const [daysMap, setDaysMap] = useState<Record<string, SessionDTO[]>>({});
@@ -150,21 +148,21 @@ function DashboardSemanaInner() {
     return Array.from({ length: 7 }, (_, i) => toYYYYMMDDUTC(addDaysUTC(start, i)));
   }, [weekStart]);
 
+  function list(ymd: string) {
+    return daysMap[ymd] || [];
+  }
   function findCell(ymd: string, turn: TurnKey, row: string) {
-    const list = daysMap[ymd] || [];
-    return list.find((s) => isCellOf(s, turn, row));
+    return list(ymd).find((s) => isCellOf(s, turn, row));
   }
   function getDayFlag(ymd: string, turn: TurnKey): DayFlag {
-    const list = daysMap[ymd] || [];
-    const f = list.find((s) => isDayFlag(s, turn));
+    const f = list(ymd).find((s) => isDayFlag(s, turn));
     return parseDayFlagTitle(f?.title);
   }
   function getMicro(ymd: string, turn: TurnKey): MicroKey {
-    const list = daysMap[ymd] || [];
-    return getMicroValue(list, turn);
+    return getMicroValue(list(ymd), turn);
   }
 
-  // ===== META (solo lectura) =====
+  // ===== META (solo lectura)
   function ReadonlyMetaCell({
     ymd,
     row,
@@ -175,11 +173,7 @@ function DashboardSemanaInner() {
     const s = findCell(ymd, activeTurn, row);
     const text = (s?.title || "").trim();
     if (!text)
-      return (
-        <div className="h-6 text-[11px] text-gray-400 italic px-1 flex items-center">
-          —
-        </div>
-      );
+      return <div className="h-6 text-[11px] text-gray-400 italic px-1 flex items-center">—</div>;
     if (row === "VIDEO") {
       const { label, url } = parseVideoValue(text);
       return url ? (
@@ -198,7 +192,7 @@ function DashboardSemanaInner() {
     return <div className="h-6 text-[11px] px-1 flex items-center truncate">{text}</div>;
   }
 
-  // ===== Tarjeta por día (planner) =====
+  // ===== Tarjeta por día
   function DayCard({ ymd }: { ymd: string }) {
     const flag = getDayFlag(ymd, activeTurn);
     const micro = getMicro(ymd, activeTurn);
@@ -248,33 +242,39 @@ function DashboardSemanaInner() {
 
     return (
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        {/* Header compacto: fecha arriba; debajo MD + botón */}
+        {/* Header compacto: fecha arriba; debajo MD + acción */}
         <div className="px-2 py-1 border-b bg-gray-50" style={{ height: DAY_HEADER_H }}>
-          <div className="flex flex-col h-full">
+          <div className="flex flex-col h-full min-w-0">
             <div className="leading-4">
               <div className="text-[10px] font-semibold uppercase tracking-wide">
                 {humanDayUTC(ymd)}
               </div>
-              <div className="text-[9px] leading-3 text-gray-400 whitespace-nowrap">{ymd}</div>
+              <div className="text-[9px] leading-3 text-gray-400">{ymd}</div>
             </div>
-            <div className="mt-1 flex items-center justify-between">
+            <div className="mt-1 flex items-center justify-between gap-2">
               {/* MD badge */}
               {micro ? (
                 <span
-                  className={`text-[10px] px-2 py-0.5 rounded-md border ${microColorClass(micro)} truncate`}
+                  className={`text-[10px] px-2 py-[2px] rounded-md border ${microColorClass(
+                    micro
+                  )} truncate`}
                   title={micro}
                 >
                   {micro}
                 </span>
-              ) : <span />}
+              ) : (
+                <span />
+              )}
 
               {/* Acción a la derecha */}
               {flag.kind === "LIBRE" ? (
-                <span className="text-[10px] rounded border bg-gray-100 px-2 py-0.5">{librePill}</span>
+                <span className="text-[10px] rounded border bg-gray-100 px-2 py-[2px] shrink-0">
+                  {librePill}
+                </span>
               ) : (
                 <a
                   href={headerHref}
-                  className="text-[10px] rounded border px-2 py-0.5 hover:bg-gray-100 shrink-0"
+                  className="text-[10px] rounded border px-2 py-[2px] hover:bg-gray-100 shrink-0"
                 >
                   Ver sesión
                 </a>
@@ -302,7 +302,7 @@ function DashboardSemanaInner() {
 
   return (
     <div className="p-3 md:p-4 space-y-3" id="print-root">
-      {/* PRINT: sólo el contenido del dashboard */}
+      {/* PRINT */}
       <style jsx global>{`
         @page { size: A4 landscape; margin: 10mm; }
         @media print {
@@ -317,7 +317,7 @@ function DashboardSemanaInner() {
         }
       `}</style>
 
-      {/* ======== Sólo Plan semanal (solo lectura) ======== */}
+      {/* ======== Plan semanal (solo lectura) ======== */}
       {!hideHeader && (
         <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between no-print">
           <div>
@@ -388,10 +388,10 @@ function DashboardSemanaInner() {
       ) : (
         <div className="rounded-2xl border bg-white shadow-sm">
           <div className="p-3">
-            {/* META compacta */}
+            {/* DETALLES (antes decía “TURNO MAÑANA · Meta”) */}
             <div className="mb-2">
               <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-0.5 border rounded-md uppercase tracking-wide text-[11px] inline-block">
-                {activeTurn === "morning" ? "TURNO MAÑANA · Meta" : "TURNO TARDE · Meta"}
+                DETALLES
               </div>
               <div
                 className="mt-2 grid gap-[6px]"
@@ -446,7 +446,7 @@ function DashboardSemanaInner() {
                 gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))`,
               }}
             >
-              {/* Columna etiquetas: espaciador header + 4 filas */}
+              {/* Columna etiquetas: header spacer + 4 filas */}
               <div
                 className="grid gap-[6px]"
                 style={{ gridTemplateRows: `${DAY_HEADER_H}px repeat(4, ${ROW_H}px)` }}
@@ -474,7 +474,7 @@ function DashboardSemanaInner() {
 }
 
 /* =========================================================
-   Página: envuelve en Suspense para cumplir Next requirement
+   Página
 ========================================================= */
 export default function DashboardSemanaPage() {
   return (
