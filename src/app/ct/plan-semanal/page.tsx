@@ -1,4 +1,3 @@
-// src/app/ct/plan-semanal/page.tsx
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -13,7 +12,6 @@ import {
   type SessionDTO,
 } from "@/lib/api/sessions";
 import PlannerActionsBar from "./PlannerActionsBar";
-import HelpTip from "@/components/HelpTip";
 
 export const dynamic = "force-dynamic";
 
@@ -139,7 +137,6 @@ function PlanSemanalInner() {
       setRowLabels(j.rowLabels || {});
       setPlaces(j.places || []);
     } catch {
-      // fallback vacío, el editor sigue funcionando
       setRowLabels({});
       setPlaces([]);
     }
@@ -329,7 +326,7 @@ function PlanSemanalInner() {
       );
     }
 
-    // LUGAR → TEXTO MANUAL + SUGERENCIAS (datalist) — SIN HelpTip en el editor
+    // LUGAR → TEXTO + SUGERENCIAS (datalist). Sin "?" en el editor.
     if (row === "LUGAR") {
       const [local, setLocal] = useState(value || "");
       useEffect(() => setLocal(value || ""), [value, k]);
@@ -338,7 +335,7 @@ function PlanSemanalInner() {
         <input
           list="places-datalist"
           className="h-8 w-full rounded-md border px-2 text-xs"
-          placeholder="Lugar (texto libre o elegí de sugerencias)"
+          placeholder="Lugar (texto libre o sugerencias)"
           value={local}
           onChange={(e) => setLocal(e.target.value)}
           onBlur={() => stageCell(dayYmd, turn, row, (local || "").trim())}
@@ -442,7 +439,7 @@ function PlanSemanalInner() {
     return null;
   }
 
-  // ---- Celdas de contenido
+  // ---- Celdas de contenido (sin ? en editor)
   function EditableCell({
     dayYmd,
     turn,
@@ -649,13 +646,6 @@ function PlanSemanalInner() {
             </div>
           ))}
         </div>
-
-        {/* Sugerencias de lugares (se llena desde Herramientas) */}
-        <datalist id="places-datalist">
-          {places.map((p) => (
-            <option key={p} value={p} />
-          ))}
-        </datalist>
       </>
     );
   }
@@ -678,7 +668,6 @@ function PlanSemanalInner() {
           <div>
             <h1 className="text-lg md:text-xl font-bold flex items-center gap-2">
               Plan semanal — Editor en tabla
-              <HelpTip text="Acá armás la semana. Usá Mañana/Tarde para alternar y Herramientas para importar/duplicar y cargar la lista de Lugares." />
             </h1>
             <p className="text-xs md:text-sm text-gray-500">
               Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)
@@ -728,7 +717,7 @@ function PlanSemanalInner() {
         </header>
       )}
 
-      {/* Pestañas */}
+      {/* Tabs */}
       <div className="flex items-center gap-2">
         <button
           className={`px-3 py-1.5 rounded-xl border text-xs ${
@@ -757,9 +746,10 @@ function PlanSemanalInner() {
             activePane === "tools" ? "bg-black text-white" : "hover:bg-gray-50"
           }`}
           onClick={() => setActivePane("tools")}
-          title="Exportar / Importar / Duplicar semana y cargar Lugares"
+          title="Herramientas"
+          aria-label="Herramientas"
         >
-          Herramientas
+          ⚙️
         </button>
       </div>
 
@@ -775,6 +765,13 @@ function PlanSemanalInner() {
           <TurnEditor turn={activeTurn} />
         </div>
       )}
+
+      {/* DATALIST GLOBAL (sirve para Mañana y Tarde) */}
+      <datalist id="places-datalist">
+        {(places || []).map((p) => (
+          <option key={p} value={p} />
+        ))}
+      </datalist>
     </div>
   );
 }
