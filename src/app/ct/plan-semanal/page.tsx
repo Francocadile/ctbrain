@@ -63,7 +63,18 @@ const MICRO_CHOICES: Array<{
   value: MicroKey;
   label: string;
   colorClass: string; // fondo suave para la celda
-}
+}> = [
+  { value: "", label: "—", colorClass: "" },
+  { value: "MD+1", label: "MD+1 · muy baja", colorClass: "bg-blue-50" },
+  { value: "MD+2", label: "MD+2 · media", colorClass: "bg-yellow-50" },
+  { value: "MD-4", label: "MD-4 · muy alta", colorClass: "bg-red-50" },
+  { value: "MD-3", label: "MD-3 · alta", colorClass: "bg-orange-50" },
+  { value: "MD-2", label: "MD-2 · media-baja", colorClass: "bg-green-50" },
+  { value: "MD-1", label: "MD-1 · muy baja", colorClass: "bg-gray-50" },
+  { value: "MD", label: "MD (Match Day)", colorClass: "bg-amber-50" },
+  { value: "DESCANSO", label: "Descanso", colorClass: "bg-gray-100" },
+];
+
 function microMarker(turn: TurnKey) {
   return `[${MICRO_TAG}:${turn}]`;
 }
