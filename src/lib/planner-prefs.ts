@@ -1,55 +1,54 @@
-// src/lib/planner-prefs.ts
 export type RowLabels = Record<string, string>;
 
-type GetResp = {
-  rowLabels: RowLabels | null;
-  places: string[];
-};
-
-export async function fetchPrefs(): Promise<GetResp> {
-  const r = await fetch("/api/planner/labels", { cache: "no-store" });
-  if (!r.ok) throw new Error("No se pudo cargar preferencias");
-  const j = (await r.json()) as GetResp;
-  return {
-    rowLabels: j.rowLabels || {},
-    places: j.places || [],
-  };
-}
-
+// ---- Row labels (por usuario)
 export async function fetchRowLabels(): Promise<RowLabels> {
-  const { rowLabels } = await fetchPrefs();
-  return rowLabels || {};
+  const r = await fetch("/api/planner/labels", { cache: "no-store" });
+  if (!r.ok) throw new Error("fetch rowLabels failed");
+  const j = await r.json();
+  return j.rowLabels || {};
 }
 
 export async function saveRowLabels(labels: RowLabels): Promise<void> {
   const r = await fetch("/api/planner/labels", {
-    method: "PUT",
+    method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ rowLabels: labels }),
   });
-  if (!r.ok) throw new Error("No se pudieron guardar los nombres");
+  if (!r.ok) throw new Error("save rowLabels failed");
 }
 
 export async function resetRowLabels(): Promise<void> {
-  const r = await fetch("/api/planner/labels?target=labels", { method: "DELETE" });
-  if (!r.ok) throw new Error("No se pudo resetear");
+  const r = await fetch("/api/planner/labels", { method: "DELETE" });
+  if (!r.ok) throw new Error("reset rowLabels failed");
 }
 
+// ---- Lugares (global con tabla Place)
 export async function fetchPlaces(): Promise<string[]> {
-  const { places } = await fetchPrefs();
-  return places || [];
+  const r = await fetch("/api/planner/labels", { cache: "no-store" });
+  if (!r.ok) return [];
+  const j = await r.json();
+  return j.places || [];
 }
 
-export async function savePlaces(list: string[]): Promise<void> {
+/** Guarda TODOS los lugares. Recibe el textarea (1 por línea). */
+export async function savePlacesFromTextarea(text: string): Promise<string[]> {
+  const names = text
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
   const r = await fetch("/api/planner/labels", {
-    method: "PUT",
+    method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ places: list }),
+    body: JSON.stringify({ places: names }),
   });
-  if (!r.ok) throw new Error("No se pudo guardar los lugares");
+  if (!r.ok) throw new Error("save places failed");
+
+  const j = await r.json();
+  window.dispatchEvent(new Event("planner-places-updated"));
+  return j.places || [];
 }
 
 export async function clearPlaces(): Promise<void> {
-  const r = await fetch("/api/planner/labels?target=places", { method: "DELETE" });
-  if (!r.ok) throw new Error("No se pudo vaciar la lista");
+  await savePlacesFromTextarea("");
 }
