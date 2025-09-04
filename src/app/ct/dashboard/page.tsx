@@ -16,12 +16,14 @@ import {
 type TurnKey = "morning" | "afternoon";
 const ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 
+// Meta en lectura (mismo orden que editor: Nombre, Lugar, Hora, Video)
 const SESSION_NAME_ROW = "NOMBRE SESIÓN" as const;
-const META_ROWS = ["LUGAR", "HORA", "VIDEO", SESSION_NAME_ROW] as const;
+const META_ROWS = [SESSION_NAME_ROW, "LUGAR", "HORA", "VIDEO"] as const;
 
 // ===== Flags (creados en el editor semanal) =====
 type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
 type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string };
+
 const DAYFLAG_TAG = "DAYFLAG";
 const dayFlagMarker = (turn: TurnKey) => `[${DAYFLAG_TAG}:${turn}]`;
 const isDayFlag = (s: SessionDTO, turn: TurnKey) =>
@@ -35,40 +37,26 @@ function parseDayFlagTitle(title?: string | null): DayFlag {
   return { kind: "NONE" };
 }
 
-// ===== Microciclo (intensidad MD) =====
-const MICRO_TAG = "MICRO";
-const microMarker = (turn: TurnKey) => `[${MICRO_TAG}:${turn}]`;
-const isMicro = (s: SessionDTO, turn: TurnKey) =>
-  typeof s.description === "string" && s.description.startsWith(microMarker(turn));
+// ===== Microciclo / Intensidad (MD) =====
 type MicroKey = "" | "MD+1" | "MD+2" | "MD-4" | "MD-3" | "MD-2" | "MD-1" | "MD" | "DESCANSO";
-
-function getMicroValue(list: SessionDTO[], turn: TurnKey): MicroKey {
-  const x = list.find((s) => isMicro(s, turn));
-  const t = (x?.title || "").trim() as MicroKey;
-  return t || "";
-}
-function microColorClass(v: MicroKey) {
-  switch (v) {
-    case "MD+1":
-      return "bg-blue-50 border-blue-100 text-blue-900";
-    case "MD+2":
-      return "bg-yellow-50 border-yellow-100 text-yellow-900";
-    case "MD-4":
-      return "bg-red-50 border-red-100 text-red-900";
-    case "MD-3":
-      return "bg-orange-50 border-orange-100 text-orange-900";
-    case "MD-2":
-      return "bg-green-50 border-green-100 text-green-900";
-    case "MD-1":
-      return "bg-gray-50 border-gray-200 text-gray-800";
-    case "MD":
-      return "bg-amber-50 border-amber-100 text-amber-900";
-    case "DESCANSO":
-      return "bg-gray-100 border-gray-200 text-gray-700";
-    default:
-      return "bg-white border-gray-200 text-gray-600";
-  }
-}
+const MICRO_TAG = "MICRO"; // mismo marcador que usa el editor
+const microMarker = (turn: TurnKey) => `[${MICRO_TAG}:${turn}]`;
+const isMicroOf = (s: SessionDTO, turn: TurnKey) =>
+  typeof s.description === "string" && s.description.startsWith(microMarker(turn));
+const MICRO_STYLES: Record<
+  MicroKey,
+  { bg: string; text: string; border: string }
+> = {
+  "": { bg: "bg-gray-50", text: "text-gray-500", border: "border-gray-200" },
+  "MD+1": { bg: "bg-blue-50", text: "text-blue-900", border: "border-blue-200" },
+  "MD+2": { bg: "bg-yellow-50", text: "text-yellow-900", border: "border-yellow-200" },
+  "MD-4": { bg: "bg-red-50", text: "text-red-900", border: "border-red-200" },
+  "MD-3": { bg: "bg-orange-50", text: "text-orange-900", border: "border-orange-200" },
+  "MD-2": { bg: "bg-green-50", text: "text-green-900", border: "border-green-200" },
+  "MD-1": { bg: "bg-gray-50", text: "text-gray-700", border: "border-gray-200" },
+  "MD":   { bg: "bg-amber-50", text: "text-amber-900", border: "border-amber-200" },
+  "DESCANSO": { bg: "bg-gray-100", text: "text-gray-700", border: "border-gray-200" },
+};
 
 /* =========================================================
    Utils fecha / texto
@@ -80,9 +68,12 @@ function addDaysUTC(date: Date, days: number) {
 }
 function humanDayUTC(ymd: string) {
   const d = new Date(`${ymd}T00:00:00.000Z`);
-  const wd = d.toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" });
-  const dd = d.toLocaleDateString(undefined, { day: "2-digit", month: "2-digit", timeZone: "UTC" });
-  return `${wd.toUpperCase()}, ${dd}`;
+  return d.toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "UTC",
+  });
 }
 function cellMarker(turn: TurnKey, row: string) {
   return `[GRID:${turn}:${row}]`;
@@ -101,14 +92,14 @@ function parseVideoValue(v?: string | null) {
 /* =========================================================
    Layout (planner semanal)
 ========================================================= */
-const COL_LABEL_W = 110;   // ancho columna izquierda
-const DAY_MIN_W   = 116;   // ancho mín por día
-const ROW_H       = 64;    // alto de cada fila
-const DAY_HEADER_H = 60;   // altura header compacta
+const COL_LABEL_W = 110;  // ancho columna izquierda
+const DAY_MIN_W   = 116;  // ancho mín por día
+const ROW_H       = 64;   // alto de cada fila
+const DAY_HEADER_H = 60;  // altura header de tarjeta (2 líneas compactas)
 const CELL_GAP    = 6;
 
 /* =========================================================
-   Inner
+   Inner (envuelto en Suspense para useSearchParams)
 ========================================================= */
 function DashboardSemanaInner() {
   const qs = useSearchParams();
@@ -116,6 +107,7 @@ function DashboardSemanaInner() {
   const initialTurn = (qs.get("turn") === "afternoon" ? "afternoon" : "morning") as TurnKey;
   const [activeTurn, setActiveTurn] = useState<TurnKey>(initialTurn);
 
+  // ====== Estado Planner semanal ======
   const [base, setBase] = useState<Date>(() => getMonday(new Date()));
   const [loadingWeek, setLoadingWeek] = useState(false);
   const [daysMap, setDaysMap] = useState<Record<string, SessionDTO[]>>({});
@@ -148,21 +140,24 @@ function DashboardSemanaInner() {
     return Array.from({ length: 7 }, (_, i) => toYYYYMMDDUTC(addDaysUTC(start, i)));
   }, [weekStart]);
 
-  function list(ymd: string) {
+  function sessionsOf(ymd: string) {
     return daysMap[ymd] || [];
   }
   function findCell(ymd: string, turn: TurnKey, row: string) {
-    return list(ymd).find((s) => isCellOf(s, turn, row));
+    return sessionsOf(ymd).find((s) => isCellOf(s, turn, row));
   }
   function getDayFlag(ymd: string, turn: TurnKey): DayFlag {
-    const f = list(ymd).find((s) => isDayFlag(s, turn));
+    const f = sessionsOf(ymd).find((s) => isDayFlag(s, turn));
     return parseDayFlagTitle(f?.title);
   }
   function getMicro(ymd: string, turn: TurnKey): MicroKey {
-    return getMicroValue(list(ymd), turn);
+    const m = sessionsOf(ymd).find((s) => isMicroOf(s, turn));
+    const t = (m?.title || "").trim() as MicroKey;
+    const valid = ["MD+1","MD+2","MD-4","MD-3","MD-2","MD-1","MD","DESCANSO",""].includes(t);
+    return (valid ? t : "") as MicroKey;
   }
 
-  // ===== META (solo lectura)
+  // ===== META (solo lectura) =====
   function ReadonlyMetaCell({
     ymd,
     row,
@@ -173,7 +168,11 @@ function DashboardSemanaInner() {
     const s = findCell(ymd, activeTurn, row);
     const text = (s?.title || "").trim();
     if (!text)
-      return <div className="h-6 text-[11px] text-gray-400 italic px-1 flex items-center">—</div>;
+      return (
+        <div className="h-6 text-[11px] text-gray-400 italic px-1 flex items-center">
+          —
+        </div>
+      );
     if (row === "VIDEO") {
       const { label, url } = parseVideoValue(text);
       return url ? (
@@ -192,10 +191,24 @@ function DashboardSemanaInner() {
     return <div className="h-6 text-[11px] px-1 flex items-center truncate">{text}</div>;
   }
 
-  // ===== Tarjeta por día
+  // ===== Badge MD (compacta) =====
+  function MicroBadge({ ymd }: { ymd: string }) {
+    const v = getMicro(ymd, activeTurn);
+    if (!v) return null;
+    const s = MICRO_STYLES[v];
+    return (
+      <span
+        className={`inline-flex items-center h-[20px] px-2 rounded-md border text-[10px] font-semibold ${s.bg} ${s.text} ${s.border}`}
+        title="Intensidad (microciclo)"
+      >
+        {v}
+      </span>
+    );
+  }
+
+  // ===== Tarjeta por día (planner) =====
   function DayCard({ ymd }: { ymd: string }) {
     const flag = getDayFlag(ymd, activeTurn);
-    const micro = getMicro(ymd, activeTurn);
     const headerHref = `/ct/sessions/by-day/${ymd}/${activeTurn}`;
     const librePill = activeTurn === "morning" ? "Mañana libre" : "Tarde libre";
 
@@ -242,44 +255,29 @@ function DashboardSemanaInner() {
 
     return (
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        {/* Header compacto: fecha arriba; debajo MD + acción */}
+        {/* Encabezado en 2 líneas compactas */}
         <div className="px-2 py-1 border-b bg-gray-50" style={{ height: DAY_HEADER_H }}>
-          <div className="flex flex-col h-full min-w-0">
-            <div className="leading-4">
+          <div className="flex items-center justify-between">
+            <div>
               <div className="text-[10px] font-semibold uppercase tracking-wide">
                 {humanDayUTC(ymd)}
               </div>
-              <div className="text-[9px] leading-3 text-gray-400">{ymd}</div>
+              <div className="text-[9px] leading-3 text-gray-400 whitespace-nowrap">{ymd}</div>
             </div>
-            <div className="mt-1 flex items-center justify-between gap-2">
-              {/* MD badge */}
-              {micro ? (
-                <span
-                  className={`text-[10px] px-2 py-[2px] rounded-md border ${microColorClass(
-                    micro
-                  )} truncate`}
-                  title={micro}
-                >
-                  {micro}
-                </span>
-              ) : (
-                <span />
-              )}
+          </div>
 
-              {/* Acción a la derecha */}
-              {flag.kind === "LIBRE" ? (
-                <span className="text-[10px] rounded border bg-gray-100 px-2 py-[2px] shrink-0">
-                  {librePill}
-                </span>
-              ) : (
-                <a
-                  href={headerHref}
-                  className="text-[10px] rounded border px-2 py-[2px] hover:bg-gray-100 shrink-0"
-                >
-                  Ver sesión
-                </a>
-              )}
-            </div>
+          <div className="mt-1 flex items-center justify-between">
+            <MicroBadge ymd={ymd} />
+            {flag.kind === "LIBRE" ? (
+              <span className="text-[10px] rounded border bg-gray-100 px-2 py-0.5">{librePill}</span>
+            ) : (
+              <a
+                href={headerHref}
+                className="text-[10px] rounded border px-2 py-0.5 hover:bg-gray-100"
+              >
+                Ver sesión
+              </a>
+            )}
           </div>
         </div>
 
@@ -302,7 +300,7 @@ function DashboardSemanaInner() {
 
   return (
     <div className="p-3 md:p-4 space-y-3" id="print-root">
-      {/* PRINT */}
+      {/* PRINT: sólo el contenido del dashboard */}
       <style jsx global>{`
         @page { size: A4 landscape; margin: 10mm; }
         @media print {
@@ -317,7 +315,7 @@ function DashboardSemanaInner() {
         }
       `}</style>
 
-      {/* ======== Plan semanal (solo lectura) ======== */}
+      {/* ======== Sólo Plan semanal (solo lectura) ======== */}
       {!hideHeader && (
         <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between no-print">
           <div>
@@ -388,7 +386,7 @@ function DashboardSemanaInner() {
       ) : (
         <div className="rounded-2xl border bg-white shadow-sm">
           <div className="p-3">
-            {/* DETALLES (antes decía “TURNO MAÑANA · Meta”) */}
+            {/* DETALLES compactos */}
             <div className="mb-2">
               <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-0.5 border rounded-md uppercase tracking-wide text-[11px] inline-block">
                 DETALLES
@@ -399,36 +397,16 @@ function DashboardSemanaInner() {
                   gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))`,
                 }}
               >
-                <div className="bg-gray-50/60 border rounded-md px-2 py-1 text-[10px] font-medium text-gray-600">
-                  LUGAR
-                </div>
-                {orderedDays.map((ymd) => (
-                  <div key={`lugar-${ymd}`} className="rounded-md border px-1 py-0.5">
-                    <ReadonlyMetaCell ymd={ymd} row="LUGAR" />
-                  </div>
-                ))}
-                <div className="bg-gray-50/60 border rounded-md px-2 py-1 text-[10px] font-medium text-gray-600">
-                  HORA
-                </div>
-                {orderedDays.map((ymd) => (
-                  <div key={`hora-${ymd}`} className="rounded-md border px-1 py-0.5">
-                    <ReadonlyMetaCell ymd={ymd} row="HORA" />
-                  </div>
-                ))}
-                <div className="bg-gray-50/60 border rounded-md px-2 py-1 text-[10px] font-medium text-gray-600">
-                  VIDEO
-                </div>
-                {orderedDays.map((ymd) => (
-                  <div key={`video-${ymd}`} className="rounded-md border px-1 py-0.5">
-                    <ReadonlyMetaCell ymd={ymd} row="VIDEO" />
-                  </div>
-                ))}
-                <div className="bg-gray-50/60 border rounded-md px-2 py-1 text-[10px] font-medium text-gray-600">
-                  NOMBRE SESIÓN
-                </div>
-                {orderedDays.map((ymd) => (
-                  <div key={`name-${ymd}`} className="rounded-md border px-1 py-0.5">
-                    <ReadonlyMetaCell ymd={ymd} row={SESSION_NAME_ROW} />
+                {META_ROWS.map((label) => (
+                  <div key={`meta-label-${label}`} className="contents">
+                    <div className="bg-gray-50/60 border rounded-md px-2 py-1 text-[10px] font-medium text-gray-600">
+                      {label}
+                    </div>
+                    {orderedDays.map((ymd) => (
+                      <div key={`${label}-${ymd}`} className="rounded-md border px-1 py-0.5">
+                        <ReadonlyMetaCell ymd={ymd} row={label} />
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>
@@ -446,7 +424,7 @@ function DashboardSemanaInner() {
                 gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))`,
               }}
             >
-              {/* Columna etiquetas: header spacer + 4 filas */}
+              {/* Columna etiquetas: espaciador header + 4 filas */}
               <div
                 className="grid gap-[6px]"
                 style={{ gridTemplateRows: `${DAY_HEADER_H}px repeat(4, ${ROW_H}px)` }}
@@ -474,7 +452,7 @@ function DashboardSemanaInner() {
 }
 
 /* =========================================================
-   Página
+   Página: envuelve en Suspense para cumplir Next requirement
 ========================================================= */
 export default function DashboardSemanaPage() {
   return (
