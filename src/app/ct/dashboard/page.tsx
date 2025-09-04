@@ -92,10 +92,11 @@ function parseVideoValue(v?: string | null) {
 /* =========================================================
    Layout (planner semanal)
 ========================================================= */
-const COL_LABEL_W = 110;        // ancho columna izquierda
-const DAY_MIN_W   = 142;        // ⬅️ más ancho por tarjeta (antes 116)
-const ROW_H       = 64;         // alto de cada fila
-const DAY_HEADER_H = 66;        // ⬅️ un poco más alto el header (antes 60)
+// ⬇️ Ajustes para que entre todo sin scroll horizontal
+const COL_LABEL_W = 110;  // ancho columna izquierda
+const DAY_MIN_W   = 120;  // antes 142 — más angosto para que entren 7 columnas
+const ROW_H       = 72;   // antes 64 — un poco más alto (aprovecha espacio vertical)
+const DAY_HEADER_H = 66;  // header compacto de dos líneas
 const CELL_GAP    = 6;
 
 /* =========================================================
@@ -217,7 +218,7 @@ function DashboardSemanaInner() {
         {ROWS.map((row) => {
           const s = findCell(ymd, activeTurn, row);
           const txt = (s?.title || "").trim();
-          return (
+        return (
             <div
               key={row}
               className="rounded-md border bg-gray-50 px-2 py-1.5 text-[12px] leading-[18px] whitespace-pre-wrap overflow-hidden"
