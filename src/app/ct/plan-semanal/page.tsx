@@ -24,29 +24,34 @@ export default function Page() {
   );
 }
 
+/* =========================================================
+   Constantes de layout (tamaños coherentes con dashboard)
+========================================================= */
+const COL_LABEL_W = 120;
+const DAY_MIN_W = 120;
+
+/* =========================================================
+   Tipos y filas
+========================================================= */
 type TurnKey = "morning" | "afternoon";
 type PaneKey = "editor" | "tools";
 
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 const SESSION_NAME_ROW = "NOMBRE SESIÓN";
-// Orden solicitado en DETALLES
 const META_ROWS = [SESSION_NAME_ROW, "LUGAR", "HORA", "VIDEO"] as const;
 
+/* ===== Estado del día (tipo) ===== */
 type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
 type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string };
-
 const DAYFLAG_TAG = "DAYFLAG";
-function dayFlagMarker(turn: TurnKey) {
-  return `[${DAYFLAG_TAG}:${turn}]`;
-}
-function isDayFlag(s: SessionDTO, turn: TurnKey) {
-  return typeof s.description === "string" && s.description.startsWith(dayFlagMarker(turn));
-}
-function parseDayFlagTitle(title: string | null | undefined): DayFlag {
+const dayFlagMarker = (turn: TurnKey) => `[${DAYFLAG_TAG}:${turn}]`;
+const isDayFlag = (s: SessionDTO, turn: TurnKey) =>
+  typeof s.description === "string" && s.description.startsWith(dayFlagMarker(turn));
+function parseDayFlagTitle(title?: string | null): DayFlag {
   const t = (title || "").trim();
   if (!t) return { kind: "NONE" };
   const [kind, rival, logoUrl] = t.split("|").map((x) => (x || "").trim());
-  if (kind === "PARTIDO") return { kind: "PARTIDO", rival: rival || "", logoUrl: logoUrl || "" };
+  if (kind === "PARTIDO") return { kind: "PARTIDO", rival, logoUrl };
   if (kind === "LIBRE") return { kind: "LIBRE" };
   return { kind: "NONE" };
 }
@@ -56,9 +61,9 @@ function buildDayFlagTitle(df: DayFlag): string {
   return "";
 }
 
-// ------- MICROCICLO (INTENSIDAD / MD) -------
+/* ===== MICROCICLO (intensidad) ===== */
 type MicroKey = "" | "MD+1" | "MD+2" | "MD-4" | "MD-3" | "MD-2" | "MD-1" | "MD" | "DESCANSO";
-
+const MICRO_TAG = "MICRO";
 const MICRO_CHOICES: Array<{ value: MicroKey; colorClass: string }> = [
   { value: "",        colorClass: "" },
   { value: "MD+1",    colorClass: "bg-blue-50" },
@@ -70,29 +75,18 @@ const MICRO_CHOICES: Array<{ value: MicroKey; colorClass: string }> = [
   { value: "MD",      colorClass: "bg-amber-50" },
   { value: "DESCANSO",colorClass: "bg-gray-100" },
 ];
-
-const MICRO_TAG = "MICRO";
-function microMarker(turn: TurnKey) {
-  return `[${MICRO_TAG}:${turn}]`;
-}
-function isMicrocycle(s: SessionDTO, turn: TurnKey) {
-  return typeof s.description === "string" && s.description.startsWith(microMarker(turn));
-}
-function findMicroSession(list: SessionDTO[], turn: TurnKey) {
-  return list.find((s) => isMicrocycle(s, turn));
-}
+const microMarker = (turn: TurnKey) => `[${MICRO_TAG}:${turn}]`;
+const isMicrocycle = (s: SessionDTO, turn: TurnKey) =>
+  typeof s.description === "string" && s.description.startsWith(microMarker(turn));
 function parseMicroTitle(title?: string | null): MicroKey {
   const t = (title || "").trim();
   if (!t) return "";
-  const val = t as MicroKey;
-  if (MICRO_CHOICES.some((c) => c.value === val)) return val;
-  return "";
-}
-function buildMicroTitle(v: MicroKey): string {
-  return v || "";
+  return (MICRO_CHOICES.find((c) => c.value === t)?.value || "") as MicroKey;
 }
 
-// ------- Utils -------
+/* =========================================================
+   Utils
+========================================================= */
 function addDaysUTC(date: Date, days: number) {
   const x = new Date(date);
   x.setUTCDate(x.getUTCDate() + days);
@@ -136,7 +130,9 @@ function cellKey(dayYmd: string, turn: TurnKey, row: string) {
   return `${dayYmd}::${turn}::${row}`;
 }
 
-// ------- Página -------
+/* =========================================================
+   Página
+========================================================= */
 function PlanSemanalInner() {
   const qs = useSearchParams();
   const router = useRouter();
@@ -144,7 +140,7 @@ function PlanSemanalInner() {
 
   // Pestañas
   const initialTurn = (qs.get("turn") === "afternoon" ? "afternoon" : "morning") as TurnKey;
-  const initialPane: PaneKey = qs.get("pane") === "tools" ? "tools" : "editor";
+  const initialPane: PaneKey = (qs.get("pane") === "tools" ? "tools" : "editor") as PaneKey;
   const [activeTurn, setActiveTurn] = useState<TurnKey>(initialTurn);
   const [activePane, setActivePane] = useState<PaneKey>(initialPane);
 
@@ -164,7 +160,7 @@ function PlanSemanalInner() {
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
-  // Preferencias de usuario (servidor): rowLabels + places
+  // Preferencias de usuario (labels + places)
   const [rowLabels, setRowLabels] = useState<Record<string, string>>({});
   const [places, setPlaces] = useState<string[]>([]);
 
@@ -234,13 +230,11 @@ function PlanSemanalInner() {
   const label = (id: string) => rowLabels[id] || id;
 
   // Helpers sesiones
-  function listFor(dayYmd: string) {
-    return daysMap[dayYmd] || [];
-  }
-  function findCell(dayYmd: string, turn: TurnKey, row: string): SessionDTO | undefined {
+  const listFor = (dayYmd: string) => daysMap[dayYmd] || [];
+  function findCell(dayYmd: string, turn: TurnKey, row: string) {
     return listFor(dayYmd).find((s) => isCellOf(s, turn, row));
   }
-  function findDayFlagSession(dayYmd: string, turn: TurnKey): SessionDTO | undefined {
+  function findDayFlagSession(dayYmd: string, turn: TurnKey) {
     return listFor(dayYmd).find((s) => isDayFlag(s, turn));
   }
   function getDayFlag(dayYmd: string, turn: TurnKey): DayFlag {
@@ -250,8 +244,7 @@ function PlanSemanalInner() {
   async function setDayFlag(dayYmd: string, turn: TurnKey, df: DayFlag) {
     const existing = findDayFlagSession(dayYmd, turn);
     const iso = computeISOForSlot(dayYmd, turn);
-    const marker = dayFlagMarker(turn);
-       const desc = `${marker} | ${dayYmd}`;
+    const desc = `${dayFlagMarker(turn)} | ${dayYmd}`;
     const title = buildDayFlagTitle(df);
     try {
       if (df.kind === "NONE") {
@@ -259,11 +252,8 @@ function PlanSemanalInner() {
         await loadWeek(base);
         return;
       }
-      if (!existing) {
-        await createSession({ title, description: desc, date: iso, type: "GENERAL" });
-      } else {
-        await updateSession(existing.id, { title, description: desc, date: iso });
-      }
+      if (!existing) await createSession({ title, description: desc, date: iso, type: "GENERAL" });
+      else await updateSession(existing.id, { title, description: desc, date: iso });
       await loadWeek(base);
     } catch (e: any) {
       console.error(e);
@@ -272,27 +262,26 @@ function PlanSemanalInner() {
   }
 
   // MICROCICLO helpers
+  function findMicroSession(dayYmd: string, turn: TurnKey) {
+    return listFor(dayYmd).find((s) => isMicrocycle(s, turn));
+  }
   function getMicroValue(dayYmd: string, turn: TurnKey): MicroKey {
-    const s = findMicroSession(listFor(dayYmd), turn);
+    const s = findMicroSession(dayYmd, turn);
     return parseMicroTitle(s?.title);
   }
   async function setMicroValue(dayYmd: string, turn: TurnKey, value: MicroKey) {
-    const existing = findMicroSession(listFor(dayYmd), turn);
+    const existing = findMicroSession(dayYmd, turn);
     const iso = computeISOForSlot(dayYmd, turn);
-    const marker = microMarker(turn);
-    const desc = `${marker} | ${dayYmd}`;
-    const title = buildMicroTitle(value);
+    const desc = `${microMarker(turn)} | ${dayYmd}`;
+    const title = value || "";
     try {
       if (!value) {
         if (existing) await deleteSession(existing.id);
         await loadWeek(base);
         return;
       }
-      if (!existing) {
-        await createSession({ title, description: desc, date: iso, type: "GENERAL" });
-      } else {
-        await updateSession(existing.id, { title, description: desc, date: iso });
-      }
+      if (!existing) await createSession({ title, description: desc, date: iso, type: "GENERAL" });
+      else await updateSession(existing.id, { title, description: desc, date: iso });
       await loadWeek(base);
     } catch (e: any) {
       console.error(e);
@@ -333,18 +322,11 @@ function PlanSemanalInner() {
           continue;
         }
         if (!existing) {
-          await createSession({
-            title: text,
-            description: `${marker} | ${dayYmd}`,
-            date: iso,
-            type: "GENERAL",
-          });
+          await createSession({ title: text, description: `${marker} | ${dayYmd}`, date: iso, type: "GENERAL" });
         } else {
           await updateSession(existing.id, {
             title: text,
-            description: existing.description?.startsWith(marker)
-              ? existing.description
-              : `${marker} | ${dayYmd}`,
+            description: existing.description?.startsWith(marker) ? existing.description : `${marker} | ${dayYmd}`,
             date: iso,
           });
         }
@@ -357,6 +339,10 @@ function PlanSemanalInner() {
       setSavingAll(false);
     }
   }
+
+  /* ============================
+     Componentes de celdas
+  ============================ */
 
   // ---- Inputs META
   function MetaInput({
@@ -388,9 +374,7 @@ function PlanSemanalInner() {
           value={local}
           onChange={(e) => setLocal(e.target.value)}
           onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-          }}
+          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
         />
       );
     }
@@ -399,7 +383,6 @@ function PlanSemanalInner() {
     if (row === "LUGAR") {
       const [local, setLocal] = useState(value || "");
       useEffect(() => setLocal(value || ""), [value, k]);
-
       return (
         <input
           list="places-datalist"
@@ -431,45 +414,21 @@ function PlanSemanalInner() {
       const [isEditing, setIsEditing] = useState(!(parsed.label || parsed.url));
       const [localLabel, setLocalLabel] = useState(parsed.label);
       const [localUrl, setLocalUrl] = useState(parsed.url);
-      useEffect(() => {
-        setLocalLabel(parsed.label);
-        setLocalUrl(parsed.url);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, [k, value]);
+      useEffect(() => { setLocalLabel(parsed.label); setLocalUrl(parsed.url); }, [k, value]);
 
       if (!isEditing) {
         return (
           <div className="flex items-center justify-between gap-1">
             {parsed.url ? (
-              <a
-                href={parsed.url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-[12px] underline text-emerald-700 truncate"
-                title={parsed.label || "Video"}
-              >
+              <a href={parsed.url} target="_blank" rel="noreferrer" className="text-[12px] underline text-emerald-700 truncate" title={parsed.label || "Video"}>
                 {parsed.label || "Video"}
               </a>
             ) : (
               <span className="text-[12px] text-gray-500 truncate">{parsed.label}</span>
             )}
             <div className="flex items-center gap-1">
-              <button
-                type="button"
-                className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
-                onClick={() => setIsEditing(true)}
-                title="Editar"
-              >
-                ✏️
-              </button>
-              <button
-                type="button"
-                className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
-                onClick={() => stageCell(dayYmd, turn, row, "")}
-                title="Borrar"
-              >
-                ❌
-              </button>
+              <button type="button" className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50" onClick={() => setIsEditing(true)} title="Editar">✏️</button>
+              <button type="button" className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50" onClick={() => stageCell(dayYmd, turn, row, "")} title="Borrar">❌</button>
             </div>
           </div>
         );
@@ -477,30 +436,9 @@ function PlanSemanalInner() {
 
       return (
         <div className="flex items-center gap-1.5">
-          <input
-            className="h-8 w-[45%] rounded-md border px-2 text-xs"
-            placeholder="Título"
-            value={localLabel}
-            onChange={(e) => setLocalLabel(e.target.value)}
-          />
-          <input
-            type="url"
-            className="h-8 w-[55%] rounded-md border px-2 text-xs"
-            placeholder="https://…"
-            value={localUrl}
-            onChange={(e) => setLocalUrl(e.target.value)}
-          />
-          <button
-            type="button"
-            className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50"
-            onClick={() => {
-              stageCell(dayYmd, turn, row, joinVideoValue(localLabel, localUrl));
-              setIsEditing(false);
-            }}
-            title="Listo"
-          >
-            ✓
-          </button>
+          <input className="h-8 w-[45%] rounded-md border px-2 text-xs" placeholder="Título" value={localLabel} onChange={(e) => setLocalLabel(e.target.value)} />
+          <input type="url" className="h-8 w-[55%] rounded-md border px-2 text-xs" placeholder="https://…" value={localUrl} onChange={(e) => setLocalUrl(e.target.value)} />
+          <button type="button" className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50" onClick={() => { stageCell(dayYmd, turn, row, joinVideoValue(localLabel, localUrl)); setIsEditing(false); }} title="Listo">✓</button>
         </div>
       );
     }
@@ -509,15 +447,7 @@ function PlanSemanalInner() {
   }
 
   // ---- Celdas de contenido
-  function EditableCell({
-    dayYmd,
-    turn,
-    row,
-  }: {
-    dayYmd: string;
-    turn: TurnKey;
-    row: string;
-  }) {
+  function EditableCell({ dayYmd, turn, row }: { dayYmd: string; turn: TurnKey; row: string }) {
     const existing = findCell(dayYmd, turn, row);
     const ref = useRef<HTMLDivElement | null>(null);
     const k = cellKey(dayYmd, turn, row);
@@ -553,12 +483,8 @@ function PlanSemanalInner() {
         <div className="flex items-center justify-between">
           <div>{flagBadge}</div>
           {sessionHref ? (
-            <a
-              href={sessionHref}
-              className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50"
-              title="Editar ejercicio"
-            >
-              Editar ejercicio
+            <a href={sessionHref} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50" title="Abrir el ejercicio completo">
+              Ejercicio completo
             </a>
           ) : null}
         </div>
@@ -569,10 +495,8 @@ function PlanSemanalInner() {
           suppressContentEditableWarning
           onBlur={onBlur}
           onKeyDown={onKeyDown}
-          className={`min-h-[90px] w-full rounded-xl border p-2 text-[13px] leading-5 outline-none focus:ring-2 ${
-            staged !== undefined ? "border-emerald-400 ring-emerald-200" : "focus:ring-emerald-400"
-          } whitespace-pre-wrap`}
-          data-placeholder="Escribir…"
+          className="min-h-[90px] w-full rounded-xl border p-2 text-[13px] leading-5 outline-none focus:ring-2 focus:ring-emerald-400 whitespace-pre-wrap"
+          data-placeholder="Contenidos / títulos (breves)…"
           dangerouslySetInnerHTML={{ __html: (initialText || "").replace(/\n/g, "<br/>") }}
         />
       </div>
@@ -583,14 +507,9 @@ function PlanSemanalInner() {
   function DayStatusCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const df = getDayFlag(ymd, turn);
     const [kind, setKind] = useState<DayFlagKind>(df.kind);
-    const [rival, setRival] = useState(df.rival || "");
-    const [logo, setLogo] = useState(df.logoUrl || "");
 
     useEffect(() => {
-      const fresh = getDayFlag(ymd, turn);
-      setKind(fresh.kind);
-      setRival(fresh.rival || "");
-      setLogo(fresh.logoUrl || "");
+      setKind(getDayFlag(ymd, turn).kind);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [weekStart, ymd, turn]);
 
@@ -598,72 +517,74 @@ function PlanSemanalInner() {
 
     return (
       <div className="p-1">
-        <div className="flex items-center gap-1">
-          <select
-            className="h-7 w-[120px] rounded-md border px-1.5 text-[11px]"
-            value={kind}
-            onChange={(e) => {
-              const k = e.target.value as DayFlagKind;
-              setKind(k);
-              if (k === "NONE") save({ kind: "NONE" });
-              if (k === "LIBRE") save({ kind: "LIBRE" });
-              if (k === "PARTIDO") save({ kind: "PARTIDO", rival, logoUrl: logo });
-            }}
-          >
-            <option value="NONE">Normal</option>
-            <option value="PARTIDO">Partido (MD)</option>
-            <option value="LIBRE">Descanso</option>
-          </select>
+        <select
+          className="h-7 w-[120px] rounded-md border px-1.5 text-[11px]"
+          value={kind}
+          onChange={(e) => {
+            const k = e.target.value as DayFlagKind;
+            setKind(k);
+            if (k === "NONE") save({ kind: "NONE" });
+            if (k === "LIBRE") save({ kind: "LIBRE" });
+            if (k === "PARTIDO") save({ kind: "PARTIDO" });
+          }}
+        >
+          <option value="NONE">Normal</option>
+          <option value="PARTIDO">Partido (MD)</option>
+          <option value="LIBRE">Descanso</option>
+        </select>
+      </div>
+    );
+  }
+  function DayStatusRow({ turn }: { turn: TurnKey }) {
+    return (
+      <div className="grid items-center border-b bg-gray-50/60" style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}>
+        <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Tipo</div>
+        {orderedDays.map((ymd) => <DayStatusCell key={`${ymd}-${turn}-status`} ymd={ymd} turn={turn} />)}
+      </div>
+    );
+  }
 
-          {kind === "PARTIDO" && (
-            <>
-              <input
-                className="h-7 flex-1 rounded-md border px-2 text-[11px]"
-                placeholder="Rival"
-                value={rival}
-                onChange={(e) => setRival(e.target.value)}
-                onBlur={() => save({ kind: "PARTIDO", rival, logoUrl: logo })}
-              />
-              <input
-                className="h-7 w-[140px] rounded-md border px-2 text-[11px]"
-                placeholder="Logo URL"
-                value={logo}
-                onChange={(e) => setLogo(e.target.value)}
-                onBlur={() => save({ kind: "PARTIDO", rival, logoUrl: logo })}
-              />
-            </>
-          )}
+  // ---- Partido (extras) fila
+  function PartidoExtraCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
+    const f = getDayFlag(ymd, turn);
+    const [rival, setRival] = useState(f.rival || "");
+    const [logo, setLogo] = useState(f.logoUrl || "");
+
+    useEffect(() => {
+      const fresh = getDayFlag(ymd, turn);
+      setRival(fresh.rival || "");
+      setLogo(fresh.logoUrl || "");
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [weekStart, ymd, turn]);
+
+    if (f.kind !== "PARTIDO") return <div className="p-1 text-[11px] text-gray-400">—</div>;
+
+    const save = () => setDayFlag(ymd, turn, { kind: "PARTIDO", rival, logoUrl: logo });
+
+    return (
+      <div className="p-1">
+        <div className="flex items-center gap-1.5">
+          <input className="h-7 flex-1 rounded-md border px-2 text-[11px]" placeholder="Rival" value={rival} onChange={(e) => setRival(e.target.value)} onBlur={save} />
+          <input className="h-7 w-[160px] rounded-md border px-2 text-[11px]" placeholder="Logo URL" value={logo} onChange={(e) => setLogo(e.target.value)} onBlur={save} />
+          {logo ? ( /* eslint-disable-next-line @next/next/no-img-element */ <img src={logo} alt="Logo" className="h-7 w-7 object-contain rounded border" /> ) : null}
         </div>
       </div>
     );
   }
-
-  function DayStatusRow({ turn }: { turn: TurnKey }) {
+  function PartidoExtraRow({ turn }: { turn: TurnKey }) {
     return (
-      <div
-        className="grid items-center border-b bg-gray-50/60"
-        style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
-      >
-        <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Tipo</div>
-        {orderedDays.map((ymd) => (
-          <DayStatusCell key={`${ymd}-${turn}-status`} ymd={ymd} turn={turn} />
-        ))}
+      <div className="grid items-center border-b bg-amber-50/20" style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}>
+        <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Partido</div>
+        {orderedDays.map((ymd) => <PartidoExtraCell key={`${ymd}-${turn}-partido`} ymd={ymd} turn={turn} />)}
       </div>
     );
   }
 
-  // ---- Intensidad (MICROCICLO)
+  // ---- Intensidad (MICRO) fila
   function MicroCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
-    const current = getMicroValue(ymd, turn);
-    const [val, setVal] = useState<MicroKey>(current);
-
-    useEffect(() => {
-      setVal(getMicroValue(ymd, turn));
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [weekStart, ymd, turn]);
-
+    const [val, setVal] = useState<MicroKey>(getMicroValue(ymd, turn));
+    useEffect(() => { setVal(getMicroValue(ymd, turn)); /* eslint-disable-next-line */ }, [weekStart, ymd, turn]);
     const cls = MICRO_CHOICES.find((c) => c.value === val)?.colorClass || "";
-
     return (
       <div className={`p-1 ${cls}`}>
         <select
@@ -684,17 +605,11 @@ function PlanSemanalInner() {
       </div>
     );
   }
-
   function MicroRow({ turn }: { turn: TurnKey }) {
     return (
-      <div
-        className="grid items-center border-b"
-        style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
-      >
+      <div className="grid items-center border-b" style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}>
         <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Intensidad</div>
-        {orderedDays.map((ymd) => (
-          <MicroCell key={`${ymd}-${turn}-micro`} ymd={ymd} turn={turn} />
-        ))}
+        {orderedDays.map((ymd) => <MicroCell key={`${ymd}-${turn}-micro`} ymd={ymd} turn={turn} />)}
       </div>
     );
   }
@@ -710,17 +625,12 @@ function PlanSemanalInner() {
   function TurnEditor({ turn }: { turn: TurnKey }) {
     return (
       <>
-        {/* Encabezado días */}
-        <div
-          className="grid text-xs"
-          style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
-        >
+        {/* Encabezado de días */}
+        <div className="grid text-xs" style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}>
           <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600"></div>
           {orderedDays.map((ymd) => (
             <div key={`${turn}-${ymd}`} className="bg-gray-50 border-b px-2 py-1.5">
-              <div className="text-[11px] font-semibold uppercase tracking-wide">
-                {humanDayUTC(ymd)}
-              </div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide">{humanDayUTC(ymd)}</div>
               <div className="text-[10px] text-gray-400">{ymd}</div>
             </div>
           ))}
@@ -730,18 +640,13 @@ function PlanSemanalInner() {
         <SectionLabel>MICROCICLO</SectionLabel>
         <DayStatusRow turn={turn} />
         <MicroRow turn={turn} />
+        <PartidoExtraRow turn={turn} />
 
         {/* DETALLES */}
         <SectionLabel>DETALLES</SectionLabel>
         {META_ROWS.map((rowName) => (
-          <div
-            key={`${turn}-meta-${rowName}`}
-            className="grid items-center"
-            style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
-          >
-            <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">
-              {rowName}
-            </div>
+          <div key={`${turn}-meta-${rowName}`} className="grid items-center" style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}>
+            <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">{rowName}</div>
             {orderedDays.map((ymd) => (
               <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
                 <MetaInput dayYmd={ymd} turn={turn} row={rowName} />
@@ -750,17 +655,16 @@ function PlanSemanalInner() {
           </div>
         ))}
 
-        {/* CONTENIDO */}
+        {/* CONTENIDOS */}
         <div className="border-t">
+          <div className="px-2 py-1 text-[10px] text-gray-600 border-b bg-gray-50">
+            Escribí el <b>contenido general</b> (títulos). El detalle se edita en <b>“Ejercicio completo”</b>.
+          </div>
           <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
             {turn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
           </div>
           {CONTENT_ROWS.map((rowName) => (
-            <div
-              key={`${turn}-${rowName}`}
-              className="grid items-stretch"
-              style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
-            >
+            <div key={`${turn}-${rowName}`} className="grid items-stretch" style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}>
               <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600 whitespace-pre-line">
                 {label(rowName)}
               </div>
@@ -792,102 +696,40 @@ function PlanSemanalInner() {
       {!hideHeader && (
         <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-lg md:text-xl font-bold flex items-center gap-2">
-              Plan semanal — Editor en tabla
-            </h1>
+            <h1 className="text-lg md:text-xl font-bold">Plan semanal — Editor en tabla</h1>
             <p className="text-xs md:text-sm text-gray-500">
               Semana {weekStart || "—"} → {weekEnd || "—"} (Lun→Dom)
             </p>
-            <p className="mt-1 text-[10px] text-gray-400">
-              Tip: <kbd className="rounded border px-1">Ctrl</kbd>/<kbd className="rounded border px-1">⌘</kbd>{" "}
-              + <kbd className="rounded border px-1">Enter</kbd> marca una celda sin guardar aún.
-            </p>
           </div>
 
-          {activePane === "editor" ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-                ◀ Semana anterior
-              </button>
-              <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-                Hoy
-              </button>
-              <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-                Semana siguiente ▶
-              </button>
-              <div className="w-px h-6 bg-gray-200 mx-1" />
-              <button
-                onClick={saveAll}
-                disabled={pendingCount === 0 || savingAll}
-                className={`px-3 py-1.5 rounded-xl text-xs ${
-                  pendingCount === 0 || savingAll ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
-                }`}
-                title={pendingCount ? `${pendingCount} cambio(s) por guardar` : "Sin cambios"}
-              >
-                {savingAll ? "Guardando..." : `Guardar cambios${pendingCount ? ` (${pendingCount})` : ""}`}
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              <button onClick={goPrevWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-                ◀ Semana anterior
-              </button>
-              <button onClick={goTodayWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-                Hoy
-              </button>
-              <button onClick={goNextWeek} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-                Semana siguiente ▶
-              </button>
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => confirmDiscardIfNeeded(() => setBase((d) => addDaysUTC(d, -7)))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">◀ Semana anterior</button>
+            <button onClick={() => confirmDiscardIfNeeded(() => setBase(getMonday(new Date())))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Hoy</button>
+            <button onClick={() => confirmDiscardIfNeeded(() => setBase((d) => addDaysUTC(d, 7)))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Semana siguiente ▶</button>
+            <div className="w-px h-6 bg-gray-200 mx-1" />
+            <button
+              onClick={saveAll}
+              disabled={pendingCount === 0 || savingAll}
+              className={`px-3 py-1.5 rounded-xl text-xs ${pendingCount === 0 || savingAll ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
+              title={pendingCount ? `${pendingCount} cambio(s) por guardar` : "Sin cambios"}
+            >
+              {savingAll ? "Guardando..." : `Guardar cambios${pendingCount ? ` (${pendingCount})` : ""}`}
+            </button>
+          </div>
         </header>
       )}
 
       {/* Tabs */}
       <div className="flex items-center gap-2">
-        <button
-          className={`px-3 py-1.5 rounded-xl border text-xs ${
-            activePane === "editor" && activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"
-          }`}
-          onClick={() => {
-            setActivePane("editor");
-            setActiveTurn("morning");
-          }}
-        >
-          Mañana
-        </button>
-        <button
-          className={`px-3 py-1.5 rounded-xl border text-xs ${
-            activePane === "editor" && activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"
-          }`}
-          onClick={() => {
-            setActivePane("editor");
-            setActiveTurn("afternoon");
-          }}
-        >
-          Tarde
-        </button>
-        <button
-          className={`px-3 py-1.5 rounded-xl border text-xs ${
-            activePane === "tools" ? "bg-black text-white" : "hover:bg-gray-50"
-          }`}
-          onClick={() => setActivePane("tools")}
-          title="Herramientas"
-          aria-label="Herramientas"
-        >
-          ⚙️
-        </button>
+        <button className={`px-3 py-1.5 rounded-xl border text-xs ${activePane === "editor" && activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={() => { setActivePane("editor"); setActiveTurn("morning"); }}>Mañana</button>
+        <button className={`px-3 py-1.5 rounded-xl border text-xs ${activePane === "editor" && activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={() => { setActivePane("editor"); setActiveTurn("afternoon"); }}>Tarde</button>
+        <button className={`px-3 py-1.5 rounded-xl border text-xs ${activePane === "tools" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={() => setActivePane("tools")} title="Herramientas" aria-label="Herramientas">⚙️</button>
       </div>
 
       {/* Contenido */}
       {activePane === "tools" ? (
         <div className="rounded-2xl border bg-white shadow-sm p-3">
-          <PlannerActionsBar
-            onAfterChange={() => {
-              loadWeek(base);
-              loadPrefs();
-            }}
-          />
+          <PlannerActionsBar onAfterChange={() => { loadWeek(base); loadPrefs(); }} />
         </div>
       ) : loading ? (
         <div className="text-gray-500">Cargando semana…</div>
@@ -897,11 +739,9 @@ function PlanSemanalInner() {
         </div>
       )}
 
-      {/* DATALIST GLOBAL (sirve para Mañana y Tarde) */}
+      {/* DATALIST GLOBAL */}
       <datalist id="places-datalist">
-        {(places || []).map((p) => (
-          <option key={p} value={p} />
-        ))}
+        {(places || []).map((p) => (<option key={p} value={p} />))}
       </datalist>
     </div>
   );
