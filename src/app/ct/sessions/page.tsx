@@ -27,35 +27,19 @@ type Session = {
 
 // --- constantes de filas usadas en el editor ---
 const SESSION_NAME_ROW = "NOMBRE SESIÓN";
-const SESSION_NAME_ALIASES = [
-  "NOMBRE SESIÓN",
-  "NOMBRE DE SESIÓN",
-  "NOMBRE SESION",
-  "NOMBRE DE SESION",
-] as const;
-
 const META_LUGAR = "LUGAR";
 const META_HORA = "HORA";
 
-// ---- helpers -------------------------------------------------------
+/* ============================
+   Helpers
+============================ */
 function ymdUTCFromISO(iso: string) {
   const d = new Date(iso);
   return d.toISOString().slice(0, 10);
 }
 
-// Regex más permisivo: permite espacios antes de [GRID y alrededor del nombre de fila
-// Ejemplos válidos:
-//   "[GRID:morning:NOMBRE SESIÓN] | 2025-09-01"
-//   "   [GRID:afternoon:  NOMBRE DE SESION  ] | 2025-09-01"
-const GRID_RE = /^\s*\[GRID:(morning|afternoon):\s*([^\]]+?)\s*\]/i;
-
-function normalizeNoAccents(s: string) {
-  return s
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toUpperCase()
-    .trim();
-}
+// [GRID:morning|afternoon:<ROW>] | YYYY-MM-DD
+const GRID_RE = /^\[GRID:(morning|afternoon):(.+?)\]/i;
 
 function parseGrid(description?: string | null): { turn?: TurnKey; row?: string } {
   const text = (description || "").trim();
@@ -75,12 +59,25 @@ function formatHumanDateTime(iso: string) {
   return d.toLocaleString();
 }
 
-/** Devuelve true si la sesión es la celda de NOMBRE SESIÓN (tolerando variantes y sin tildes) */
+// Normaliza etiquetas: quita acentos, colapsa espacios, lowercase
+function normalizeLabel(s?: string | null) {
+  return (s || "")
+    .normalize("NFD")
+    // @ts-ignore - Unicode property escapes soportadas en runtime moderno
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const NAME_ROW_NORM = normalizeLabel(SESSION_NAME_ROW);
+const LUGAR_NORM = normalizeLabel(META_LUGAR);
+const HORA_NORM = normalizeLabel(META_HORA);
+
+/** Devuelve true si la sesión es la celda de NOMBRE SESIÓN */
 function isSessionNameCell(s: Session): boolean {
   const { row } = parseGrid(s.description);
-  if (!row) return false;
-  const norm = normalizeNoAccents(row);
-  return SESSION_NAME_ALIASES.some((alias) => normalizeNoAccents(alias) === norm);
+  return normalizeLabel(row) === NAME_ROW_NORM;
 }
 
 /** Busca en el conjunto completo la celda META (LUGAR | HORA) del mismo día/turno */
@@ -90,19 +87,21 @@ function findMetaFor(
   turn: TurnKey,
   metaRow: "LUGAR" | "HORA"
 ): string {
-  const wanted = normalizeNoAccents(metaRow);
+  const wanted = metaRow === "LUGAR" ? LUGAR_NORM : HORA_NORM;
   const item = all.find((x) => {
     const { turn: t, row } = parseGrid(x.description);
     return (
       t === turn &&
-      row &&
-      normalizeNoAccents(row) === wanted &&
+      normalizeLabel(row) === wanted &&
       ymdUTCFromISO(x.date) === dayYmd
     );
   });
   return (item?.title || "").trim();
 }
 
+/* ============================
+   Página
+============================ */
 export default function CTSessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,7 +114,6 @@ export default function CTSessionsPage() {
     try {
       setLoading(true);
       setError(null);
-      // Traemos todas (el endpoint ya lo tenés)
       const res = await fetch("/api/sessions", { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "No se pudieron cargar las sesiones");
@@ -131,18 +129,38 @@ export default function CTSessionsPage() {
     fetchSessions();
   }, []);
 
-  // 1) Nos quedamos SOLO con las celdas "NOMBRE SESIÓN" (tolerante)
+  // 1) Nos quedamos SOLO con las celdas "NOMBRE SESIÓN" (robusto con normalización)
   const onlyNamed = useMemo(() => {
     return (sessions || []).filter(isSessionNameCell);
   }, [sessions]);
 
-  // 2) Orden por fecha desc
+  // 2) Agrupamos por día + turno y nos quedamos con la MÁS RECIENTE (updatedAt)
+  const groupedLatest = useMemo(() => {
+    const map = new Map<string, Session>(); // key: ymd::turn
+    for (const s of onlyNamed) {
+      const { turn: tFromDesc } = parseGrid(s.description);
+      const turn = (tFromDesc ?? inferTurnFromISO(s.date)) as TurnKey;
+      const ymd = ymdUTCFromISO(s.date);
+      const key = `${ymd}::${turn}`;
+      const prev = map.get(key);
+      if (!prev) {
+        map.set(key, s);
+      } else {
+        const prevTime = new Date(prev.updatedAt || prev.date).getTime();
+        const curTime = new Date(s.updatedAt || s.date).getTime();
+        if (curTime >= prevTime) map.set(key, s);
+      }
+    }
+    return Array.from(map.values());
+  }, [onlyNamed]);
+
+  // 3) Orden por fecha desc
   const ordered = useMemo(
-    () => [...onlyNamed].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-    [onlyNamed]
+    () => [...groupedLatest].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [groupedLatest]
   );
 
-  // 3) Aplicar filtro por fecha si se eligió un día
+  // 4) Aplicar filtro por fecha si se eligió un día
   const visible = useMemo(() => {
     if (!dateFilter) return ordered;
     return ordered.filter((s) => ymdUTCFromISO(s.date) === dateFilter);
@@ -202,8 +220,8 @@ export default function CTSessionsPage() {
             const displayTitle = (s.title || "").trim() || "(Sin nombre)";
 
             // Meta (se buscan en todas las sesiones del mismo día/turno)
-            const lugar = findMetaFor(sessions, ymd, turn, META_LUGAR);
-            const hora = findMetaFor(sessions, ymd, turn, META_HORA);
+            const lugar = findMetaFor(sessions, ymd, turn, "LUGAR");
+            const hora = findMetaFor(sessions, ymd, turn, "HORA");
 
             // Link a la vista por día/turno
             const byDayHref = `/ct/sessions/by-day/${ymd}/${turn}`;
