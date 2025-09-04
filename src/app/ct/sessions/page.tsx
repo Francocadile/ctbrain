@@ -27,6 +27,13 @@ type Session = {
 
 // --- constantes de filas usadas en el editor ---
 const SESSION_NAME_ROW = "NOMBRE SESIÓN";
+const SESSION_NAME_ALIASES = [
+  "NOMBRE SESIÓN",
+  "NOMBRE DE SESIÓN",
+  "NOMBRE SESION",
+  "NOMBRE DE SESION",
+] as const;
+
 const META_LUGAR = "LUGAR";
 const META_HORA = "HORA";
 
@@ -36,8 +43,19 @@ function ymdUTCFromISO(iso: string) {
   return d.toISOString().slice(0, 10);
 }
 
-// [GRID:morning:<ROW>] | YYYY-MM-DD
-const GRID_RE = /^\[GRID:(morning|afternoon):(.+?)\]/i;
+// Regex más permisivo: permite espacios antes de [GRID y alrededor del nombre de fila
+// Ejemplos válidos:
+//   "[GRID:morning:NOMBRE SESIÓN] | 2025-09-01"
+//   "   [GRID:afternoon:  NOMBRE DE SESION  ] | 2025-09-01"
+const GRID_RE = /^\s*\[GRID:(morning|afternoon):\s*([^\]]+?)\s*\]/i;
+
+function normalizeNoAccents(s: string) {
+  return s
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toUpperCase()
+    .trim();
+}
 
 function parseGrid(description?: string | null): { turn?: TurnKey; row?: string } {
   const text = (description || "").trim();
@@ -57,10 +75,12 @@ function formatHumanDateTime(iso: string) {
   return d.toLocaleString();
 }
 
-/** Devuelve true si la sesión es la celda de NOMBRE SESIÓN */
+/** Devuelve true si la sesión es la celda de NOMBRE SESIÓN (tolerando variantes y sin tildes) */
 function isSessionNameCell(s: Session): boolean {
   const { row } = parseGrid(s.description);
-  return !!row && row.toUpperCase() === SESSION_NAME_ROW.toUpperCase();
+  if (!row) return false;
+  const norm = normalizeNoAccents(row);
+  return SESSION_NAME_ALIASES.some((alias) => normalizeNoAccents(alias) === norm);
 }
 
 /** Busca en el conjunto completo la celda META (LUGAR | HORA) del mismo día/turno */
@@ -70,12 +90,13 @@ function findMetaFor(
   turn: TurnKey,
   metaRow: "LUGAR" | "HORA"
 ): string {
-  const wanted = metaRow.toUpperCase();
+  const wanted = normalizeNoAccents(metaRow);
   const item = all.find((x) => {
     const { turn: t, row } = parseGrid(x.description);
     return (
       t === turn &&
-      (row || "").toUpperCase() === wanted &&
+      row &&
+      normalizeNoAccents(row) === wanted &&
       ymdUTCFromISO(x.date) === dayYmd
     );
   });
@@ -94,7 +115,7 @@ export default function CTSessionsPage() {
     try {
       setLoading(true);
       setError(null);
-      // Traemos las últimas (el endpoint ya lo tenés)
+      // Traemos todas (el endpoint ya lo tenés)
       const res = await fetch("/api/sessions", { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "No se pudieron cargar las sesiones");
@@ -110,7 +131,7 @@ export default function CTSessionsPage() {
     fetchSessions();
   }, []);
 
-  // 1) Nos quedamos SOLO con las celdas "NOMBRE SESIÓN"
+  // 1) Nos quedamos SOLO con las celdas "NOMBRE SESIÓN" (tolerante)
   const onlyNamed = useMemo(() => {
     return (sessions || []).filter(isSessionNameCell);
   }, [sessions]);
@@ -188,7 +209,10 @@ export default function CTSessionsPage() {
             const byDayHref = `/ct/sessions/by-day/${ymd}/${turn}`;
 
             return (
-              <li key={s.id} className="rounded-xl border p-3 shadow-sm flex items-start justify-between bg-white">
+              <li
+                key={s.id}
+                className="rounded-xl border p-3 shadow-sm flex items-start justify-between bg-white"
+              >
                 <div>
                   <h3 className="font-semibold text-[15px]">
                     <a href={byDayHref} className="hover:underline" title="Abrir sesión (día/turno)">
