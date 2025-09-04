@@ -2,43 +2,27 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import {
+  getSessionsWeek,
+  getMonday,
+  toYYYYMMDDUTC,
+  type SessionDTO,
+} from "@/lib/api/sessions";
 
-type Role = "ADMIN" | "CT" | "MEDICO" | "JUGADOR" | "DIRECTIVO";
 type TurnKey = "morning" | "afternoon";
 
-type User = {
-  id: string;
-  name: string | null;
-  email: string | null;
-  role: Role;
-};
-
-type Session = {
-  id: string;
-  title: string | null;
-  description?: string | null;
-  date: string; // ISO
-  createdAt: string; // ISO
-  updatedAt: string; // ISO
-  createdBy: Pick<User, "id" | "name" | "email"> | null;
-  user?: { id: string; name: string | null; email: string | null; role?: string | null } | null;
-  type?: string | null;
-};
-
-// --- constantes de filas usadas en el editor ---
 const SESSION_NAME_ROW = "NOMBRE SESIÓN";
 const META_LUGAR = "LUGAR";
 const META_HORA = "HORA";
 
-/* ============================
-   Helpers
-============================ */
+// ===== helpers =====================================================
+
 function ymdUTCFromISO(iso: string) {
   const d = new Date(iso);
   return d.toISOString().slice(0, 10);
 }
 
-// [GRID:morning|afternoon:<ROW>] | YYYY-MM-DD
+// [GRID:morning|afternoon:<ROW>]
 const GRID_RE = /^\[GRID:(morning|afternoon):(.+?)\]/i;
 
 function parseGrid(description?: string | null): { turn?: TurnKey; row?: string } {
@@ -49,9 +33,18 @@ function parseGrid(description?: string | null): { turn?: TurnKey; row?: string 
   return { turn: m[1] as TurnKey, row: (m[2] || "").trim() };
 }
 
-function inferTurnFromISO(iso: string): TurnKey {
-  const h = new Date(iso).getUTCHours();
-  return h < 12 ? "morning" : "afternoon";
+function isRow(s: SessionDTO, turn: TurnKey, row: string) {
+  const m = parseGrid(s.description);
+  return m.turn === turn && (m.row || "").toUpperCase() === row.toUpperCase();
+}
+
+function formatHumanDate(ymd: string) {
+  const d = new Date(`${ymd}T00:00:00.000Z`);
+  return d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
 }
 
 function formatHumanDateTime(iso: string) {
@@ -59,112 +52,93 @@ function formatHumanDateTime(iso: string) {
   return d.toLocaleString();
 }
 
-// Normaliza etiquetas: quita acentos, colapsa espacios, lowercase
-function normalizeLabel(s?: string | null) {
-  return (s || "")
-    .normalize("NFD")
-    // @ts-ignore - Unicode property escapes soportadas en runtime moderno
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
+// ===== page ========================================================
 
-const NAME_ROW_NORM = normalizeLabel(SESSION_NAME_ROW);
-const LUGAR_NORM = normalizeLabel(META_LUGAR);
-const HORA_NORM = normalizeLabel(META_HORA);
-
-/** Devuelve true si la sesión es la celda de NOMBRE SESIÓN */
-function isSessionNameCell(s: Session): boolean {
-  const { row } = parseGrid(s.description);
-  return normalizeLabel(row) === NAME_ROW_NORM;
-}
-
-/** Busca en el conjunto completo la celda META (LUGAR | HORA) del mismo día/turno */
-function findMetaFor(
-  all: Session[],
-  dayYmd: string,
-  turn: TurnKey,
-  metaRow: "LUGAR" | "HORA"
-): string {
-  const wanted = metaRow === "LUGAR" ? LUGAR_NORM : HORA_NORM;
-  const item = all.find((x) => {
-    const { turn: t, row } = parseGrid(x.description);
-    return (
-      t === turn &&
-      normalizeLabel(row) === wanted &&
-      ymdUTCFromISO(x.date) === dayYmd
-    );
-  });
-  return (item?.title || "").trim();
-}
-
-/* ============================
-   Página
-============================ */
 export default function CTSessionsPage() {
-  const [sessions, setSessions] = useState<Session[]>([]);
+  const [base, setBase] = useState<Date>(() => getMonday(new Date())); // lunes actual
+  const [daysMap, setDaysMap] = useState<Record<string, SessionDTO[]>>({});
+  const [weekStart, setWeekStart] = useState<string>("");
+  const [weekEnd, setWeekEnd] = useState<string>("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [dateFilter, setDateFilter] = useState<string>(""); // YYYY-MM-DD
 
-  // Filtro por fecha (YYYY-MM-DD). Vacío => mostrar todas
-  const [dateFilter, setDateFilter] = useState<string>("");
-
-  const fetchSessions = async () => {
+  async function loadWeek(d: Date) {
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
-      const res = await fetch("/api/sessions", { cache: "no-store" });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "No se pudieron cargar las sesiones");
-      setSessions(json.data as Session[]);
-    } catch (e: any) {
-      setError(e.message || "Error cargando sesiones");
+      const start = toYYYYMMDDUTC(getMonday(d));
+      const res = await getSessionsWeek({ start });
+      setDaysMap(res.days);
+      setWeekStart(res.weekStart);
+      setWeekEnd(res.weekEnd);
+    } catch (e) {
+      console.error(e);
+      alert("No se pudieron cargar las sesiones.");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   useEffect(() => {
-    fetchSessions();
-  }, []);
+    loadWeek(base);
+  }, [base]);
 
-  // 1) Nos quedamos SOLO con las celdas "NOMBRE SESIÓN" (robusto con normalización)
-  const onlyNamed = useMemo(() => {
-    return (sessions || []).filter(isSessionNameCell);
-  }, [sessions]);
+  // Construimos la lista SÓLO con la fila "NOMBRE SESIÓN" de cada día/turno
+  type Item = {
+    id: string;
+    title: string;
+    ymd: string;
+    turn: TurnKey;
+    dateISO: string;
+    lugar?: string;
+    hora?: string;
+  };
 
-  // 2) Agrupamos por día + turno y nos quedamos con la MÁS RECIENTE (updatedAt)
-  const groupedLatest = useMemo(() => {
-    const map = new Map<string, Session>(); // key: ymd::turn
-    for (const s of onlyNamed) {
-      const { turn: tFromDesc } = parseGrid(s.description);
-      const turn = (tFromDesc ?? inferTurnFromISO(s.date)) as TurnKey;
-      const ymd = ymdUTCFromISO(s.date);
-      const key = `${ymd}::${turn}`;
-      const prev = map.get(key);
-      if (!prev) {
-        map.set(key, s);
-      } else {
-        const prevTime = new Date(prev.updatedAt || prev.date).getTime();
-        const curTime = new Date(s.updatedAt || s.date).getTime();
-        if (curTime >= prevTime) map.set(key, s);
-      }
+  const items: Item[] = useMemo(() => {
+    const out: Item[] = [];
+    if (!weekStart) return out;
+
+    const orderedDays = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(`${weekStart}T00:00:00.000Z`);
+      d.setUTCDate(d.getUTCDate() + i);
+      return toYYYYMMDDUTC(d);
+    });
+
+    for (const ymd of orderedDays) {
+      const list = daysMap[ymd] || [];
+      (["morning", "afternoon"] as TurnKey[]).forEach((turn) => {
+        // 1) celda nombre sesión (si existe)
+        const nameCell = list.find((s) => isRow(s, turn, SESSION_NAME_ROW));
+        if (!nameCell) return;
+
+        // 2) meta
+        const lugar = (list.find((s) => isRow(s, turn, META_LUGAR))?.title || "").trim();
+        const hora = (list.find((s) => isRow(s, turn, META_HORA))?.title || "").trim();
+
+        out.push({
+          id: nameCell.id,
+          title: (nameCell.title || "").trim() || "(Sin nombre)",
+          ymd,
+          turn,
+          dateISO: nameCell.date,
+          lugar,
+          hora,
+        });
+      });
     }
-    return Array.from(map.values());
-  }, [onlyNamed]);
 
-  // 3) Orden por fecha desc
-  const ordered = useMemo(
-    () => [...groupedLatest].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-    [groupedLatest]
-  );
+    // Orden por fecha (asc) y turno (mañana antes que tarde)
+    return out.sort((a, b) => {
+      if (a.ymd !== b.ymd) return a.ymd.localeCompare(b.ymd);
+      if (a.turn !== b.turn) return a.turn === "morning" ? -1 : 1;
+      return 0;
+    });
+  }, [daysMap, weekStart]);
 
-  // 4) Aplicar filtro por fecha si se eligió un día
+  // Filtro opcional por fecha
   const visible = useMemo(() => {
-    if (!dateFilter) return ordered;
-    return ordered.filter((s) => ymdUTCFromISO(s.date) === dateFilter);
-  }, [ordered, dateFilter]);
+    if (!dateFilter) return items;
+    return items.filter((x) => x.ymd === dateFilter);
+  }, [items, dateFilter]);
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
@@ -172,18 +146,44 @@ export default function CTSessionsPage() {
         <div>
           <h1 className="text-2xl font-bold">Sesiones</h1>
           <p className="text-sm text-gray-500">
-            Lista basada en el nombre asignado en el editor semanal (fila “{SESSION_NAME_ROW}”).
+            Basadas en la fila “{SESSION_NAME_ROW}” del editor semanal.
+          </p>
+          <p className="text-xs text-gray-400">
+            Semana {weekStart ? formatHumanDate(weekStart) : "—"} →{" "}
+            {weekEnd ? formatHumanDate(weekEnd) : "—"} (Lun→Dom)
           </p>
         </div>
 
-        {/* Filtro por fecha (opcional) */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setBase((d) => {
+              const x = new Date(d); x.setUTCDate(x.getUTCDate() - 7); return x;
+            })}
+            className="text-sm px-3 py-1.5 rounded-lg border hover:bg-gray-50"
+          >
+            ◀ Semana anterior
+          </button>
+          <button
+            onClick={() => setBase(getMonday(new Date()))}
+            className="text-sm px-3 py-1.5 rounded-lg border hover:bg-gray-50"
+          >
+            Hoy
+          </button>
+          <button
+            onClick={() => setBase((d) => {
+              const x = new Date(d); x.setUTCDate(x.getUTCDate() + 7); return x;
+            })}
+            className="text-sm px-3 py-1.5 rounded-lg border hover:bg-gray-50"
+          >
+            Semana siguiente ▶
+          </button>
+
+          <div className="w-px h-6 bg-gray-200 mx-1" />
           <input
             type="date"
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
             className="rounded-lg border px-2 py-1.5 text-sm"
-            placeholder="YYYY-MM-DD"
             title="Filtrar por fecha"
           />
           <button
@@ -197,35 +197,16 @@ export default function CTSessionsPage() {
         </div>
       </header>
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
       {loading ? (
         <div className="text-sm text-gray-500">Cargando sesiones…</div>
       ) : visible.length === 0 ? (
         <div className="rounded-lg border p-6 text-sm text-gray-600">
-          No hay sesiones para mostrar. Asegurate de haber puesto “{SESSION_NAME_ROW}” en el editor.
+          No hay sesiones para mostrar en esta semana/fecha.
         </div>
       ) : (
         <ul className="space-y-3">
           {visible.map((s) => {
-            const parsed = parseGrid(s.description);
-            const turn = (parsed.turn ?? inferTurnFromISO(s.date)) as TurnKey;
-            const ymd = ymdUTCFromISO(s.date);
-
-            // Nombre EXACTO que cargaste en el editor
-            const displayTitle = (s.title || "").trim() || "(Sin nombre)";
-
-            // Meta (se buscan en todas las sesiones del mismo día/turno)
-            const lugar = findMetaFor(sessions, ymd, turn, "LUGAR");
-            const hora = findMetaFor(sessions, ymd, turn, "HORA");
-
-            // Link a la vista por día/turno
-            const byDayHref = `/ct/sessions/by-day/${ymd}/${turn}`;
-
+            const byDayHref = `/ct/sessions/by-day/${s.ymd}/${s.turn}`;
             return (
               <li
                 key={s.id}
@@ -234,27 +215,25 @@ export default function CTSessionsPage() {
                 <div>
                   <h3 className="font-semibold text-[15px]">
                     <a href={byDayHref} className="hover:underline" title="Abrir sesión (día/turno)">
-                      {displayTitle}
+                      {s.title}
                     </a>
                   </h3>
 
                   <div className="text-xs text-gray-500 mt-1 space-x-3">
-                    <span>📅 {formatHumanDateTime(s.date)}</span>
-                    <span>🕑 {turn === "morning" ? "Mañana" : "Tarde"}</span>
-                    {hora && <span>⏰ {hora}</span>}
-                    {lugar && <span>📍 {lugar}</span>}
+                    <span>📅 {formatHumanDateTime(s.dateISO)}</span>
+                    <span>🕑 {s.turn === "morning" ? "Mañana" : "Tarde"}</span>
+                    {s.hora && <span>⏰ {s.hora}</span>}
+                    {s.lugar && <span>📍 {s.lugar}</span>}
                   </div>
                 </div>
 
-                <div className="flex flex-col items-end gap-2">
-                  <a
-                    href={byDayHref}
-                    className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
-                    title="Ver sesión (día/turno)"
-                  >
-                    Ver sesión
-                  </a>
-                </div>
+                <a
+                  href={byDayHref}
+                  className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
+                  title="Ver sesión (día/turno)"
+                >
+                  Ver sesión
+                </a>
               </li>
             );
           })}
