@@ -1,3 +1,4 @@
+// src/app/ct/plan-semanal/page.tsx
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -12,7 +13,6 @@ import {
   type SessionDTO,
 } from "@/lib/api/sessions";
 import PlannerActionsBar from "./PlannerActionsBar";
-import HelpTip from "@/components/HelpTip";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +30,71 @@ type PaneKey = "editor" | "tools";
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 const SESSION_NAME_ROW = "NOMBRE SESIÓN";
 const META_ROWS = ["LUGAR", "HORA", "VIDEO", SESSION_NAME_ROW] as const;
+
+// ====== MD (intensidad)
+const MD_ROW = "MD";
+type MDKey = "MD+1" | "MD+2" | "MD-4" | "MD-3" | "MD-2" | "MD-1" | "MD" | "DESCANSO" | "";
+const MD_OPTIONS: Array<{
+  key: MDKey extends "" ? never : Exclude<MDKey, "">;
+  label: string;
+  tip: string;
+  badgeClass: string; // bg + text for the chip
+}> = [
+  {
+    key: "MD+1",
+    label: "MD+1",
+    tip:
+      "Recup titulares / compensatorio suplentes/no conv. Intensidad muy baja.",
+    badgeClass: "bg-blue-50 text-blue-800 border-blue-200",
+  },
+  {
+    key: "MD+2",
+    label: "MD+2",
+    tip:
+      "Reintro carga general, fuerza y volumen medio. Intensidad media.",
+    badgeClass: "bg-yellow-50 text-yellow-800 border-yellow-200",
+  },
+  {
+    key: "MD-4",
+    label: "MD-4",
+    tip:
+      "Pico de carga: físico muy intenso y técnico–táctico exigente. Intensidad muy alta.",
+    badgeClass: "bg-red-50 text-red-800 border-red-200",
+  },
+  {
+    key: "MD-3",
+    label: "MD-3",
+    tip:
+      "Orientación táctica específica, transiciones. Intensidad alta.",
+    badgeClass: "bg-orange-50 text-orange-800 border-orange-200",
+  },
+  {
+    key: "MD-2",
+    label: "MD-2",
+    tip:
+      "Sesión estratégica, plan de partido y balón parado. Intensidad media-baja.",
+    badgeClass: "bg-green-50 text-green-800 border-green-200",
+  },
+  {
+    key: "MD-1",
+    label: "MD-1",
+    tip:
+      "Activación corta y ligera. Confianza y repaso final. Intensidad muy baja.",
+    badgeClass: "bg-gray-50 text-gray-800 border-gray-200",
+  },
+  {
+    key: "MD",
+    label: "MD",
+    tip: "Match day / Día de partido.",
+    badgeClass: "bg-purple-50 text-purple-800 border-purple-200",
+  },
+  {
+    key: "DESCANSO",
+    label: "Descanso",
+    tip: "Día libre / descanso.",
+    badgeClass: "bg-slate-100 text-slate-800 border-slate-200",
+  },
+];
 
 type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
 type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string };
@@ -54,65 +119,6 @@ function buildDayFlagTitle(df: DayFlag): string {
   if (df.kind === "LIBRE") return "LIBRE";
   return "";
 }
-
-/* ========= MD± (intensidad/jornada) ========= */
-type MdCode = "NONE" | "MD" | "DESCANSO" | "MD+1" | "MD+2" | "MD-4" | "MD-3" | "MD-2" | "MD-1";
-type MdPlan = { code: Exclude<MdCode, "NONE">; desc: string; color: string };
-
-const MD_TAG = "MDPLAN";
-const mdMarker = (turn: TurnKey) => `[${MD_TAG}:${turn}]`;
-const isMdPlan = (s: SessionDTO, turn: TurnKey) =>
-  typeof s.description === "string" && s.description.startsWith(mdMarker(turn));
-const buildMdTitle = (code: Exclude<MdCode, "NONE">) => code;
-function parseMdTitle(title?: string | null): MdCode {
-  const t = (title || "").trim();
-  if (!t) return "NONE";
-  const valid = ["MD", "DESCANSO", "MD+1", "MD+2", "MD-4", "MD-3", "MD-2", "MD-1"] as const;
-  return (valid as readonly string[]).includes(t as any) ? (t as MdCode) : "NONE";
-}
-
-const MD_OPTIONS: MdPlan[] = [
-  {
-    code: "MD+1",
-    desc: "Día post-partido: recup titulares / compensatorio suplentes. Intensidad muy baja.",
-    color: "bg-sky-100 text-sky-900 border-sky-200",
-  },
-  {
-    code: "MD+2",
-    desc: "Reintro carga general, fuerza y volumen medio. Intensidad media.",
-    color: "bg-yellow-100 text-yellow-900 border-yellow-200",
-  },
-  {
-    code: "MD-4",
-    desc: "Pico de carga: físico muy intenso y técnico–táctico exigente. Intensidad muy alta.",
-    color: "bg-red-100 text-red-900 border-red-200",
-  },
-  {
-    code: "MD-3",
-    desc: "Orientación táctica específica y transiciones. Intensidad alta.",
-    color: "bg-orange-100 text-orange-900 border-orange-200",
-  },
-  {
-    code: "MD-2",
-    desc: "Sesión estratégica, plan de partido y balón parado. Intensidad media-baja.",
-    color: "bg-green-100 text-green-900 border-green-200",
-  },
-  {
-    code: "MD-1",
-    desc: "Activación previa, corta y ligera. Confianza y repaso final. Intensidad muy baja.",
-    color: "bg-gray-100 text-gray-800 border-gray-200",
-  },
-  {
-    code: "MD",
-    desc: "Match day – día de partido. Intensidad competitiva.",
-    color: "bg-amber-100 text-amber-900 border-amber-200",
-  },
-  {
-    code: "DESCANSO",
-    desc: "Día libre / descanso. Sin carga.",
-    color: "bg-gray-100 text-gray-800 border-gray-200",
-  },
-];
 
 function addDaysUTC(date: Date, days: number) {
   const x = new Date(date);
@@ -165,7 +171,7 @@ function PlanSemanalInner() {
 
   // Pestañas
   const initialTurn = (qs.get("turn") === "afternoon" ? "afternoon" : "morning") as TurnKey;
-  the const initialPane: PaneKey = qs.get("pane") === "tools" ? "tools" : "editor";
+  const initialPane: PaneKey = qs.get("pane") === "tools" ? "tools" : "editor"; // <— FIX del typo
   const [activeTurn, setActiveTurn] = useState<TurnKey>(initialTurn);
   const [activePane, setActivePane] = useState<PaneKey>(initialPane);
 
@@ -175,7 +181,8 @@ function PlanSemanalInner() {
     if (activePane === "tools") p.set("pane", "tools");
     else p.delete("pane");
     router.replace(`?${p.toString()}`);
-  }, [activeTurn, activePane]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTurn, activePane]);
 
   // Estado semana
   const [base, setBase] = useState<Date>(() => getMonday(new Date()));
@@ -184,7 +191,7 @@ function PlanSemanalInner() {
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
-  // Preferencias (labels + lugares)
+  // Preferencias de usuario (servidor): rowLabels + places
   const [rowLabels, setRowLabels] = useState<Record<string, string>>({});
   const [places, setPlaces] = useState<string[]>([]);
 
@@ -232,7 +239,8 @@ function PlanSemanalInner() {
   }
   useEffect(() => {
     loadWeek(base);
-  }, [base]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [base]);
 
   // Navegación semana
   function confirmDiscardIfNeeded(action: () => void) {
@@ -282,47 +290,10 @@ function PlanSemanalInner() {
       } else {
         await updateSession(existing.id, { title, description: desc, date: iso });
       }
-
-      // ajuste de MD según tipo
-      if (df.kind === "PARTIDO") await setMd(dayYmd, turn, "MD");
-      if (df.kind === "LIBRE") await setMd(dayYmd, turn, "DESCANSO");
-
       await loadWeek(base);
     } catch (e: any) {
       console.error(e);
       alert(e?.message || "No se pudo actualizar el estado del día");
-    }
-  }
-
-  // ---- MD± helpers
-  function findMdSession(dayYmd: string, turn: TurnKey) {
-    const list = daysMap[dayYmd] || [];
-    return list.find((s) => isMdPlan(s, turn));
-  }
-  function getMd(dayYmd: string, turn: TurnKey): MdCode {
-    const s = findMdSession(dayYmd, turn);
-    return parseMdTitle(s?.title);
-  }
-  async function setMd(dayYmd: string, turn: TurnKey, code: MdCode) {
-    const existing = findMdSession(dayYmd, turn);
-    const iso = computeISOForSlot(dayYmd, turn);
-    const desc = `${mdMarker(turn)} | ${dayYmd}`;
-    try {
-      if (code === "NONE") {
-        if (existing) await deleteSession(existing.id);
-        await loadWeek(base);
-        return;
-      }
-      const title = buildMdTitle(code as Exclude<MdCode, "NONE">);
-      if (!existing) {
-        await createSession({ title, description: desc, date: iso, type: "GENERAL" });
-      } else {
-        await updateSession(existing.id, { title, description: desc, date: iso });
-      }
-      await loadWeek(base);
-    } catch (e: any) {
-      console.error(e);
-      alert(e?.message || "No se pudo actualizar MD±");
     }
   }
 
@@ -421,7 +392,7 @@ function PlanSemanalInner() {
       );
     }
 
-    // LUGAR
+    // LUGAR → TEXTO + SUGERENCIAS (datalist). Sin "?" en el editor.
     if (row === "LUGAR") {
       const [local, setLocal] = useState(value || "");
       useEffect(() => setLocal(value || ""), [value, k]);
@@ -460,7 +431,8 @@ function PlanSemanalInner() {
       useEffect(() => {
         setLocalLabel(parsed.label);
         setLocalUrl(parsed.url);
-      }, [k, value]); // eslint-disable-line
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [k, value]);
 
       if (!isEditing) {
         return (
@@ -533,7 +505,7 @@ function PlanSemanalInner() {
     return null;
   }
 
-  // ---- Celdas de contenido
+  // ---- Celdas de contenido (sin ? en editor)
   function EditableCell({
     dayYmd,
     turn,
@@ -616,7 +588,8 @@ function PlanSemanalInner() {
       setKind(fresh.kind);
       setRival(fresh.rival || "");
       setLogo(fresh.logoUrl || "");
-    }, [weekStart, ymd, turn]); // eslint-disable-line
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [weekStart, ymd, turn]);
 
     const save = (next: DayFlag) => setDayFlag(ymd, turn, next);
 
@@ -626,13 +599,12 @@ function PlanSemanalInner() {
           <select
             className="h-7 w-[110px] rounded-md border px-1.5 text-[11px]"
             value={kind}
-            onChange={async (e) => {
+            onChange={(e) => {
               const k = e.target.value as DayFlagKind;
               setKind(k);
-              if (k === "NONE") await save({ kind: "NONE" });
-              if (k === "LIBRE") await save({ kind: "LIBRE" });
-              if (k === "PARTIDO") await save({ kind: "PARTIDO", rival, logoUrl: logo });
-              // setMd automático según tipo (también se hace dentro de save)
+              if (k === "NONE") save({ kind: "NONE" });
+              if (k === "LIBRE") save({ kind: "LIBRE" });
+              if (k === "PARTIDO") save({ kind: "PARTIDO", rival, logoUrl: logo });
             }}
           >
             <option value="NONE">Normal</option>
@@ -677,63 +649,63 @@ function PlanSemanalInner() {
     );
   }
 
-  /* ======= Fila: MD (intensidad) ======= */
-  function MdStatusCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
-    const current = getMd(ymd, turn);
-    const [code, setCode] = useState<MdCode>(current);
+  // ---- MD (intensidad) — debajo de Tipo
+  function MDCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
+    const existing = findCell(ymd, turn, MD_ROW);
+    const k = cellKey(ymd, turn, MD_ROW);
+    const staged = pending[k];
+    const raw: string = (staged !== undefined ? staged : existing?.title || "").trim();
+    const value: MDKey = (["MD+1","MD+2","MD-4","MD-3","MD-2","MD-1","MD","DESCANSO"].includes(raw) ? (raw as MDKey) : "") as MDKey;
 
-    useEffect(() => {
-      setCode(getMd(ymd, turn));
-    }, [weekStart, ymd, turn]); // eslint-disable-line
-
-    const selected = MD_OPTIONS.find((o) => o.code === code);
+    const current = MD_OPTIONS.find(o => o.key === value);
+    const tip = current
+      ? current.tip
+      : "Elegí una opción MD / Descanso. Se guarda con “Guardar cambios”.";
 
     return (
       <div className="p-1">
         <div className="flex items-center gap-1.5">
           <select
             className="h-7 w-[120px] rounded-md border px-1.5 text-[11px]"
-            value={code}
-            onChange={(e) => {
-              const c = e.target.value as MdCode;
-              setCode(c);
-              setMd(ymd, turn, c);
-            }}
+            value={value}
+            onChange={(e) => stageCell(ymd, turn, MD_ROW, e.target.value)}
           >
-            <option value="NONE">—</option>
+            <option value="">—</option>
             {MD_OPTIONS.map((o) => (
-              <option key={o.code} value={o.code}>
-                {o.code}
-              </option>
+              <option key={o.key} value={o.key}>{o.label}</option>
             ))}
           </select>
 
-          {selected ? (
-            <>
-              <span className={`text-[10px] rounded border px-2 py-0.5 ${selected.color}`}>
-                {selected.code}
-              </span>
-              <HelpTip text={selected.desc} />
-            </>
+          {current ? (
+            <span
+              className={`text-[10px] rounded px-1.5 py-0.5 border ${current.badgeClass}`}
+            >
+              {current.label}
+            </span>
           ) : null}
+
+          <button
+            type="button"
+            className="h-6 w-6 text-[11px] rounded border hover:bg-gray-50"
+            title={tip}
+            aria-label="Ayuda MD"
+          >
+            ?
+          </button>
         </div>
       </div>
     );
   }
 
-  function MdStatusRow({ turn }: { turn: TurnKey }) {
-    const help =
-      "MD+1: recuperación / compensatorio (muy baja) · MD+2: fuerza y volumen medio (media) · MD-4: pico de carga (muy alta) · MD-3: táctica específica (alta) · MD-2: plan de partido/BP (media-baja) · MD-1: activación corta (muy baja) · MD: día de partido · DESCANSO: libre/sin carga.";
+  function MDRow({ turn }: { turn: TurnKey }) {
     return (
       <div
         className="grid items-center border-b bg-gray-50/60"
         style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
       >
-        <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600 flex items-center gap-1">
-          MD (intensidad) <HelpTip text={help} />
-        </div>
+        <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">MD (intensidad)</div>
         {orderedDays.map((ymd) => (
-          <MdStatusCell key={`${ymd}-${turn}-md`} ymd={ymd} turn={turn} />
+          <MDCell key={`${ymd}-${turn}-md`} ymd={ymd} turn={turn} />
         ))}
       </div>
     );
@@ -758,7 +730,7 @@ function PlanSemanalInner() {
         </div>
 
         <DayStatusRow turn={turn} />
-        <MdStatusRow turn={turn} /> {/* ← debajo de Tipo */}
+        <MDRow turn={turn} />
 
         <div className="border-t">
           <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
