@@ -29,72 +29,8 @@ type PaneKey = "editor" | "tools";
 
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 const SESSION_NAME_ROW = "NOMBRE SESIÓN";
-const META_ROWS = ["LUGAR", "HORA", "VIDEO", SESSION_NAME_ROW] as const;
-
-// ====== MD (intensidad)
-const MD_ROW = "MD";
-type MDKey = "MD+1" | "MD+2" | "MD-4" | "MD-3" | "MD-2" | "MD-1" | "MD" | "DESCANSO" | "";
-const MD_OPTIONS: Array<{
-  key: MDKey extends "" ? never : Exclude<MDKey, "">;
-  label: string;
-  tip: string;
-  badgeClass: string; // bg + text for the chip
-}> = [
-  {
-    key: "MD+1",
-    label: "MD+1",
-    tip:
-      "Recup titulares / compensatorio suplentes/no conv. Intensidad muy baja.",
-    badgeClass: "bg-blue-50 text-blue-800 border-blue-200",
-  },
-  {
-    key: "MD+2",
-    label: "MD+2",
-    tip:
-      "Reintro carga general, fuerza y volumen medio. Intensidad media.",
-    badgeClass: "bg-yellow-50 text-yellow-800 border-yellow-200",
-  },
-  {
-    key: "MD-4",
-    label: "MD-4",
-    tip:
-      "Pico de carga: físico muy intenso y técnico–táctico exigente. Intensidad muy alta.",
-    badgeClass: "bg-red-50 text-red-800 border-red-200",
-  },
-  {
-    key: "MD-3",
-    label: "MD-3",
-    tip:
-      "Orientación táctica específica, transiciones. Intensidad alta.",
-    badgeClass: "bg-orange-50 text-orange-800 border-orange-200",
-  },
-  {
-    key: "MD-2",
-    label: "MD-2",
-    tip:
-      "Sesión estratégica, plan de partido y balón parado. Intensidad media-baja.",
-    badgeClass: "bg-green-50 text-green-800 border-green-200",
-  },
-  {
-    key: "MD-1",
-    label: "MD-1",
-    tip:
-      "Activación corta y ligera. Confianza y repaso final. Intensidad muy baja.",
-    badgeClass: "bg-gray-50 text-gray-800 border-gray-200",
-  },
-  {
-    key: "MD",
-    label: "MD",
-    tip: "Match day / Día de partido.",
-    badgeClass: "bg-purple-50 text-purple-800 border-purple-200",
-  },
-  {
-    key: "DESCANSO",
-    label: "Descanso",
-    tip: "Día libre / descanso.",
-    badgeClass: "bg-slate-100 text-slate-800 border-slate-200",
-  },
-];
+// ⚠️ Orden solicitado: Nombre de sesión → Lugar → Hora → Video
+const META_ROWS = [SESSION_NAME_ROW, "LUGAR", "HORA", "VIDEO"] as const;
 
 type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
 type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string };
@@ -118,6 +54,45 @@ function buildDayFlagTitle(df: DayFlag): string {
   if (df.kind === "PARTIDO") return `PARTIDO|${df.rival ?? ""}|${df.logoUrl ?? ""}`;
   if (df.kind === "LIBRE") return "LIBRE";
   return "";
+}
+
+// ------- MICROCICLO (INTENSIDAD / MD) -------
+type MicroKey = "" | "MD+1" | "MD+2" | "MD-4" | "MD-3" | "MD-2" | "MD-1" | "MD" | "DESCANSO";
+const MICRO_TAG = "MICRO";
+const MICRO_CHOICES: Array<{
+  value: MicroKey;
+  label: string;
+  colorClass: string; // fondo suave para la celda
+}> = [
+  { value: "", label: "—", colorClass: "" },
+  { value: "MD+1", label: "MD+1 · muy baja", colorClass: "bg-blue-50" },
+  { value: "MD+2", label: "MD+2 · media", colorClass: "bg-yellow-50" },
+  { value: "MD-4", label: "MD-4 · muy alta", colorClass: "bg-red-50" },
+  { value: "MD-3", label: "MD-3 · alta", colorClass: "bg-orange-50" },
+  { value: "MD-2", label: "MD-2 · media-baja", colorClass: "bg-green-50" },
+  { value: "MD-1", label: "MD-1 · muy baja", colorClass: "bg-gray-50" },
+  { value: "MD", label: "MD (Match Day)", colorClass: "bg-amber-50" },
+  { value: "DESCANSO", label: "Descanso", colorClass: "bg-gray-100" },
+];
+
+function microMarker(turn: TurnKey) {
+  return `[${MICRO_TAG}:${turn}]`;
+}
+function isMicrocycle(s: SessionDTO, turn: TurnKey) {
+  return typeof s.description === "string" && s.description.startsWith(microMarker(turn));
+}
+function findMicroSession(list: SessionDTO[], turn: TurnKey) {
+  return list.find((s) => isMicrocycle(s, turn));
+}
+function parseMicroTitle(title?: string | null): MicroKey {
+  const t = (title || "").trim();
+  if (!t) return "";
+  const val = t as MicroKey;
+  if (MICRO_CHOICES.some((c) => c.value === val)) return val;
+  return "";
+}
+function buildMicroTitle(v: MicroKey): string {
+  return v || "";
 }
 
 function addDaysUTC(date: Date, days: number) {
@@ -171,7 +146,7 @@ function PlanSemanalInner() {
 
   // Pestañas
   const initialTurn = (qs.get("turn") === "afternoon" ? "afternoon" : "morning") as TurnKey;
-  const initialPane: PaneKey = qs.get("pane") === "tools" ? "tools" : "editor"; // <— FIX del typo
+  const initialPane: PaneKey = qs.get("pane") === "tools" ? "tools" : "editor";
   const [activeTurn, setActiveTurn] = useState<TurnKey>(initialTurn);
   const [activePane, setActivePane] = useState<PaneKey>(initialPane);
 
@@ -261,13 +236,14 @@ function PlanSemanalInner() {
   const label = (id: string) => rowLabels[id] || id;
 
   // Helpers sesiones
+  function listFor(dayYmd: string) {
+    return daysMap[dayYmd] || [];
+  }
   function findCell(dayYmd: string, turn: TurnKey, row: string): SessionDTO | undefined {
-    const list = daysMap[dayYmd] || [];
-    return list.find((s) => isCellOf(s, turn, row));
+    return listFor(dayYmd).find((s) => isCellOf(s, turn, row));
   }
   function findDayFlagSession(dayYmd: string, turn: TurnKey): SessionDTO | undefined {
-    const list = daysMap[dayYmd] || [];
-    return list.find((s) => isDayFlag(s, turn));
+    return listFor(dayYmd).find((s) => isDayFlag(s, turn));
   }
   function getDayFlag(dayYmd: string, turn: TurnKey): DayFlag {
     const s = findDayFlagSession(dayYmd, turn);
@@ -294,6 +270,35 @@ function PlanSemanalInner() {
     } catch (e: any) {
       console.error(e);
       alert(e?.message || "No se pudo actualizar el estado del día");
+    }
+  }
+
+  // MICROCICLO helpers
+  function getMicroValue(dayYmd: string, turn: TurnKey): MicroKey {
+    const s = findMicroSession(listFor(dayYmd), turn);
+    return parseMicroTitle(s?.title);
+  }
+  async function setMicroValue(dayYmd: string, turn: TurnKey, value: MicroKey) {
+    const existing = findMicroSession(listFor(dayYmd), turn);
+    const iso = computeISOForSlot(dayYmd, turn);
+    const marker = microMarker(turn);
+    const desc = `${marker} | ${dayYmd}`;
+    const title = buildMicroTitle(value);
+    try {
+      if (!value) {
+        if (existing) await deleteSession(existing.id);
+        await loadWeek(base);
+        return;
+      }
+      if (!existing) {
+        await createSession({ title, description: desc, date: iso, type: "GENERAL" });
+      } else {
+        await updateSession(existing.id, { title, description: desc, date: iso });
+      }
+      await loadWeek(base);
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message || "No se pudo actualizar la intensidad");
     }
   }
 
@@ -392,7 +397,7 @@ function PlanSemanalInner() {
       );
     }
 
-    // LUGAR → TEXTO + SUGERENCIAS (datalist). Sin "?" en el editor.
+    // LUGAR → TEXTO + SUGERENCIAS (datalist). Sin ayuda.
     if (row === "LUGAR") {
       const [local, setLocal] = useState(value || "");
       useEffect(() => setLocal(value || ""), [value, k]);
@@ -505,7 +510,7 @@ function PlanSemanalInner() {
     return null;
   }
 
-  // ---- Celdas de contenido (sin ? en editor)
+  // ---- Celdas de contenido
   function EditableCell({
     dayYmd,
     turn,
@@ -576,7 +581,7 @@ function PlanSemanalInner() {
     );
   }
 
-  // ---- Tipo de día
+  // ---- Tipo de día (fila)
   function DayStatusCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const df = getDayFlag(ymd, turn);
     const [kind, setKind] = useState<DayFlagKind>(df.kind);
@@ -597,7 +602,7 @@ function PlanSemanalInner() {
       <div className="p-1">
         <div className="flex items-center gap-1">
           <select
-            className="h-7 w-[110px] rounded-md border px-1.5 text-[11px]"
+            className="h-7 w-[120px] rounded-md border px-1.5 text-[11px]"
             value={kind}
             onChange={(e) => {
               const k = e.target.value as DayFlagKind;
@@ -608,8 +613,8 @@ function PlanSemanalInner() {
             }}
           >
             <option value="NONE">Normal</option>
-            <option value="PARTIDO">Partido</option>
-            <option value="LIBRE">Libre</option>
+            <option value="PARTIDO">Partido (MD)</option>
+            <option value="LIBRE">Descanso</option>
           </select>
 
           {kind === "PARTIDO" && (
@@ -622,7 +627,7 @@ function PlanSemanalInner() {
                 onBlur={() => save({ kind: "PARTIDO", rival, logoUrl: logo })}
               />
               <input
-                className="h-7 w-[120px] rounded-md border px-2 text-[11px]"
+                className="h-7 w-[140px] rounded-md border px-2 text-[11px]"
                 placeholder="Logo URL"
                 value={logo}
                 onChange={(e) => setLogo(e.target.value)}
@@ -649,64 +654,53 @@ function PlanSemanalInner() {
     );
   }
 
-  // ---- MD (intensidad) — debajo de Tipo
-  function MDCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
-    const existing = findCell(ymd, turn, MD_ROW);
-    const k = cellKey(ymd, turn, MD_ROW);
-    const staged = pending[k];
-    const raw: string = (staged !== undefined ? staged : existing?.title || "").trim();
-    const value: MDKey = (["MD+1","MD+2","MD-4","MD-3","MD-2","MD-1","MD","DESCANSO"].includes(raw) ? (raw as MDKey) : "") as MDKey;
-
-    const current = MD_OPTIONS.find(o => o.key === value);
-    const tip = current
-      ? current.tip
-      : "Elegí una opción MD / Descanso. Se guarda con “Guardar cambios”.";
-
+  // ---- Intensidad (MICROCICLO) fila
+  function MicroRow({ turn }: { turn: TurnKey }) {
     return (
-      <div className="p-1">
-        <div className="flex items-center gap-1.5">
-          <select
-            className="h-7 w-[120px] rounded-md border px-1.5 text-[11px]"
-            value={value}
-            onChange={(e) => stageCell(ymd, turn, MD_ROW, e.target.value)}
-          >
-            <option value="">—</option>
-            {MD_OPTIONS.map((o) => (
-              <option key={o.key} value={o.key}>{o.label}</option>
-            ))}
-          </select>
+      <div
+        className="grid items-center border-b"
+        style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
+      >
+        <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Intensidad</div>
+        {orderedDays.map((ymd) => {
+          const current = getMicroValue(ymd, turn);
+          const [val, setVal] = useState<MicroKey>(current);
+          useEffect(() => {
+            setVal(getMicroValue(ymd, turn));
+            // eslint-disable-next-line react-hooks/exhaustive-deps
+          }, [weekStart, ymd, turn]);
 
-          {current ? (
-            <span
-              className={`text-[10px] rounded px-1.5 py-0.5 border ${current.badgeClass}`}
-            >
-              {current.label}
-            </span>
-          ) : null}
+          const cls =
+            MICRO_CHOICES.find((c) => c.value === val)?.colorClass || "";
 
-          <button
-            type="button"
-            className="h-6 w-6 text-[11px] rounded border hover:bg-gray-50"
-            title={tip}
-            aria-label="Ayuda MD"
-          >
-            ?
-          </button>
-        </div>
+          return (
+            <div key={`${ymd}-${turn}-micro`} className={`p-1 ${cls}`}>
+              <select
+                className="h-7 w-full rounded-md border px-1.5 text-[11px]"
+                value={val}
+                onChange={async (e) => {
+                  const nextVal = e.target.value as MicroKey;
+                  setVal(nextVal);
+                  await setMicroValue(ymd, turn, nextVal);
+                }}
+              >
+                {MICRO_CHOICES.map((opt) => (
+                  <option key={opt.value || "none"} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          );
+        })}
       </div>
     );
   }
 
-  function MDRow({ turn }: { turn: TurnKey }) {
+  function SectionLabel({ children }: { children: React.ReactNode }) {
     return (
-      <div
-        className="grid items-center border-b bg-gray-50/60"
-        style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
-      >
-        <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">MD (intensidad)</div>
-        {orderedDays.map((ymd) => (
-          <MDCell key={`${ymd}-${turn}-md`} ymd={ymd} turn={turn} />
-        ))}
+      <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
+        {children}
       </div>
     );
   }
@@ -714,6 +708,7 @@ function PlanSemanalInner() {
   function TurnEditor({ turn }: { turn: TurnKey }) {
     return (
       <>
+        {/* Encabezado días */}
         <div
           className="grid text-xs"
           style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
@@ -729,31 +724,31 @@ function PlanSemanalInner() {
           ))}
         </div>
 
+        {/* MICROCICLO */}
+        <SectionLabel>MICROCICLO</SectionLabel>
         <DayStatusRow turn={turn} />
-        <MDRow turn={turn} />
+        <MicroRow turn={turn} />
 
-        <div className="border-t">
-          <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
-            {turn === "morning" ? "TURNO MAÑANA · Meta" : "TURNO TARDE · Meta"}
-          </div>
-          {META_ROWS.map((rowName) => (
-            <div
-              key={`${turn}-meta-${rowName}`}
-              className="grid items-center"
-              style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
-            >
-              <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">
-                {rowName}
-              </div>
-              {orderedDays.map((ymd) => (
-                <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
-                  <MetaInput dayYmd={ymd} turn={turn} row={rowName} />
-                </div>
-              ))}
+        {/* DETALLES (Meta) */}
+        <SectionLabel>DETALLES</SectionLabel>
+        {META_ROWS.map((rowName) => (
+          <div
+            key={`${turn}-meta-${rowName}`}
+            className="grid items-center"
+            style={{ gridTemplateColumns: `120px repeat(7, minmax(120px, 1fr))` }}
+          >
+            <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">
+              {rowName}
             </div>
-          ))}
-        </div>
+            {orderedDays.map((ymd) => (
+              <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
+                <MetaInput dayYmd={ymd} turn={turn} row={rowName} />
+              </div>
+            ))}
+          </div>
+        ))}
 
+        {/* CONTENIDO */}
         <div className="border-t">
           <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
             {turn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
@@ -885,7 +880,12 @@ function PlanSemanalInner() {
       {/* Contenido */}
       {activePane === "tools" ? (
         <div className="rounded-2xl border bg-white shadow-sm p-3">
-          <PlannerActionsBar onAfterChange={() => { loadWeek(base); loadPrefs(); }} />
+          <PlannerActionsBar
+            onAfterChange={() => {
+              loadWeek(base);
+              loadPrefs();
+            }}
+          />
         </div>
       ) : loading ? (
         <div className="text-gray-500">Cargando semana…</div>
