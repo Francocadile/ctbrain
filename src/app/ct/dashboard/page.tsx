@@ -92,10 +92,10 @@ function parseVideoValue(v?: string | null) {
 /* =========================================================
    Layout (planner semanal)
 ========================================================= */
-const COL_LABEL_W = 110;  // ancho columna izquierda
-const DAY_MIN_W   = 116;  // ancho mín por día
-const ROW_H       = 64;   // alto de cada fila
-const DAY_HEADER_H = 60;  // altura header de tarjeta (2 líneas compactas)
+const COL_LABEL_W = 110;        // ancho columna izquierda
+const DAY_MIN_W   = 142;        // ⬅️ más ancho por tarjeta (antes 116)
+const ROW_H       = 64;         // alto de cada fila
+const DAY_HEADER_H = 66;        // ⬅️ un poco más alto el header (antes 60)
 const CELL_GAP    = 6;
 
 /* =========================================================
@@ -198,7 +198,7 @@ function DashboardSemanaInner() {
     const s = MICRO_STYLES[v];
     return (
       <span
-        className={`inline-flex items-center h-[20px] px-2 rounded-md border text-[10px] font-semibold ${s.bg} ${s.text} ${s.border}`}
+        className={`inline-flex items-center h-[20px] px-2 rounded-md border text-[10px] font-semibold ${s.bg} ${s.text} ${s.border} whitespace-nowrap`}
         title="Intensidad (microciclo)"
       >
         {v}
@@ -257,7 +257,7 @@ function DashboardSemanaInner() {
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
         {/* Encabezado en 2 líneas compactas */}
         <div className="px-2 py-1 border-b bg-gray-50" style={{ height: DAY_HEADER_H }}>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between min-w-0">
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-wide">
                 {humanDayUTC(ymd)}
@@ -266,14 +266,16 @@ function DashboardSemanaInner() {
             </div>
           </div>
 
-          <div className="mt-1 flex items-center justify-between">
+          <div className="mt-1 flex items-center justify-between gap-2">
             <MicroBadge ymd={ymd} />
             {flag.kind === "LIBRE" ? (
-              <span className="text-[10px] rounded border bg-gray-100 px-2 py-0.5">{librePill}</span>
+              <span className="text-[10px] rounded border bg-gray-100 px-2 py-0.5 whitespace-nowrap">
+                {librePill}
+              </span>
             ) : (
               <a
                 href={headerHref}
-                className="text-[10px] rounded border px-2 py-0.5 hover:bg-gray-100"
+                className="text-[10px] rounded border px-2 py-0.5 hover:bg-gray-100 whitespace-nowrap"
               >
                 Ver sesión
               </a>
