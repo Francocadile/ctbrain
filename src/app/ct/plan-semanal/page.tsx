@@ -450,7 +450,6 @@ function PlanSemanalInner() {
     const ref = useRef<HTMLDivElement | null>(null);
     const k = cellKey(dayYmd, turn, row);
     const staged = pending[k];
-    theconst; // <- remove if accidentally left
     const initialText = staged !== undefined ? staged : existing?.title ?? "";
 
     const onBlur = () => {
