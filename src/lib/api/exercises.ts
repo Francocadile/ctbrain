@@ -1,5 +1,3 @@
-// Cliente para la API de ejercicios (tipado compartido con la UI)
-
 export type Dir = "asc" | "desc";
 export type Order = "createdAt" | "title";
 
@@ -13,9 +11,7 @@ export type ExerciseDTO = {
   imageUrl: string | null;
   tags: string[];
   createdAt: string | Date;
-  // relación
   kind?: { id?: string; name?: string } | null;
-  // origen (si fue importado desde una sesión)
   sourceSessionId?: string | null;
 };
 
@@ -53,5 +49,14 @@ export async function deleteExercise(id: string) {
 export async function importAllFromSessions() {
   const res = await fetch("/api/exercises/import", { method: "POST" });
   if (!res.ok) throw new Error("importAllFromSessions error");
+  return (await res.json()) as { ok: true; created: number; updated: number };
+}
+
+// ✅ usado por /ct/sessions/[id] (algunos archivos de tu repo lo esperan)
+export async function importFromSession(sessionId: string) {
+  const res = await fetch(`/api/exercises/import?sessionId=${encodeURIComponent(sessionId)}`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("importFromSession error");
   return (await res.json()) as { ok: true; created: number; updated: number };
 }
