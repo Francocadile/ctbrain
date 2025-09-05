@@ -2,12 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { listKinds } from "@/lib/settings";
-import {
-  searchExercises,
-  deleteExercise,
-  importAllFromSessions,
-  type ExerciseDTO,
-} from "@/lib/api/exercises";
+import { searchExercises, deleteExercise, type ExerciseDTO } from "@/lib/api/exercises";
 
 type Order = "createdAt" | "title";
 type Dir = "asc" | "desc";
@@ -34,8 +29,14 @@ export default function ExercisesLibraryPage() {
         dir,
         page,
         pageSize,
-      });
-      setRows(data);
+      } as any);
+      // Dedup por session (si viniera importado y también virtual)
+      const bySessionKey = new Map<string, ExerciseDTO>();
+      for (const ex of data) {
+        const key = (ex as any).sourceSessionId || ex.id;
+        if (!bySessionKey.has(key)) bySessionKey.set(key, ex);
+      }
+      setRows([...bySessionKey.values()]);
       setTotal(meta.total);
     } catch (e) {
       console.error(e);
@@ -53,7 +54,7 @@ export default function ExercisesLibraryPage() {
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
-      <header className="flex flex-wrap gap-3 items-center justify-between">
+      <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Ejercicios</h1>
           <p className="text-sm text-gray-500">Tu base de datos personal de tareas</p>
@@ -87,24 +88,6 @@ export default function ExercisesLibraryPage() {
               <option value="asc">↑</option>
             </select>
           </div>
-
-          <button
-            onClick={async () => {
-              if (!confirm("Importar/actualizar ejercicios desde las sesiones actuales?")) return;
-              try {
-                const res = await importAllFromSessions();
-                alert(`Importados nuevos: ${res.created} · Actualizados: ${res.updated}`);
-                setPage(1);
-                load();
-              } catch {
-                alert("No se pudo importar desde sesiones");
-              }
-            }}
-            className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
-            title="Lee tus sesiones y crea/actualiza ejercicios"
-          >
-            Importar desde sesiones
-          </button>
         </div>
       </header>
 
@@ -116,51 +99,28 @@ export default function ExercisesLibraryPage() {
         </div>
       ) : (
         <ul className="space-y-3">
-          {rows.map((ex) => {
-            // Prioridad 1: backend nos pasa sourceSessionId
-            let sessionId: string | undefined =
-              (ex as any).sourceSessionId || undefined;
-
-            // Prioridad 2: deducir del id determinístico "<sessionId>__<idx>"
-            if (!sessionId && typeof ex.id === "string" && ex.id.includes("__")) {
-              sessionId = ex.id.split("__")[0];
-            }
-
-            const canOpenSession = !!sessionId;
-            const href = canOpenSession ? `/ct/sessions/${sessionId}` : undefined;
-
-            return (
-              <li key={ex.id} className="rounded-xl border p-3 shadow-sm bg-white flex items-start justify-between">
-                <div>
-                  <h3 className="font-semibold text-[15px]">{ex.title}</h3>
-                  <div className="text-xs text-gray-500 mt-1 space-x-3">
-                    <span>📅 {new Date(ex.createdAt).toLocaleString()}</span>
-                    {ex.kind?.name && <span>🏷 {ex.kind.name}</span>}
-                    {ex.space && <span>📍 {ex.space}</span>}
-                    {ex.players && <span>👥 {ex.players}</span>}
-                    {ex.duration && <span>⏱ {ex.duration}</span>}
-                  </div>
+          {rows.map((ex) => (
+            <li key={ex.id} className="rounded-xl border p-3 shadow-sm bg-white flex items-start justify-between">
+              <div>
+                <h3 className="font-semibold text-[15px]">{ex.title || "(Sin título)"}</h3>
+                <div className="text-xs text-gray-500 mt-1 space-x-3">
+                  <span>📅 {new Date(ex.createdAt).toLocaleString()}</span>
+                  {(ex as any).kind?.name && <span>🏷 {(ex as any).kind.name}</span>}
+                  {ex.space && <span>📍 {ex.space}</span>}
+                  {ex.players && <span>👥 {ex.players}</span>}
+                  {ex.duration && <span>⏱ {ex.duration}</span>}
                 </div>
+              </div>
 
-                <div className="flex items-center gap-2">
-                  {canOpenSession ? (
-                    <a
-                      href={href}
-                      className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
-                      title="Abrir en el editor de la sesión"
-                    >
-                      Ver
-                    </a>
-                  ) : (
-                    <button
-                      disabled
-                      className="text-xs px-3 py-1.5 rounded-lg border opacity-50 cursor-not-allowed"
-                      title="Este ejercicio no tiene sesión asociada (puede ser antiguo)."
-                    >
-                      Ver
-                    </button>
-                  )}
-
+              <div className="flex items-center gap-2">
+                <a
+                  href={`/ct/sessions/${(ex as any).sourceSessionId || String(ex.id).split("__")[0] || ex.id}`}
+                  className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
+                >
+                  Ver
+                </a>
+                {/* Eliminar sólo si realmente es un Exercise persistido (no virtual) */}
+                {!String(ex.id).includes("__") && (
                   <button
                     onClick={async () => {
                       if (!confirm("¿Eliminar este ejercicio?")) return;
@@ -175,10 +135,10 @@ export default function ExercisesLibraryPage() {
                   >
                     Eliminar
                   </button>
-                </div>
-              </li>
-            );
-          })}
+                )}
+              </div>
+            </li>
+          ))}
         </ul>
       )}
 
