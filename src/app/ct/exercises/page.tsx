@@ -63,56 +63,34 @@ export default function ExercisesLibraryPage() {
       <header className="flex flex-wrap gap-3 items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Ejercicios</h1>
-          <p className="text-sm text-gray-500">
-            Tu base de datos personal de tareas
-          </p>
+          <p className="text-sm text-gray-500">Tu base de datos personal de tareas</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <input
             value={q}
-            onChange={(e) => {
-              setPage(1);
-              setQ(e.target.value);
-            }}
+            onChange={(e) => { setPage(1); setQ(e.target.value); }}
             className="rounded-xl border px-3 py-1.5 text-sm"
             placeholder="Buscar (título, descripción, espacio, jugadores)"
           />
 
           <select
             value={kindFilter}
-            onChange={(e) => {
-              setPage(1);
-              setKindFilter(e.target.value);
-            }}
+            onChange={(e) => { setPage(1); setKindFilter(e.target.value); }}
             className="rounded-xl border px-2 py-1.5 text-sm"
             title="Tipo"
           >
             <option value="">Todos los tipos</option>
-            {kinds.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
+            {kinds.map((k) => <option key={k} value={k}>{k}</option>)}
           </select>
 
           <div className="inline-flex rounded-xl border overflow-hidden">
-            <select
-              value={order}
-              onChange={(e) => setOrder(e.target.value as Order)}
-              className="px-2 py-1.5 text-xs"
-              title="Ordenar por"
-            >
+            <select value={order} onChange={(e) => setOrder(e.target.value as Order)} className="px-2 py-1.5 text-xs">
               <option value="createdAt">Fecha</option>
               <option value="title">Título</option>
             </select>
             <div className="w-px bg-gray-200" />
-            <select
-              value={dir}
-              onChange={(e) => setDir(e.target.value as Dir)}
-              className="px-2 py-1.5 text-xs"
-              title="Dirección"
-            >
+            <select value={dir} onChange={(e) => setDir(e.target.value as Dir)} className="px-2 py-1.5 text-xs">
               <option value="desc">↓</option>
               <option value="asc">↑</option>
             </select>
@@ -120,17 +98,10 @@ export default function ExercisesLibraryPage() {
 
           <button
             onClick={async () => {
-              if (
-                !confirm(
-                  "Importar/actualizar ejercicios desde las sesiones actuales?"
-                )
-              )
-                return;
+              if (!confirm("Importar/actualizar ejercicios desde las sesiones actuales?")) return;
               try {
                 const res = await importAllFromSessions();
-                alert(
-                  `Importados nuevos: ${res.created} · Actualizados: ${res.updated}`
-                );
+                alert(`Importados nuevos: ${res.created} · Actualizados: ${res.updated}`);
                 setPage(1);
                 load();
               } catch {
@@ -154,14 +125,19 @@ export default function ExercisesLibraryPage() {
       ) : (
         <ul className="space-y-3">
           {rows.map((ex) => {
+            // Si no viene el sourceSessionId, deducimos desde el id determinístico "<sessionId>__<idx>"
+            let sessionIdFromDeterministic: string | undefined = undefined;
+            if (typeof ex.id === "string" && ex.id.includes("__")) {
+              sessionIdFromDeterministic = ex.id.split("__")[0];
+            }
             const sessionHref = ex.sourceSessionId
               ? `/ct/sessions/${ex.sourceSessionId}`
+              : sessionIdFromDeterministic
+              ? `/ct/sessions/${sessionIdFromDeterministic}`
               : undefined;
+
             return (
-              <li
-                key={ex.id}
-                className="rounded-xl border p-3 shadow-sm bg-white flex items-start justify-between"
-              >
+              <li key={ex.id} className="rounded-xl border p-3 shadow-sm bg-white flex items-start justify-between">
                 <div>
                   <h3 className="font-semibold text-[15px]">{ex.title}</h3>
                   <div className="text-xs text-gray-500 mt-1 space-x-3">
@@ -175,19 +151,9 @@ export default function ExercisesLibraryPage() {
 
                 <div className="flex items-center gap-2">
                   {sessionHref ? (
-                    <a
-                      href={sessionHref}
-                      className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
-                    >
-                      Ver
-                    </a>
+                    <a href={sessionHref} className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50">Ver</a>
                   ) : (
-                    <a
-                      href={`/ct/exercises/${ex.id}`}
-                      className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
-                    >
-                      Ver
-                    </a>
+                    <a href={`/ct/exercises/${ex.id}`} className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50">Ver</a>
                   )}
                   <button
                     onClick={async () => {
@@ -195,7 +161,7 @@ export default function ExercisesLibraryPage() {
                       try {
                         await deleteExercise(ex.id);
                         load();
-                      } catch (e) {
+                      } catch {
                         alert("No se pudo eliminar");
                       }
                     }}
