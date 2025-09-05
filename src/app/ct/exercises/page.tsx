@@ -107,7 +107,12 @@ export default function ExercisesLibraryPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                {/* En el MVP sólo lectura/Eliminar desde aquí; edición la podés hacer desde tu editor */}
+                <a
+                  href={`/ct/sessions/${ex.id}`} // si querés abrirlos con tu editor de ejercicios; podés cambiar esta ruta
+                  className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
+                >
+                  Ver
+                </a>
                 <button
                   onClick={async () => {
                     if (!confirm("¿Eliminar este ejercicio?")) return;
@@ -128,7 +133,7 @@ export default function ExercisesLibraryPage() {
         </ul>
       )}
 
-      {/* Paginado simple */}
+      {/* Paginado */}
       <div className="flex items-center justify-between">
         <div className="text-xs text-gray-500">
           {total} ejercicios · página {page} / {pages}
