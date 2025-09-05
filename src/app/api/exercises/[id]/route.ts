@@ -1,18 +1,12 @@
+// src/app/api/exercises/[id]/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
-import { getServerSession } from "next-auth";
 
 const prisma = new PrismaClient();
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
-  const session = await getServerSession();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const userId = String(session.user.id);
-
-  const row = await prisma.exercise.findFirst({
-    where: { id: params.id, userId },
+  const row = await prisma.exercise.findUnique({
+    where: { id: params.id },
     include: { kind: true },
   });
   if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -20,21 +14,30 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 }
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
-  const session = await getServerSession();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const userId = String(session.user.id);
-
   const body = await req.json().catch(() => ({}));
-  const exists = await prisma.exercise.findFirst({ where: { id: params.id, userId } });
+  const exists = await prisma.exercise.findUnique({ where: { id: params.id } });
   if (!exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  let kindId = exists.kindId;
+  if ("kindName" in body) {
+    const name = String(body?.kindName || "").trim();
+    if (name) {
+      const k = await prisma.exerciseKind.upsert({
+        where: { name },
+        update: {},
+        create: { name },
+      });
+      kindId = k.id;
+    } else {
+      kindId = null;
+    }
+  }
 
   const updated = await prisma.exercise.update({
     where: { id: params.id },
     data: {
       title: (body?.title ?? exists.title),
-      kindId: "kindId" in body ? body?.kindId ?? null : exists.kindId,
+      kindId,
       space: "space" in body ? body?.space ?? null : exists.space,
       players: "players" in body ? body?.players ?? null : exists.players,
       duration: "duration" in body ? body?.duration ?? null : exists.duration,
@@ -49,15 +52,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 }
 
 export async function DELETE(_: Request, { params }: { params: { id: string } }) {
-  const session = await getServerSession();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const userId = String(session.user.id);
-
-  const exists = await prisma.exercise.findFirst({ where: { id: params.id, userId } });
+  const exists = await prisma.exercise.findUnique({ where: { id: params.id } });
   if (!exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
   await prisma.exercise.delete({ where: { id: params.id } });
   return NextResponse.json({ ok: true });
 }
