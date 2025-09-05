@@ -19,6 +19,9 @@ type ExerciseEncoded = {
   tags?: string[];
 };
 
+// Tipado liviano que coincide con el SELECT que hacemos abajo
+type SessionLite = { id: string; description: string | null; date: Date };
+
 function decodeFromDescription(desc?: string | null): ExerciseEncoded[] {
   const text = (desc || "").trimEnd();
   const idx = text.lastIndexOf(EX_TAG);
@@ -41,7 +44,7 @@ export async function POST() {
   const userId = String(session.user.id);
 
   // Trae sesiones del usuario que potencialmente tengan ejercicios embebidos
-  const sessions = await prisma.session.findMany({
+  const sessions: SessionLite[] = await prisma.session.findMany({
     where: { createdBy: userId, description: { contains: EX_TAG } },
     select: { id: true, description: true, date: true },
     orderBy: { date: "desc" },
