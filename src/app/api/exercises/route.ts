@@ -1,8 +1,6 @@
-// src/app/api/exercises/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getServerSession } from "next-auth";
-import authOptions from "@/app/api/auth/[...nextauth]/route"; // default export
 
 const prisma = new PrismaClient();
 
@@ -11,14 +9,17 @@ const prisma = new PrismaClient();
  * POST /api/exercises { title, kindId?, space?, players?, duration?, description?, imageUrl?, tags? }
  */
 export async function GET(req: Request) {
-  const session = await getServerSession(authOptions as any);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const userId = session.user.id as string;
+  // ⚠️ Sin authOptions — evita error de build si tu ruta de nextauth no lo exporta
+  const session = await getServerSession();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = String(session.user.id);
 
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") || "").trim();
   const kindId = (url.searchParams.get("kindId") || "").trim() || undefined;
-  const kindName = (url.searchParams.get("kind") || "").trim() || undefined; // por nombre
+  const kindName = (url.searchParams.get("kind") || "").trim() || undefined; // filtro por nombre
   const order = (url.searchParams.get("order") || "createdAt") as "createdAt" | "title";
   const dir = (url.searchParams.get("dir") || "desc") as "asc" | "desc";
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
@@ -57,9 +58,11 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions as any);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const userId = session.user.id as string;
+  const session = await getServerSession();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = String(session.user.id);
 
   const body = await req.json().catch(() => ({}));
   const title = (body?.title || "").trim();
