@@ -1,97 +1,80 @@
-// src/lib/api/exercises.ts
-export type KindDTO = { id: string; name: string };
-
+export type ExerciseKindDTO = { id: string; name: string };
 export type ExerciseDTO = {
   id: string;
   userId: string;
   title: string;
-  description: string | null;
+  kindId: string | null;
+  kind?: ExerciseKindDTO | null;
   space: string | null;
   players: string | null;
   duration: string | null;
+  description: string | null;
   imageUrl: string | null;
-  tags: string[];
-  kindId: string | null;
-  kind?: KindDTO | null;
+  tags: string[] | null;
   createdAt: string;
   updatedAt: string;
 };
 
 export type SearchParams = {
   q?: string;
-  /** filtrar por nombre del tipo (útil cuando no tenés IDs) */
-  kind?: string;
-  /** filtrar por id del tipo (si trabajás con ExerciseKind en DB) */
-  kindId?: string;
+  kindId?: string;   // filtro por id
+  kind?: string;     // o por nombre
   order?: "createdAt" | "title";
   dir?: "asc" | "desc";
   page?: number;
   pageSize?: number;
 };
 
-function buildQuery(p: SearchParams = {}) {
-  const usp = new URLSearchParams();
-  if (p.q) usp.set("q", p.q);
-  if (p.kind) usp.set("kind", p.kind);
-  if (p.kindId) usp.set("kindId", p.kindId);
-  usp.set("order", p.order || "createdAt");
-  usp.set("dir", p.dir || "desc");
-  usp.set("page", String(p.page || 1));
-  usp.set("pageSize", String(p.pageSize || 20));
-  return usp.toString();
-}
-
 export async function searchExercises(params: SearchParams) {
-  const qs = buildQuery(params);
-  const res = await fetch(`/api/exercises?${qs}`, { cache: "no-store" as RequestCache });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || "No se pudo buscar ejercicios");
-  return json as { data: ExerciseDTO[]; meta: { total: number; page: number; pageSize: number; pages: number } };
+  const qs = new URLSearchParams();
+  if (params.q) qs.set("q", params.q);
+  if (params.kindId) qs.set("kindId", params.kindId);
+  if (params.kind) qs.set("kind", params.kind);
+  qs.set("order", params.order || "createdAt");
+  qs.set("dir", params.dir || "desc");
+  qs.set("page", String(params.page || 1));
+  qs.set("pageSize", String(params.pageSize || 20));
+
+  const res = await fetch(`/api/exercises?${qs.toString()}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("searchExercises failed");
+  return (await res.json()) as { data: ExerciseDTO[]; meta: { total: number; page: number; pageSize: number; pages: number } };
 }
 
-export async function getExerciseById(id: string) {
-  const res = await fetch(`/api/exercises/${id}`, { cache: "no-store" as RequestCache });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || "No se pudo obtener el ejercicio");
-  return json as { data: ExerciseDTO };
+export async function getExercise(id: string) {
+  const res = await fetch(`/api/exercises/${id}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("getExercise failed");
+  return (await res.json()) as { data: ExerciseDTO };
 }
 
-export async function createExercise(
-  payload: Partial<ExerciseDTO> & { title: string }
-) {
+export async function createExercise(input: Partial<ExerciseDTO>) {
   const res = await fetch(`/api/exercises`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(input),
   });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || "No se pudo crear");
-  return json as { data: ExerciseDTO };
+  if (!res.ok) throw new Error("createExercise failed");
+  return (await res.json()) as { data: ExerciseDTO };
 }
 
-export async function updateExercise(
-  id: string,
-  payload: Partial<ExerciseDTO>
-) {
+export async function updateExercise(id: string, input: Partial<ExerciseDTO>) {
   const res = await fetch(`/api/exercises/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(input),
   });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || "No se pudo actualizar");
-  return json as { data: ExerciseDTO };
+  if (!res.ok) throw new Error("updateExercise failed");
+  return (await res.json()) as { data: ExerciseDTO };
 }
 
 export async function deleteExercise(id: string) {
   const res = await fetch(`/api/exercises/${id}`, { method: "DELETE" });
-  if (!res.ok) {
-    let msg = "No se pudo eliminar";
-    try {
-      const j = await res.json();
-      msg = j?.error || msg;
-    } catch {}
-    throw new Error(msg);
-  }
-  return true;
+  if (!res.ok) throw new Error("deleteExercise failed");
+  return (await res.json()) as { ok: boolean };
+}
+
+// NEW: importar los ejercicios embebidos en sesiones del usuario
+export async function importFromSessions() {
+  const res = await fetch(`/api/exercises/import`, { method: "POST" });
+  if (!res.ok) throw new Error("import failed");
+  return (await res.json()) as { ok: true; imported: number; scanned: number };
 }
