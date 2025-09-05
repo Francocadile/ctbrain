@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { PrismaClient, Session } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { getServerSession } from "next-auth";
 
 const prisma = new PrismaClient();
@@ -9,8 +9,8 @@ const EX_TAG = "[EXERCISES]";
 
 type ExerciseEncoded = {
   title: string;
-  kind?: string;      // nombre, opcional
-  kindId?: string;    // id, opcional
+  kind?: string;      // nombre (opcional)
+  kindId?: string;    // id (opcional)
   space?: string;
   players?: string;
   duration?: string;
@@ -41,7 +41,7 @@ export async function POST() {
   const userId = String(session.user.id);
 
   // Trae sesiones del usuario que potencialmente tengan ejercicios embebidos
-  const sessions: Session[] = await prisma.session.findMany({
+  const sessions = await prisma.session.findMany({
     where: { createdBy: userId, description: { contains: EX_TAG } },
     select: { id: true, description: true, date: true },
     orderBy: { date: "desc" },
