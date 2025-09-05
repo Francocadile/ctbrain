@@ -93,7 +93,7 @@ export default function ExercisesLibraryPage() {
             onClick={async () => {
               try {
                 const res = await importAllFromSessions();
-                alert(`Importados: ${res.created}`);
+                alert(`Importados: ${res.created} · Actualizados: ${res.updated}`);
                 setPage(1);
                 load();
               } catch {
@@ -101,7 +101,7 @@ export default function ExercisesLibraryPage() {
               }
             }}
             className="rounded-xl border px-3 py-1.5 text-sm hover:bg-gray-50"
-            title="Leer ejercicios embebidos en sesiones y agregarlos a la base"
+            title="Leer ejercicios embebidos en sesiones y agregarlos/actualizarlos en la base"
           >
             Importar desde sesiones
           </button>
@@ -130,14 +130,19 @@ export default function ExercisesLibraryPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                {/* Quitamos el botón "Ver" que llevaba a 404 */}
+                <a
+                  href={`/ct/exercises/${ex.id}`}
+                  className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
+                >
+                  Ver
+                </a>
                 <button
                   onClick={async () => {
                     if (!confirm("¿Eliminar este ejercicio?")) return;
                     try {
                       await deleteExercise(ex.id);
                       load();
-                    } catch (e) {
+                    } catch {
                       alert("No se pudo eliminar");
                     }
                   }}
