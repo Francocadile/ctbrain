@@ -1,9 +1,14 @@
 // src/app/ct/exercises/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { listKinds } from "@/lib/settings";
-import { searchExercises, deleteExercise, type ExerciseDTO } from "@/lib/api/exercises";
+import {
+  searchExercises,
+  deleteExercise,
+  importAllFromSessions,
+  type ExerciseDTO,
+} from "@/lib/api/exercises";
 
 type Order = "createdAt" | "title";
 type Dir = "asc" | "desc";
@@ -19,7 +24,6 @@ export default function ExercisesLibraryPage() {
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<ExerciseDTO[]>([]);
   const [total, setTotal] = useState(0);
-  const triedAutoImport = useRef(false);
 
   async function load() {
     setLoading(true);
@@ -34,18 +38,6 @@ export default function ExercisesLibraryPage() {
       });
       setRows(data);
       setTotal(meta.total);
-
-      // Fallback: si no hay nada y aún no probamos, importamos desde sesiones
-      if (!triedAutoImport.current && meta.total === 0) {
-        triedAutoImport.current = true;
-        await fetch("/api/exercises/import", { method: "POST" }).catch(() => {});
-        // reintentar
-        const again = await searchExercises({
-          q, kind: kindFilter || undefined, order, dir, page, pageSize,
-        });
-        setRows(again.data);
-        setTotal(again.meta.total);
-      }
     } catch (e) {
       console.error(e);
       setRows([]);
@@ -98,9 +90,18 @@ export default function ExercisesLibraryPage() {
           </div>
 
           <button
-            onClick={async () => { await fetch("/api/exercises/import", { method: "POST" }); load(); }}
+            onClick={async () => {
+              try {
+                const res = await importAllFromSessions();
+                alert(`Importados: ${res.created}`);
+                setPage(1);
+                load();
+              } catch {
+                alert("No se pudo importar");
+              }
+            }}
             className="rounded-xl border px-3 py-1.5 text-sm hover:bg-gray-50"
-            title="Escanear sesiones y traer ejercicios"
+            title="Leer ejercicios embebidos en sesiones y agregarlos a la base"
           >
             Importar desde sesiones
           </button>
@@ -129,12 +130,7 @@ export default function ExercisesLibraryPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                <a
-                  href={`/ct/sessions/${ex.id}`} // abrimos con tu editor de ejercicios si el id coincide con una sesión guardada como ejercicio suelto
-                  className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
-                >
-                  Ver
-                </a>
+                {/* Quitamos el botón "Ver" que llevaba a 404 */}
                 <button
                   onClick={async () => {
                     if (!confirm("¿Eliminar este ejercicio?")) return;
