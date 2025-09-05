@@ -1,27 +1,30 @@
-// src/app/api/exercises/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { getServerSession } from "next-auth";
 
 const prisma = new PrismaClient();
 
 /**
- * GET /api/exercises?q=&kind=&order=createdAt|title&dir=desc|asc&page=1&pageSize=20
- *  - sin auth: lista todo; si pasás ?userId=... filtra por usuario
- * POST /api/exercises { title, userId, kindName?, space?, players?, duration?, description?, imageUrl?, tags? }
+ * GET /api/exercises?q=&kindId=&order=createdAt|title&dir=desc|asc&page=1&pageSize=20
+ * POST /api/exercises { title, kindId?, space?, players?, duration?, description?, imageUrl?, tags? }
  */
+
 export async function GET(req: Request) {
+  const session = await getServerSession(); // sin authOptions para evitar errores de export
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = String(session.user.id);
+
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") || "").trim();
-  const kind = (url.searchParams.get("kind") || "").trim();
-  const userId = (url.searchParams.get("userId") || "").trim() || undefined;
+  const kindId = (url.searchParams.get("kindId") || "").trim() || undefined;
   const order = (url.searchParams.get("order") || "createdAt") as "createdAt" | "title";
   const dir = (url.searchParams.get("dir") || "desc") as "asc" | "desc";
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
   const pageSize = Math.min(50, Math.max(5, parseInt(url.searchParams.get("pageSize") || "20", 10)));
 
-  const where: any = {
-    ...(userId ? { userId } : {}),
-    ...(kind ? { kind: { name: { equals: kind } } } : {}),
+  const where = {
+    userId,
+    ...(kindId ? { kindId } : {}),
     ...(q
       ? {
           OR: [
@@ -45,35 +48,35 @@ export async function GET(req: Request) {
     }),
   ]);
 
+  // Añadimos sourceSessionId derivado del id determinístico "<sessionId>__<idx>"
+  const data = rows.map((r: any) => {
+    let sourceSessionId: string | null = null;
+    if (typeof r.id === "string" && r.id.includes("__")) {
+      sourceSessionId = r.id.split("__")[0];
+    }
+    return { ...r, sourceSessionId };
+  });
+
   return NextResponse.json({
-    data: rows,
+    data,
     meta: { total, page, pageSize, pages: Math.ceil(total / pageSize) },
   });
 }
 
 export async function POST(req: Request) {
+  const session = await getServerSession();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = String(session.user.id);
+
   const body = await req.json().catch(() => ({}));
   const title = (body?.title || "").trim();
-  const userId = (body?.userId || "").trim();
   if (!title) return NextResponse.json({ error: "title requerido" }, { status: 400 });
-  if (!userId) return NextResponse.json({ error: "userId requerido" }, { status: 400 });
-
-  let kindId: string | null = null;
-  const kindName = (body?.kindName || "").trim();
-  if (kindName) {
-    const k = await prisma.exerciseKind.upsert({
-      where: { name: kindName },
-      update: {},
-      create: { name: kindName },
-    });
-    kindId = k.id;
-  }
 
   const created = await prisma.exercise.create({
     data: {
       userId,
       title,
-      kindId,
+      kindId: body?.kindId || null,
       space: body?.space || null,
       players: body?.players || null,
       duration: body?.duration || null,
@@ -84,5 +87,10 @@ export async function POST(req: Request) {
     include: { kind: true },
   });
 
-  return NextResponse.json({ data: created });
+  let sourceSessionId: string | null = null;
+  if (typeof created.id === "string" && created.id.includes("__")) {
+    sourceSessionId = created.id.split("__")[0];
+  }
+
+  return NextResponse.json({ data: { ...created, sourceSessionId } });
 }
