@@ -5,7 +5,7 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 const EX_TAG = "[EXERCISES]";
 
-type ImportExercise = {
+type ExercisePayload = {
   title?: string;
   kind?: string;
   space?: string;
@@ -15,50 +15,47 @@ type ImportExercise = {
   imageUrl?: string;
 };
 
-function decodeFromDescription(desc?: string | null): ImportExercise[] {
+function decodeExercises(desc?: string | null): ExercisePayload[] {
   const text = (desc || "").trimEnd();
   const idx = text.lastIndexOf(EX_TAG);
   if (idx === -1) return [];
   const rest = text.slice(idx + EX_TAG.length).trim();
-  const b64 = rest.split(/\s+/)[0] || "";
+  const b64 = (rest.split(/\s+/)[0] || "").trim();
+  if (!b64) return [];
   try {
     const json = Buffer.from(b64, "base64").toString("utf8");
     const arr = JSON.parse(json);
-    if (Array.isArray(arr)) return arr as ImportExercise[];
+    return Array.isArray(arr) ? arr : [];
   } catch {
-    // ignore corrupt payloads
+    return [];
   }
-  return [];
 }
 
-/**
- * POST /api/exercises/import
- * Escanea TODAS las sesiones que tengan el tag [EXERCISES] y crea ejercicios
- * asociados al usuario dueño de cada sesión (createdBy).
- *
- * Nota: deliberadamente no dependemos de next-auth aquí para evitar errores de
- * compilación por exportaciones de authOptions. Seguridad: es una herramienta
- * interna; si quisieras protegerla luego, bastaría con reintroducir session.
- */
 export async function POST() {
-  // Buscamos sesiones con el marcador de ejercicios para cualquier usuario
-  const sessions: Array<{ id: string; description: string | null; date: Date; createdBy: string }> =
-    await prisma.session.findMany({
-      where: { description: { contains: EX_TAG } },
-      select: { id: true, description: true, date: true, createdBy: true },
-      orderBy: { date: "desc" },
-    });
+  // Trae sesiones (de cualquiera) que tengan ejercicios embebidos
+  const sessions = await prisma.session.findMany({
+    where: { description: { contains: EX_TAG } },
+    select: { id: true, description: true, date: true, createdBy: true },
+    orderBy: { date: "desc" },
+  });
 
   let created = 0;
 
   for (const s of sessions) {
-    const list = decodeFromDescription(s.description);
-    for (const e of list) {
-      const title = (e?.title || "").trim() || "(Sin título)";
+    const items = decodeExercises(s.description);
+    if (!items.length) continue;
 
-      // upsert del tipo (kind) si viene nombre
+    for (const it of items) {
+      // upsert naive por (userId, title, date) para evitar duplicar en importaciones repetidas
+      const keyTitle = (it.title || "").trim() || "(Sin título)";
+      const existing = await prisma.exercise.findFirst({
+        where: { userId: s.createdBy, title: keyTitle },
+        orderBy: { createdAt: "desc" },
+      });
+      if (existing) continue;
+
       let kindId: string | null = null;
-      const kindName = (e?.kind || "").trim();
+      const kindName = (it.kind || "").trim();
       if (kindName) {
         const k = await prisma.exerciseKind.upsert({
           where: { name: kindName },
@@ -70,14 +67,14 @@ export async function POST() {
 
       await prisma.exercise.create({
         data: {
-          userId: s.createdBy, // dueño correcto del ejercicio
-          title,
+          userId: s.createdBy,
+          title: keyTitle,
           kindId,
-          space: (e?.space || null) as string | null,
-          players: (e?.players || null) as string | null,
-          duration: (e?.duration || null) as string | null,
-          description: (e?.description || null) as string | null,
-          imageUrl: (e?.imageUrl || null) as string | null,
+          space: it.space || null,
+          players: it.players || null,
+          duration: it.duration || null,
+          description: it.description || null,
+          imageUrl: it.imageUrl || null,
           tags: [],
         },
       });
