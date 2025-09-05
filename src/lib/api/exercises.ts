@@ -16,7 +16,7 @@ export type ExerciseDTO = {
 
 export async function searchExercises(params: {
   q?: string;
-  kindId?: string;
+  kindName?: string;            // <- por nombre
   order?: "createdAt" | "title";
   dir?: "asc" | "desc";
   page?: number;
