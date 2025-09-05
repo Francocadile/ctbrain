@@ -41,7 +41,7 @@ model User {
   // preferencias (1 a 1)
   plannerPrefs    PlannerPrefs?
 
-  // biblioteca de ejercicios
+  // 👇 biblioteca personal de ejercicios
   exercises       Exercise[]
 }
 
@@ -88,6 +88,7 @@ model ExerciseKind {
 // ===== Biblioteca personal de ejercicios =====
 model Exercise {
   id          String        @id @default(cuid())
+
   userId      String
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -100,6 +101,7 @@ model Exercise {
   duration    String?
   description String?
   imageUrl    String?
+
   tags        String[]      @default([])
 
   createdAt   DateTime      @default(now())
