@@ -7,16 +7,14 @@ import {
   deleteExercise,
   importAllFromSessions,
   type ExerciseDTO,
-  type SearchParams,
+  type Order,
+  type Dir,
 } from "@/lib/api/exercises";
-
-type Order = "createdAt" | "title";
-type Dir = "asc" | "desc";
 
 export default function ExercisesLibraryPage() {
   const [kinds, setKinds] = useState<string[]>([]);
   const [q, setQ] = useState("");
-  const [kindFilter, setKindFilter] = useState<string>(""); // guarda el NOMBRE seleccionado
+  const [kindFilter, setKindFilter] = useState<string>("");
   const [order, setOrder] = useState<Order>("createdAt");
   const [dir, setDir] = useState<Dir>("desc");
   const [page, setPage] = useState(1);
@@ -28,18 +26,14 @@ export default function ExercisesLibraryPage() {
   async function load() {
     setLoading(true);
     try {
-      // NOTA: SearchParams hoy acepta kindId. Como en la UI tenemos sólo NOMBRES de kind,
-      // mandamos ese string en 'kindId' para no romper el tipo. El backend puede ignorarlo
-      // o también aceptar filtro por nombre (si ya lo implementaste).
-      const params: SearchParams = {
+      const { data, meta } = await searchExercises({
         q,
         kindId: kindFilter || undefined,
         order,
         dir,
         page,
         pageSize,
-      };
-      const { data, meta } = await searchExercises(params);
+      });
       setRows(data);
       setTotal(meta.total);
     } catch (e) {
@@ -52,29 +46,26 @@ export default function ExercisesLibraryPage() {
   }
 
   useEffect(() => {
-    (async () => {
-      try {
-        const k = await listKinds();
-        setKinds(k);
-      } catch {
-        setKinds([]);
-      }
-    })();
+    (async () => setKinds(await listKinds()))();
   }, []);
-
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, kindFilter, order, dir, page]);
 
-  const pages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
+  const pages = useMemo(
+    () => Math.max(1, Math.ceil(total / pageSize)),
+    [total, pageSize]
+  );
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
-      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <header className="flex flex-wrap gap-3 items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Ejercicios</h1>
-          <p className="text-sm text-gray-500">Tu base de datos personal de tareas</p>
+          <p className="text-sm text-gray-500">
+            Tu base de datos personal de tareas
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -95,7 +86,7 @@ export default function ExercisesLibraryPage() {
               setKindFilter(e.target.value);
             }}
             className="rounded-xl border px-2 py-1.5 text-sm"
-            title="Tipo de ejercicio"
+            title="Tipo"
           >
             <option value="">Todos los tipos</option>
             {kinds.map((k) => (
@@ -127,22 +118,27 @@ export default function ExercisesLibraryPage() {
             </select>
           </div>
 
-          {/* Importar desde sesiones */}
           <button
             onClick={async () => {
-              if (!confirm("¿Importar/actualizar ejercicios desde todas las sesiones?")) return;
+              if (
+                !confirm(
+                  "Importar/actualizar ejercicios desde las sesiones actuales?"
+                )
+              )
+                return;
               try {
                 const res = await importAllFromSessions();
-                alert(`Importados: ${res.created} · Actualizados: ${res.updated}`);
+                alert(
+                  `Importados nuevos: ${res.created} · Actualizados: ${res.updated}`
+                );
                 setPage(1);
                 load();
-              } catch (e) {
-                console.error(e);
+              } catch {
                 alert("No se pudo importar desde sesiones");
               }
             }}
             className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
-            title="Crea/actualiza ejercicios leyendo las secciones [EXERCISES] de cada sesión"
+            title="Lee tus sesiones y crea/actualiza ejercicios"
           >
             Importar desde sesiones
           </button>
@@ -152,52 +148,65 @@ export default function ExercisesLibraryPage() {
       {loading ? (
         <div className="text-sm text-gray-500">Cargando…</div>
       ) : rows.length === 0 ? (
-        <div className="rounded-lg border p-6 text-sm text-gray-600">No hay ejercicios que coincidan.</div>
+        <div className="rounded-lg border p-6 text-sm text-gray-600">
+          No hay ejercicios que coincidan.
+        </div>
       ) : (
         <ul className="space-y-3">
-          {rows.map((ex) => (
-            <li
-              key={ex.id}
-              className="rounded-xl border p-3 shadow-sm bg-white flex items-start justify-between"
-            >
-              <div className="min-w-0">
-                <a href={`/ct/exercises/${ex.id}`} className="font-semibold text-[15px] hover:underline">
-                  {ex.title || "(Sin título)"}
-                </a>
-                <div className="text-xs text-gray-500 mt-1 space-x-3">
-                  <span>📅 {new Date(ex.createdAt).toLocaleString()}</span>
-                  {ex.kind?.name && <span>🏷 {ex.kind.name}</span>}
-                  {ex.space && <span>📍 {ex.space}</span>}
-                  {ex.players && <span>👥 {ex.players}</span>}
-                  {ex.duration && <span>⏱ {ex.duration}</span>}
+          {rows.map((ex) => {
+            const sessionHref = ex.sourceSessionId
+              ? `/ct/sessions/${ex.sourceSessionId}`
+              : undefined;
+            return (
+              <li
+                key={ex.id}
+                className="rounded-xl border p-3 shadow-sm bg-white flex items-start justify-between"
+              >
+                <div>
+                  <h3 className="font-semibold text-[15px]">{ex.title}</h3>
+                  <div className="text-xs text-gray-500 mt-1 space-x-3">
+                    <span>📅 {new Date(ex.createdAt).toLocaleString()}</span>
+                    {ex.kind?.name && <span>🏷 {ex.kind.name}</span>}
+                    {ex.space && <span>📍 {ex.space}</span>}
+                    {ex.players && <span>👥 {ex.players}</span>}
+                    {ex.duration && <span>⏱ {ex.duration}</span>}
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-2">
-                <a
-                  href={`/ct/exercises/${ex.id}`}
-                  className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
-                >
-                  Ver
-                </a>
-                <button
-                  onClick={async () => {
-                    if (!confirm("¿Eliminar este ejercicio?")) return;
-                    try {
-                      await deleteExercise(ex.id);
-                      load();
-                    } catch (e) {
-                      console.error(e);
-                      alert("No se pudo eliminar");
-                    }
-                  }}
-                  className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
-                >
-                  Eliminar
-                </button>
-              </div>
-            </li>
-          ))}
+                <div className="flex items-center gap-2">
+                  {sessionHref ? (
+                    <a
+                      href={sessionHref}
+                      className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
+                    >
+                      Ver
+                    </a>
+                  ) : (
+                    <a
+                      href={`/ct/exercises/${ex.id}`}
+                      className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
+                    >
+                      Ver
+                    </a>
+                  )}
+                  <button
+                    onClick={async () => {
+                      if (!confirm("¿Eliminar este ejercicio?")) return;
+                      try {
+                        await deleteExercise(ex.id);
+                        load();
+                      } catch (e) {
+                        alert("No se pudo eliminar");
+                      }
+                    }}
+                    className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
 
