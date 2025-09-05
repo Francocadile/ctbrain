@@ -7,9 +7,10 @@ import {
   deleteExercise,
   importAllFromSessions,
   type ExerciseDTO,
-  type Order,
-  type Dir,
 } from "@/lib/api/exercises";
+
+type Order = "createdAt" | "title";
+type Dir = "asc" | "desc";
 
 export default function ExercisesLibraryPage() {
   const [kinds, setKinds] = useState<string[]>([]);
@@ -45,18 +46,10 @@ export default function ExercisesLibraryPage() {
     }
   }
 
-  useEffect(() => {
-    (async () => setKinds(await listKinds()))();
-  }, []);
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, kindFilter, order, dir, page]);
+  useEffect(() => { (async () => setKinds(await listKinds()))(); }, []);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [q, kindFilter, order, dir, page]);
 
-  const pages = useMemo(
-    () => Math.max(1, Math.ceil(total / pageSize)),
-    [total, pageSize]
-  );
+  const pages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -73,7 +66,6 @@ export default function ExercisesLibraryPage() {
             className="rounded-xl border px-3 py-1.5 text-sm"
             placeholder="Buscar (título, descripción, espacio, jugadores)"
           />
-
           <select
             value={kindFilter}
             onChange={(e) => { setPage(1); setKindFilter(e.target.value); }}
@@ -125,16 +117,17 @@ export default function ExercisesLibraryPage() {
       ) : (
         <ul className="space-y-3">
           {rows.map((ex) => {
-            // Si no viene el sourceSessionId, deducimos desde el id determinístico "<sessionId>__<idx>"
-            let sessionIdFromDeterministic: string | undefined = undefined;
-            if (typeof ex.id === "string" && ex.id.includes("__")) {
-              sessionIdFromDeterministic = ex.id.split("__")[0];
+            // Prioridad 1: backend nos pasa sourceSessionId
+            let sessionId: string | undefined =
+              (ex as any).sourceSessionId || undefined;
+
+            // Prioridad 2: deducir del id determinístico "<sessionId>__<idx>"
+            if (!sessionId && typeof ex.id === "string" && ex.id.includes("__")) {
+              sessionId = ex.id.split("__")[0];
             }
-            const sessionHref = ex.sourceSessionId
-              ? `/ct/sessions/${ex.sourceSessionId}`
-              : sessionIdFromDeterministic
-              ? `/ct/sessions/${sessionIdFromDeterministic}`
-              : undefined;
+
+            const canOpenSession = !!sessionId;
+            const href = canOpenSession ? `/ct/sessions/${sessionId}` : undefined;
 
             return (
               <li key={ex.id} className="rounded-xl border p-3 shadow-sm bg-white flex items-start justify-between">
@@ -150,18 +143,31 @@ export default function ExercisesLibraryPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {sessionHref ? (
-                    <a href={sessionHref} className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50">Ver</a>
+                  {canOpenSession ? (
+                    <a
+                      href={href}
+                      className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
+                      title="Abrir en el editor de la sesión"
+                    >
+                      Ver
+                    </a>
                   ) : (
-                    <a href={`/ct/exercises/${ex.id}`} className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50">Ver</a>
+                    <button
+                      disabled
+                      className="text-xs px-3 py-1.5 rounded-lg border opacity-50 cursor-not-allowed"
+                      title="Este ejercicio no tiene sesión asociada (puede ser antiguo)."
+                    >
+                      Ver
+                    </button>
                   )}
+
                   <button
                     onClick={async () => {
                       if (!confirm("¿Eliminar este ejercicio?")) return;
                       try {
                         await deleteExercise(ex.id);
                         load();
-                      } catch {
+                      } catch (e) {
                         alert("No se pudo eliminar");
                       }
                     }}
