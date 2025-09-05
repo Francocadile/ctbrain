@@ -32,27 +32,23 @@ function decodeExercises(desc?: string | null): ExercisePayload[] {
 }
 
 export async function POST() {
-  // Trae sesiones (de cualquiera) que tengan ejercicios embebidos
   const sessions = await prisma.session.findMany({
     where: { description: { contains: EX_TAG } },
-    select: { id: true, description: true, date: true, createdBy: true },
+    select: { id: true, description: true, createdBy: true, date: true },
     orderBy: { date: "desc" },
   });
 
   let created = 0;
+  let updated = 0;
 
   for (const s of sessions) {
     const items = decodeExercises(s.description);
     if (!items.length) continue;
 
-    for (const it of items) {
-      // upsert naive por (userId, title, date) para evitar duplicar en importaciones repetidas
-      const keyTitle = (it.title || "").trim() || "(Sin título)";
-      const existing = await prisma.exercise.findFirst({
-        where: { userId: s.createdBy, title: keyTitle },
-        orderBy: { createdAt: "desc" },
-      });
-      if (existing) continue;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i] as ExercisePayload;
+      const title = (it.title || "").trim() || "(Sin título)";
+      const tag = `from:session:${s.id}:${i}`;
 
       let kindId: string | null = null;
       const kindName = (it.kind || "").trim();
@@ -65,22 +61,42 @@ export async function POST() {
         kindId = k.id;
       }
 
-      await prisma.exercise.create({
-        data: {
-          userId: s.createdBy,
-          title: keyTitle,
-          kindId,
-          space: it.space || null,
-          players: it.players || null,
-          duration: it.duration || null,
-          description: it.description || null,
-          imageUrl: it.imageUrl || null,
-          tags: [],
-        },
+      const existing = await prisma.exercise.findFirst({
+        where: { userId: s.createdBy, tags: { has: tag } },
       });
-      created++;
+
+      if (existing) {
+        await prisma.exercise.update({
+          where: { id: existing.id },
+          data: {
+            title,
+            kindId,
+            space: it.space ?? null,
+            players: it.players ?? null,
+            duration: it.duration ?? null,
+            description: it.description ?? null,
+            imageUrl: it.imageUrl ?? null,
+          },
+        });
+        updated++;
+      } else {
+        await prisma.exercise.create({
+          data: {
+            userId: s.createdBy,
+            title,
+            kindId,
+            space: it.space ?? null,
+            players: it.players ?? null,
+            duration: it.duration ?? null,
+            description: it.description ?? null,
+            imageUrl: it.imageUrl ?? null,
+            tags: [tag],
+          },
+        });
+        created++;
+      }
     }
   }
 
-  return NextResponse.json({ ok: true, created });
+  return NextResponse.json({ ok: true, created, updated });
 }
