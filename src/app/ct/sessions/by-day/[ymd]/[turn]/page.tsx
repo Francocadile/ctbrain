@@ -18,6 +18,13 @@ const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSA
 // Metadatos (arriba). Agregamos NOMBRE SESIÓN
 const META_ROWS = ["LUGAR", "HORA", "VIDEO", "NOMBRE SESIÓN"] as const;
 
+/* ====== Marcadores usados por el editor ====== */
+const DAYFLAG_TAG = "DAYFLAG";                  // título: "PARTIDO|rival|logo" | "LIBRE" | ""
+const MICRO_TAG   = "MICRO";                    // título: "MD+1" | "MD+2" | ... | "MD" | "DESCANSO" | ""
+const dayFlagMarker   = (turn: TurnKey) => `[${DAYFLAG_TAG}:${turn}]`;
+const microMarker     = (turn: TurnKey) => `[${MICRO_TAG}:${turn}]`;
+
+/* ====== Helpers generales ====== */
 function cellMarker(turn: TurnKey, row: string) {
   return `[GRID:${turn}:${row}]`;
 }
@@ -31,14 +38,56 @@ function parseVideoValue(v: string | null | undefined): { label: string; url: st
   if (!url && label?.startsWith("http")) return { label: "Video", url: label };
   return { label: label || "", url: url || "" };
 }
-function humanDate(ymd: string) {
+
+function humanDateShort(ymd: string) {
   const d = new Date(`${ymd}T00:00:00.000Z`);
   return d.toLocaleDateString(undefined, {
-    weekday: "long",
+    weekday: "short",
     day: "2-digit",
-    month: "long",
+    month: "2-digit",
     timeZone: "UTC",
   });
+}
+
+/* ====== Partido / Descanso ====== */
+type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
+type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string };
+
+function isDayFlag(s: SessionDTO, turn: TurnKey) {
+  return typeof s.description === "string" && s.description.startsWith(dayFlagMarker(turn));
+}
+function parseDayFlagTitle(title?: string | null): DayFlag {
+  const t = (title || "").trim();
+  if (!t) return { kind: "NONE" };
+  const [kind, rival, logoUrl] = t.split("|").map((x) => (x || "").trim());
+  if (kind === "PARTIDO") return { kind: "PARTIDO", rival, logoUrl };
+  if (kind === "LIBRE") return { kind: "LIBRE" };
+  return { kind: "NONE" };
+}
+
+/* ====== Intensidad (Microciclo) ====== */
+type MicroKey = "" | "MD+1" | "MD+2" | "MD-4" | "MD-3" | "MD-2" | "MD-1" | "MD" | "DESCANSO";
+function isMicro(s: SessionDTO, turn: TurnKey) {
+  return typeof s.description === "string" && s.description.startsWith(microMarker(turn));
+}
+function parseMicroTitle(title?: string | null): MicroKey {
+  const t = (title || "").trim();
+  const allowed = new Set(["", "MD+1", "MD+2", "MD-4", "MD-3", "MD-2", "MD-1", "MD", "DESCANSO"]);
+  return (allowed.has(t) ? (t as MicroKey) : "") as MicroKey;
+}
+function microChipClass(v: MicroKey) {
+  // Colores en línea con editor/dashboard
+  switch (v) {
+    case "MD+1":     return "bg-blue-100 text-blue-900 border-blue-200";
+    case "MD+2":     return "bg-yellow-100 text-yellow-900 border-yellow-200";
+    case "MD-4":     return "bg-red-100 text-red-900 border-red-200";
+    case "MD-3":     return "bg-orange-100 text-orange-900 border-orange-200";
+    case "MD-2":     return "bg-green-100 text-green-900 border-green-200";
+    case "MD-1":     return "bg-gray-100 text-gray-800 border-gray-200";
+    case "MD":       return "bg-amber-100 text-amber-900 border-amber-200";
+    case "DESCANSO": return "bg-gray-200 text-gray-800 border-gray-300";
+    default:         return "bg-gray-50 text-gray-600 border-gray-200";
+  }
 }
 
 export default function SessionTurnoPage() {
@@ -51,7 +100,7 @@ export default function SessionTurnoPage() {
   const [weekStart, setWeekStart] = useState<string>("");
 
   const printCSS = `
-    @page { size: A4 landscape; margin: 10mm; }
+    @page { size: A4 portrait; margin: 10mm; }
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       body * { visibility: hidden !important; }
@@ -108,6 +157,18 @@ export default function SessionTurnoPage() {
     return { lugar, hora, video, name };
   }, [daySessions, turn]);
 
+  // Flag del día (partido / descanso)
+  const dayFlag = useMemo<DayFlag>(() => {
+    const f = daySessions.find((s) => isDayFlag(s, turn));
+    return parseDayFlagTitle(f?.title);
+  }, [daySessions, turn]);
+
+  // Intensidad (MD…)
+  const micro = useMemo<MicroKey>(() => {
+    const m = daySessions.find((s) => isMicro(s, turn));
+    return parseMicroTitle(m?.title);
+  }, [daySessions, turn]);
+
   // Bloques
   const blocks = useMemo(() => {
     return CONTENT_ROWS.map((row) => {
@@ -122,14 +183,16 @@ export default function SessionTurnoPage() {
       <style jsx global>{printCSS}</style>
 
       <header className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-lg md:text-xl font-bold">
-            {meta.name ? `${meta.name} — ` : "Sesión — "}
-            {turn === "morning" ? "Mañana" : "Tarde"} · {humanDate(ymd)}
-          </h1>
-          <p className="text-xs md:text-sm text-gray-500">
-            Semana base: {weekStart || "—"} · Día: {ymd}
-          </p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="text-sm text-gray-500">
+            {humanDateShort(ymd)}, {turn === "morning" ? "Mañana" : "Tarde"}
+          </div>
+          <span className={`text-[10px] px-2 py-0.5 rounded border ${microChipClass(micro)}`}>
+            {micro || "—"}
+          </span>
+          {meta.name ? (
+            <span className="text-sm text-gray-700">· <b>{meta.name}</b></span>
+          ) : null}
         </div>
         <div className="flex items-center gap-2 no-print">
           <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
@@ -150,7 +213,7 @@ export default function SessionTurnoPage() {
       {/* Meta */}
       <section className="rounded-2xl border bg-white shadow-sm overflow-hidden">
         <div className="bg-emerald-50 text-emerald-900 font-semibold px-3 py-2 border-b uppercase tracking-wide text-[12px]">
-          Meta de la sesión
+          Detalles
         </div>
         <div className="grid md:grid-cols-4 gap-2 p-3 text-sm">
           <div>
@@ -187,37 +250,68 @@ export default function SessionTurnoPage() {
               <span className="text-gray-400">—</span>
             )}
           </div>
+
+          {/* Partido (solo si corresponde) */}
+          {dayFlag.kind === "PARTIDO" && (
+            <>
+              <div className="md:col-span-2">
+                <div className="text-[11px] text-gray-500">Rival</div>
+                <div className="font-medium">
+                  {dayFlag.rival || <span className="text-gray-400">—</span>}
+                </div>
+              </div>
+              <div className="md:col-span-2">
+                <div className="text-[11px] text-gray-500">Logo</div>
+                {dayFlag.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={dayFlag.logoUrl}
+                    alt="Logo rival"
+                    className="h-10 w-auto object-contain rounded border bg-white"
+                  />
+                ) : (
+                  <span className="text-gray-400">—</span>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </section>
 
-      {/* Bloques */}
-      <section className="space-y-3">
-        {blocks.map(({ row, text, id }) => (
-          <div
-            key={row}
-            ref={blockRefs[row]}
-            className="rounded-2xl border bg-white shadow-sm p-3"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">
-                {row}
-              </h2>
-              {id ? (
-                <a
-                  href={`/ct/sessions/${id}`}
-                  className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50 no-print"
-                  title="Ver ejercicios de este bloque"
-                >
-                  Ver ejercicios
-                </a>
-              ) : null}
+      {/* Descanso => no mostrar bloques */}
+      {dayFlag.kind === "LIBRE" ? (
+        <div className="rounded-2xl border bg-white shadow-sm p-10 text-center text-gray-700 font-semibold">
+          DESCANSO
+        </div>
+      ) : (
+        <section className="space-y-3">
+          {blocks.map(({ row, text, id }) => (
+            <div
+              key={row}
+              ref={blockRefs[row]}
+              className="rounded-2xl border bg-white shadow-sm p-3"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">
+                  {row}
+                </h2>
+                {id ? (
+                  <a
+                    href={`/ct/sessions/${id}`}
+                    className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50 no-print"
+                    title="Ver ejercicios de este bloque"
+                  >
+                    Ver ejercicios
+                  </a>
+                ) : null}
+              </div>
+              <div className="min-h-[120px] whitespace-pre-wrap leading-6 text-[13px]">
+                {text || <span className="text-gray-400 italic">—</span>}
+              </div>
             </div>
-            <div className="min-h-[120px] whitespace-pre-wrap leading-6 text-[13px]">
-              {text || <span className="text-gray-400 italic">—</span>}
-            </div>
-          </div>
-        ))}
-      </section>
+          ))}
+        </section>
+      )}
     </div>
   );
 }
