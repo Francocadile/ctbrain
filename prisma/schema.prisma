@@ -38,10 +38,10 @@ model User {
   rpeEntries      RPEEntry[]
   wellnessEntries WellnessEntry[]
 
-  // preferencias (1 a 1)
+  // preferencias
   plannerPrefs    PlannerPrefs?
 
-  // 👇 biblioteca personal de ejercicios
+  // 👇 biblioteca personal
   exercises       Exercise[]
 }
 
@@ -83,9 +83,12 @@ model ExerciseKind {
   name      String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // 👇 back-relation requerido por Prisma
+  exercises  Exercise[]
 }
 
-// ===== Biblioteca personal de ejercicios =====
+// ===== Biblioteca de ejercicios =====
 model Exercise {
   id          String        @id @default(cuid())
 
@@ -156,7 +159,7 @@ model WellnessEntry {
   @@index([userId, date])
 }
 
-// ===== Preferencias del planificador =====
+// ===== Preferencias =====
 model PlannerPrefs {
   id        String   @id @default(cuid())
   userId    String   @unique
