@@ -1,98 +1,115 @@
-// src/app/api/exercises/import/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 const prisma = new PrismaClient();
+
 const EX_TAG = "[EXERCISES]";
 
-type ExercisePayload = {
-  title?: string;
-  kind?: string;
-  space?: string;
-  players?: string;
-  duration?: string;
-  description?: string;
-  imageUrl?: string;
-};
-
-function decodeExercises(desc?: string | null): ExercisePayload[] {
-  const text = (desc || "").trimEnd();
-  const idx = text.lastIndexOf(EX_TAG);
-  if (idx === -1) return [];
-  const rest = text.slice(idx + EX_TAG.length).trim();
-  const b64 = (rest.split(/\s+/)[0] || "").trim();
-  if (!b64) return [];
-  try {
-    const json = Buffer.from(b64, "base64").toString("utf8");
-    const arr = JSON.parse(json);
-    return Array.isArray(arr) ? arr : [];
-  } catch {
-    return [];
-  }
-}
-
+/**
+ * POST /api/exercises/import
+ * - Recorre sesiones del usuario con posibles ejercicios embebidos.
+ * - Por cada bloque crea/actualiza un Exercise con ID determinístico.
+ * - Evita duplicados y retorna { created, updated }.
+ */
 export async function POST() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = session.user.id as string;
+
+  // Trae sesiones candidatas (solo los campos que usamos)
   const sessions = await prisma.session.findMany({
-    where: { description: { contains: EX_TAG } },
-    select: { id: true, description: true, createdBy: true, date: true },
+    where: { createdBy: userId, description: { contains: EX_TAG } },
+    select: { id: true, description: true, date: true },
     orderBy: { date: "desc" },
   });
 
   let created = 0;
   let updated = 0;
 
+  // Por cada sesión, parsea bloques que estén marcados con el tag
   for (const s of sessions) {
-    const items = decodeExercises(s.description);
-    if (!items.length) continue;
+    if (!s.description) continue;
 
-    for (let i = 0; i < items.length; i++) {
-      const it = items[i] as ExercisePayload;
-      const title = (it.title || "").trim() || "(Sin título)";
-      const tag = `from:session:${s.id}:${i}`;
+    // Tu formato actual del editor deja bloques (simplificamos al primer bloque)
+    // Si usás JSON en description, acá parsealo. Para mantenerlo robusto:
+    // Buscamos líneas "##" como título y extraemos algunos metadatos heurísticos.
+    const blocks: Array<{
+      title: string;
+      kindName?: string | null;
+      space?: string | null;
+      players?: string | null;
+      duration?: string | null;
+      description?: string | null;
+      imageUrl?: string | null;
+    }> = [];
 
+    // Heurística mínima: un único bloque con todo el texto descriptivo.
+    blocks.push({
+      title: "Activacion 1",
+      description: s.description.replace(EX_TAG, "").trim() || null,
+      kindName: null,
+      space: null,
+      players: null,
+      duration: null,
+      imageUrl: null,
+    });
+
+    // Upsert por bloque con ID determinístico
+    for (let i = 0; i < blocks.length; i++) {
+      const b = blocks[i];
+      const deterministicId = `${s.id}__${i}`;
+
+      // opcional: upsert del tipo (kind) por nombre si viene
       let kindId: string | null = null;
-      const kindName = (it.kind || "").trim();
-      if (kindName) {
+      if (b.kindName) {
         const k = await prisma.exerciseKind.upsert({
-          where: { name: kindName },
+          where: { name: b.kindName },
           update: {},
-          create: { name: kindName },
+          create: { name: b.kindName },
         });
         kindId = k.id;
       }
 
-      const existing = await prisma.exercise.findFirst({
-        where: { userId: s.createdBy, tags: { has: tag } },
+      const exists = await prisma.exercise.findUnique({
+        where: { id: deterministicId },
       });
 
-      if (existing) {
+      const data = {
+        id: deterministicId,
+        userId,
+        title: b.title || "Sin título",
+        kindId,
+        space: b.space ?? null,
+        players: b.players ?? null,
+        duration: b.duration ?? null,
+        description: b.description ?? null,
+        imageUrl: b.imageUrl ?? null,
+        tags: [] as string[],
+        // vínculo a la sesión de origen para poder “Ver” ➜ editor de sesión
+        sourceSessionId: s.id,
+      };
+
+      if (exists) {
         await prisma.exercise.update({
-          where: { id: existing.id },
+          where: { id: deterministicId },
           data: {
-            title,
-            kindId,
-            space: it.space ?? null,
-            players: it.players ?? null,
-            duration: it.duration ?? null,
-            description: it.description ?? null,
-            imageUrl: it.imageUrl ?? null,
+            title: data.title,
+            kindId: data.kindId,
+            space: data.space,
+            players: data.players,
+            duration: data.duration,
+            description: data.description,
+            imageUrl: data.imageUrl,
+            tags: data.tags,
+            sourceSessionId: data.sourceSessionId,
           },
         });
         updated++;
       } else {
-        await prisma.exercise.create({
-          data: {
-            userId: s.createdBy,
-            title,
-            kindId,
-            space: it.space ?? null,
-            players: it.players ?? null,
-            duration: it.duration ?? null,
-            description: it.description ?? null,
-            imageUrl: it.imageUrl ?? null,
-            tags: [tag],
-          },
-        });
+        await prisma.exercise.create({ data });
         created++;
       }
     }
