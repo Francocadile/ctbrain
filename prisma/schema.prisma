@@ -1,5 +1,3 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -29,7 +27,7 @@ model User {
   id        String    @id @default(cuid())
   email     String    @unique
   name      String?
-  password  String?   // necesario para /admin/users (bcrypt)
+  password  String?
   role      Role      @default(JUGADOR)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -42,6 +40,9 @@ model User {
 
   // preferencias (1 a 1)
   plannerPrefs    PlannerPrefs?
+
+  // biblioteca de ejercicios
+  exercises       Exercise[]
 }
 
 model Session {
@@ -61,8 +62,7 @@ model Session {
   @@index([createdBy])
 }
 
-// ===== Catálogos básicos (opcionales) =====
-
+// ===== Catálogos =====
 model Rival {
   id        String   @id @default(cuid())
   name      String   @unique
@@ -85,8 +85,32 @@ model ExerciseKind {
   updatedAt DateTime @updatedAt
 }
 
-// ===== Métricas =====
+// ===== Biblioteca personal de ejercicios =====
+model Exercise {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  title       String
+  kindId      String?
+  kind        ExerciseKind? @relation(fields: [kindId], references: [id], onDelete: SetNull)
+
+  space       String?
+  players     String?
+  duration    String?
+  description String?
+  imageUrl    String?
+  tags        String[]      @default([])
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([userId, title])
+  @@index([kindId])
+}
+
+// ===== Métricas =====
 model RPEEntry {
   id        String   @id @default(cuid())
   userId    String
@@ -94,8 +118,8 @@ model RPEEntry {
 
   date      DateTime
   rpe       Int
-  duration  Int?     // minutos
-  load      Int?     // AU
+  duration  Int?
+  load      Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -112,15 +136,15 @@ model WellnessEntry {
 
   date            DateTime
 
-  sleepQuality    Int      // 1..5
-  sleepHours      Float?   // horas (opcional)
-  fatigue         Int      // 1..5
-  muscleSoreness  Int      // 1..5
-  stress          Int      // 1..5
-  mood            Int      // 1..5
+  sleepQuality    Int
+  sleepHours      Float?
+  fatigue         Int
+  muscleSoreness  Int
+  stress          Int
+  mood            Int
   comment         String?
 
-  total           Int?     // suma de escalas
+  total           Int?
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -130,13 +154,12 @@ model WellnessEntry {
   @@index([userId, date])
 }
 
-// ===== Preferencias del planificador por usuario =====
-
+// ===== Preferencias del planificador =====
 model PlannerPrefs {
   id        String   @id @default(cuid())
   userId    String   @unique
-  rowLabels Json     @default("{}")  // { "PRE ENTREN0": "...", ... }
-  places    Json     @default("[]")  // ["Cancha 1", "Gimnasio", ...]
+  rowLabels Json     @default("{}")
+  places    Json     @default("[]")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
