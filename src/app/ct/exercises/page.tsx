@@ -1,22 +1,17 @@
+// src/app/ct/exercises/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { listKinds } from "@/lib/settings";
-import {
-  searchExercises,
-  deleteExercise,
-  importFromSessions,
-  type ExerciseDTO,
-  type SearchParams,
-} from "@/lib/api/exercises";
+import { searchExercises, deleteExercise, type ExerciseDTO } from "@/lib/api/exercises";
 
-type Order = NonNullable<SearchParams["order"]>;
-type Dir = NonNullable<SearchParams["dir"]>;
+type Order = "createdAt" | "title";
+type Dir = "asc" | "desc";
 
 export default function ExercisesLibraryPage() {
   const [kinds, setKinds] = useState<string[]>([]);
   const [q, setQ] = useState("");
-  const [kindFilter, setKindFilter] = useState<string>(""); // usamos nombre
+  const [kindFilter, setKindFilter] = useState<string>("");
   const [order, setOrder] = useState<Order>("createdAt");
   const [dir, setDir] = useState<Dir>("desc");
   const [page, setPage] = useState(1);
@@ -24,13 +19,14 @@ export default function ExercisesLibraryPage() {
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<ExerciseDTO[]>([]);
   const [total, setTotal] = useState(0);
+  const triedAutoImport = useRef(false);
 
   async function load() {
     setLoading(true);
     try {
       const { data, meta } = await searchExercises({
         q,
-        kind: kindFilter || undefined, // filtramos por NOMBRE para simplificar
+        kind: kindFilter || undefined,
         order,
         dir,
         page,
@@ -38,6 +34,18 @@ export default function ExercisesLibraryPage() {
       });
       setRows(data);
       setTotal(meta.total);
+
+      // Fallback: si no hay nada y aún no probamos, importamos desde sesiones
+      if (!triedAutoImport.current && meta.total === 0) {
+        triedAutoImport.current = true;
+        await fetch("/api/exercises/import", { method: "POST" }).catch(() => {});
+        // reintentar
+        const again = await searchExercises({
+          q, kind: kindFilter || undefined, order, dir, page, pageSize,
+        });
+        setRows(again.data);
+        setTotal(again.meta.total);
+      }
     } catch (e) {
       console.error(e);
       setRows([]);
@@ -47,13 +55,8 @@ export default function ExercisesLibraryPage() {
     }
   }
 
-  useEffect(() => {
-    (async () => setKinds(await listKinds()))();
-  }, []);
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, kindFilter, order, dir, page]);
+  useEffect(() => { (async () => setKinds(await listKinds()))(); }, []);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [q, kindFilter, order, dir, page]);
 
   const pages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
 
@@ -68,28 +71,18 @@ export default function ExercisesLibraryPage() {
         <div className="flex flex-wrap items-center gap-2">
           <input
             value={q}
-            onChange={(e) => {
-              setPage(1);
-              setQ(e.target.value);
-            }}
+            onChange={(e) => { setPage(1); setQ(e.target.value); }}
             className="rounded-xl border px-3 py-1.5 text-sm"
             placeholder="Buscar (título, descripción, espacio, jugadores)"
           />
           <select
             value={kindFilter}
-            onChange={(e) => {
-              setPage(1);
-              setKindFilter(e.target.value);
-            }}
+            onChange={(e) => { setPage(1); setKindFilter(e.target.value); }}
             className="rounded-xl border px-2 py-1.5 text-sm"
             title="Tipo"
           >
             <option value="">Todos los tipos</option>
-            {kinds.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
+            {kinds.map((k) => <option key={k} value={k}>{k}</option>)}
           </select>
 
           <div className="inline-flex rounded-xl border overflow-hidden">
@@ -104,21 +97,10 @@ export default function ExercisesLibraryPage() {
             </select>
           </div>
 
-          {/* Botón de importación */}
           <button
-            onClick={async () => {
-              if (!confirm("Importar ejercicios desde tus sesiones?")) return;
-              try {
-                const res = await importFromSessions();
-                alert(`Importados: ${res.imported} (sesiones analizadas: ${res.scanned})`);
-                setPage(1);
-                load();
-              } catch {
-                alert("No se pudo importar");
-              }
-            }}
-            className="rounded-xl border px-3 py-1.5 text-xs hover:bg-gray-50"
-            title="Extrae los ejercicios guardados dentro de tus sesiones"
+            onClick={async () => { await fetch("/api/exercises/import", { method: "POST" }); load(); }}
+            className="rounded-xl border px-3 py-1.5 text-sm hover:bg-gray-50"
+            title="Escanear sesiones y traer ejercicios"
           >
             Importar desde sesiones
           </button>
@@ -128,7 +110,9 @@ export default function ExercisesLibraryPage() {
       {loading ? (
         <div className="text-sm text-gray-500">Cargando…</div>
       ) : rows.length === 0 ? (
-        <div className="rounded-lg border p-6 text-sm text-gray-600">No hay ejercicios que coincidan.</div>
+        <div className="rounded-lg border p-6 text-sm text-gray-600">
+          No hay ejercicios que coincidan.
+        </div>
       ) : (
         <ul className="space-y-3">
           {rows.map((ex) => (
@@ -146,7 +130,7 @@ export default function ExercisesLibraryPage() {
 
               <div className="flex items-center gap-2">
                 <a
-                  href={`/ct/exercises/${ex.id}`}
+                  href={`/ct/sessions/${ex.id}`} // abrimos con tu editor de ejercicios si el id coincide con una sesión guardada como ejercicio suelto
                   className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
                 >
                   Ver
