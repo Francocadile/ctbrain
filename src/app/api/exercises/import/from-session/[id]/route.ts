@@ -32,27 +32,24 @@ function decode(desc?: string | null): ExercisePayload[] {
 }
 
 export async function POST(_: Request, { params }: { params: { id: string } }) {
-  const s = await prisma.session.findUnique({
+  const sess = await prisma.session.findUnique({
     where: { id: params.id },
     select: { id: true, description: true, createdBy: true },
   });
-  if (!s) return NextResponse.json({ error: "Sesión no encontrada" }, { status: 404 });
+  if (!sess) return NextResponse.json({ error: "Sesión no encontrada" }, { status: 404 });
 
-  const items = decode(s.description);
-  if (!items.length) return NextResponse.json({ ok: true, created: 0 });
+  const items = decode(sess.description);
+  if (!items.length) return NextResponse.json({ ok: true, created: 0, updated: 0 });
 
   let created = 0;
+  let updated = 0;
 
-  for (const it of items) {
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i] as ExercisePayload;
     const title = (it.title || "").trim() || "(Sin título)";
+    const tag = `from:session:${sess.id}:${i}`;
 
-    // Evitar duplicados para este usuario por título
-    const exists = await prisma.exercise.findFirst({
-      where: { userId: s.createdBy, title },
-      orderBy: { createdAt: "desc" },
-    });
-    if (exists) continue;
-
+    // Resolver kindId (si hay)
     let kindId: string | null = null;
     const kindName = (it.kind || "").trim();
     if (kindName) {
@@ -64,22 +61,42 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
       kindId = k.id;
     }
 
-    await prisma.exercise.create({
-      data: {
-        userId: s.createdBy,
-        title,
-        kindId,
-        space: it.space || null,
-        players: it.players || null,
-        duration: it.duration || null,
-        description: it.description || null,
-        imageUrl: it.imageUrl || null,
-        tags: [],
-      },
+    // Buscar por tag de origen
+    const existing = await prisma.exercise.findFirst({
+      where: { userId: sess.createdBy, tags: { has: tag } },
     });
 
-    created++;
+    if (existing) {
+      await prisma.exercise.update({
+        where: { id: existing.id },
+        data: {
+          title,
+          kindId,
+          space: it.space ?? null,
+          players: it.players ?? null,
+          duration: it.duration ?? null,
+          description: it.description ?? null,
+          imageUrl: it.imageUrl ?? null,
+        },
+      });
+      updated++;
+    } else {
+      await prisma.exercise.create({
+        data: {
+          userId: sess.createdBy,
+          title,
+          kindId,
+          space: it.space ?? null,
+          players: it.players ?? null,
+          duration: it.duration ?? null,
+          description: it.description ?? null,
+          imageUrl: it.imageUrl ?? null,
+          tags: [tag], // ← marca de origen para futuras actualizaciones
+        },
+      });
+      created++;
+    }
   }
 
-  return NextResponse.json({ ok: true, created });
+  return NextResponse.json({ ok: true, created, updated });
 }
