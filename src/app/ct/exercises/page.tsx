@@ -2,7 +2,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { listKinds } from "@/lib/settings";
 import { searchExercises, deleteExercise, type ExerciseDTO } from "@/lib/api/exercises";
 
@@ -26,7 +25,7 @@ export default function ExercisesLibraryPage() {
     try {
       const { data, meta } = await searchExercises({
         q,
-        kindId: kindFilter || undefined,
+        kind: kindFilter || undefined, // 👈 filtra por nombre
         order,
         dir,
         page,
@@ -109,13 +108,12 @@ export default function ExercisesLibraryPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                {/* ⬇️ Link corregido: ahora va a /ct/exercises/[id] */}
-                <Link
-                  href={`/ct/exercises/${ex.id}`}
+                <a
+                  href={`/ct/exercises/${ex.id}`} // 👈 detalle correcto
                   className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
                 >
                   Ver
-                </Link>
+                </a>
                 <button
                   onClick={async () => {
                     if (!confirm("¿Eliminar este ejercicio?")) return;
