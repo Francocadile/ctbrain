@@ -10,13 +10,11 @@ const prisma = new PrismaClient();
  */
 
 export async function GET(req: Request) {
-  // Sin authOptions para evitar problemas de export
-  const session = await getServerSession();
+  const session = await getServerSession(); // sin authOptions para evitar export issues
   if (!session?.user?.id)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const userId = String(session.user.id);
-
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") || "").trim();
   const kindId = (url.searchParams.get("kindId") || "").trim() || undefined;
@@ -30,11 +28,9 @@ export async function GET(req: Request) {
     Math.max(5, parseInt(url.searchParams.get("pageSize") || "20", 10))
   );
 
-  // Construimos el where CON TIPO explícito de Prisma para que `mode` valide
+  // --- 1) Intento con tabla Exercise
   const where: Prisma.ExerciseWhereInput = { userId };
-
   if (kindId) where.kindId = kindId;
-
   if (q) {
     where.OR = [
       { title: { contains: q, mode: "insensitive" } },
@@ -44,7 +40,7 @@ export async function GET(req: Request) {
     ];
   }
 
-  const [total, rows] = await Promise.all([
+  const [totalDb, rowsDb] = await Promise.all([
     prisma.exercise.count({ where }),
     prisma.exercise.findMany({
       where,
@@ -55,18 +51,101 @@ export async function GET(req: Request) {
     }),
   ]);
 
-  // Añadimos `sourceSessionId` derivado del id determinístico "<sessionId>__<idx>"
-  const data = rows.map((r: any) => {
+  let data: any[] = (rowsDb || []).map((r) => {
     let sourceSessionId: string | null = null;
     if (typeof r.id === "string" && r.id.includes("__")) {
+      // ids determinísticos "sessionId__idx"
       sourceSessionId = r.id.split("__")[0];
     }
     return { ...r, sourceSessionId };
   });
 
+  // --- 2) Fallback: si no hay nada en Exercise, generamos vista desde Sesiones
+  if (totalDb === 0) {
+    // Tomamos últimas 100 sesiones del usuario
+    const sessions = await prisma.session.findMany({
+      where: { createdBy: userId },
+      orderBy: { date: "desc" },
+      take: 100,
+      select: {
+        id: true,
+        date: true,
+        title: true,
+        description: true,
+        // si tu schema tuviera más campos útiles para el ejercicio, agrégalos aquí
+      },
+    });
+
+    const guess = (txt?: string | null) => {
+      const t = (txt || "").trim();
+      const duration =
+        (t.match(/(\d+)\s*min/i)?.[1] && `${t.match(/(\d+)\s*min/i)![1]} minutos`) ||
+        null;
+      const players = /todos/i.test(t) ? "Todos" : null;
+      const space = /gimnasio/i.test(t) ? "Gimnasio" : null;
+      return { duration, players, space, description: t || null };
+    };
+
+    const virtual = sessions.map((s, idx) => {
+      const g = guess(s.description);
+      return {
+        id: `${s.id}__1`, // determinístico
+        userId,
+        title: s.title?.trim() || "Sin título",
+        createdAt: s.date,
+        updatedAt: s.date,
+        kindId: null,
+        kind: null,
+        space: g.space,
+        players: g.players,
+        duration: g.duration,
+        description: g.description,
+        imageUrl: null,
+        tags: [],
+        sourceSessionId: s.id, // clave para linkear al editor
+      };
+    });
+
+    // Paginamos el virtual localmente
+    let list = virtual;
+    // filtros
+    if (q) {
+      const qi = q.toLowerCase();
+      list = list.filter(
+        (r) =>
+          r.title.toLowerCase().includes(qi) ||
+          (r.description || "").toLowerCase().includes(qi) ||
+          (r.space || "").toLowerCase().includes(qi) ||
+          (r.players || "").toLowerCase().includes(qi)
+      );
+    }
+    // orden
+    list.sort((a, b) => {
+      const A = order === "title" ? a.title : new Date(a.createdAt).getTime();
+      const B = order === "title" ? b.title : new Date(b.createdAt).getTime();
+      // @ts-ignore
+      return (A > B ? 1 : A < B ? -1 : 0) * (dir === "asc" ? 1 : -1);
+    });
+
+    const total = list.length;
+    const start = (page - 1) * pageSize;
+    data = list.slice(start, start + pageSize);
+
+    return NextResponse.json({
+      data,
+      meta: { total, page, pageSize, pages: Math.max(1, Math.ceil(total / pageSize)) },
+    });
+  }
+
+  // Respuesta normal con tabla Exercise
   return NextResponse.json({
     data,
-    meta: { total, page, pageSize, pages: Math.ceil(total / pageSize) },
+    meta: {
+      total: totalDb,
+      page,
+      pageSize,
+      pages: Math.max(1, Math.ceil(totalDb / pageSize)),
+    },
   });
 }
 
@@ -76,7 +155,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const userId = String(session.user.id);
-
   const body = await req.json().catch(() => ({}));
   const title = (body?.title || "").trim();
   if (!title)
