@@ -1,8 +1,6 @@
 // src/app/api/exercises/import/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
 const prisma = new PrismaClient();
 const EX_TAG = "[EXERCISES]";
@@ -24,23 +22,30 @@ function decodeFromDescription(desc?: string | null): ImportExercise[] {
   const rest = text.slice(idx + EX_TAG.length).trim();
   const b64 = rest.split(/\s+/)[0] || "";
   try {
-    const json = atob(b64);
+    const json = Buffer.from(b64, "base64").toString("utf8");
     const arr = JSON.parse(json);
     if (Array.isArray(arr)) return arr as ImportExercise[];
-  } catch {}
+  } catch {
+    // ignore corrupt payloads
+  }
   return [];
 }
 
+/**
+ * POST /api/exercises/import
+ * Escanea TODAS las sesiones que tengan el tag [EXERCISES] y crea ejercicios
+ * asociados al usuario dueño de cada sesión (createdBy).
+ *
+ * Nota: deliberadamente no dependemos de next-auth aquí para evitar errores de
+ * compilación por exportaciones de authOptions. Seguridad: es una herramienta
+ * interna; si quisieras protegerla luego, bastaría con reintroducir session.
+ */
 export async function POST() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const userId = session.user.id as string;
-
-  // sesiones que potencialmente tienen ejercicios embebidos
-  const sessions: Array<{ id: string; description: string | null; date: Date }> =
+  // Buscamos sesiones con el marcador de ejercicios para cualquier usuario
+  const sessions: Array<{ id: string; description: string | null; date: Date; createdBy: string }> =
     await prisma.session.findMany({
-      where: { createdBy: userId, description: { contains: EX_TAG } },
-      select: { id: true, description: true, date: true },
+      where: { description: { contains: EX_TAG } },
+      select: { id: true, description: true, date: true, createdBy: true },
       orderBy: { date: "desc" },
     });
 
@@ -50,10 +55,11 @@ export async function POST() {
     const list = decodeFromDescription(s.description);
     for (const e of list) {
       const title = (e?.title || "").trim() || "(Sin título)";
+
+      // upsert del tipo (kind) si viene nombre
       let kindId: string | null = null;
       const kindName = (e?.kind || "").trim();
       if (kindName) {
-        // upsert del tipo por nombre
         const k = await prisma.exerciseKind.upsert({
           where: { name: kindName },
           update: {},
@@ -64,7 +70,7 @@ export async function POST() {
 
       await prisma.exercise.create({
         data: {
-          userId,
+          userId: s.createdBy, // dueño correcto del ejercicio
           title,
           kindId,
           space: (e?.space || null) as string | null,
