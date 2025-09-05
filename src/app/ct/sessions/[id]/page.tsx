@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { getSessionById, updateSession, type SessionDTO } from "@/lib/api/sessions";
 import { listKinds, addKind as apiAddKind, replaceKinds } from "@/lib/settings";
+import { importFromSession } from "@/lib/api/exercises";
 
 type TurnKey = "morning" | "afternoon";
 
@@ -152,8 +153,13 @@ export default function SesionDetailEditorPage() {
         date: s.date,
       });
 
-      // 🔽 Importación automática a la base de datos de ejercicios
-      await fetch("/api/exercises/import", { method: "POST" }).catch(() => {});
+      // === Auto-importar ejercicios a la base ===
+      try {
+        const res = await importFromSession(s.id);
+        console.log("importFromSession:", res);
+      } catch (e) {
+        console.warn("No se pudo auto-importar", e);
+      }
 
       setEditing(false);
       alert("Guardado");
@@ -225,7 +231,7 @@ export default function SesionDetailEditorPage() {
       {/* Lista de ejercicios */}
       <div className="space-y-4">
         {exercises.map((ex, idx) => (
-          <section key={idx} className="rounded-2xl border bg-white shadow-sm overflow-hidden print:break-after-page">
+          <section key={idx} className="rounded-2xl border bg-white shadow-sm overflow-hidden print:page">
             <div className="flex items-center justify-between bg-gray-50 px-3 py-2 border-b">
               <input
                 className={`text-[12px] font-semibold uppercase tracking-wide w-full max-w-[360px] ${roCls}`}
@@ -358,21 +364,13 @@ export default function SesionDetailEditorPage() {
         @media print {
           @page { size: A4 portrait; margin: 10mm; }
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-
-          /* Oculta TODO por defecto y muestra solo #print-root */
           body * { visibility: hidden !important; }
           #print-root, #print-root * { visibility: visible !important; }
           #print-root { position: absolute; inset: 0; margin: 0 !important; padding: 0 !important; }
-
-          /* Oculta menús/sidebars del layout general */
           nav, aside, header[role="banner"], .sidebar, .app-sidebar, .print\\:hidden { display: none !important; }
-
-          /* Evita URLs automáticas en <a> impresas */
           a[href]:after { content: ""; }
-
-          /* 🔽 Una hoja por ejercicio */
-          .print\\:break-after-page { page-break-after: always; }
-          .print\\:break-after-page:last-child { page-break-after: auto; }
+          /* === hoja A4 por ejercicio === */
+          .print\\:page { page-break-after: always; }
         }
       `}</style>
     </div>
