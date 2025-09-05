@@ -151,6 +151,10 @@ export default function SesionDetailEditorPage() {
         description: newDescription,
         date: s.date,
       });
+
+      // 🔽 Importación automática a la base de datos de ejercicios
+      await fetch("/api/exercises/import", { method: "POST" }).catch(() => {});
+
       setEditing(false);
       alert("Guardado");
     } catch (e: any) {
@@ -221,7 +225,7 @@ export default function SesionDetailEditorPage() {
       {/* Lista de ejercicios */}
       <div className="space-y-4">
         {exercises.map((ex, idx) => (
-          <section key={idx} className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+          <section key={idx} className="rounded-2xl border bg-white shadow-sm overflow-hidden print:break-after-page">
             <div className="flex items-center justify-between bg-gray-50 px-3 py-2 border-b">
               <input
                 className={`text-[12px] font-semibold uppercase tracking-wide w-full max-w-[360px] ${roCls}`}
@@ -365,6 +369,10 @@ export default function SesionDetailEditorPage() {
 
           /* Evita URLs automáticas en <a> impresas */
           a[href]:after { content: ""; }
+
+          /* 🔽 Una hoja por ejercicio */
+          .print\\:break-after-page { page-break-after: always; }
+          .print\\:break-after-page:last-child { page-break-after: auto; }
         }
       `}</style>
     </div>
