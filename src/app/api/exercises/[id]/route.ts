@@ -2,16 +2,27 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getServerSession } from "next-auth";
-import * as AuthRoute from "@/app/api/auth/[...nextauth]/route";
+import * as Auth from "@/app/api/auth/[...nextauth]/route";
 
 const prisma = new PrismaClient();
-const authOptions: any = (AuthRoute as any).authOptions || (AuthRoute as any).default || undefined;
+
+// Tomamos authOptions si existe (ya sea export nombrado o default). Evita romper en build.
+const authOptions: any = (Auth as any)?.authOptions ?? (Auth as any)?.default ?? undefined;
+
+async function getUserId(): Promise<string | null> {
+  try {
+    // Cast explícito para que TS no marque session como {}
+    const session = (await getServerSession(authOptions as any)) as any;
+    return session?.user?.id ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const userId = session.user.id as string;
+    const userId = await getUserId();
+    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const row = await prisma.exercise.findFirst({
       where: { id: params.id, userId },
@@ -26,11 +37,11 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const userId = session.user.id as string;
+    const userId = await getUserId();
+    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const body = await req.json().catch(() => ({}));
+    const body = (await req.json().catch(() => ({}))) as any;
+
     const exists = await prisma.exercise.findFirst({ where: { id: params.id, userId } });
     if (!exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
@@ -45,6 +56,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         description: "description" in body ? body?.description ?? null : exists.description,
         imageUrl: "imageUrl" in body ? body?.imageUrl ?? null : exists.imageUrl,
         tags: Array.isArray(body?.tags) ? body.tags.filter((x: any) => typeof x === "string") : exists.tags,
+        // si tu schema tiene sessionId, actualizamos; si no, Prisma ignora propiedad extra
         ...(body?.sessionId !== undefined ? { sessionId: body.sessionId } : {}),
       } as any,
       include: { kind: true },
@@ -58,9 +70,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
 export async function DELETE(_: Request, { params }: { params: { id: string } }) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const userId = session.user.id as string;
+    const userId = await getUserId();
+    if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const exists = await prisma.exercise.findFirst({ where: { id: params.id, userId } });
     if (!exists) return NextResponse.json({ error: "Not found" }, { status: 404 });
