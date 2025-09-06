@@ -1,113 +1,67 @@
+// src/app/api/exercises/import/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getServerSession } from "next-auth";
 
 const prisma = new PrismaClient();
-const EX_TAG = "[EXERCISES]";
 
 /**
  * POST /api/exercises/import?sessionId=...
- * - Recorre sesiones del usuario con posibles ejercicios embebidos.
- * - Por cada bloque crea/actualiza un Exercise con ID determinístico (<sessionId>__<idx>).
- * - Evita duplicados y retorna { created, updated }.
- *
- * NOTA: NO importamos authOptions para evitar el error de compilación.
+ * - Recorre sesiones del usuario (una o todas).
+ * - Crea/actualiza UN Exercise por sesión (id determinístico: "<sessionId>__0").
+ * - No requiere etiquetas en la descripción.
  */
 export async function POST(req: Request) {
-  const session = await getServerSession(); // sin parámetros => evita el import problemático
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const userId = String(session.user.id);
+  const session = await getServerSession();
+  const userId = (session as any)?.user?.id as string | undefined;
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);
-  const onlySessionId = url.searchParams.get("sessionId") || null;
+  const onlySessionId = url.searchParams.get("sessionId") || undefined;
 
-  // Sesiones candidatas
   const sessions = await prisma.session.findMany({
-    where: {
-      createdBy: userId,
-      ...(onlySessionId ? { id: onlySessionId } : {}),
-      description: { contains: EX_TAG },
-    },
-    select: { id: true, description: true, date: true },
+    where: { createdBy: userId, ...(onlySessionId ? { id: onlySessionId } : {}) },
     orderBy: { date: "desc" },
+    select: { id: true, date: true, title: true, description: true },
   });
 
   let created = 0;
   let updated = 0;
 
+  const derive = (txt?: string | null) => {
+    const t = (txt || "").trim();
+    const duration = (t.match(/(\d+)\s*min/i)?.[1] && `${t.match(/(\d+)\s*min/i)![1]} minutos`) || null;
+    const players = /todos/i.test(t) ? "Todos" : null;
+    const space = /gimnasio/i.test(t) ? "Gimnasio" : null;
+    return { duration, players, space, description: t || null };
+  };
+
   for (const s of sessions) {
-    if (!s.description) continue;
+    const id = `${s.id}__0`; // determinístico
+    const g = derive(s.description);
 
-    // Heurística simple: creamos un bloque por sesión (ajústalo si tenés múltiples)
-    const blocks: Array<{
-      title: string;
-      kindName?: string | null;
-      space?: string | null;
-      players?: string | null;
-      duration?: string | null;
-      description?: string | null;
-      imageUrl?: string | null;
-    }> = [
-      {
-        title: "Activacion 1",
-        description: s.description.replace(EX_TAG, "").trim() || null,
-        kindName: null,
-        space: null,
-        players: null,
-        duration: null,
-        imageUrl: null,
-      },
-    ];
+    const base = {
+      id,
+      userId,
+      title: (s.title || "Sin título").trim(),
+      kindId: null,
+      space: g.space,
+      players: g.players,
+      duration: g.duration,
+      description: g.description,
+      imageUrl: null,
+      tags: [] as string[],
+      // si tu schema tiene sessionId, podés incluirlo:
+      // sessionId: s.id,
+    };
 
-    for (let i = 0; i < blocks.length; i++) {
-      const b = blocks[i];
-      const deterministicId = `${s.id}__${i}`;
-
-      let kindId: string | null = null;
-      if (b.kindName) {
-        const k = await prisma.exerciseKind.upsert({
-          where: { name: b.kindName },
-          update: {},
-          create: { name: b.kindName },
-        });
-        kindId = k.id;
-      }
-
-      const exists = await prisma.exercise.findUnique({
-        where: { id: deterministicId },
-      });
-
-      // Construimos los datos comunes
-      const baseData = {
-        title: b.title || "Sin título",
-        kindId,
-        space: b.space ?? null,
-        players: b.players ?? null,
-        duration: b.duration ?? null,
-        description: b.description ?? null,
-        imageUrl: b.imageUrl ?? null,
-        tags: [] as string[],
-      };
-
-      if (exists) {
-        await prisma.exercise.update({
-          where: { id: deterministicId },
-          data: { ...baseData },
-        });
-        updated++;
-      } else {
-        // Si tu schema NO tiene sourceSessionId, esto igual compila (no lo incluimos)
-        await prisma.exercise.create({
-          data: {
-            id: deterministicId,
-            userId,
-            ...baseData,
-          },
-        });
-        created++;
-      }
+    const exists = await prisma.exercise.findUnique({ where: { id } });
+    if (exists) {
+      await prisma.exercise.update({ where: { id }, data: { ...base } as any });
+      updated++;
+    } else {
+      await prisma.exercise.create({ data: { ...base } as any });
+      created++;
     }
   }
 
