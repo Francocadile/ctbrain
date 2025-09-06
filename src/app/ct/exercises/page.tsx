@@ -1,4 +1,3 @@
-// src/app/ct/exercises/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -30,21 +29,16 @@ export default function ExercisesLibraryPage() {
     try {
       const { data, meta } = await searchExercises({
         q,
-        // filtramos por NOMBRE del tipo (compat con settings.ts que devuelve nombres)
-        kind: kindFilter || undefined,
+        kind: kindFilter || undefined, // filtramos por NOMBRE
         order,
         dir,
         page,
         pageSize,
       });
 
-      // 🧹 por las dudas, deduplicamos por id (si el backend devolviese duplicados)
+      // Deduplicado defensivo
       const seen = new Set<string>();
-      const dedup = data.filter((d) => {
-        if (seen.has(d.id)) return false;
-        seen.add(d.id);
-        return true;
-      });
+      const dedup = data.filter((d) => (seen.has(d.id) ? false : seen.add(d.id)));
 
       setRows(dedup);
       setTotal(meta.total);
@@ -62,7 +56,8 @@ export default function ExercisesLibraryPage() {
   }, []);
 
   useEffect(() => {
-    load(); // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    load();
   }, [q, kindFilter, order, dir, page]);
 
   const pages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
@@ -97,33 +92,22 @@ export default function ExercisesLibraryPage() {
           >
             <option value="">Todos los tipos</option>
             {kinds.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
+              <option key={k} value={k}>{k}</option>
             ))}
           </select>
 
           <div className="inline-flex rounded-xl border overflow-hidden">
-            <select
-              value={order}
-              onChange={(e) => setOrder(e.target.value as Order)}
-              className="px-2 py-1.5 text-xs"
-            >
+            <select value={order} onChange={(e) => setOrder(e.target.value as Order)} className="px-2 py-1.5 text-xs">
               <option value="createdAt">Fecha</option>
               <option value="title">Título</option>
             </select>
             <div className="w-px bg-gray-200" />
-            <select
-              value={dir}
-              onChange={(e) => setDir(e.target.value as Dir)}
-              className="px-2 py-1.5 text-xs"
-            >
+            <select value={dir} onChange={(e) => setDir(e.target.value as Dir)} className="px-2 py-1.5 text-xs">
               <option value="desc">↓</option>
               <option value="asc">↑</option>
             </select>
           </div>
 
-          {/* Botón opcional para import masivo (stub en backend) */}
           <button
             onClick={async () => {
               try {
@@ -150,13 +134,16 @@ export default function ExercisesLibraryPage() {
       ) : (
         <ul className="space-y-3">
           {rows.map((ex) => {
-            // Link deseado: sesión original cuando exista; fallback a /ct/sessions (lista) si no hay sessionId
-            const sessionHref = ex.sessionId ? `/ct/sessions/${ex.sessionId}` : `/ct/sessions`;
+            // Prioridad: linkear siempre al editor de sesión
+            const sessionHref =
+              ex.sourceSessionId
+                ? `/ct/sessions/${ex.sourceSessionId}`
+                : ex.sessionId
+                ? `/ct/sessions/${ex.sessionId}`
+                : `/ct/sessions`; // fallback
+
             return (
-              <li
-                key={ex.id}
-                className="rounded-xl border p-3 shadow-sm bg-white flex items-start justify-between gap-3"
-              >
+              <li key={ex.id} className="rounded-xl border p-3 shadow-sm bg-white flex items-start justify-between gap-3">
                 <div>
                   <h3 className="font-semibold text-[15px]">{ex.title}</h3>
                   <div className="text-xs text-gray-500 mt-1 space-x-3">
@@ -187,7 +174,7 @@ export default function ExercisesLibraryPage() {
                       try {
                         await deleteExercise(ex.id);
                         load();
-                      } catch (e) {
+                      } catch {
                         alert("No se pudo eliminar");
                       }
                     }}
@@ -208,19 +195,13 @@ export default function ExercisesLibraryPage() {
           {total} ejercicios · página {page} / {pages}
         </div>
         <div className="inline-flex rounded-xl border overflow-hidden">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
-            className="px-3 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-50"
-          >
+          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}
+                  className="px-3 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-50">
             ◀ Anterior
           </button>
-          <div className="w-px bg-gray-200" />
-          <button
-            onClick={() => setPage((p) => Math.min(pages, p + 1))}
-            disabled={page >= pages}
-            className="px-3 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-50"
-          >
+          <div className="w-px bg-gray-2 00" />
+          <button onClick={() => setPage((p) => Math.min(pages, p + 1))} disabled={page >= pages}
+                  className="px-3 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-50">
             Siguiente ▶
           </button>
         </div>
