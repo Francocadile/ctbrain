@@ -34,6 +34,37 @@ async function importFromSession(sessionId: string) {
   }
 }
 
+/* =========================
+   Base64 helpers (Unicode-safe)
+   ========================= */
+function encodeB64Json(value: unknown) {
+  const json = JSON.stringify(value);
+  try {
+    // Navegador: unicode-safe
+    // encodeURIComponent -> escape -> btoa
+    // (catch por si el ambiente no soporta escape/unescape)
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    return btoa(unescape(encodeURIComponent(json)));
+  } catch {
+    return btoa(json);
+  }
+}
+
+function decodeB64Json<T = any>(b64: string): T {
+  try {
+    // Navegador: unicode-safe
+    // atob -> unescape-reverse -> decodeURIComponent -> JSON.parse
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    const s = decodeURIComponent(escape(atob(b64)));
+    return JSON.parse(s) as T;
+  } catch {
+    const s = atob(b64);
+    return JSON.parse(s) as T;
+  }
+}
+
 // ---------- helpers ----------
 function parseMarker(description?: string) {
   const text = (description || "").trimStart();
@@ -49,8 +80,7 @@ function decodeExercises(desc: string | null | undefined): { prefix: string; exe
   const rest = text.slice(idx + EX_TAG.length).trim();
   const b64 = rest.split(/\s+/)[0] || "";
   try {
-    const json = atob(b64);
-    const arr = JSON.parse(json) as Partial<Exercise>[];
+    const arr = decodeB64Json<Partial<Exercise>[]>(b64);
     if (Array.isArray(arr)) {
       const fixed = arr.map((e) => ({
         title: e.title ?? "",
@@ -68,7 +98,7 @@ function decodeExercises(desc: string | null | undefined): { prefix: string; exe
 }
 
 function encodeExercises(prefix: string, exercises: Exercise[]) {
-  const b64 = btoa(JSON.stringify(exercises));
+  const b64 = encodeB64Json(exercises);
   const safePrefix = (prefix || "").trimEnd();
   return `${safePrefix}\n\n${EX_TAG} ${b64}`;
 }
@@ -96,7 +126,8 @@ export default function SesionDetailEditorPage() {
       setLoading(true);
       try {
         const res = await getSessionById(id);
-        const sess: SessionDTO = (res as any)?.data ? (res as any).data : (res as unknown as SessionDTO);
+        const sess: SessionDTO =
+          (res as any)?.data ? (res as any).data : (res as unknown as SessionDTO);
         setS(sess);
 
         const d = decodeExercises(sess?.description || "");
@@ -104,7 +135,17 @@ export default function SesionDetailEditorPage() {
         setExercises(
           d.exercises.length
             ? d.exercises
-            : [{ title: "", kind: "", space: "", players: "", duration: "", description: "", imageUrl: "" }]
+            : [
+                {
+                  title: "",
+                  kind: "",
+                  space: "",
+                  players: "",
+                  duration: "",
+                  description: "",
+                  imageUrl: "",
+                },
+              ]
         );
 
         setEditing(true);
@@ -134,7 +175,15 @@ export default function SesionDetailEditorPage() {
   function addExercise() {
     setExercises((prev) => [
       ...prev,
-      { title: "", kind: "", space: "", players: "", duration: "", description: "", imageUrl: "" },
+      {
+        title: "",
+        kind: "",
+        space: "",
+        players: "",
+        duration: "",
+        description: "",
+        imageUrl: "",
+      },
     ]);
   }
 
@@ -192,7 +241,12 @@ export default function SesionDetailEditorPage() {
   }
 
   if (loading) return <div className="p-6 text-gray-500">Cargando…</div>;
-  if (!s) return <div className="p-6"><h1 className="text-xl font-semibold">Sesión no encontrada</h1></div>;
+  if (!s)
+    return (
+      <div className="p-6">
+        <h1 className="text-xl font-semibold">Sesión no encontrada</h1>
+      </div>
+    );
 
   const roCls = editing ? "" : "bg-gray-50 text-gray-600 cursor-not-allowed";
 
@@ -213,20 +267,28 @@ export default function SesionDetailEditorPage() {
         <div className="flex items-center gap-2">
           {marker.ymd && marker.turn && (
             <a
-              href={`/ct/sessions/by-day/${marker.ymd}/${marker.turn}?focus=${encodeURIComponent(marker.row || "")}`}
+              href={`/ct/sessions/by-day/${marker.ymd}/${marker.turn}?focus=${encodeURIComponent(
+                marker.row || ""
+              )}`}
               className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
             >
               ← Volver a sesión
             </a>
           )}
-          <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Dashboard</a>
-          <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">✏️ Editor semanal</a>
+          <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+            Dashboard
+          </a>
+          <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+            ✏️ Editor semanal
+          </a>
 
           {editing ? (
             <button
               onClick={saveAll}
               disabled={saving}
-              className={`px-3 py-1.5 rounded-xl text-xs ${saving ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
+              className={`px-3 py-1.5 rounded-xl text-xs ${
+                saving ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
+              }`}
             >
               {saving ? "Guardando…" : "Guardar y bloquear"}
             </button>
@@ -438,3 +500,4 @@ export default function SesionDetailEditorPage() {
     </div>
   );
 }
+
