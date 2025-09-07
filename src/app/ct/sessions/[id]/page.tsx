@@ -40,6 +40,7 @@ function parseMarker(description?: string) {
   const m = text.match(/^\[GRID:(morning|afternoon):(.+?)\]\s*\|\s*(\d{4}-\d{2}-\d{2})/i);
   return { turn: (m?.[1] || "") as TurnKey | "", row: m?.[2] || "", ymd: m?.[3] || "" };
 }
+
 function decodeExercises(desc: string | null | undefined): { prefix: string; exercises: Exercise[] } {
   const text = (desc || "").trimEnd();
   const idx = text.lastIndexOf(EX_TAG);
@@ -65,6 +66,7 @@ function decodeExercises(desc: string | null | undefined): { prefix: string; exe
   } catch {}
   return { prefix: text, exercises: [] };
 }
+
 function encodeExercises(prefix: string, exercises: Exercise[]) {
   const b64 = btoa(JSON.stringify(exercises));
   const safePrefix = (prefix || "").trimEnd();
@@ -84,7 +86,9 @@ export default function SesionDetailEditorPage() {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [kinds, setKinds] = useState<string[]>([]);
 
-  useEffect(() => { (async ()=> setKinds(await listKinds()))(); }, []);
+  useEffect(() => {
+    (async () => setKinds(await listKinds()))();
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -126,10 +130,17 @@ export default function SesionDetailEditorPage() {
       return next;
     });
   }
+
   function addExercise() {
-    setExercises((prev) => [...prev, { title: "", kind: "", space: "", players: "", duration: "", description: "", imageUrl: "" }]);
+    setExercises((prev) => [
+      ...prev,
+      { title: "", kind: "", space: "", players: "", duration: "", description: "", imageUrl: "" },
+    ]);
   }
-  function removeExercise(idx: number) { setExercises((prev) => prev.filter((_, i) => i !== idx)); }
+
+  function removeExercise(idx: number) {
+    setExercises((prev) => prev.filter((_, i) => i !== idx));
+  }
 
   function addKind() {
     const n = prompt("Nuevo tipo de ejercicio:");
@@ -142,6 +153,7 @@ export default function SesionDetailEditorPage() {
     })();
     return name;
   }
+
   function manageKinds() {
     (async () => {
       const edited = prompt(
@@ -149,7 +161,7 @@ export default function SesionDetailEditorPage() {
         kinds.join("\n")
       );
       if (edited === null) return;
-      const list = edited.split("\n").map(s=>s.trim()).filter(Boolean);
+      const list = edited.split("\n").map((s) => s.trim()).filter(Boolean);
       const unique = await replaceKinds(list);
       setKinds(unique);
     })();
@@ -239,13 +251,17 @@ export default function SesionDetailEditorPage() {
       {/* Lista de ejercicios */}
       <div className="space-y-4">
         {exercises.map((ex, idx) => (
-          <section key={idx} className="rounded-2xl border bg-white shadow-sm overflow-hidden print:page">
+          <section
+            id={`ex-${idx}`}
+            key={idx}
+            className="rounded-2xl border bg-white shadow-sm overflow-hidden print:page"
+          >
             <div className="flex items-center justify-between bg-gray-50 px-3 py-2 border-b">
               <input
                 className={`text-[12px] font-semibold uppercase tracking-wide w-full max-w-[360px] ${roCls}`}
                 placeholder={`EJERCICIO #${idx + 1} — Título`}
                 value={ex.title}
-                onChange={(e)=>updateExercise(idx,{ title: e.target.value })}
+                onChange={(e) => updateExercise(idx, { title: e.target.value })}
                 disabled={!editing}
               />
               {editing && (
@@ -267,20 +283,27 @@ export default function SesionDetailEditorPage() {
                   <select
                     className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
                     value={ex.kind || ""}
-                    onChange={(e)=> {
+                    onChange={(e) => {
                       const v = e.target.value;
                       if (v === "__add__") {
                         const created = addKind();
-                        if (created) updateExercise(idx,{ kind: created });
+                        if (created) updateExercise(idx, { kind: created });
                         return;
                       }
-                      if (v === "__manage__") { manageKinds(); return; }
-                      updateExercise(idx,{ kind: v });
+                      if (v === "__manage__") {
+                        manageKinds();
+                        return;
+                      }
+                      updateExercise(idx, { kind: v });
                     }}
                     disabled={!editing}
                   >
                     <option value="">— Seleccionar —</option>
-                    {kinds.map(k => <option key={k} value={k}>{k}</option>)}
+                    {kinds.map((k) => (
+                      <option key={k} value={k}>
+                        {k}
+                      </option>
+                    ))}
                     <option value="__add__">➕ Agregar…</option>
                     <option value="__manage__">⚙️ Gestionar…</option>
                   </select>
@@ -346,7 +369,11 @@ export default function SesionDetailEditorPage() {
                 {ex.imageUrl ? (
                   <div className="mt-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={ex.imageUrl} alt="Vista previa" className="max-h-80 rounded-lg border object-contain" />
+                    <img
+                      src={ex.imageUrl}
+                      alt="Vista previa"
+                      className="max-h-80 rounded-lg border object-contain"
+                    />
                   </div>
                 ) : null}
               </div>
@@ -370,15 +397,42 @@ export default function SesionDetailEditorPage() {
       {/* estilos de impresión */}
       <style jsx global>{`
         @media print {
-          @page { size: A4 portrait; margin: 10mm; }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          body * { visibility: hidden !important; }
-          #print-root, #print-root * { visibility: visible !important; }
-          #print-root { position: absolute; inset: 0; margin: 0 !important; padding: 0 !important; }
-          nav, aside, header[role="banner"], .sidebar, .app-sidebar, .print\\:hidden { display: none !important; }
-          a[href]:after { content: ""; }
+          @page {
+            size: A4 portrait;
+            margin: 10mm;
+          }
+          body {
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          body * {
+            visibility: hidden !important;
+          }
+          #print-root,
+          #print-root * {
+            visibility: visible !important;
+          }
+          #print-root {
+            position: absolute;
+            inset: 0;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          nav,
+          aside,
+          header[role='banner'],
+          .sidebar,
+          .app-sidebar,
+          .print\\:hidden {
+            display: none !important;
+          }
+          a[href]:after {
+            content: '';
+          }
           /* === hoja A4 por ejercicio === */
-          .print\\:page { page-break-after: always; }
+          .print\\:page {
+            page-break-after: always;
+          }
         }
       `}</style>
     </div>
