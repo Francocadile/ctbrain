@@ -2,54 +2,182 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Row = {
+type SessionDTO = {
   id: string;
   title: string;
-  kind: string;
-  space: string;
-  players: string;
-  duration: string;
-  createdAt: string;
-  sessionId: string;
-  turn?: "morning" | "afternoon" | "";
-  row?: string;
-  ymd?: string;
-  idx: number;
+  description?: string | null;
+  date: string | Date;
+  type?: string | null;
 };
 
-type Order = "date" | "title";
-type Dir = "asc" | "desc";
+type Exercise = {
+  title: string;
+  kind?: string;
+  space?: string;
+  players?: string;
+  duration?: string;
+  description?: string;
+  imageUrl?: string;
+};
 
-export default function BuscarEjerciciosPage() {
-  const [q, setQ] = useState("");
-  const [order, setOrder] = useState<Order>("date");
-  const [dir, setDir] = useState<Dir>("desc");
-  const [page, setPage] = useState(1);
-  const [pageSize] = useState(20);
-  const [loading, setLoading] = useState(false);
-  const [rows, setRows] = useState<Row[]>([]);
-  const [total, setTotal] = useState(0);
+// ------- helpers: decode + fallback -------
+const TAGS = ["[EXERCISES]", "[EXERCISE]", "[EX]"];
 
-  async function load() {
-    setLoading(true);
-    try {
-      const url = new URL("/api/exercises-flat", window.location.origin);
-      if (q) url.searchParams.set("q", q);
-      url.searchParams.set("order", order);
-      url.searchParams.set("dir", dir);
-      url.searchParams.set("page", String(page));
-      url.searchParams.set("pageSize", String(pageSize));
-      const res = await fetch(url, { cache: "no-store" });
-      const json = await res.json();
-      setRows(json.data || []);
-      setTotal(json.meta?.total || 0);
-    } finally {
-      setLoading(false);
-    }
+function tryDecode(desc?: string | null): Exercise[] {
+  const text = (desc || "").trim();
+  if (!text) return [];
+  let idx = -1;
+  for (const t of TAGS) {
+    const j = text.lastIndexOf(t);
+    if (j > idx) idx = j;
   }
+  if (idx === -1) return [];
+  const after = text.slice(idx).replace(/^\[[^\]]+\]\s*/i, "").trim();
+  const b64 = after.split(/\s+/)[0] || "";
+  try {
+    const json = atob(b64);
+    const arr = JSON.parse(json) as Partial<Exercise>[];
+    if (Array.isArray(arr)) {
+      return arr.map((e) => ({
+        title: e.title ?? "",
+        kind: e.kind ?? "",
+        space: e.space ?? "",
+        players: e.players ?? "",
+        duration: e.duration ?? "",
+        description: e.description ?? "",
+        imageUrl: e.imageUrl ?? "",
+      }));
+    }
+  } catch {
+    // silencioso
+  }
+  return [];
+}
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [q, order, dir, page]);
-  const pages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
+function toLocal(date: string | Date) {
+  const d = new Date(date);
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// ------- API mínima a /api/sessions -------
+async function fetchSessions(page = 1, pageSize = 50) {
+  const url = new URL(
+    "/api/sessions",
+    typeof window === "undefined" ? "http://localhost" : window.location.origin
+  );
+  url.searchParams.set("order", "date");
+  url.searchParams.set("dir", "desc");
+  url.searchParams.set("page", String(page));
+  url.searchParams.set("pageSize", String(pageSize));
+  const res = await fetch(url.toString(), { cache: "no-store" });
+  if (!res.ok) throw new Error("No se pudieron listar sesiones");
+  return (await res.json()) as {
+    data: SessionDTO[];
+    meta?: { total: number; page: number; pageSize: number; pages: number };
+  };
+}
+
+type Item = {
+  id: string;            // sessionId__idx
+  sessionId: string;
+  sessionTitle: string;
+  createdAt: string | Date;
+  exIndex: number;
+  title: string;
+  kind?: string;
+  space?: string;
+  players?: string;
+  duration?: string;
+};
+
+export default function BuscarEjerciciosDesdeSesiones() {
+  const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState<Item[]>([]);
+  const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        // Traemos bastantes sesiones recientes (podés ampliar si querés)
+        const { data: sess } = await fetchSessions(1, 200);
+
+        // Expandimos ejercicios (o creamos 1 virtual si no hay marcador)
+        const items: Item[] = [];
+        for (const s of sess) {
+          const decoded = tryDecode(s.description);
+          if (decoded.length === 0) {
+            // Fallback: un ejercicio “virtual” para que la lista no quede vacía
+            items.push({
+              id: `${s.id}__0`,
+              sessionId: s.id,
+              sessionTitle: s.title || "Sesión",
+              createdAt: s.date,
+              exIndex: 0,
+              title: (s.title?.trim() || "Ejercicio").toString(),
+              kind: "",
+              space: undefined,
+              players: undefined,
+              duration: undefined,
+            });
+          } else {
+            decoded.forEach((ex, idx) => {
+              items.push({
+                id: `${s.id}__${idx}`,
+                sessionId: s.id,
+                sessionTitle: s.title || "Sesión",
+                createdAt: s.date,
+                exIndex: idx,
+                title: ex.title || s.title || `Ejercicio ${idx + 1}`,
+                kind: ex.kind || "",
+                space: ex.space || undefined,
+                players: ex.players || undefined,
+                duration: ex.duration || undefined,
+              });
+            });
+          }
+        }
+
+        // Orden por fecha desc
+        items.sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+
+        setRows(items);
+      } catch (e) {
+        console.error(e);
+        setRows([]);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  // filtro + paginado en cliente
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return rows;
+    return rows.filter((r) => {
+      return (
+        r.title.toLowerCase().includes(t) ||
+        (r.kind || "").toLowerCase().includes(t) ||
+        (r.space || "").toLowerCase().includes(t) ||
+        (r.players || "").toLowerCase().includes(t)
+      );
+    });
+  }, [rows, q]);
+
+  const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -59,59 +187,68 @@ export default function BuscarEjerciciosPage() {
           <p className="text-sm text-gray-500">Listado a partir de tus sesiones</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           <input
             value={q}
-            onChange={(e) => { setPage(1); setQ(e.target.value); }}
+            onChange={(e) => {
+              setPage(1);
+              setQ(e.target.value);
+            }}
             className="rounded-xl border px-3 py-1.5 text-sm"
-            placeholder="Buscar (título, descripción, espacio, jugadores)"
+            placeholder="Buscar (título, tipo, espacio, jugadores)"
           />
-          <div className="inline-flex rounded-xl border overflow-hidden">
-            <select value={order} onChange={(e) => setOrder(e.target.value as Order)} className="px-2 py-1.5 text-xs">
-              <option value="date">Fecha</option>
-              <option value="title">Título</option>
-            </select>
+          <div className="inline-flex rounded-xl border overflow-hidden text-xs">
+            <button
+              onClick={() => setPage(Math.max(1, page - 1))}
+              className="px-3 py-1.5 hover:bg-gray-50"
+              disabled={page <= 1}
+            >
+              ◀ Anterior
+            </button>
             <div className="w-px bg-gray-200" />
-            <select value={dir} onChange={(e) => setDir(e.target.value as Dir)} className="px-2 py-1.5 text-xs">
-              <option value="desc">↓</option>
-              <option value="asc">↑</option>
-            </select>
+            <button
+              onClick={() => setPage(Math.min(pages, page + 1))}
+              className="px-3 py-1.5 hover:bg-gray-50"
+              disabled={page >= pages}
+            >
+              Siguiente ▶
+            </button>
           </div>
         </div>
       </header>
 
       {loading ? (
         <div className="text-sm text-gray-500">Cargando…</div>
-      ) : rows.length === 0 ? (
-        <div className="rounded-lg border p-6 text-sm text-gray-600">No hay ejercicios.</div>
+      ) : pageRows.length === 0 ? (
+        <div className="rounded-lg border p-6 text-sm text-gray-600">
+          No hay ejercicios.
+        </div>
       ) : (
         <ul className="space-y-3">
-          {rows.map((ex) => {
-            const href =
-              `/ct/sessions/${ex.sessionId}` +
-              (ex.turn && ex.row && ex.ymd
-                ? `?turn=${ex.turn}&row=${encodeURIComponent(ex.row)}&ymd=${ex.ymd}#ex-${ex.idx}`
-                : "");
+          {pageRows.map((it) => {
+            const href = `/ct/sessions/${it.sessionId}#ex-${it.exIndex}`;
             return (
-              <li key={ex.id} className="rounded-xl border p-3 shadow-sm bg-white flex items-start justify-between gap-3">
+              <li
+                key={it.id}
+                className="rounded-xl border p-3 shadow-sm bg-white flex items-start justify-between gap-3"
+              >
                 <div>
-                  <h3 className="font-semibold text-[15px]">{ex.title || "Sin título"}</h3>
+                  <h3 className="font-semibold text-[15px]">
+                    {it.title || it.sessionTitle}
+                  </h3>
                   <div className="text-xs text-gray-500 mt-1 space-x-3">
-                    <span>
-                      📅{" "}
-                      {new Date(ex.createdAt).toLocaleString(undefined, {
-                        year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
-                      })}
-                    </span>
-                    {ex.kind && <span>🏷 {ex.kind}</span>}
-                    {ex.space && <span>📍 {ex.space}</span>}
-                    {ex.players && <span>👥 {ex.players}</span>}
-                    {ex.duration && <span>⏱ {ex.duration}</span>}
+                    <span>📅 {toLocal(it.createdAt)}</span>
+                    {it.kind && <span>🏷 {it.kind}</span>}
+                    {it.space && <span>📍 {it.space}</span>}
+                    {it.players && <span>👥 {it.players}</span>}
+                    {it.duration && <span>⏱ {it.duration}</span>}
                   </div>
                 </div>
-
                 <div className="flex items-center gap-2">
-                  <a href={href} className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50">
+                  <a
+                    href={href}
+                    className="text-xs px-3 py-1.5 rounded-lg border hover:bg-gray-50"
+                  >
                     Ver ejercicio
                   </a>
                 </div>
@@ -122,17 +259,8 @@ export default function BuscarEjerciciosPage() {
       )}
 
       <div className="flex items-center justify-between">
-        <div className="text-xs text-gray-500">{total} ejercicios · página {page} / {pages}</div>
-        <div className="inline-flex rounded-xl border overflow-hidden">
-          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}
-                  className="px-3 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-50">
-            ◀ Anterior
-          </button>
-          <div className="w-px bg-gray-200" />
-          <button onClick={() => setPage((p) => Math.min(pages, p + 1))} disabled={page >= pages}
-                  className="px-3 py-1.5 text-xs hover:bg-gray-50 disabled:opacity-50">
-            Siguiente ▶
-          </button>
+        <div className="text-xs text-gray-500">
+          {filtered.length} ejercicios · página {page} / {pages}
         </div>
       </div>
     </div>
