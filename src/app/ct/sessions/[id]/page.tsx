@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { getSessionById, updateSession, type SessionDTO } from "@/lib/api/sessions";
 import { listKinds, addKind as apiAddKind, replaceKinds } from "@/lib/settings";
-import { importFromSession } from "@/lib/api/exercises";
 
 type TurnKey = "morning" | "afternoon";
 
@@ -20,6 +19,20 @@ type Exercise = {
 };
 
 const EX_TAG = "[EXERCISES]";
+
+/** Helper local: intenta notificar al backend para importar ejercicios (si existe el endpoint).
+ *  Si no existe o falla, seguimos como si nada. */
+async function importFromSession(sessionId: string) {
+  try {
+    const res = await fetch(`/api/exercises/import?sessionId=${encodeURIComponent(sessionId)}`, {
+      method: "POST",
+    });
+    if (!res.ok) return { ok: false, created: 0, updated: 0 };
+    return (await res.json()) as { ok: boolean; created: number; updated: number };
+  } catch {
+    return { ok: false, created: 0, updated: 0 };
+  }
+}
 
 // ---------- helpers ----------
 function parseMarker(description?: string) {
@@ -153,13 +166,8 @@ export default function SesionDetailEditorPage() {
         date: s.date,
       });
 
-      // === Auto-importar ejercicios a la base ===
-      try {
-        const res = await importFromSession(s.id);
-        console.log("importFromSession:", res);
-      } catch (e) {
-        console.warn("No se pudo auto-importar", e);
-      }
+      // Intento opcional de importar al backend (si el endpoint existe).
+      importFromSession(s.id).catch(() => {});
 
       setEditing(false);
       alert("Guardado");
