@@ -46,6 +46,10 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
         <ul className="space-y-0.5 mb-2">
           <li><NavItem href={"/ct/plan-semanal" satisfies Route}>Plan semanal (Editor)</NavItem></li>
           <li><NavItem href={"/ct/sessions" satisfies Route}>Sesiones</NavItem></li>
+          {/* Ejercicios -> redirige al buscador */}
+          <li>
+            <NavItem href={"/ct/exercises" as any}>Ejercicios</NavItem>
+          </li>
         </ul>
       </aside>
 
