@@ -1,17 +1,16 @@
-// src/app/api/exercises/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient, Prisma } from "@prisma/client";
 import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
 /**
  * GET /api/exercises?q=&kind=&kindId=&order=createdAt|title&dir=desc|asc&page=1&pageSize=20
- * POST /api/exercises { title, kindId?, space?, players?, duration?, description?, imageUrl?, tags?, sessionId? }
+ * POST /api/exercises { title, kindId?, space?, players?, duration?, description?, imageUrl?, tags? }
  */
-
 export async function GET(req: Request) {
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
   const userId = (session as any)?.user?.id as string | undefined;
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -24,20 +23,17 @@ export async function GET(req: Request) {
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
   const pageSize = Math.min(50, Math.max(5, parseInt(url.searchParams.get("pageSize") || "20", 10)));
 
-  // --------- DB (Exercise)
   const where: Prisma.ExerciseWhereInput = {
     userId,
     ...(kindId ? { kindId } : {}),
-    ...(kindName
-      ? { kind: { is: { name: { equals: kindName, mode: "insensitive" as Prisma.QueryMode } } } }
-      : {}),
+    ...(kindName ? { kind: { is: { name: { equals: kindName, mode: "insensitive" } } } } : {}),
     ...(q
       ? {
           OR: [
-            { title: { contains: q, mode: "insensitive" as Prisma.QueryMode } },
-            { description: { contains: q, mode: "insensitive" as Prisma.QueryMode } },
-            { space: { contains: q, mode: "insensitive" as Prisma.QueryMode } },
-            { players: { contains: q, mode: "insensitive" as Prisma.QueryMode } },
+            { title: { contains: q, mode: "insensitive" } },
+            { description: { contains: q, mode: "insensitive" } },
+            { space: { contains: q, mode: "insensitive" } },
+            { players: { contains: q, mode: "insensitive" } },
           ],
         }
       : {}),
@@ -54,21 +50,21 @@ export async function GET(req: Request) {
     }),
   ]);
 
-  // Mapeo + sourceSessionId (por si el id es determinístico "sessionId__idx")
+  // Mapea y, si el id es determinístico "<sessionId>__idx", infiere el sessionId de origen
   const mapRow = (r: any) => {
     const fromId = typeof r.id === "string" && r.id.includes("__") ? r.id.split("__")[0] : null;
-    const sourceSessionId = r.sessionId ?? fromId ?? null;
+    const sourceSessionId = (r as any).sessionId ?? fromId ?? null;
     return { ...r, sourceSessionId };
   };
 
   let data: any[] = (rowsDb || []).map(mapRow);
 
-  // --------- Fallback: si aún no hay registros en Exercise, armamos vista virtual desde Session
+  // Fallback: si aún no tenés registros en Exercise, mostramos vista virtual desde Session
   if (totalDb === 0) {
     const sessions = await prisma.session.findMany({
       where: { createdBy: userId },
       orderBy: { date: "desc" },
-      take: 100,
+      take: 200,
       select: { id: true, date: true, title: true, description: true },
     });
 
@@ -80,7 +76,7 @@ export async function GET(req: Request) {
       return { duration, players, space, description: t || null };
     };
 
-    let virtual = sessions.map((s, i) => {
+    let virtual = sessions.map((s) => {
       const g = derive(s.description);
       return {
         id: `${s.id}__0`,
@@ -100,7 +96,6 @@ export async function GET(req: Request) {
       };
     });
 
-    // Filtros/orden/paginado sobre virtual
     if (q) {
       const qi = q.toLowerCase();
       virtual = virtual.filter(
@@ -110,9 +105,6 @@ export async function GET(req: Request) {
           (r.space || "").toLowerCase().includes(qi) ||
           (r.players || "").toLowerCase().includes(qi)
       );
-    }
-    if (kindName) {
-      // En virtual no hay tipos, así que lo ignoramos (o podrías inferir)
     }
 
     virtual.sort((a, b) => {
@@ -138,7 +130,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
   const userId = (session as any)?.user?.id as string | undefined;
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -150,14 +142,14 @@ export async function POST(req: Request) {
     data: {
       userId,
       title,
-      kindId: body?.kindId || null,
-      space: body?.space || null,
-      players: body?.players || null,
-      duration: body?.duration || null,
-      description: body?.description || null,
-      imageUrl: body?.imageUrl || null,
+      kindId: body?.kindId ?? null,
+      space: body?.space ?? null,
+      players: body?.players ?? null,
+      duration: body?.duration ?? null,
+      description: body?.description ?? null,
+      imageUrl: body?.imageUrl ?? null,
       tags: Array.isArray(body?.tags) ? body.tags.filter((x: any) => typeof x === "string") : [],
-      sessionId: body?.sessionId ?? null, // si existe el campo en tu schema
+      // si tu schema tiene sessionId, agregalo aquí
     } as any,
     include: { kind: true },
   });
