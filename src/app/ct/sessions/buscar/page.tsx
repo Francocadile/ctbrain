@@ -2,12 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type SessionDTO = {
+type SessionListDTO = {
   id: string;
   title: string;
-  description?: string | null;
   date: string | Date;
   type?: string | null;
+  description?: string | null; // puede venir vacío en la lista
+};
+
+type SessionDetailDTO = {
+  id: string;
+  title: string;
+  date: string | Date;
+  description?: string | null;
 };
 
 type Exercise = {
@@ -31,8 +38,8 @@ function tryDecode(desc?: string | null): Exercise[] {
     if (j > idx) idx = j;
   }
   if (idx === -1) return [];
-  const after = text.slice(idx).replace(/^\[[^\]]+\]\s*/i, "").trim();
-  const b64 = after.split(/\s+/)[0] || "";
+  const fromTag = text.slice(idx).replace(/^\[[^\]]+\]\s*/i, "").trim();
+  const b64 = fromTag.split(/\s+/)[0] || "";
   try {
     const json = atob(b64);
     const arr = JSON.parse(json) as Partial<Exercise>[];
@@ -73,11 +80,18 @@ async function fetchSessions(page = 1, pageSize = 200) {
   url.searchParams.set("pageSize", String(pageSize));
   const res = await fetch(url.toString(), { cache: "no-store" });
   if (!res.ok) throw new Error("No se pudieron listar sesiones");
-  return (await res.json()) as { data: SessionDTO[] };
+  return (await res.json()) as { data: SessionListDTO[] };
+}
+
+async function fetchSessionDetail(id: string) {
+  const res = await fetch(`/api/sessions/${id}`, { cache: "no-store" });
+  if (!res.ok) throw new Error("No se pudo obtener la sesión");
+  const json = (await res.json()) as { data: SessionDetailDTO };
+  return json.data;
 }
 
 type Item = {
-  id: string;            // sessionId__idx
+  id: string; // sessionId__idx
   sessionId: string;
   sessionTitle: string;
   createdAt: string | Date;
@@ -102,13 +116,23 @@ export default function BuscarEjerciciosDesdeSesiones() {
       try {
         const { data: sess } = await fetchSessions(1, 200);
 
+        // Para cada sesión, garantizamos tener description:
+        const withDescriptions = await Promise.all(
+          sess.map(async (s) => {
+            if (s.description && s.description.trim() !== "") return s;
+            try {
+              const det = await fetchSessionDetail(s.id);
+              return { ...s, description: det.description ?? null };
+            } catch {
+              return s; // si falla, seguimos sin description
+            }
+          })
+        );
+
         const items: Item[] = [];
-        for (const s of sess) {
+        for (const s of withDescriptions) {
           const decoded = tryDecode(s.description);
-          if (decoded.length === 0) {
-            // 👇 NUEVO: si la sesión no tiene ejercicios codificados, NO la incluimos
-            continue;
-          }
+          if (decoded.length === 0) continue; // 👈 solo sesiones con ejercicios guardados
           decoded.forEach((ex, idx) => {
             items.push({
               id: `${s.id}__${idx}`,
@@ -125,7 +149,6 @@ export default function BuscarEjerciciosDesdeSesiones() {
           });
         }
 
-        // Orden por fecha desc
         items.sort(
           (a, b) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -141,7 +164,6 @@ export default function BuscarEjerciciosDesdeSesiones() {
     })();
   }, []);
 
-  // filtro + paginado en cliente
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
     if (!t) return rows;
@@ -164,7 +186,7 @@ export default function BuscarEjerciciosDesdeSesiones() {
         <div>
           <h1 className="text-2xl font-bold">Ejercicios</h1>
           <p className="text-sm text-gray-500">
-            Se muestran solo los ejercicios guardados desde las sesiones
+            Se listan solo los ejercicios guardados desde las sesiones
             (botón “Guardar y bloquear”).
           </p>
         </div>
@@ -206,7 +228,7 @@ export default function BuscarEjerciciosDesdeSesiones() {
           <div>No hay ejercicios.</div>
           <div className="text-gray-500">
             Tip: entrá a una sesión, cargá los bloques y tocá{" "}
-            <strong>“Guardar y bloquear”</strong>. Al volver acá, aparecerán.
+            <strong>“Guardar y bloquear”</strong>. Luego volvé acá o actualizá.
           </div>
         </div>
       ) : (
