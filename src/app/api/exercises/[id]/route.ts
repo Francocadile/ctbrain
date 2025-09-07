@@ -1,19 +1,16 @@
-// src/app/api/exercises/[id]/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
   const userId = (session as any)?.user?.id as string | undefined;
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const row = await prisma.exercise.findFirst({
-    where: { id: params.id, userId },
-    include: { kind: true },
-  });
+  const row = await prisma.exercise.findFirst({ where: { id: params.id, userId }, include: { kind: true } });
   if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const fromId = typeof row.id === "string" && row.id.includes("__") ? row.id.split("__")[0] : null;
@@ -23,7 +20,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 }
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
   const userId = (session as any)?.user?.id as string | undefined;
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -41,7 +38,8 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       duration: "duration" in body ? body?.duration ?? null : exists.duration,
       description: "description" in body ? body?.description ?? null : exists.description,
       imageUrl: "imageUrl" in body ? body?.imageUrl ?? null : exists.imageUrl,
-      sessionId: "sessionId" in body ? body?.sessionId ?? null : (exists as any).sessionId ?? null,
+      // sessionId si existe en tu schema:
+      // sessionId: "sessionId" in body ? body?.sessionId ?? null : (exists as any).sessionId ?? null,
       tags: Array.isArray(body?.tags) ? body.tags.filter((x: any) => typeof x === "string") : exists.tags,
     } as any,
     include: { kind: true },
@@ -54,7 +52,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 }
 
 export async function DELETE(_: Request, { params }: { params: { id: string } }) {
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
   const userId = (session as any)?.user?.id as string | undefined;
   if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
