@@ -20,7 +20,6 @@ type Exercise = {
   imageUrl?: string;
 };
 
-// ------- helpers: decode + fallback -------
 const TAGS = ["[EXERCISES]", "[EXERCISE]", "[EX]"];
 
 function tryDecode(desc?: string | null): Exercise[] {
@@ -48,9 +47,7 @@ function tryDecode(desc?: string | null): Exercise[] {
         imageUrl: e.imageUrl ?? "",
       }));
     }
-  } catch {
-    // silencioso
-  }
+  } catch {}
   return [];
 }
 
@@ -65,8 +62,7 @@ function toLocal(date: string | Date) {
   });
 }
 
-// ------- API mínima a /api/sessions -------
-async function fetchSessions(page = 1, pageSize = 50) {
+async function fetchSessions(page = 1, pageSize = 200) {
   const url = new URL(
     "/api/sessions",
     typeof window === "undefined" ? "http://localhost" : window.location.origin
@@ -77,10 +73,7 @@ async function fetchSessions(page = 1, pageSize = 50) {
   url.searchParams.set("pageSize", String(pageSize));
   const res = await fetch(url.toString(), { cache: "no-store" });
   if (!res.ok) throw new Error("No se pudieron listar sesiones");
-  return (await res.json()) as {
-    data: SessionDTO[];
-    meta?: { total: number; page: number; pageSize: number; pages: number };
-  };
+  return (await res.json()) as { data: SessionDTO[] };
 }
 
 type Item = {
@@ -107,43 +100,29 @@ export default function BuscarEjerciciosDesdeSesiones() {
     (async () => {
       setLoading(true);
       try {
-        // Traemos bastantes sesiones recientes (podés ampliar si querés)
         const { data: sess } = await fetchSessions(1, 200);
 
-        // Expandimos ejercicios (o creamos 1 virtual si no hay marcador)
         const items: Item[] = [];
         for (const s of sess) {
           const decoded = tryDecode(s.description);
           if (decoded.length === 0) {
-            // Fallback: un ejercicio “virtual” para que la lista no quede vacía
+            // 👇 NUEVO: si la sesión no tiene ejercicios codificados, NO la incluimos
+            continue;
+          }
+          decoded.forEach((ex, idx) => {
             items.push({
-              id: `${s.id}__0`,
+              id: `${s.id}__${idx}`,
               sessionId: s.id,
               sessionTitle: s.title || "Sesión",
               createdAt: s.date,
-              exIndex: 0,
-              title: (s.title?.trim() || "Ejercicio").toString(),
-              kind: "",
-              space: undefined,
-              players: undefined,
-              duration: undefined,
+              exIndex: idx,
+              title: ex.title || s.title || `Ejercicio ${idx + 1}`,
+              kind: ex.kind || "",
+              space: ex.space || undefined,
+              players: ex.players || undefined,
+              duration: ex.duration || undefined,
             });
-          } else {
-            decoded.forEach((ex, idx) => {
-              items.push({
-                id: `${s.id}__${idx}`,
-                sessionId: s.id,
-                sessionTitle: s.title || "Sesión",
-                createdAt: s.date,
-                exIndex: idx,
-                title: ex.title || s.title || `Ejercicio ${idx + 1}`,
-                kind: ex.kind || "",
-                space: ex.space || undefined,
-                players: ex.players || undefined,
-                duration: ex.duration || undefined,
-              });
-            });
-          }
+          });
         }
 
         // Orden por fecha desc
@@ -184,7 +163,10 @@ export default function BuscarEjerciciosDesdeSesiones() {
       <header className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">Ejercicios</h1>
-          <p className="text-sm text-gray-500">Listado a partir de tus sesiones</p>
+          <p className="text-sm text-gray-500">
+            Se muestran solo los ejercicios guardados desde las sesiones
+            (botón “Guardar y bloquear”).
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -220,8 +202,12 @@ export default function BuscarEjerciciosDesdeSesiones() {
       {loading ? (
         <div className="text-sm text-gray-500">Cargando…</div>
       ) : pageRows.length === 0 ? (
-        <div className="rounded-lg border p-6 text-sm text-gray-600">
-          No hay ejercicios.
+        <div className="rounded-lg border p-6 text-sm text-gray-600 space-y-2">
+          <div>No hay ejercicios.</div>
+          <div className="text-gray-500">
+            Tip: entrá a una sesión, cargá los bloques y tocá{" "}
+            <strong>“Guardar y bloquear”</strong>. Al volver acá, aparecerán.
+          </div>
         </div>
       ) : (
         <ul className="space-y-3">
