@@ -1,140 +1,85 @@
-// src/app/api/injuries/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient, Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 
-export const dynamic = "force-dynamic";
-
-const prisma = new PrismaClient();
-
-// Tipo con usuario incluido
-type InjuryWithUser = Prisma.InjuryEntryGetPayload<{
-  include: { user: true };
-}>;
-
-function toYMD(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
-function fromYMD(s: string) {
-  const [y, m, dd] = s.split("-").map(Number);
-  return new Date(y, m - 1, dd);
-}
-
-/**
- * GET /api/injuries?date=YYYY-MM-DD
- * Lista entradas de lesión del día (normaliza campos y nombre de usuario).
- */
+// GET /api/injuries?date=YYYY-MM-DD
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const dateStr = searchParams.get("date");
-  if (!dateStr) {
-    return NextResponse.json(
-      { error: "Missing 'date' (YYYY-MM-DD)" },
-      { status: 400 }
-    );
-  }
+  const date = searchParams.get("date");
+  if (!date) return NextResponse.json({ error: "Missing date" }, { status: 400 });
 
-  // traemos por igualdad de fecha (asumiendo date sin hora)
-  const day = fromYMD(dateStr);
-  const rows: InjuryWithUser[] = await prisma.injuryEntry.findMany({
-    where: { date: day },
-    include: { user: true },
-    orderBy: [{ userId: "asc" }],
+  const start = new Date(date);
+  const end = new Date(date);
+  end.setDate(end.getDate() + 1);
+
+  const rows = await prisma.injuryEntry.findMany({
+    where: { date: { gte: start, lt: end } },
+    include: { user: { select: { name: true, email: true } } },
+    orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
   });
 
-  const mapped = rows.map((r: InjuryWithUser) => ({
+  const mapped = rows.map((r: any) => ({
     id: r.id,
     userId: r.userId,
     userName: r.user?.name || r.user?.email || "—",
-    date: toYMD(r.date),
-    status: r.status, // enum/string según tu schema
-    bodyPart: r.bodyPart ?? null,
-    laterality: r.laterality ?? null,
-    mechanism: r.mechanism ?? null,
-    expectedReturn: r.expectedReturn ? toYMD(r.expectedReturn) : null,
-    notes: r.notes ?? null,
-    createdAt: r.createdAt?.toISOString?.() ?? undefined,
-    updatedAt: r.updatedAt?.toISOString?.() ?? undefined,
+    date: r.date.toISOString().slice(0, 10),
+    status: r.status,
+    bodyPart: r.bodyPart,
+    laterality: r.laterality,
+    mechanism: r.mechanism,
+    severity: r.severity,
+    expectedReturn: r.expectedReturn ? r.expectedReturn.toISOString().slice(0, 10) : null,
+    availability: r.availability,
+    pain: r.pain,
+    notes: r.notes,
+    capMinutes: r.capMinutes,
+    noSprint: r.noSprint,
+    noChangeOfDirection: r.noChangeOfDirection,
+    gymOnly: r.gymOnly,
+    noContact: r.noContact,
+    updatedAt: r.updatedAt,
   }));
 
   return NextResponse.json(mapped);
 }
 
-/**
- * POST /api/injuries
- * Upsert por (userId, date).
- * Body JSON:
- * { userId, date: 'YYYY-MM-DD', status, bodyPart?, laterality?, mechanism?, expectedReturn?: 'YYYY-MM-DD', notes? }
- */
+// POST /api/injuries  (upsert por userId+date)
 export async function POST(req: Request) {
-  const body = await req.json().catch(() => ({}));
-  const {
-    userId,
-    date,
-    status,
-    bodyPart = null,
-    laterality = null,
-    mechanism = null,
-    expectedReturn = null,
-    notes = null,
-  }: {
-    userId?: string;
-    date?: string;
-    status?: string; // o enum de tu schema
-    bodyPart?: string | null;
-    laterality?: string | null;
-    mechanism?: string | null;
-    expectedReturn?: string | null;
-    notes?: string | null;
-  } = body || {};
-
-  if (!userId || !date || !status) {
-    return NextResponse.json(
-      { error: "Missing 'userId', 'date' (YYYY-MM-DD) or 'status'" },
-      { status: 400 }
-    );
+  const body = await req.json();
+  const { userId, date } = body as { userId?: string; date?: string };
+  if (!userId || !date) {
+    return NextResponse.json({ error: "userId and date are required" }, { status: 400 });
   }
 
-  const d = fromYMD(date);
-  const er = expectedReturn ? fromYMD(expectedReturn) : null;
+  const ymd = date.slice(0, 10);
+  const d = new Date(ymd);
 
-  // Requiere en el schema: @@unique([userId, date]) en InjuryEntry
-  const up = await prisma.injuryEntry.upsert({
-    where: { userId_date: { userId, date: d } },
-    create: {
-      userId,
-      date: d,
-      status: status as any,
-      bodyPart,
-      laterality,
-      mechanism,
-      expectedReturn: er,
-      notes,
-    },
-    update: {
-      status: status as any,
-      bodyPart,
-      laterality,
-      mechanism,
-      expectedReturn: er,
-      notes,
-    },
-    include: { user: true },
-  });
-
-  const out = {
-    id: up.id,
-    userId: up.userId,
-    userName: up.user?.name || up.user?.email || "—",
-    date: toYMD(up.date),
-    status: up.status,
-    bodyPart: up.bodyPart ?? null,
-    laterality: up.laterality ?? null,
-    mechanism: up.mechanism ?? null,
-    expectedReturn: up.expectedReturn ? toYMD(up.expectedReturn) : null,
-    notes: up.notes ?? null,
-    createdAt: up.createdAt?.toISOString?.() ?? undefined,
-    updatedAt: up.updatedAt?.toISOString?.() ?? undefined,
+  const data = {
+    status: body.status ?? "ACTIVO",
+    bodyPart: body.bodyPart ?? null,
+    laterality: body.laterality ?? null,
+    mechanism: body.mechanism ?? null,
+    severity: body.severity ?? null,
+    expectedReturn: body.expectedReturn ? new Date(body.expectedReturn) : null,
+    availability: body.availability ?? null,
+    pain: typeof body.pain === "number" ? body.pain : null,
+    notes: body.notes ?? null,
+    capMinutes: typeof body.capMinutes === "number" ? body.capMinutes : null,
+    noSprint: !!body.noSprint,
+    noChangeOfDirection: !!body.noChangeOfDirection,
+    gymOnly: !!body.gymOnly,
+    noContact: !!body.noContact,
   };
 
-  return NextResponse.json(out, { status: 201 });
+  const saved = await prisma.injuryEntry.upsert({
+    where: { userId_date: { userId, date: d } },
+    update: data,
+    create: { userId, date: d, ...data },
+    include: { user: { select: { name: true, email: true } } },
+  });
+
+  return NextResponse.json({
+    ...saved,
+    date: saved.date.toISOString().slice(0, 10),
+    expectedReturn: saved.expectedReturn ? saved.expectedReturn.toISOString().slice(0, 10) : null,
+  });
 }
