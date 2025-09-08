@@ -1,36 +1,28 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 
-const prisma = (globalThis as any).prisma || new PrismaClient();
-if (process.env.NODE_ENV !== "production") (globalThis as any).prisma = prisma;
-
-function fromYMD(s?: string | null): Date | null {
-  if (!s) return null;
-  const [y, m, d] = s.split("-").map(Number);
-  return new Date(Date.UTC(y, (m || 1) - 1, d || 1, 0, 0, 0));
-}
-
+// PATCH /api/injuries/[id]
 export async function PATCH(
-  req: Request,
+  _req: Request,
   { params }: { params: { id: string } }
 ) {
   const id = params.id;
-  if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+  const body = await _req.json();
 
-  const body = await req.json().catch(() => ({}));
-
-  const data: any = {};
-  if ("status" in body) data.status = String(body.status);
-  if ("bodyPart" in body) data.bodyPart = body.bodyPart ?? null;
-  if ("laterality" in body) data.laterality = body.laterality ?? null;
-  if ("mechanism" in body) data.mechanism = body.mechanism ?? null;
-  if ("expectedReturn" in body) data.expectedReturn = fromYMD(body.expectedReturn);
-  if ("notes" in body) data.notes = body.notes ?? null;
-
-  try {
-    const saved = await prisma.injuryEntry.update({ where: { id }, data });
-    return NextResponse.json({ ok: true, id: saved.id });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Update failed" }, { status: 400 });
+  const data: any = { ...body };
+  if ("expectedReturn" in data) {
+    data.expectedReturn = data.expectedReturn ? new Date(data.expectedReturn) : null;
   }
+
+  const updated = await prisma.injuryEntry.update({
+    where: { id },
+    data,
+    include: { user: { select: { name: true, email: true } } },
+  });
+
+  return NextResponse.json({
+    ...updated,
+    date: updated.date.toISOString().slice(0, 10),
+    expectedReturn: updated.expectedReturn ? updated.expectedReturn.toISOString().slice(0, 10) : null,
+  });
 }
