@@ -77,6 +77,16 @@ export default function CTSessionsPage() {
       return x;
     });
 
+  // NUEVO: cuando el usuario elige una fecha, movemos la "base" a ese lunes
+  function onDateChange(value: string) {
+    setDateFilter(value);
+    if (!value) return;
+    // Parse seguro en UTC
+    const picked = new Date(`${value}T00:00:00.000Z`);
+    const monday = getMonday(picked);
+    setBase(monday);
+  }
+
   async function loadWeek(d: Date) {
     setLoading(true);
     try {
@@ -191,7 +201,7 @@ export default function CTSessionsPage() {
             <button
               onClick={goNextWeek}
               className="px-2.5 py-1.5 text-xs hover:bg-gray-50"
-              title="Semana siguiente"
+              title="Semana siguiente ▶"
             >
               Semana siguiente ▶
             </button>
@@ -201,7 +211,7 @@ export default function CTSessionsPage() {
           <input
             type="date"
             value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
+            onChange={(e) => onDateChange(e.target.value)}
             className="rounded-xl border px-2 py-1.5 text-sm"
             title="Filtrar por fecha"
           />
