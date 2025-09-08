@@ -1,4 +1,3 @@
-// src/app/ct/metrics/rpe/page.tsx
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -184,20 +183,15 @@ function RPECT() {
     }
   }
 
+  // ✅ ahora actualiza por ID con PATCH (coherente con tu route /[id])
   async function saveOne(row: Row, newMinStr: string) {
     const minutes = newMinStr === "" ? null : Math.max(0, Number(newMinStr));
     setSaving(true);
     try {
-      const res = await fetch("/api/metrics/rpe", {
-        method: "POST",
+      const res = await fetch(`/api/metrics/rpe/${row.id}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: row.id, // update directo
-          date,
-          rpe: row.rpe,
-          duration: minutes,
-          playerKey: row.playerKey || row.userName || "Jugador",
-        }),
+        body: JSON.stringify({ duration: minutes }),
       });
       if (!res.ok) throw new Error(await res.text());
       await load();
@@ -218,10 +212,7 @@ function RPECT() {
       .filter((v) => !Number.isNaN(v))
       .reduce((a, b) => a + b, 0);
 
-    // distribución por RPE del día (intensidad percibida)
-    let b1 = 0,
-      b2 = 0,
-      b3 = 0;
+    let b1 = 0, b2 = 0, b3 = 0;
     for (const r of rows) {
       const v = Number(r.rpe || 0);
       if (v <= 3) b1++;
@@ -286,8 +277,7 @@ function RPECT() {
           allIndividual.push(...srpes);
         }
 
-        // histograma individual (AU) en el rango
-        const bins = [0, 0, 0, 0, 0]; // 0–300 | 301–600 | 601–900 | 901–1200 | >1200
+        const bins = [0, 0, 0, 0, 0];
         for (const v of allIndividual) {
           if (v <= 300) bins[0]++;
           else if (v <= 600) bins[1]++;
@@ -296,7 +286,7 @@ function RPECT() {
           else bins[4]++;
         }
 
-        setDailyTeamSRPE(dailyTeam); // hoy..hace N-1
+        setDailyTeamSRPE(dailyTeam);
         setSrpeHistBins(bins);
       } finally {
         setRangeLoading(false);
@@ -317,9 +307,8 @@ function RPECT() {
     setQuickOpen(true);
     setQuickLoading(true);
     try {
-      // SDW 7d: hoy + 7 previos
       const daysW = Array.from({ length: 8 }, (_, i) =>
-        toYMDw(addDaysW(fromYMDw(date), -(i === 0 ? 0 : i))) // 0..7
+        toYMDw(addDaysW(fromYMDw(date), -(i === 0 ? 0 : i)))
       );
       const wData = await Promise.all(daysW.map((d) => fetchWellnessDay(d)));
       const sdwSeries: number[] = [];
@@ -337,7 +326,6 @@ function RPECT() {
       }
       setQuickSDW7(sdwSeries);
 
-      // RPE 7d: AU por día (si existe)
       const daysR = Array.from({ length: 7 }, (_, i) => toYMD(addDays(fromYMD(date), -i)));
       const rpeData = await Promise.all(
         daysR.map((d) => fetch(`/api/metrics/rpe?date=${d}`, { cache: "no-store" }))
@@ -498,44 +486,47 @@ function RPECT() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((r) => (
-                      <tr key={r.id} className="border-b last:border-0">
-                        <td className="px-3 py-2 font-medium">
-                          {r.userName || r.playerKey || "Jugador"}
-                        </td>
-                        <td className="px-3 py-2">{r.rpe}</td>
-                        <td className="px-3 py-2">
-                          <input
-                            className="w-24 rounded-md border px-2 py-1 text-sm"
-                            defaultValue={r.duration ?? ""}
-                            onBlur={(e) => saveOne(r, e.currentTarget.value)}
-                            placeholder="min"
-                            inputMode="numeric"
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          {(r.load ?? null) !== null ? Math.round(Number(r.load)) : "—"}
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="flex justify-end gap-2">
-                            <button
-                              onClick={() =>
-                                openQuickViewFor(r.userName || r.playerKey || "Jugador")
-                              }
-                              className="rounded-lg border px-2 py-1 text-[11px] hover:bg-gray-50"
-                            >
-                              Ver
-                            </button>
-                            <button
-                              onClick={() => saveOne(r, "")}
-                              className="rounded-lg border px-2 py-1 text-[11px] hover:bg-gray-50"
-                            >
-                              Vaciar
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {filtered
+                      .slice()
+                      .sort((a, b) => srpeOf(b) - srpeOf(a)) {/* ✅ AU desc */}
+                      .map((r) => (
+                        <tr key={r.id} className="border-b last:border-0">
+                          <td className="px-3 py-2 font-medium">
+                            {r.userName || r.playerKey || "Jugador"}
+                          </td>
+                          <td className="px-3 py-2">{r.rpe}</td>
+                          <td className="px-3 py-2">
+                            <input
+                              className="w-24 rounded-md border px-2 py-1 text-sm"
+                              defaultValue={r.duration ?? ""}
+                              onBlur={(e) => saveOne(r, e.currentTarget.value)}
+                              placeholder="min"
+                              inputMode="numeric"
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            {(r.load ?? null) !== null ? Math.round(Number(r.load)) : "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() =>
+                                  openQuickViewFor(r.userName || r.playerKey || "Jugador")
+                                }
+                                className="rounded-lg border px-2 py-1 text-[11px] hover:bg-gray-50"
+                              >
+                                Ver
+                              </button>
+                              <button
+                                onClick={() => saveOne(r, "")}
+                                className="rounded-lg border px-2 py-1 text-[11px] hover:bg-gray-50"
+                              >
+                                Vaciar
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
