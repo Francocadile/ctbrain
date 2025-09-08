@@ -1,58 +1,49 @@
-// src/app/api/injuries/range/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 
-export const dynamic = "force-dynamic";
-const prisma = new PrismaClient();
+const prisma = (globalThis as any).prisma || new PrismaClient();
+if (process.env.NODE_ENV !== "production") (globalThis as any).prisma = prisma;
 
-function bad(msg: string, code = 400) {
-  return NextResponse.json({ error: msg }, { status: code });
+function fromYMD(s: string): Date {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(Date.UTC(y, (m || 1) - 1, d || 1, 0, 0, 0));
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const start = searchParams.get("start");
   const end = searchParams.get("end");
-  const player = searchParams.get("player");
-
-  if (!start || !end) return bad("Parámetros requeridos: start, end (YYYY-MM-DD)");
-
-  try {
-    const where: any = { date: { gte: new Date(start), lte: new Date(end) } };
-    if (player) {
-      where.user = {
-        is: {
-          OR: [
-            { name: { equals: player, mode: "insensitive" } },
-            { email: { equals: player, mode: "insensitive" } },
-          ],
-        },
-      };
-    }
-
-    const items = await prisma.injuryEntry.findMany({
-      where,
-      include: { user: { select: { id: true, name: true, email: true } } },
-      orderBy: [{ date: "asc" }, { id: "asc" }],
-    });
-
-    const out = items.map((r) => ({
-      id: r.id,
-      date: r.date,
-      userId: r.userId,
-      user: r.user,
-      status: r.status,
-      bodyPart: r.bodyPart,
-      laterality: r.laterality,
-      mechanism: r.mechanism,
-      expectedReturn: r.expectedReturn,
-      notes: r.notes,
-      userName: r.user?.name ?? r.user?.email ?? "—",
-    }));
-
-    return NextResponse.json({ start, end, count: out.length, items: out });
-  } catch (e: any) {
-    console.error(e);
-    return bad(e?.message || "Error consultando lesiones", 500);
+  if (!start || !end) {
+    return NextResponse.json({ error: "Missing ?start=YYYY-MM-DD&end=YYYY-MM-DD" }, { status: 400 });
   }
+
+  const startDate = fromYMD(start);
+  const endDate = fromYMD(end);
+
+  const rows = await prisma.injuryEntry.findMany({
+    where: {
+      date: {
+        gte: startDate,
+        lte: endDate,
+      },
+    },
+    include: { user: { select: { id: true, name: true, email: true } } },
+    orderBy: [{ date: "asc" }, { updatedAt: "desc" }],
+  });
+
+  const mapped = rows.map((r) => ({
+    id: r.id,
+    userId: r.userId,
+    userName: r.user?.name || r.user?.email || "—",
+    date: r.date.toISOString().slice(0, 10),
+    status: r.status,
+    bodyPart: r.bodyPart,
+    laterality: r.laterality,
+    mechanism: r.mechanism,
+    expectedReturn: r.expectedReturn ? r.expectedReturn.toISOString().slice(0, 10) : null,
+    notes: r.notes,
+    updatedAt: r.updatedAt,
+  }));
+
+  return NextResponse.json(mapped);
 }
