@@ -1,175 +1,181 @@
-// src/app/api/ct/exercises/route.ts
+// src/app/api/exercises/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
+import { getServerSession } from "next-auth";
 
 const prisma = new PrismaClient();
-
-// ====== Encoder/Decoder (idéntico al editor) =================================
 const EX_TAG = "[EXERCISES]";
 
-type Exercise = {
-  title: string;
-  kind: string;
-  space: string;
-  players: string;
-  duration: string;
-  description: string;
-  imageUrl: string;
-};
-
-function decodeExercises(desc: string | null | undefined): { prefix: string; exercises: Exercise[] } {
-  const text = (desc || "").trimEnd();
-  const idx = text.lastIndexOf(EX_TAG);
-  if (idx === -1) return { prefix: text, exercises: [] };
-  const prefix = text.slice(0, idx).trimEnd();
-  const rest = text.slice(idx + EX_TAG.length).trim();
-  const b64 = rest.split(/\s+/)[0] || "";
+// -------- helpers (node-safe base64 json) --------
+function decodeB64Json<T = any>(b64: string): T | null {
   try {
-    const json = Buffer.from(b64, "base64").toString("utf-8");
-    const arr = JSON.parse(json) as Partial<Exercise>[];
-    if (Array.isArray(arr)) {
-      const fixed = arr.map((e) => ({
-        title: e.title ?? "",
-        kind: e.kind ?? "",
-        space: e.space ?? "",
-        players: e.players ?? "",
-        duration: e.duration ?? "",
-        description: e.description ?? "",
-        imageUrl: e.imageUrl ?? "",
-      }));
-      return { prefix, exercises: fixed };
-    }
-  } catch {}
-  return { prefix: text, exercises: [] };
-}
-
-function encodeExercises(prefix: string, exercises: Exercise[]) {
-  const b64 = Buffer.from(JSON.stringify(exercises), "utf-8").toString("base64");
-  const safePrefix = (prefix || "").trimEnd();
-  return `${safePrefix}\n\n${EX_TAG} ${b64}`;
-}
-
-// ====== Tipos DTO =============================================================
-type ExerciseDTO = {
-  id: string;              // sessionId::index
-  sessionId: string;       // para abrir en el editor de sesión
-  title: string;
-  createdAt: string;       // ISO (de la sesión)
-  kind?: { name: string } | null;
-  space?: string | null;
-  players?: string | null;
-  duration?: string | null;
-  description?: string | null;
-  imageUrl?: string | null;
-};
-
-type SearchQuery = {
-  q?: string;
-  kindName?: string;
-  order?: "createdAt" | "title";
-  dir?: "asc" | "desc";
-  page?: string;
-  pageSize?: string;
-};
-
-function matchesQuery(ex: Exercise, q: string): boolean {
-  const hay = `${ex.title} ${ex.description} ${ex.space} ${ex.players}`.toLowerCase();
-  return hay.includes(q.toLowerCase());
-}
-
-// ====== GET /api/ct/exercises  (search) ======================================
-export async function GET(req: Request) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const q: SearchQuery = {
-      q: searchParams.get("q") || undefined,
-      kindName: searchParams.get("kindName") || undefined,
-      order: (searchParams.get("order") as any) || "createdAt",
-      dir: (searchParams.get("dir") as any) || "desc",
-      page: searchParams.get("page") || "1",
-      pageSize: searchParams.get("pageSize") || "20",
-    };
-
-    const page = Math.max(1, parseInt(q.page || "1", 10) || 1);
-    const pageSize = Math.min(100, Math.max(1, parseInt(q.pageSize || "20", 10) || 20));
-
-    // Traemos un conjunto razonable de sesiones recientes que podrían contener ejercicios
-    // (sin filtrar por user para el MVP, eliminamos authOptions)
-    const sessions = await prisma.session.findMany({
-      where: {
-        description: { contains: EX_TAG },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 1000, // tope defensivo
-    });
-
-    // Aplanamos todos los ejercicios de todas las sesiones
-    let all: ExerciseDTO[] = [];
-    for (const s of sessions) {
-      const { exercises } = decodeExercises(s.description || "");
-      exercises.forEach((ex, idx) => {
-        all.push({
-          id: `${s.id}::${idx}`,
-          sessionId: s.id,
-          title: ex.title || "(Sin título)",
-          createdAt: s.createdAt.toISOString(),
-          kind: ex.kind ? { name: ex.kind } : null,
-          space: ex.space || null,
-          players: ex.players || null,
-          duration: ex.duration || null,
-          description: ex.description || null,
-          imageUrl: ex.imageUrl || null,
-        });
-      });
-    }
-
-    // Filtros
-    if (q.kindName) {
-      all = all.filter((r) => (r.kind?.name || "").toLowerCase() === q.kindName!.toLowerCase());
-    }
-    if (q.q) {
-      all = all.filter((r) =>
-        matchesQuery(
-          {
-            title: r.title,
-            kind: r.kind?.name || "",
-            space: r.space || "",
-            players: r.players || "",
-            duration: r.duration || "",
-            description: r.description || "",
-            imageUrl: r.imageUrl || "",
-          },
-          q.q!
-        )
-      );
-    }
-
-    // Orden
-    const dir = (q.dir === "asc" ? 1 : -1) as 1 | -1;
-    all.sort((a, b) => {
-      if (q.order === "title") {
-        return a.title.localeCompare(b.title) * dir;
-      }
-      // createdAt por defecto
-      return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * dir;
-    });
-
-    // Paginado
-    const total = all.length;
-    const start = (page - 1) * pageSize;
-    const data = all.slice(start, start + pageSize);
-
-    return NextResponse.json({
-      data,
-      meta: { total, page, pageSize },
-    });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
+    const s = Buffer.from(b64, "base64").toString("utf8");
+    return JSON.parse(s) as T;
+  } catch {
+    return null;
   }
 }
 
-// ====== POST /api/ct/exercises (opcional – no lo usamos aún) =================
-// Para un MVP puro, omitimos crear ejercicios sueltos (vivimos dentro de Session).
-export async function POST() {
-  return new NextResponse("No implementado en MVP (alojar dentro de Session)", { status: 501 });
+type VirtualExercise = {
+  id: string;
+  userId: string;
+  title: string;
+  kind: { id?: string; name: string } | null;
+  space: string | null;
+  players: string | null;
+  duration: string | null;
+  description: string | null;
+  imageUrl: string | null;
+  tags: string[];
+  createdAt: Date;
+  updatedAt: Date;
+  sourceSessionId: string;
+};
+
+function extractFromSession(
+  s: { id: string; date: Date; description: string | null },
+  userId: string
+): VirtualExercise[] {
+  const desc = (s.description || "").trim();
+  const idx = desc.lastIndexOf(EX_TAG);
+  if (idx === -1) return [];
+
+  const rest = desc.slice(idx + EX_TAG.length).trim();
+  const b64 = (rest.split(/\s+/)[0] || "").trim();
+  if (!b64) return [];
+
+  const arr = decodeB64Json<Array<Partial<VirtualExercise & { kind: string }>>>(b64);
+  if (!Array.isArray(arr)) return [];
+
+  return arr.map((e, i) => {
+    const kindName = typeof (e as any)?.kind === "string" ? (e as any).kind : "";
+    return {
+      id: `${s.id}__${i}`, // id virtual estable
+      userId,
+      title: (e.title || "").trim() || `Ejercicio ${i + 1}`,
+      kind: kindName ? { name: kindName } : null,
+      space: (e as any)?.space ?? null,
+      players: (e as any)?.players ?? null,
+      duration: (e as any)?.duration ?? null,
+      description: (e as any)?.description ?? null,
+      imageUrl: (e as any)?.imageUrl ?? null,
+      tags: Array.isArray((e as any)?.tags) ? ((e as any).tags as string[]) : [],
+      createdAt: s.date,
+      updatedAt: s.date,
+      sourceSessionId: s.id,
+    };
+  });
+}
+
+/**
+ * GET /api/exercises?q=&kind=&kindId=&order=createdAt|title&dir=desc|asc&page=1&pageSize=20
+ * Devuelve desde DB; si no hay, cae a “virtual” leyendo las sesiones con [EXERCISES] <base64>.
+ */
+export async function GET(req: Request) {
+  const session = await getServerSession();
+  const userId = (session as any)?.user?.id as string | undefined;
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const url = new URL(req.url);
+  const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+  const kindName = (url.searchParams.get("kind") || "").trim().toLowerCase() || undefined;
+  const order = (url.searchParams.get("order") || "createdAt") as "createdAt" | "title";
+  const dir = (url.searchParams.get("dir") || "desc") as "asc" | "desc";
+  const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
+  const pageSize = Math.min(50, Math.max(5, parseInt(url.searchParams.get("pageSize") || "20", 10)));
+
+  // ---------- Primero intentamos desde DB ----------
+  const where: Prisma.ExerciseWhereInput = {
+    userId,
+    ...(kindName
+      ? { kind: { is: { name: { equals: kindName, mode: "insensitive" as Prisma.QueryMode } } } }
+      : {}),
+    ...(q
+      ? {
+          OR: [
+            { title: { contains: q, mode: "insensitive" as Prisma.QueryMode } },
+            { description: { contains: q, mode: "insensitive" as Prisma.QueryMode } },
+            { space: { contains: q, mode: "insensitive" as Prisma.QueryMode } },
+            { players: { contains: q, mode: "insensitive" as Prisma.QueryMode } },
+          ],
+        }
+      : {}),
+  };
+
+  const totalDb = await prisma.exercise.count({ where });
+  if (totalDb > 0) {
+    const rowsDb = await prisma.exercise.findMany({
+      where,
+      include: { kind: true },
+      orderBy: { [order]: dir },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    });
+
+    const data = rowsDb.map((r: any) => {
+      const fromId = typeof r.id === "string" && r.id.includes("__") ? r.id.split("__")[0] : null;
+      const sourceSessionId = r.sessionId ?? fromId ?? null;
+      return { ...r, sourceSessionId };
+    });
+
+    return NextResponse.json({
+      data,
+      meta: { total: totalDb, page, pageSize, pages: Math.max(1, Math.ceil(totalDb / pageSize)) },
+    });
+  }
+
+  // ---------- Fallback: construir “virtual” desde sesiones ----------
+  // Traemos un rango razonable (p. ej. últimos 180 días)
+  const since = new Date();
+  since.setDate(since.getDate() - 180);
+
+  const sessions = await prisma.session.findMany({
+    where: { createdBy: userId, date: { gte: since } },
+    orderBy: { date: "desc" },
+    select: { id: true, date: true, description: true, title: true },
+    take: 500, // límite defensivo
+  });
+
+  // Extraer ejercicios del bloque [EXERCISES] de cada sesión
+  let virtual: VirtualExercise[] = [];
+  for (const s of sessions) {
+    const items = extractFromSession(s, userId);
+    virtual.push(...items);
+  }
+
+  // Filtros
+  if (q) {
+    const qi = q.toLowerCase();
+    virtual = virtual.filter((r) => {
+      const kind = r.kind?.name?.toLowerCase() || "";
+      return (
+        r.title.toLowerCase().includes(qi) ||
+        (r.description || "").toLowerCase().includes(qi) ||
+        (r.space || "").toLowerCase().includes(qi) ||
+        (r.players || "").toLowerCase().includes(qi) ||
+        kind.includes(qi)
+      );
+    });
+  }
+  if (kindName) {
+    virtual = virtual.filter((r) => (r.kind?.name || "").toLowerCase() === kindName);
+  }
+
+  // Orden
+  virtual.sort((a, b) => {
+    const A = order === "title" ? a.title : a.createdAt.getTime();
+    const B = order === "title" ? b.title : b.createdAt.getTime();
+    const cmp = A > B ? 1 : A < B ? -1 : 0;
+    return dir === "asc" ? cmp : -cmp;
+  });
+
+  // Paginación
+  const total = virtual.length;
+  const start = (page - 1) * pageSize;
+  const data = virtual.slice(start, start + pageSize);
+
+  return NextResponse.json({
+    data,
+    meta: { total, page, pageSize, pages: Math.max(1, Math.ceil(total / pageSize)) },
+  });
 }
