@@ -10,7 +10,7 @@ function NavItem({
   children,
   soon,
 }: {
-  href?: Route | string;
+  href?: Route;
   children: React.ReactNode;
   soon?: boolean;
 }) {
@@ -62,9 +62,9 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
               RPE (semana)
             </NavItem>
           </li>
-          {/* 👇 usar string plano para evitar el error de typedRoutes */}
+          {/* Mientras typedRoutes no “vea” la ruta en el union, usamos assertion */}
           <li>
-            <NavItem href={"/ct/injuries"}>Lesionados</NavItem>
+            <NavItem href={"/ct/injuries" as Route}>Lesionados</NavItem>
           </li>
         </ul>
 
