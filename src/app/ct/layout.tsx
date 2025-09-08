@@ -1,3 +1,4 @@
+// src/app/ct/layout.tsx
 "use client";
 
 import * as React from "react";
@@ -9,7 +10,7 @@ function NavItem({
   children,
   soon,
 }: {
-  href?: Route;
+  href?: Route | string;
   children: React.ReactNode;
   soon?: boolean;
 }) {
@@ -61,9 +62,9 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
               RPE (semana)
             </NavItem>
           </li>
-          {/* 👇 ahora activo */}
+          {/* 👇 usar string plano para evitar el error de typedRoutes */}
           <li>
-            <NavItem href={"/ct/injuries" satisfies Route}>Lesionados</NavItem>
+            <NavItem href={"/ct/injuries"}>Lesionados</NavItem>
           </li>
         </ul>
 
@@ -79,6 +80,7 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
           <li>
             <NavItem href={"/ct/sessions" satisfies Route}>Sesiones</NavItem>
           </li>
+          {/* Ejercicios -> redirige al buscador */}
           <li>
             <NavItem href={"/ct/exercises" as any}>Ejercicios</NavItem>
           </li>
