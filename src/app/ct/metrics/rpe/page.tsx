@@ -1,3 +1,4 @@
+// src/app/ct/metrics/rpe/page.tsx
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -143,6 +144,12 @@ function RPECT() {
     );
   }, [rows, q]);
 
+  // 🔽 ordenamos por AU desc una sola vez por render
+  const filteredSorted = useMemo(
+    () => filtered.slice().sort((a, b) => srpeOf(b) - srpeOf(a)),
+    [filtered]
+  );
+
   async function applyDefaultDuration() {
     const minutes = Math.max(0, Number(bulkMin || 0));
     if (!minutes) {
@@ -183,7 +190,7 @@ function RPECT() {
     }
   }
 
-  // ✅ ahora actualiza por ID con PATCH (coherente con tu route /[id])
+  // PATCH por id (coherente con /api/metrics/rpe/[id])
   async function saveOne(row: Row, newMinStr: string) {
     const minutes = newMinStr === "" ? null : Math.max(0, Number(newMinStr));
     setSaving(true);
@@ -212,7 +219,9 @@ function RPECT() {
       .filter((v) => !Number.isNaN(v))
       .reduce((a, b) => a + b, 0);
 
-    let b1 = 0, b2 = 0, b3 = 0;
+    let b1 = 0,
+      b2 = 0,
+      b3 = 0;
     for (const r of rows) {
       const v = Number(r.rpe || 0);
       if (v <= 3) b1++;
@@ -235,7 +244,7 @@ function RPECT() {
     const header = ["Jugador", "Fecha", "RPE", "Minutos", "sRPE_AU"];
     const lines = [header.join(",")];
 
-    for (const r of filtered) {
+    for (const r of filteredSorted) {
       const jug = (r.userName || r.playerKey || "Jugador").replace(/"/g, '""');
       const au = srpeOf(r);
       lines.push(
@@ -252,7 +261,7 @@ function RPECT() {
     URL.revokeObjectURL(url);
   }
 
-  // ----- KPIs de rango (fetch por día, igual que Wellness) -----
+  // ----- KPIs de rango -----
   useEffect(() => {
     if (tab !== "kpis") return;
     (async () => {
@@ -456,7 +465,7 @@ function RPECT() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
-            <span className="text-[12px] text-gray-500">{filtered.length} resultado(s)</span>
+            <span className="text-[12px] text-gray-500">{filteredSorted.length} resultado(s)</span>
           </div>
 
           {/* Tabla */}
@@ -464,7 +473,7 @@ function RPECT() {
             <div className="bg-gray-50 px-3 py-2 text-[12px] font-semibold uppercase">Entradas</div>
             {loading ? (
               <div className="p-4 text-gray-500">Cargando…</div>
-            ) : filtered.length === 0 ? (
+            ) : filteredSorted.length === 0 ? (
               <div className="p-4 text-gray-500 italic">Sin datos</div>
             ) : (
               <div className="overflow-x-auto">
@@ -486,47 +495,44 @@ function RPECT() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered
-                      .slice()
-                      .sort((a, b) => srpeOf(b) - srpeOf(a)) {/* ✅ AU desc */}
-                      .map((r) => (
-                        <tr key={r.id} className="border-b last:border-0">
-                          <td className="px-3 py-2 font-medium">
-                            {r.userName || r.playerKey || "Jugador"}
-                          </td>
-                          <td className="px-3 py-2">{r.rpe}</td>
-                          <td className="px-3 py-2">
-                            <input
-                              className="w-24 rounded-md border px-2 py-1 text-sm"
-                              defaultValue={r.duration ?? ""}
-                              onBlur={(e) => saveOne(r, e.currentTarget.value)}
-                              placeholder="min"
-                              inputMode="numeric"
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            {(r.load ?? null) !== null ? Math.round(Number(r.load)) : "—"}
-                          </td>
-                          <td className="px-3 py-2">
-                            <div className="flex justify-end gap-2">
-                              <button
-                                onClick={() =>
-                                  openQuickViewFor(r.userName || r.playerKey || "Jugador")
-                                }
-                                className="rounded-lg border px-2 py-1 text-[11px] hover:bg-gray-50"
-                              >
-                                Ver
-                              </button>
-                              <button
-                                onClick={() => saveOne(r, "")}
-                                className="rounded-lg border px-2 py-1 text-[11px] hover:bg-gray-50"
-                              >
-                                Vaciar
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                    {filteredSorted.map((r) => (
+                      <tr key={r.id} className="border-b last:border-0">
+                        <td className="px-3 py-2 font-medium">
+                          {r.userName || r.playerKey || "Jugador"}
+                        </td>
+                        <td className="px-3 py-2">{r.rpe}</td>
+                        <td className="px-3 py-2">
+                          <input
+                            className="w-24 rounded-md border px-2 py-1 text-sm"
+                            defaultValue={r.duration ?? ""}
+                            onBlur={(e) => saveOne(r, e.currentTarget.value)}
+                            placeholder="min"
+                            inputMode="numeric"
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          {(r.load ?? null) !== null ? Math.round(Number(r.load)) : "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() =>
+                                openQuickViewFor(r.userName || r.playerKey || "Jugador")
+                              }
+                              className="rounded-lg border px-2 py-1 text-[11px] hover:bg-gray-50"
+                            >
+                              Ver
+                            </button>
+                            <button
+                              onClick={() => saveOne(r, "")}
+                              className="rounded-lg border px-2 py-1 text-[11px] hover:bg-gray-50"
+                            >
+                              Vaciar
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -665,7 +671,7 @@ function RPECT() {
                 .sort(
                   (a, b) =>
                     (a.userName || "").localeCompare(b.userName || "") ||
-                    (srpeOf(b) - srpeOf(a))
+                    srpeOf(b) - srpeOf(a)
                 )
                 .map((r) => {
                   const au = srpeOf(r);
