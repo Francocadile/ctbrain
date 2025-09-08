@@ -1,87 +1,88 @@
-// src/app/api/injuries/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 
-export const dynamic = "force-dynamic";
-const prisma = new PrismaClient();
+// Prisma singleton simple para evitar leaks en dev
+const prisma = (globalThis as any).prisma || new PrismaClient();
+if (process.env.NODE_ENV !== "production") (globalThis as any).prisma = prisma;
 
-function toUTCStart(ymd: string) {
-  const d = new Date(`${ymd}T00:00:00.000Z`);
-  if (Number.isNaN(d.getTime())) throw new Error("Fecha inválida");
-  return d;
-}
-function nextUTCDay(d: Date) {
-  const n = new Date(d);
-  n.setUTCDate(n.getUTCDate() + 1);
-  return n;
+function fromYMD(s: string): Date {
+  // normalizamos a 00:00 local → guardá tus fechas siempre “día” (sin hora) para coherencia
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(Date.UTC(y, (m || 1) - 1, d || 1, 0, 0, 0));
 }
 
-export async function GET(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const date = searchParams.get("date") || "";
-    if (!date) {
-      // últimas 30 por defecto, para debug
-      const rows = await prisma.injuryEntry.findMany({
-        include: { user: { select: { name: true, email: true } } },
-        orderBy: [{ date: "desc" }],
-        take: 30,
-      });
-      const mapped = rows.map((r) => ({
-        ...r,
-        userName: r.user?.name ?? r.user?.email ?? "—",
-      }));
-      return NextResponse.json(mapped);
-    }
-    const start = toUTCStart(date);
-    const end = nextUTCDay(start);
-
-    const rows = await prisma.injuryEntry.findMany({
-      where: { date: { gte: start, lt: end } },
-      include: { user: { select: { name: true, email: true } } },
-      orderBy: [{ date: "desc" }],
-    });
-    const mapped = rows.map((r) => ({
-      ...r,
-      userName: r.user?.name ?? r.user?.email ?? "—",
-    }));
-    return NextResponse.json(mapped);
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const dateStr = searchParams.get("date");
+  if (!dateStr) {
+    return NextResponse.json({ error: "Missing ?date=YYYY-MM-DD" }, { status: 400 });
   }
+
+  const date = fromYMD(dateStr);
+
+  const rows = await prisma.injuryEntry.findMany({
+    where: { date },
+    include: { user: { select: { id: true, name: true, email: true } } },
+    orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+  });
+
+  const mapped = rows.map((r) => ({
+    id: r.id,
+    userId: r.userId,
+    userName: r.user?.name || r.user?.email || "—",
+    date: dateStr,
+    status: r.status, // "ACTIVO" | "REINTEGRO" | "ALTA"
+    bodyPart: r.bodyPart,
+    laterality: r.laterality,
+    mechanism: r.mechanism,
+    expectedReturn: r.expectedReturn ? r.expectedReturn.toISOString().slice(0, 10) : null,
+    notes: r.notes,
+    updatedAt: r.updatedAt,
+  }));
+
+  return NextResponse.json(mapped);
 }
 
-export async function POST(req: NextRequest) {
-  try {
-    const b = await req.json();
-    const userId = String(b?.userId || "").trim();
-    const dateStr = String(b?.date || "").trim();
-    if (!userId || !dateStr) {
-      return new NextResponse("userId y date requeridos", { status: 400 });
-    }
-    const start = toUTCStart(dateStr);
+export async function POST(req: Request) {
+  const body = await req.json().catch(() => ({}));
+  const {
+    userId,
+    date, // YYYY-MM-DD
+    status, // "ACTIVO" | "REINTEGRO" | "ALTA"
+    bodyPart,
+    laterality,
+    mechanism,
+    expectedReturn, // YYYY-MM-DD | null
+    notes,
+  } = body || {};
 
-    const data = {
-      status: String(b?.status || "ACTIVO"),
-      bodyPart: b?.bodyPart ? String(b.bodyPart) : null,
-      laterality: b?.laterality ? String(b.laterality) : null,
-      mechanism: b?.mechanism ? String(b.mechanism) : null,
-      expectedReturn: b?.expectedReturn ? new Date(b.expectedReturn) : null,
-      notes: b?.notes ? String(b.notes) : null,
-    };
-
-    const entry = await prisma.injuryEntry.upsert({
-      where: { userId_date: { userId, date: start } },
-      update: data,
-      create: { userId, date: start, ...data },
-      include: { user: { select: { name: true, email: true } } },
-    });
-
-    return NextResponse.json({
-      ...entry,
-      userName: entry.user?.name ?? entry.user?.email ?? "—",
-    });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
+  if (!userId || !date || !status) {
+    return NextResponse.json(
+      { error: "Missing userId, date, or status" },
+      { status: 400 }
+    );
   }
+
+  const dateObj = fromYMD(date);
+  const expected = expectedReturn ? fromYMD(expectedReturn) : null;
+
+  // upsert por (userId, date) — si tu esquema tiene @@unique([userId, date]) funciona perfecto
+  const existing = await prisma.injuryEntry.findFirst({ where: { userId, date: dateObj } });
+
+  const payload = {
+    userId,
+    date: dateObj,
+    status: String(status),
+    bodyPart: bodyPart ?? null,
+    laterality: laterality ?? null,
+    mechanism: mechanism ?? null,
+    expectedReturn: expected,
+    notes: notes ?? null,
+  };
+
+  const saved = existing
+    ? await prisma.injuryEntry.update({ where: { id: existing.id }, data: payload })
+    : await prisma.injuryEntry.create({ data: payload });
+
+  return NextResponse.json({ id: saved.id }, { status: existing ? 200 : 201 });
 }
