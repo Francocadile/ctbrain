@@ -41,8 +41,11 @@ model User {
   // preferencias
   plannerPrefs    PlannerPrefs?
 
-  // 👇 biblioteca personal
+  // biblioteca personal
   exercises       Exercise[]
+
+  // 👇 NUEVO: relación con lesiones
+  injuries        InjuryEntry[]
 }
 
 model Session {
@@ -84,7 +87,7 @@ model ExerciseKind {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // 👇 back-relation requerido por Prisma
+  // back-relation requerido por Prisma
   exercises  Exercise[]
 }
 
@@ -169,4 +172,25 @@ model PlannerPrefs {
   updatedAt DateTime @updatedAt
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ===== NUEVO: Lesionados =====
+model InjuryEntry {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date           DateTime          // día de referencia (UTC 00:00)
+  status         String            // "ACTIVO" | "REINTEGRO" | "ALTA"
+  bodyPart       String?
+  laterality     String?
+  mechanism      String?
+  expectedReturn DateTime?
+  notes          String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId, date])
+  @@unique([userId, date]) // habilita upsert por (userId,date)
 }
