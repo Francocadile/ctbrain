@@ -23,6 +23,33 @@ enum SessionType {
   RECUPERACION
 }
 
+/* ==== NUEVO ==== */
+enum InjuryStatus {
+  ACTIVO
+  REINTEGRO
+  ALTA
+}
+
+enum Laterality {
+  IZQ
+  DER
+  BILATERAL
+  NA
+}
+
+enum Severity {
+  LEVE
+  MODERADA
+  SEVERA
+}
+
+enum Availability {
+  OUT
+  MODIFIED
+  FULL
+}
+/* ================ */
+
 model User {
   id        String    @id @default(cuid())
   email     String    @unique
@@ -32,20 +59,14 @@ model User {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  sessions       Session[]     @relation("UserSessions")
-
-  // métricas
+  sessions        Session[]      @relation("UserSessions")
   rpeEntries      RPEEntry[]
   wellnessEntries WellnessEntry[]
-
-  // preferencias
   plannerPrefs    PlannerPrefs?
-
-  // biblioteca personal
   exercises       Exercise[]
 
-  // 👇 NUEVO: relación con lesiones
-  injuries        InjuryEntry[]
+  /* ==== NUEVO ==== */
+  injuryEntries   InjuryEntry[]
 }
 
 model Session {
@@ -87,7 +108,6 @@ model ExerciseKind {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // back-relation requerido por Prisma
   exercises  Exercise[]
 }
 
@@ -174,23 +194,38 @@ model PlannerPrefs {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// ===== NUEVO: Lesionados =====
+/* ===== Lesiones (NUEVO) =====
+   Registro DIARIO por jugador (userId+date unique).
+   Incluye estado clínico, restricciones ejecutables y ETR. */
 model InjuryEntry {
-  id             String   @id @default(cuid())
-  userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String        @id @default(cuid())
+  userId     String
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  date           DateTime          // día de referencia (UTC 00:00)
-  status         String            // "ACTIVO" | "REINTEGRO" | "ALTA"
-  bodyPart       String?
-  laterality     String?
-  mechanism      String?
+  date       DateTime
+  status     InjuryStatus  @default(ACTIVO)
+
+  bodyPart   String?
+  laterality Laterality?
+  mechanism  String?
+  severity   Severity?
   expectedReturn DateTime?
-  notes          String?
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  availability Availability?   // OUT / MODIFIED / FULL (día)
+  pain        Int?             // 0..10
+  notes       String?
 
+  // Restricciones “ejecutables”
+  capMinutes  Int?
+  noSprint    Boolean         @default(false)
+  noChangeOfDirection Boolean @default(false)
+  gymOnly     Boolean         @default(false)
+  noContact   Boolean         @default(false)
+
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@unique([userId, date])
+  @@index([date])
   @@index([userId, date])
-  @@unique([userId, date]) // habilita upsert por (userId,date)
 }
