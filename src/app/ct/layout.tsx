@@ -1,3 +1,6 @@
+// src/app/ct/layout.tsx
+"use client";
+
 import * as React from "react";
 import Link from "next/link";
 import type { Route } from "next"; // typedRoutes
@@ -19,7 +22,10 @@ function NavItem({
     );
   }
   return (
-    <Link href={href} className="block rounded-md px-2 py-1.5 text-sm hover:bg-gray-100 transition">
+    <Link
+      href={href}
+      className="block rounded-md px-2 py-1.5 text-sm hover:bg-gray-100 transition"
+    >
       {children}
     </Link>
   );
@@ -30,22 +36,50 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex bg-gray-50">
       {/* Sidebar */}
       <aside className="w-64 shrink-0 border-r bg-white p-3 space-y-3">
-        <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">INICIO</div>
+        <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
+          INICIO
+        </div>
         <ul className="space-y-0.5 mb-2">
-          <li><NavItem href={"/ct" satisfies Route}>Dashboard / Inicio rápido</NavItem></li>
+          <li>
+            <NavItem href={"/ct" satisfies Route}>Dashboard / Inicio rápido</NavItem>
+          </li>
         </ul>
 
-        <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">MONITOREO</div>
+        <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
+          MONITOREO
+        </div>
         <ul className="space-y-0.5 mb-2">
-          <li><NavItem href={"/ct/metrics/wellness" satisfies Route}>Wellness (día)</NavItem></li>
-          <li><NavItem href={"/ct/metrics/rpe" satisfies Route}>RPE (día)</NavItem></li>
-          <li><NavItem soon>Lesionados</NavItem></li>
+          <li>
+            <NavItem href={"/ct/metrics/wellness" satisfies Route}>
+              Wellness (día)
+            </NavItem>
+          </li>
+          <li>
+            <NavItem href={"/ct/metrics/rpe" satisfies Route}>RPE (día)</NavItem>
+          </li>
+          {/* ✅ Mejora: agregamos RPE (semana) al menú */}
+          <li>
+            <NavItem href={"/ct/metrics/rpe/semana" satisfies Route}>
+              RPE (semana)
+            </NavItem>
+          </li>
+          <li>
+            <NavItem soon>Lesionados</NavItem>
+          </li>
         </ul>
 
-        <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">PLANIFICACIÓN</div>
+        <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
+          PLANIFICACIÓN
+        </div>
         <ul className="space-y-0.5 mb-2">
-          <li><NavItem href={"/ct/plan-semanal" satisfies Route}>Plan semanal (Editor)</NavItem></li>
-          <li><NavItem href={"/ct/sessions" satisfies Route}>Sesiones</NavItem></li>
+          <li>
+            <NavItem href={"/ct/plan-semanal" satisfies Route}>
+              Plan semanal (Editor)
+            </NavItem>
+          </li>
+          <li>
+            <NavItem href={"/ct/sessions" satisfies Route}>Sesiones</NavItem>
+          </li>
           {/* Ejercicios -> redirige al buscador */}
           <li>
             <NavItem href={"/ct/exercises" as any}>Ejercicios</NavItem>
