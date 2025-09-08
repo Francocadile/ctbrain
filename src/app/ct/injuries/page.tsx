@@ -1,310 +1,412 @@
 "use client";
 
 import * as React from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import type { Route } from "next";
+import HelpTip from "@/components/HelpTip";
 
-type Player = { id: string; label: string };
+type InjuryStatus = "ACTIVO" | "REINTEGRO" | "ALTA";
+type Availability =
+  | "FULL"
+  | "LIMITADA"
+  | "INDIVIDUAL"
+  | "REHAB"
+  | "DESCANSO";
+
 type InjuryRow = {
   id: string;
   userId: string;
   userName: string;
   date: string; // YYYY-MM-DD
-  status: string;
+  status: InjuryStatus;
   bodyPart: string | null;
-  availability: string;
-  pain: number | null;
-  capMinutes: number | null;
-  noSprint: boolean;
-  noChangeOfDirection: boolean;
-  gymOnly: boolean;
-  noContact: boolean;
-  laterality: string | null;
+  laterality: "IZQ" | "DER" | "BIL" | "NA" | null;
   mechanism: string | null;
-  severity: string | null;
+  severity: "LEVE" | "MODERADA" | "SEVERA" | null;
   expectedReturn: string | null; // YYYY-MM-DD | null
+  availability: Availability | null;
+
+  // restricciones (opcionales)
+  pain?: number | null;
+  capMinutes?: number | null;
+  noSprint?: boolean | null;
+  noChangeOfDirection?: boolean | null;
+  gymOnly?: boolean | null;
+  noContact?: boolean | null;
 };
 
-const STATUSES = ["Activo", "Reintegro", "Alta"] as const;
-const BODYPARTS = [
-  "Isquiotibiales",
-  "Cuádriceps",
-  "Adductores",
-  "Tobillo",
-  "Rodilla",
-  "Espalda",
-  "Hombro",
-  "Otra",
-] as const;
-
-function formatDate(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+function toYMD(d: Date) {
+  return d.toISOString().slice(0, 10);
 }
 
 export default function InjuriesPage() {
   const router = useRouter();
-  const sp = useSearchParams();
-  const today = React.useMemo(() => new Date(), []);
-  const [date, setDate] = React.useState<string>(
-    sp.get("date") ?? formatDate(today)
-  );
+  const search = useSearchParams();
 
-  // Alta rápida
-  const [players, setPlayers] = React.useState<Player[]>([]);
-  const [playerId, setPlayerId] = React.useState("");
-  const [status, setStatus] = React.useState<(typeof STATUSES)[number]>("Activo");
-  const [bodyPart, setBodyPart] =
-    React.useState<(typeof BODYPARTS)[number]>("Isquiotibiales");
+  const today = useMemo(() => toYMD(new Date()), []);
+  const [date, setDate] = useState<string>(search.get("date") || today);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [rows, setRows] = useState<InjuryRow[]>([]);
+  const [q, setQ] = useState<string>("");
 
-  // Data del día
-  const [rows, setRows] = React.useState<InjuryRow[]>([]);
-  const [loading, setLoading] = React.useState(false);
+  // ---- Alta rápida (form mini) ----
+  const [form, setForm] = useState<Partial<InjuryRow>>({
+    userId: "",
+    status: "ACTIVO",
+    bodyPart: "",
+    laterality: "NA",
+    mechanism: "",
+    severity: "LEVE",
+    expectedReturn: "",
+    availability: "LIMITADA",
+  });
 
-  // Ayuda (?)
-  const [showHelp, setShowHelp] = React.useState(false);
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return rows;
+    return rows.filter(
+      (r) =>
+        r.userName.toLowerCase().includes(t) ||
+        (r.bodyPart || "").toLowerCase().includes(t) ||
+        (r.mechanism || "").toLowerCase().includes(t)
+    );
+  }, [rows, q]);
 
-  // Cargar jugadores para el selector
-  React.useEffect(() => {
-    fetch("/api/users/players")
-      .then((r) => r.json())
-      .then((data) =>
-        setPlayers(
-          data.map((p: any) => ({
-            id: p.id,
-            label: p.name ?? p.email ?? "Sin nombre",
-          }))
-        )
-      )
-      .catch(() => setPlayers([]));
-  }, []);
-
-  // Cargar entradas del día
-  const loadDay = React.useCallback(async () => {
+  const loadDay = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch(`/api/injuries?date=${date}`, { cache: "no-store" });
-      const data: InjuryRow[] = await r.json();
+      const res = await fetch(`/api/injuries?date=${date}`, { cache: "no-store" });
+      const data = res.ok ? await res.json() : [];
       setRows(Array.isArray(data) ? data : []);
-    } catch {
-      setRows([]);
     } finally {
       setLoading(false);
     }
   }, [date]);
 
-  React.useEffect(() => {
-    // mantener la fecha en la URL para copiar/pegar
+  // Mantiene la fecha en la URL sin romper typedRoutes (cast a Route)
+  useEffect(() => {
     const url = `/ct/injuries?date=${date}`;
-    router.replace(url);
+    router.replace(url as unknown as Route);
     loadDay();
   }, [date, router, loadDay]);
 
-  async function onSave() {
-    if (!playerId) {
-      alert("Elegí un jugador.");
+  async function saveQuick() {
+    if (!form.userId) {
+      alert("Elegí un jugador (userId).");
       return;
     }
+    setSaving(true);
     try {
+      const payload = {
+        userId: form.userId,
+        date,
+        status: form.status || "ACTIVO",
+        bodyPart: form.bodyPart || null,
+        laterality: form.laterality || "NA",
+        mechanism: form.mechanism || null,
+        severity: form.severity || null,
+        expectedReturn: form.expectedReturn || null,
+        availability: form.availability || "LIMITADA",
+        pain: form.pain ?? null,
+        capMinutes: form.capMinutes ?? null,
+        noSprint: !!form.noSprint,
+        noChangeOfDirection: !!form.noChangeOfDirection,
+        gymOnly: !!form.gymOnly,
+        noContact: !!form.noContact,
+      };
+
       const res = await fetch("/api/injuries", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: playerId, // 👈 ID real del jugador
-          date,
-          status,
-          bodyPart,
-        }),
+        body: JSON.stringify(payload),
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        alert(err?.error ?? "Error creando entrada");
-        return;
-      }
-      setPlayerId("");
-      setStatus("Activo");
-      setBodyPart("Isquiotibiales");
+      if (!res.ok) throw new Error(await res.text());
+      setForm({
+        userId: "",
+        status: "ACTIVO",
+        bodyPart: "",
+        laterality: "NA",
+        mechanism: "",
+        severity: "LEVE",
+        expectedReturn: "",
+        availability: "LIMITADA",
+        pain: undefined,
+        capMinutes: undefined,
+        noSprint: undefined,
+        noChangeOfDirection: undefined,
+        gymOnly: undefined,
+        noContact: undefined,
+      });
       await loadDay();
-    } catch (e) {
-      alert("Error creando entrada");
+    } catch (e: any) {
+      alert(e?.message || "Error al guardar");
+    } finally {
+      setSaving(false);
     }
   }
 
-  const activos = rows.filter((r) => r.status === "Activo").length;
-  const reintegro = rows.filter((r) => r.status === "Reintegro").length;
-  const altasHoy = rows.filter((r) => r.status === "Alta").length;
-
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="flex items-center gap-2">
-        <h1 className="text-xl font-semibold">Lesionados — Diario</h1>
-        {/* Botón (?) ayuda */}
-        <button
-          aria-label="Ayuda"
-          onClick={() => setShowHelp((s) => !s)}
-          className="h-6 w-6 rounded-full border text-xs font-bold"
-          title="Qué es esta pantalla"
-        >
-          ?
-        </button>
-      </div>
-
-      {showHelp && (
-        <div className="mt-3 text-sm rounded-md border p-3 bg-white">
-          <p className="mb-1">
-            Esta vista permite registrar el <strong>estado diario</strong> de cada
-            jugador (Activo, Reintegro, Alta) y una zona corporal.
+    <div className="p-4 space-y-4">
+      {/* Header */}
+      <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-bold">
+            Lesionados (CT){" "}
+            <HelpTip text="Vista de estado clínico diario. El cuerpo médico carga y actualiza; el CT ve disponibilidad y restricciones para planificar." />
+          </h1>
+          <p className="text-xs text-gray-500">
+            Fecha seleccionada: <b>{date}</b> • {rows.length} registro(s)
           </p>
-          <ul className="list-disc ml-5">
-            <li>Usá “Alta rápida” para cargar una entrada básica del día.</li>
-            <li>
-              Los **planes/restricciones** se completan luego en el perfil del
-              jugador.
-            </li>
-            <li>
-              El **valor del jugador** se guarda por <strong>ID</strong>, no por
-              nombre.
-            </li>
-          </ul>
         </div>
-      )}
-
-      {/* Filtros / fecha */}
-      <div className="mt-4 flex items-center gap-2">
-        <input
-          type="date"
-          className="rounded-md border px-2 py-1.5 text-sm"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-        />
-        <button
-          onClick={loadDay}
-          className="rounded-md border px-3 py-1.5 text-sm"
-        >
-          Recargar
-        </button>
-        <a
-          className="ml-auto rounded-md border px-3 py-1.5 text-sm"
-          href={`/api/injuries/export?date=${date}`}
-        >
-          Exportar CSV
-        </a>
-      </div>
-
-      {/* KPIs */}
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-4 gap-3">
-        <KpiCard label="ACTIVOS" value={activos} />
-        <KpiCard label="REINTEGRO" value={reintegro} />
-        <KpiCard label="ALTAS HOY" value={altasHoy} />
-        <KpiCard label="ENTRADAS ÚLTIMOS 30D" value={rows.length} />
-      </div>
-
-      {/* Alta rápida */}
-      <div className="mt-5 rounded-md border bg-white p-3">
-        <div className="text-xs font-semibold text-gray-500 mb-2">Alta rápida</div>
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-          <select
+        <div className="flex items-center gap-2">
+          <input
+            type="date"
             className="rounded-md border px-2 py-1.5 text-sm"
-            value={playerId}
-            onChange={(e) => setPlayerId(e.target.value)}
-          >
-            <option value="">Elegí un jugador…</option>
-            {players.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-
-          <select
-            className="rounded-md border px-2 py-1.5 text-sm"
-            value={bodyPart}
-            onChange={(e) => setBodyPart(e.target.value as any)}
-          >
-            {BODYPARTS.map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-          </select>
-
-          <select
-            className="rounded-md border px-2 py-1.5 text-sm"
-            value={status}
-            onChange={(e) => setStatus(e.target.value as any)}
-          >
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
           <button
-            onClick={onSave}
-            className="rounded-md bg-black text-white px-3 py-1.5 text-sm"
+            onClick={loadDay}
+            className="rounded-lg border px-2 py-1 text-sm hover:bg-gray-50"
+          >
+            Recargar
+          </button>
+        </div>
+      </header>
+
+      {/* Alta rápida (MVP) */}
+      <section className="rounded-xl border bg-white p-3 space-y-2">
+        <div className="text-[12px] font-semibold uppercase">
+          Alta rápida{" "}
+          <HelpTip text="Carga mínima diaria: seleccioná jugador, estado y datos claves. Esto crea/actualiza el registro del día (upsert por jugador+fecha)." />
+        </div>
+        <div className="grid md:grid-cols-6 gap-2">
+          <input
+            className="rounded-md border px-2 py-1 text-sm md:col-span-2"
+            placeholder="userId del jugador"
+            value={form.userId || ""}
+            onChange={(e) => setForm((f) => ({ ...f, userId: e.target.value }))}
+          />
+          <select
+            className="rounded-md border px-2 py-1 text-sm"
+            value={form.status || "ACTIVO"}
+            onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as InjuryStatus }))}
+          >
+            <option value="ACTIVO">Activo</option>
+            <option value="REINTEGRO">Reintegro</option>
+            <option value="ALTA">Alta médica</option>
+          </select>
+          <input
+            className="rounded-md border px-2 py-1 text-sm"
+            placeholder="Zona / Parte del cuerpo"
+            value={form.bodyPart || ""}
+            onChange={(e) => setForm((f) => ({ ...f, bodyPart: e.target.value }))}
+          />
+          <select
+            className="rounded-md border px-2 py-1 text-sm"
+            value={form.laterality || "NA"}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, laterality: e.target.value as InjuryRow["laterality"] }))
+            }
+          >
+            <option value="NA">—</option>
+            <option value="IZQ">Izq</option>
+            <option value="DER">Der</option>
+            <option value="BIL">Bilateral</option>
+          </select>
+          <select
+            className="rounded-md border px-2 py-1 text-sm"
+            value={form.availability || "LIMITADA"}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, availability: e.target.value as Availability }))
+            }
+          >
+            <option value="FULL">Full</option>
+            <option value="LIMITADA">Limitada</option>
+            <option value="INDIVIDUAL">Individual</option>
+            <option value="REHAB">Rehab</option>
+            <option value="DESCANSO">Descanso</option>
+          </select>
+        </div>
+
+        <div className="grid md:grid-cols-6 gap-2">
+          <input
+            className="rounded-md border px-2 py-1 text-sm md:col-span-2"
+            placeholder="Mecanismo (p. ej. sobreuso, impacto…)"
+            value={form.mechanism || ""}
+            onChange={(e) => setForm((f) => ({ ...f, mechanism: e.target.value }))}
+          />
+          <select
+            className="rounded-md border px-2 py-1 text-sm"
+            value={form.severity || "LEVE"}
+            onChange={(e) => setForm((f) => ({ ...f, severity: e.target.value as any }))}
+          >
+            <option value="LEVE">Leve</option>
+            <option value="MODERADA">Moderada</option>
+            <option value="SEVERA">Severa</option>
+          </select>
+          <input
+            type="date"
+            className="rounded-md border px-2 py-1 text-sm"
+            placeholder="ETR (YYYY-MM-DD)"
+            value={form.expectedReturn || ""}
+            onChange={(e) => setForm((f) => ({ ...f, expectedReturn: e.target.value }))}
+          />
+          <input
+            type="number"
+            className="rounded-md border px-2 py-1 text-sm"
+            placeholder="Dolor (0-10)"
+            value={form.pain ?? ""}
+            onChange={(e) => setForm((f) => ({ ...f, pain: e.target.value === "" ? null : Number(e.target.value) }))}
+          />
+          <input
+            type="number"
+            className="rounded-md border px-2 py-1 text-sm"
+            placeholder="Tope min (cap)"
+            value={form.capMinutes ?? ""}
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                capMinutes: e.target.value === "" ? null : Number(e.target.value),
+              }))
+            }
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="inline-flex items-center gap-1 text-sm">
+            <input
+              type="checkbox"
+              checked={!!form.noSprint}
+              onChange={(e) => setForm((f) => ({ ...f, noSprint: e.target.checked }))}
+            />
+            No sprint
+          </label>
+          <label className="inline-flex items-center gap-1 text-sm">
+            <input
+              type="checkbox"
+              checked={!!form.noChangeOfDirection}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, noChangeOfDirection: e.target.checked }))
+              }
+            />
+            Sin cambios de dirección
+          </label>
+          <label className="inline-flex items-center gap-1 text-sm">
+            <input
+              type="checkbox"
+              checked={!!form.gymOnly}
+              onChange={(e) => setForm((f) => ({ ...f, gymOnly: e.target.checked }))}
+            />
+            Solo gimnasio
+          </label>
+          <label className="inline-flex items-center gap-1 text-sm">
+            <input
+              type="checkbox"
+              checked={!!form.noContact}
+              onChange={(e) => setForm((f) => ({ ...f, noContact: e.target.checked }))}
+            />
+            Sin contacto
+          </label>
+
+          <div className="ml-auto" />
+          <button
+            onClick={saveQuick}
+            disabled={saving}
+            className={`rounded-lg px-3 py-1.5 text-sm ${
+              saving ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
+            }`}
           >
             Guardar
           </button>
         </div>
-        <p className="mt-2 text-[11px] text-gray-500">
-          * Luego podés completar detalles y restricciones.
-        </p>
+      </section>
+
+      {/* Filtros */}
+      <div className="flex items-center gap-2">
+        <input
+          className="w-full md:w-80 rounded-md border px-2 py-1.5 text-sm"
+          placeholder="Buscar por jugador, zona o mecanismo…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <span className="text-[12px] text-gray-500">{filtered.length} resultado(s)</span>
       </div>
 
-      {/* Entradas del día */}
-      <div className="mt-5 rounded-md border bg-white">
-        <div className="border-b px-3 py-2 text-sm font-medium">
-          ENTRADAS DEL DÍA
+      {/* Tabla */}
+      <section className="rounded-2xl border bg-white overflow-hidden">
+        <div className="bg-gray-50 px-3 py-2 text-[12px] font-semibold uppercase">
+          Entradas — {date}{" "}
+          <HelpTip text="Listado para el día. Ordená por severidad mentalmente: ALTA = disponible; REINTEGRO = progresiva; ACTIVO = en tratamiento." />
         </div>
-        <div className="p-3">
-          {loading ? (
-            <div className="text-sm text-gray-500">Cargando…</div>
-          ) : rows.length === 0 ? (
-            <div className="text-sm text-gray-500">Sin datos</div>
-          ) : (
-            <table className="w-full text-sm">
+        {loading ? (
+          <div className="p-4 text-gray-500">Cargando…</div>
+        ) : filtered.length === 0 ? (
+          <div className="p-4 text-gray-500 italic">Sin datos</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
               <thead>
-                <tr className="text-left text-gray-500">
-                  <th className="py-1.5">Jugador</th>
-                  <th className="py-1.5">Fecha</th>
-                  <th className="py-1.5">Estado</th>
-                  <th className="py-1.5">Zona</th>
-                  <th className="py-1.5">Dispon.</th>
+                <tr className="border-b bg-gray-50">
+                  <th className="text-left px-3 py-2">Jugador</th>
+                  <th className="text-left px-3 py-2">
+                    Estado <HelpTip text="ACTIVO: lesionado; REINTEGRO: retorno progresivo; ALTA: alta médica." />
+                  </th>
+                  <th className="text-left px-3 py-2">Zona</th>
+                  <th className="text-left px-3 py-2">Lat.</th>
+                  <th className="text-left px-3 py-2">Mecanismo</th>
+                  <th className="text-left px-3 py-2">Severidad</th>
+                  <th className="text-left px-3 py-2">
+                    Dispon. <HelpTip text="Disponibilidad práctica/partido según criterio médico." />
+                  </th>
+                  <th className="text-left px-3 py-2">ETR</th>
+                  <th className="text-left px-3 py-2">Restricciones</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} className="border-t">
-                    <td className="py-1.5">{r.userName}</td>
-                    <td className="py-1.5">{r.date}</td>
-                    <td className="py-1.5">{r.status}</td>
-                    <td className="py-1.5">{r.bodyPart ?? "—"}</td>
-                    <td className="py-1.5">{r.availability ?? "—"}</td>
+                {filtered.map((r) => (
+                  <tr key={r.id} className="border-b last:border-0 align-top">
+                    <td className="px-3 py-2 font-medium">{r.userName}</td>
+                    <td className="px-3 py-2">{r.status}</td>
+                    <td className="px-3 py-2">{r.bodyPart || "—"}</td>
+                    <td className="px-3 py-2">{r.laterality || "—"}</td>
+                    <td className="px-3 py-2">{r.mechanism || "—"}</td>
+                    <td className="px-3 py-2">{r.severity || "—"}</td>
+                    <td className="px-3 py-2">{r.availability || "—"}</td>
+                    <td className="px-3 py-2">{r.expectedReturn || "—"}</td>
+                    <td className="px-3 py-2 text-xs text-gray-700">
+                      <div className="space-y-0.5">
+                        {r.capMinutes ? <div>Cap: {r.capMinutes}′</div> : null}
+                        {typeof r.pain === "number" ? <div>Dolor: {r.pain}/10</div> : null}
+                        {r.noSprint ? <div>Sin sprint</div> : null}
+                        {r.noChangeOfDirection ? <div>Sin cambios dir.</div> : null}
+                        {r.gymOnly ? <div>Solo gym</div> : null}
+                        {r.noContact ? <div>Sin contacto</div> : null}
+                        {!r.capMinutes &&
+                        typeof r.pain !== "number" &&
+                        !r.noSprint &&
+                        !r.noChangeOfDirection &&
+                        !r.gymOnly &&
+                        !r.noContact ? (
+                          <span className="text-gray-400">—</span>
+                        ) : null}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
+      </section>
 
-      {/* Leyenda */}
-      <div className="mt-3 text-[11px] text-gray-600">
-        <strong>Disponibilidad:</strong> OUT (no entrena), MODIFIED (restricciones
-        activas), FULL (sin restricciones). <strong>Restricciones:</strong> cap de
-        minutos y flags operativos para que el CT los use en Plan y RPE.
+      {/* Nota operativa */}
+      <div className="rounded-xl border bg-white p-3 text-xs text-gray-600">
+        <b>Uso diario:</b> Cuerpo médico actualiza estado y restricciones. El CT usa
+        “Disponibilidad” y “Cap min” para ajustar minutos planificados y tareas.
       </div>
-    </div>
-  );
-}
-
-function KpiCard({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="rounded-md border bg-white p-3">
-      <div className="text-[11px] font-semibold text-gray-500">{label}</div>
-      <div className="text-2xl font-bold mt-1">{value}</div>
     </div>
   );
 }
