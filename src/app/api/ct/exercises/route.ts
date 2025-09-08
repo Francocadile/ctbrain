@@ -6,6 +6,12 @@ import { getServerSession } from "next-auth";
 const prisma = new PrismaClient();
 const EX_TAG = "[EXERCISES]";
 
+// ====== Config de filas de contenido del editor (mismo set que usamos en la UI) ======
+const CONTENT_ROWS = new Set(["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"]);
+
+// ====== Marcadores usados por el editor semanal ======
+const GRID_RE = /^\[GRID:(morning|afternoon):(.+?)\]/i;
+
 // -------- helpers (node-safe base64 json) --------
 function decodeB64Json<T = any>(b64: string): T | null {
   try {
@@ -32,7 +38,8 @@ type VirtualExercise = {
   sourceSessionId: string;
 };
 
-function extractFromSession(
+// ========= EXTRAER DESDE BLOQUE [EXERCISES] <base64> EN DESCRIPTION =========
+function extractFromSessionEXTag(
   s: { id: string; date: Date; description: string | null },
   userId: string
 ): VirtualExercise[] {
@@ -50,7 +57,7 @@ function extractFromSession(
   return arr.map((e, i) => {
     const kindName = typeof (e as any)?.kind === "string" ? (e as any).kind : "";
     return {
-      id: `${s.id}__${i}`, // id virtual estable
+      id: `${s.id}__ex__${i}`, // id virtual estable
       userId,
       title: (e.title || "").trim() || `Ejercicio ${i + 1}`,
       kind: kindName ? { name: kindName } : null,
@@ -67,9 +74,52 @@ function extractFromSession(
   });
 }
 
+// ========= EXTRAER “EJERCICIOS VIRTUALES” DESDE CELDAS [GRID:turn:ROW] =========
+function extractFromGridCell(
+  s: { id: string; date: Date; description: string | null; title: string | null },
+  userId: string
+): VirtualExercise[] {
+  const desc = (s.description || "").trim();
+  if (!desc) return [];
+
+  const m = desc.match(GRID_RE);
+  if (!m) return [];
+
+  const row = (m[2] || "").trim();
+  // Solo filas de contenido (no meta: LUGAR, HORA, VIDEO, NOMBRE SESIÓN, etc.)
+  if (!CONTENT_ROWS.has(row.toUpperCase())) return [];
+
+  const text = (s.title || "").trim();
+  if (!text) return [];
+
+  // Tomamos la primera línea como posible "título" de ejercicio; fallback al nombre de la fila
+  const firstLine = (text.split("\n")[0] || "").trim();
+  const title = firstLine || row;
+
+  return [
+    {
+      id: `${s.id}__grid__0`,
+      userId,
+      title,
+      kind: { name: row }, // usamos la fila como "tipo"
+      space: null,
+      players: null,
+      duration: null,
+      description: text,
+      imageUrl: null,
+      tags: [],
+      createdAt: s.date,
+      updatedAt: s.date,
+      sourceSessionId: s.id,
+    },
+  ];
+}
+
 /**
- * GET /api/exercises?q=&kind=&kindId=&order=createdAt|title&dir=desc|asc&page=1&pageSize=20
- * Devuelve desde DB; si no hay, cae a “virtual” leyendo las sesiones con [EXERCISES] <base64>.
+ * GET /api/exercises?q=&kind=&order=createdAt|title&dir=desc|asc&page=1&pageSize=20
+ * Devuelve desde DB; si no hay, cae a “virtual”:
+ *   1) bloque [EXERCISES] <base64> en description
+ *   2) celdas del editor semanal [GRID:turn:ROW] para filas de contenido (FÍSICO, etc.)
  */
 export async function GET(req: Request) {
   const session = await getServerSession();
@@ -114,7 +164,7 @@ export async function GET(req: Request) {
 
     const data = rowsDb.map((r: any) => {
       const fromId = typeof r.id === "string" && r.id.includes("__") ? r.id.split("__")[0] : null;
-      const sourceSessionId = r.sessionId ?? fromId ?? null;
+      const sourceSessionId = (r as any).sessionId ?? fromId ?? null; // por compat
       return { ...r, sourceSessionId };
     });
 
@@ -136,11 +186,13 @@ export async function GET(req: Request) {
     take: 500, // límite defensivo
   });
 
-  // Extraer ejercicios del bloque [EXERCISES] de cada sesión
   let virtual: VirtualExercise[] = [];
   for (const s of sessions) {
-    const items = extractFromSession(s, userId);
-    virtual.push(...items);
+    // 1) Bloque explícito [EXERCISES] <base64>
+    virtual.push(...extractFromSessionEXTag(s, userId));
+
+    // 2) Celdas del editor (GRID) consideradas como “ejercicios” de la sesión
+    virtual.push(...extractFromGridCell(s, userId));
   }
 
   // Filtros
@@ -163,8 +215,8 @@ export async function GET(req: Request) {
 
   // Orden
   virtual.sort((a, b) => {
-    const A = order === "title" ? a.title : a.createdAt.getTime();
-    const B = order === "title" ? b.title : b.createdAt.getTime();
+    const A = (order === "title" ? a.title : a.createdAt.getTime()) as any;
+    const B = (order === "title" ? b.title : b.createdAt.getTime()) as any;
     const cmp = A > B ? 1 : A < B ? -1 : 0;
     return dir === "asc" ? cmp : -cmp;
   });
