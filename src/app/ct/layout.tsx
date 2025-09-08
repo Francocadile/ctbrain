@@ -1,4 +1,3 @@
-// src/app/ct/layout.tsx
 "use client";
 
 import * as React from "react";
@@ -57,14 +56,14 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
           <li>
             <NavItem href={"/ct/metrics/rpe" satisfies Route}>RPE (día)</NavItem>
           </li>
-          {/* ✅ Mejora: agregamos RPE (semana) al menú */}
           <li>
             <NavItem href={"/ct/metrics/rpe/semana" satisfies Route}>
               RPE (semana)
             </NavItem>
           </li>
+          {/* 👇 ahora activo */}
           <li>
-            <NavItem soon>Lesionados</NavItem>
+            <NavItem href={"/ct/injuries" satisfies Route}>Lesionados</NavItem>
           </li>
         </ul>
 
@@ -80,7 +79,6 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
           <li>
             <NavItem href={"/ct/sessions" satisfies Route}>Sesiones</NavItem>
           </li>
-          {/* Ejercicios -> redirige al buscador */}
           <li>
             <NavItem href={"/ct/exercises" as any}>Ejercicios</NavItem>
           </li>
