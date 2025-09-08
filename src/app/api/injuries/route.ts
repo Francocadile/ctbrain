@@ -4,82 +4,88 @@ import { prisma } from "@/lib/prisma";
 // GET /api/injuries?date=YYYY-MM-DD
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const date = searchParams.get("date");
-  if (!date) return NextResponse.json({ error: "Missing date" }, { status: 400 });
+  const dateS = searchParams.get("date");
+  if (!dateS) {
+    return NextResponse.json({ error: "date requerido (YYYY-MM-DD)" }, { status: 400 });
+  }
 
-  const start = new Date(date);
-  const end = new Date(date);
+  const start = new Date(dateS);
+  if (Number.isNaN(start.getTime())) {
+    return NextResponse.json({ error: "date inválido" }, { status: 400 });
+  }
+  const end = new Date(start);
   end.setDate(end.getDate() + 1);
 
   const rows = await prisma.injuryEntry.findMany({
     where: { date: { gte: start, lt: end } },
     include: { user: { select: { name: true, email: true } } },
-    orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+    orderBy: [{ createdAt: "desc" }],
   });
 
-  const mapped = rows.map((r: any) => ({
+  const mapped = rows.map((r) => ({
     id: r.id,
     userId: r.userId,
-    userName: r.user?.name || r.user?.email || "—",
+    userName: r.user?.name ?? r.user?.email ?? "—",
     date: r.date.toISOString().slice(0, 10),
     status: r.status,
     bodyPart: r.bodyPart,
     laterality: r.laterality,
     mechanism: r.mechanism,
     severity: r.severity,
-    expectedReturn: r.expectedReturn ? r.expectedReturn.toISOString().slice(0, 10) : null,
+    expectedReturn: r.expectedReturn
+      ? r.expectedReturn.toISOString().slice(0, 10)
+      : null,
     availability: r.availability,
     pain: r.pain,
-    notes: r.notes,
     capMinutes: r.capMinutes,
     noSprint: r.noSprint,
     noChangeOfDirection: r.noChangeOfDirection,
     gymOnly: r.gymOnly,
     noContact: r.noContact,
-    updatedAt: r.updatedAt,
   }));
 
   return NextResponse.json(mapped);
 }
 
-// POST /api/injuries  (upsert por userId+date)
+// POST /api/injuries
 export async function POST(req: Request) {
-  const body = await req.json();
-  const { userId, date } = body as { userId?: string; date?: string };
-  if (!userId || !date) {
-    return NextResponse.json({ error: "userId and date are required" }, { status: 400 });
+  try {
+    const { userId, date, status, bodyPart } = await req.json();
+
+    if (!userId || !date || !status) {
+      return NextResponse.json(
+        { error: "userId, date y status son obligatorios" },
+        { status: 400 }
+      );
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return NextResponse.json(
+        { error: "userId inválido: debe ser el id del jugador" },
+        { status: 400 }
+      );
+    }
+
+    const created = await prisma.injuryEntry.create({
+      data: {
+        userId,
+        date: new Date(date),
+        status,
+        bodyPart: bodyPart ?? null,
+      },
+    });
+
+    return NextResponse.json(created, { status: 201 });
+  } catch (e: any) {
+    // unique (userId, date) => ya existe carga del día
+    if (e?.code === "P2002") {
+      return NextResponse.json(
+        { error: "Ya existe una entrada para ese jugador en ese día" },
+        { status: 409 }
+      );
+    }
+    console.error(e);
+    return NextResponse.json({ error: "Error interno al crear" }, { status: 500 });
   }
-
-  const ymd = date.slice(0, 10);
-  const d = new Date(ymd);
-
-  const data = {
-    status: body.status ?? "ACTIVO",
-    bodyPart: body.bodyPart ?? null,
-    laterality: body.laterality ?? null,
-    mechanism: body.mechanism ?? null,
-    severity: body.severity ?? null,
-    expectedReturn: body.expectedReturn ? new Date(body.expectedReturn) : null,
-    availability: body.availability ?? null,
-    pain: typeof body.pain === "number" ? body.pain : null,
-    notes: body.notes ?? null,
-    capMinutes: typeof body.capMinutes === "number" ? body.capMinutes : null,
-    noSprint: !!body.noSprint,
-    noChangeOfDirection: !!body.noChangeOfDirection,
-    gymOnly: !!body.gymOnly,
-    noContact: !!body.noContact,
-  };
-
-  const saved = await prisma.injuryEntry.upsert({
-    where: { userId_date: { userId, date: d } },
-    update: data,
-    create: { userId, date: d, ...data },
-    include: { user: { select: { name: true, email: true } } },
-  });
-
-  return NextResponse.json({
-    ...saved,
-    date: saved.date.toISOString().slice(0, 10),
-    expectedReturn: saved.expectedReturn ? saved.expectedReturn.toISOString().slice(0, 10) : null,
-  });
 }
