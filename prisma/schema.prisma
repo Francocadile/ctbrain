@@ -23,7 +23,7 @@ enum SessionType {
   RECUPERACION
 }
 
-/* ==== NUEVO ==== */
+// ==== NUEVO ====
 enum InjuryStatus {
   ACTIVO
   REINTEGRO
@@ -48,7 +48,7 @@ enum Availability {
   MODIFIED
   FULL
 }
-/* ================ */
+// ===============
 
 model User {
   id        String    @id @default(cuid())
@@ -65,7 +65,7 @@ model User {
   plannerPrefs    PlannerPrefs?
   exercises       Exercise[]
 
-  /* ==== NUEVO ==== */
+  // NUEVO
   injuryEntries   InjuryEntry[]
 }
 
@@ -86,7 +86,6 @@ model Session {
   @@index([createdBy])
 }
 
-// ===== Catálogos =====
 model Rival {
   id        String   @id @default(cuid())
   name      String   @unique
@@ -111,7 +110,6 @@ model ExerciseKind {
   exercises  Exercise[]
 }
 
-// ===== Biblioteca de ejercicios =====
 model Exercise {
   id          String        @id @default(cuid())
 
@@ -138,7 +136,6 @@ model Exercise {
   @@index([kindId])
 }
 
-// ===== Métricas =====
 model RPEEntry {
   id        String   @id @default(cuid())
   userId    String
@@ -182,7 +179,6 @@ model WellnessEntry {
   @@index([userId, date])
 }
 
-// ===== Preferencias =====
 model PlannerPrefs {
   id        String   @id @default(cuid())
   userId    String   @unique
@@ -194,9 +190,9 @@ model PlannerPrefs {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-/* ===== Lesiones (NUEVO) =====
-   Registro DIARIO por jugador (userId+date unique).
-   Incluye estado clínico, restricciones ejecutables y ETR. */
+// ===== Lesiones (NUEVO) =====
+// Registro DIARIO por jugador (userId+date unique).
+// Incluye estado clínico, restricciones operativas y ETR.
 model InjuryEntry {
   id         String        @id @default(cuid())
   userId     String
@@ -211,11 +207,10 @@ model InjuryEntry {
   severity   Severity?
   expectedReturn DateTime?
 
-  availability Availability?   // OUT / MODIFIED / FULL (día)
-  pain        Int?             // 0..10
+  availability Availability?
+  pain        Int?
   notes       String?
 
-  // Restricciones “ejecutables”
   capMinutes  Int?
   noSprint    Boolean         @default(false)
   noChangeOfDirection Boolean @default(false)
@@ -225,7 +220,7 @@ model InjuryEntry {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
-  @@unique([userId, date])
+  @@unique([userId, date], name: "userId_date")
   @@index([date])
   @@index([userId, date])
 }
