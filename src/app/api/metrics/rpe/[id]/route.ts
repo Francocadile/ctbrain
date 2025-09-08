@@ -1,6 +1,7 @@
-// src/app/api/metrics/rpe/[id]/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+
+export const dynamic = "force-dynamic";
 
 const prisma = new PrismaClient();
 
@@ -13,14 +14,12 @@ export async function PATCH(
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
     const b = await req.json();
-    const duration =
-      b?.duration == null ? null : Math.max(0, Number(b.duration));
+    const duration = b?.duration == null ? null : Math.max(0, Number(b.duration));
 
     const row = await prisma.rPEEntry.findUnique({ where: { id } });
     if (!row) return new NextResponse("No encontrado", { status: 404 });
 
-    const load =
-      duration == null ? null : (Math.round(Number(row.rpe)) || 0) * duration;
+    const load = duration == null ? null : (Math.round(Number(row.rpe)) || 0) * duration;
 
     const updated = await prisma.rPEEntry.update({
       where: { id },
