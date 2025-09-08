@@ -1,4 +1,4 @@
-// src/app/api/exercises/route.ts
+// src/app/api/ct/exercises/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient, Prisma } from "@prisma/client";
 import { getServerSession } from "next-auth";
@@ -6,10 +6,10 @@ import { getServerSession } from "next-auth";
 const prisma = new PrismaClient();
 const EX_TAG = "[EXERCISES]";
 
-// ====== Config de filas de contenido del editor (mismo set que usamos en la UI) ======
+// ====== Filas de contenido del editor (mismo set que usamos en la UI) ======
 const CONTENT_ROWS = new Set(["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"]);
 
-// ====== Marcadores usados por el editor semanal ======
+// ====== Marcador de celdas del editor semanal ======
 const GRID_RE = /^\[GRID:(morning|afternoon):(.+?)\]/i;
 
 // -------- helpers (node-safe base64 json) --------
@@ -35,10 +35,10 @@ type VirtualExercise = {
   tags: string[];
   createdAt: Date;
   updatedAt: Date;
-  sourceSessionId: string;
+  sourceSessionId: string | null;
 };
 
-// ========= EXTRAER DESDE BLOQUE [EXERCISES] <base64> EN DESCRIPTION =========
+// ========= 1) EXTRAER DESDE BLOQUE [EXERCISES] <base64> EN DESCRIPTION =========
 function extractFromSessionEXTag(
   s: { id: string; date: Date; description: string | null },
   userId: string
@@ -74,7 +74,7 @@ function extractFromSessionEXTag(
   });
 }
 
-// ========= EXTRAER “EJERCICIOS VIRTUALES” DESDE CELDAS [GRID:turn:ROW] =========
+// ========= 2) EXTRAER “EJERCICIOS VIRTUALES” DESDE CELDAS [GRID:turn:ROW] =========
 function extractFromGridCell(
   s: { id: string; date: Date; description: string | null; title: string | null },
   userId: string
@@ -86,13 +86,12 @@ function extractFromGridCell(
   if (!m) return [];
 
   const row = (m[2] || "").trim();
-  // Solo filas de contenido (no meta: LUGAR, HORA, VIDEO, NOMBRE SESIÓN, etc.)
+  // Solo filas de contenido (no meta)
   if (!CONTENT_ROWS.has(row.toUpperCase())) return [];
 
   const text = (s.title || "").trim();
   if (!text) return [];
 
-  // Tomamos la primera línea como posible "título" de ejercicio; fallback al nombre de la fila
   const firstLine = (text.split("\n")[0] || "").trim();
   const title = firstLine || row;
 
@@ -101,7 +100,7 @@ function extractFromGridCell(
       id: `${s.id}__grid__0`,
       userId,
       title,
-      kind: { name: row }, // usamos la fila como "tipo"
+      kind: { name: row },
       space: null,
       players: null,
       duration: null,
@@ -115,12 +114,6 @@ function extractFromGridCell(
   ];
 }
 
-/**
- * GET /api/exercises?q=&kind=&order=createdAt|title&dir=desc|asc&page=1&pageSize=20
- * Devuelve desde DB; si no hay, cae a “virtual”:
- *   1) bloque [EXERCISES] <base64> en description
- *   2) celdas del editor semanal [GRID:turn:ROW] para filas de contenido (FÍSICO, etc.)
- */
 export async function GET(req: Request) {
   const session = await getServerSession();
   const userId = (session as any)?.user?.id as string | undefined;
@@ -134,7 +127,7 @@ export async function GET(req: Request) {
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
   const pageSize = Math.min(50, Math.max(5, parseInt(url.searchParams.get("pageSize") || "20", 10)));
 
-  // ---------- Primero intentamos desde DB ----------
+  // ---------- A) Traer ejercicios en DB (si existen) ----------
   const where: Prisma.ExerciseWhereInput = {
     userId,
     ...(kindName
@@ -152,30 +145,29 @@ export async function GET(req: Request) {
       : {}),
   };
 
-  const totalDb = await prisma.exercise.count({ where });
-  if (totalDb > 0) {
-    const rowsDb = await prisma.exercise.findMany({
-      where,
-      include: { kind: true },
-      orderBy: { [order]: dir },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    });
+  const rowsDb = await prisma.exercise.findMany({
+    where,
+    include: { kind: true },
+    orderBy: { [order]: dir },
+  });
 
-    const data = rowsDb.map((r: any) => {
-      const fromId = typeof r.id === "string" && r.id.includes("__") ? r.id.split("__")[0] : null;
-      const sourceSessionId = (r as any).sessionId ?? fromId ?? null; // por compat
-      return { ...r, sourceSessionId };
-    });
+  const dbMapped: VirtualExercise[] = rowsDb.map((r: any) => ({
+    id: String(r.id),
+    userId,
+    title: String(r.title || ""),
+    kind: r.kind ? { name: r.kind.name } : null,
+    space: r.space ?? null,
+    players: r.players ?? null,
+    duration: r.duration ?? null,
+    description: r.description ?? null,
+    imageUrl: r.imageUrl ?? null,
+    tags: Array.isArray(r.tags) ? r.tags : [],
+    createdAt: new Date(r.createdAt),
+    updatedAt: new Date(r.updatedAt),
+    sourceSessionId: (r as any).sessionId ?? null, // futuro: relación explícita
+  }));
 
-    return NextResponse.json({
-      data,
-      meta: { total: totalDb, page, pageSize, pages: Math.max(1, Math.ceil(totalDb / pageSize)) },
-    });
-  }
-
-  // ---------- Fallback: construir “virtual” desde sesiones ----------
-  // Traemos un rango razonable (p. ej. últimos 180 días)
+  // ---------- B) Fallback virtual desde sesiones (últimos 180 días) ----------
   const since = new Date();
   since.setDate(since.getDate() - 180);
 
@@ -183,22 +175,29 @@ export async function GET(req: Request) {
     where: { createdBy: userId, date: { gte: since } },
     orderBy: { date: "desc" },
     select: { id: true, date: true, description: true, title: true },
-    take: 500, // límite defensivo
+    take: 500,
   });
 
   let virtual: VirtualExercise[] = [];
   for (const s of sessions) {
-    // 1) Bloque explícito [EXERCISES] <base64>
     virtual.push(...extractFromSessionEXTag(s, userId));
-
-    // 2) Celdas del editor (GRID) consideradas como “ejercicios” de la sesión
     virtual.push(...extractFromGridCell(s, userId));
   }
 
-  // Filtros
+  // ---------- C) Unir DB + virtual y eliminar duplicados ----------
+  const key = (e: VirtualExercise) =>
+    `${e.sourceSessionId || "db"}::${(e.title || "").toLowerCase()}::${(e.kind?.name || "").toLowerCase()}`;
+
+  const map = new Map<string, VirtualExercise>();
+  for (const v of virtual) map.set(key(v), v); // primero virtual
+  for (const d of dbMapped) map.set(key(d), d); // DB sobrescribe duplicados
+
+  let combined = Array.from(map.values());
+
+  // ---------- D) Filtros por q/kind ----------
   if (q) {
     const qi = q.toLowerCase();
-    virtual = virtual.filter((r) => {
+    combined = combined.filter((r) => {
       const kind = r.kind?.name?.toLowerCase() || "";
       return (
         r.title.toLowerCase().includes(qi) ||
@@ -210,21 +209,21 @@ export async function GET(req: Request) {
     });
   }
   if (kindName) {
-    virtual = virtual.filter((r) => (r.kind?.name || "").toLowerCase() === kindName);
+    combined = combined.filter((r) => (r.kind?.name || "").toLowerCase() === kindName);
   }
 
-  // Orden
-  virtual.sort((a, b) => {
-    const A = (order === "title" ? a.title : a.createdAt.getTime()) as any;
-    const B = (order === "title" ? b.title : b.createdAt.getTime()) as any;
+  // ---------- E) Orden ----------
+  combined.sort((a, b) => {
+    const A = order === "title" ? a.title : a.createdAt.getTime();
+    const B = order === "title" ? b.title : b.createdAt.getTime();
     const cmp = A > B ? 1 : A < B ? -1 : 0;
     return dir === "asc" ? cmp : -cmp;
   });
 
-  // Paginación
-  const total = virtual.length;
+  // ---------- F) Paginación ----------
+  const total = combined.length;
   const start = (page - 1) * pageSize;
-  const data = virtual.slice(start, start + pageSize);
+  const data = combined.slice(start, start + pageSize);
 
   return NextResponse.json({
     data,
