@@ -2,6 +2,7 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import RoleGate from "@/components/auth/RoleGate";
 
 export default function MedicoPage() {
@@ -16,16 +17,16 @@ export default function MedicoPage() {
         </header>
 
         <section className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Card href="/med/injuries" title="Lesiones" desc="Altas, bajas y evolución clínica." />
-          <Card href="/med/wellness" title="Wellness" desc="Cuestionarios diarios y alertas automáticas." />
-          <Card href="/med/protocolos" title="Protocolos" desc="Intervenciones, guías y lineamientos." />
+          <Card href={"/med/injuries"} title="Lesiones" desc="Altas, bajas y evolución clínica." />
+          <Card href={"/med/wellness"} title="Wellness" desc="Cuestionarios diarios y alertas automáticas." />
+          <Card href={"/med/protocolos"} title="Protocolos" desc="Intervenciones, guías y lineamientos." />
         </section>
       </main>
     </RoleGate>
   );
 }
 
-function Card({ href, title, desc }: { href: string; title: string; desc: string }) {
+function Card({ href, title, desc }: { href: Route; title: string; desc: string }) {
   return (
     <Link
       href={href}
