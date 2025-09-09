@@ -1,20 +1,13 @@
+// src/app/api/users/players/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
+  // Ajustá el filtro si tenés role "PLAYER". Si no, devolvé todos.
   const users = await prisma.user.findMany({
-    select: { id: true, name: true, email: true, role: true },
+    // where: { role: "PLAYER" },
+    select: { id: true, name: true, email: true },
     orderBy: [{ name: "asc" }],
   });
-
-  // Si tenés role "PLAYER", filtrá:
-  const players = users.filter((u: any) => (u.role ?? "").toUpperCase() === "PLAYER");
-
-  const payload = (players.length ? players : users).map((u) => ({
-    id: u.id,
-    name: u.name,
-    email: u.email,
-  }));
-
-  return NextResponse.json(payload);
+  return NextResponse.json(users);
 }
