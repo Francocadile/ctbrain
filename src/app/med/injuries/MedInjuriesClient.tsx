@@ -6,13 +6,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import HelpTip from "@/components/HelpTip";
 
-/* ===== Tipos locales ===== */
+/* ===== Tipos ===== */
 type InjuryStatus = "ACTIVO" | "REINTEGRO" | "ALTA";
 type Availability = "FULL" | "LIMITADA" | "INDIVIDUAL" | "REHAB" | "DESCANSO";
 type Laterality = "IZQ" | "DER" | "BIL" | "NA";
 type Severity = "LEVE" | "MODERADA" | "SEVERA";
-
-/** Estado clínico operativo del día (lo que pediste) */
 type ClinicalState = "DISPONIBLE" | "LIMITADO" | "BAJA";
 type DropType = "COMPETITIVA" | "ENTRENAMIENTO" | "PARCIAL";
 
@@ -20,7 +18,7 @@ type InjuryRow = {
   id: string;
   userId: string;
   userName: string;
-  date: string; // YYYY-MM-DD
+  date: string;
   status: InjuryStatus;
   bodyPart: string | null;
   laterality: Laterality | null;
@@ -36,43 +34,54 @@ type InjuryRow = {
 };
 
 type PlayerOpt = { id: string; label: string };
+
 function toYMD(d: Date) { return d.toISOString().slice(0, 10); }
 
-/* ===== Listas preestablecidas ===== */
+/* ===== Listas ===== */
 const BODY_PARTS = [
-  "Tobillo", "Rodilla", "Isquiotibial", "Cuádriceps", "Aductores",
-  "Gemelo/Sóleo", "Cadera", "Lumbar", "Cervical", "Hombro", "Muñeca", "Otra"
+  "Tobillo","Rodilla","Isquiotibial","Cuádriceps","Aductores",
+  "Gemelo/Sóleo","Cadera","Lumbar","Cervical","Hombro","Muñeca","Otra"
 ];
 
-const MECHANISMS = [
-  "Sobrecarga", "Impacto", "Torsión", "Estiramiento", "Golpe", "Caída", "Otro"
-];
+const MECHANISMS = ["Sobrecarga","Impacto","Torsión","Estiramiento","Golpe","Caída","Otro"];
 
-/* ===== Hook jugadores con fallback visual ===== */
+/* =========================================================
+   Hook de jugadores: maneja loading/error/fallback + recarga
+   ========================================================= */
 function usePlayers() {
   const [players, setPlayers] = useState<PlayerOpt[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [fallbackAll, setFallbackAll] = useState(false);
 
-  useEffect(() => {
-    fetch("/api/users/players")
-      .then((r) => r.json())
-      .then((data) => {
-        const list = Array.isArray(data) ? data : data?.items ?? [];
-        setFallbackAll(!Array.isArray(data) && !!data?.fallbackAll);
-        setPlayers(
-          (list as any[]).map((u) => ({
-            id: u.id as string,
-            label: String(u.name || u.email || u.id),
-          }))
-        );
-      })
-      .catch(() => {
-        setFallbackAll(false);
-        setPlayers([]);
-      });
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setFallbackAll(false);
+    try {
+      const res = await fetch("/api/users/players", { cache: "no-store" });
+      const fb = res.headers.get("x-fallback-all") === "1";
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      setPlayers(
+        list.map((u: any) => ({
+          id: u.id,
+          label: String(u.name || u.email || u.id),
+        }))
+      );
+      setFallbackAll(fb);
+    } catch (e) {
+      console.error("usePlayers load error:", e);
+      setError("No se pudo cargar la lista de jugadores.");
+      setPlayers([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  return { players, fallbackAll };
+  useEffect(() => { load(); }, [load]);
+
+  return { players, loading, error, fallbackAll, reload: load };
 }
 
 /* ===== Wrapper Suspense ===== */
@@ -84,11 +93,11 @@ export default function MedInjuriesClient() {
   );
 }
 
-/* ================== Contenido real ================== */
+/* ================== Contenido ================== */
 function Inner() {
   const router = useRouter();
   const search = useSearchParams();
-  const { players, fallbackAll } = usePlayers();
+  const { players, loading: loadingPlayers, error: playersError, fallbackAll, reload } = usePlayers();
 
   const today = useMemo(() => toYMD(new Date()), []);
   const [date, setDate] = useState<string>(search.get("date") || today);
@@ -97,28 +106,25 @@ function Inner() {
   const [rows, setRows] = useState<InjuryRow[]>([]);
   const [q, setQ] = useState("");
 
-  // Edición
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  /* ===== Form principal ===== */
-  const [clinicalState, setClinicalState] = useState<ClinicalState>("LIMITADO"); // DISPONIBLE/LIMITADO/BAJA
+  // Form
+  const [clinicalState, setClinicalState] = useState<ClinicalState>("LIMITADO");
   const [bodyPart, setBodyPart] = useState<string>("");
   const [laterality, setLaterality] = useState<Laterality>("NA");
   const [mechanism, setMechanism] = useState<string>("");
   const [severity, setSeverity] = useState<Severity>("LEVE");
-  const [expectedReturn, setExpectedReturn] = useState<string>(""); // YYYY-MM-DD
+  const [expectedReturn, setExpectedReturn] = useState<string>("");
   const [userId, setUserId] = useState<string>("");
 
-  // Campos nuevos
   const [diagnosis, setDiagnosis] = useState<string>("");
-  const [startDate, setStartDate] = useState<string>("");      // inicio del cuadro
+  const [startDate, setStartDate] = useState<string>("");
   const [daysMin, setDaysMin] = useState<number | "">("");
   const [daysMax, setDaysMax] = useState<number | "">("");
   const [dropType, setDropType] = useState<DropType>("ENTRENAMIENTO");
   const [report, setReport] = useState<string>("");
   const [signedBy, setSignedBy] = useState<string>("");
 
-  // Restricciones (solo si LIMITADO)
   const [noSprint, setNoSprint] = useState<boolean>(false);
   const [noChangeOfDirection, setNoChangeOfDirection] = useState<boolean>(false);
   const [gymOnly, setGymOnly] = useState<boolean>(false);
@@ -153,7 +159,6 @@ function Inner() {
     loadDay();
   }, [date, router, loadDay]);
 
-  /* ===== Autocalcular ETR si hay días estimados ===== */
   useEffect(() => {
     if (daysMin === "" && daysMax === "") return;
     const base = startDate ? new Date(startDate) : new Date(date);
@@ -189,14 +194,12 @@ function Inner() {
 
   function fillFormFromRow(r: InjuryRow) {
     setEditingId(r.id);
-    // Mapear a nuestro formulario
     setUserId(r.userId);
     setBodyPart(r.bodyPart || "");
     setLaterality((r.laterality || "NA") as Laterality);
     setMechanism(r.mechanism || "");
     setSeverity((r.severity || "LEVE") as Severity);
     setExpectedReturn(r.expectedReturn || "");
-    // Derivar clinicalState + restricciones por disponibilidad
     const avail = r.availability || "LIMITADA";
     if (avail === "FULL") setClinicalState("DISPONIBLE");
     else if (avail === "REHAB" || avail === "DESCANSO") setClinicalState("BAJA");
@@ -206,32 +209,20 @@ function Inner() {
     setGymOnly(!!r.gymOnly);
     setNoContact(!!r.noContact);
     setCapMinutes(r.capMinutes ?? "");
-    // Campos libres (se cargan desde notas en próxima fase)
     setDiagnosis("");
     setReport("");
     setSignedBy("");
   }
 
-  /* ===== Guardar ===== */
   async function save() {
     if (!userId) return alert("Elegí un jugador.");
     if (!signedBy.trim()) return alert("Ingresá firma/iniciales del médico.");
-
     setSaving(true);
     try {
-      // Mapear clinicalState → availability + status
       let availability: Availability = "LIMITADA";
       let status: InjuryStatus = "ACTIVO";
-      if (clinicalState === "DISPONIBLE") {
-        availability = "FULL";
-        status = "ALTA";
-      } else if (clinicalState === "BAJA") {
-        availability = "REHAB"; // baja total ↔ rehab/descanso
-        status = "ACTIVO";
-      } else {
-        availability = "LIMITADA";
-        status = "ACTIVO";
-      }
+      if (clinicalState === "DISPONIBLE") { availability = "FULL"; status = "ALTA"; }
+      else if (clinicalState === "BAJA") { availability = "REHAB"; status = "ACTIVO"; }
 
       const notesLines: string[] = [];
       if (diagnosis) notesLines.push(`Dx: ${diagnosis}`);
@@ -294,7 +285,6 @@ function Inner() {
     }
   }
 
-  /* ===== Semáforo visual ===== */
   function badgeFor(r: InjuryRow) {
     const avail = r.availability || "LIMITADA";
     let color = "bg-yellow-100 text-yellow-800";
@@ -304,7 +294,6 @@ function Inner() {
     return <span className={`px-2 py-0.5 rounded text-[11px] ${color}`}>{text}</span>;
   }
 
-  /* ===== Export CSV ===== */
   function exportCSV() {
     const header = [
       "date","userName","estado","zona","lat","mecanismo","gravedad",
@@ -348,11 +337,16 @@ function Inner() {
         </div>
       </header>
 
-      {/* Aviso fallback jugadores */}
-      {fallbackAll ? (
+      {/* Estados del selector de jugadores */}
+      {playersError ? (
+        <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900">
+          {playersError} <button onClick={reload} className="underline">Reintentar</button>
+        </div>
+      ) : fallbackAll ? (
         <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           No hay usuarios con rol <b>JUGADOR</b>. Mostrando <b>todos</b> como fallback.
-          Recomendación: asignar rol JUGADOR en Usuarios para que este selector filtre correctamente.
+          Te recomiendo asignar el rol JUGADOR en Usuarios.{" "}
+          <button onClick={reload} className="underline">Recargar</button>
         </div>
       ) : null}
 
@@ -365,12 +359,26 @@ function Inner() {
 
         <div className="grid md:grid-cols-6 gap-2">
           {/* Jugador */}
-          <select className="rounded-md border px-2 py-1 text-sm md:col-span-2"
-            value={userId}
-            onChange={(e)=>setUserId(e.target.value)}>
-            <option value="">{players.length ? "Jugador (nombre o email)" : "Cargando jugadores..."}</option>
-            {players.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-          </select>
+          <div className="flex items-center gap-2 md:col-span-2">
+            <select
+              className="flex-1 rounded-md border px-2 py-1 text-sm"
+              value={userId}
+              onChange={(e)=>setUserId(e.target.value)}
+              disabled={loadingPlayers}
+            >
+              <option value="">
+                {loadingPlayers
+                  ? "Cargando jugadores..."
+                  : players.length === 0
+                  ? "Sin jugadores disponibles"
+                  : "Jugador (nombre o email)"}
+              </option>
+              {players.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+            </select>
+            <button onClick={reload} className="rounded-md border px-2 py-1 text-xs hover:bg-gray-50">
+              Recargar
+            </button>
+          </div>
 
           {/* Estado clínico */}
           <select className="rounded-md border px-2 py-1 text-sm"
@@ -405,7 +413,6 @@ function Inner() {
         </div>
 
         <div className="grid md:grid-cols-6 gap-2">
-          {/* Mecanismo */}
           <select className="rounded-md border px-2 py-1 text-sm md:col-span-2"
             value={mechanism}
             onChange={(e)=>setMechanism(e.target.value)}>
@@ -413,7 +420,6 @@ function Inner() {
             {MECHANISMS.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
 
-          {/* Gravedad */}
           <select className="rounded-md border px-2 py-1 text-sm"
             value={severity}
             onChange={(e)=>setSeverity(e.target.value as Severity)}>
@@ -422,53 +428,52 @@ function Inner() {
             <option value="SEVERA">Grave</option>
           </select>
 
-          {/* Fecha de inicio */}
           <input type="date" className="rounded-md border px-2 py-1 text-sm"
-            placeholder="Inicio"
             value={startDate}
             onChange={(e)=>setStartDate(e.target.value)} />
 
-          {/* Días estimados (rango) */}
-          <input type="number" className="rounded-md border px-2 py-1 text-sm" placeholder="Días min"
-            value={daysMin} onChange={(e)=>setDaysMin(e.target.value === "" ? "" : Number(e.target.value))} />
-          <input type="number" className="rounded-md border px-2 py-1 text-sm" placeholder="Días max"
-            value={daysMax} onChange={(e)=>setDaysMax(e.target.value === "" ? "" : Number(e.target.value))} />
+          <input type="number" className="rounded-md border px-2 py-1 text-sm"
+            placeholder="Días min"
+            value={daysMin}
+            onChange={(e)=>setDaysMin(e.target.value === "" ? "" : Number(e.target.value))} />
+          <input type="number" className="rounded-md border px-2 py-1 text-sm"
+            placeholder="Días max"
+            value={daysMax}
+            onChange={(e)=>setDaysMax(e.target.value === "" ? "" : Number(e.target.value))} />
 
-          {/* ETR (editable) */}
           <input type="date" className="rounded-md border px-2 py-1 text-sm"
             value={expectedReturn}
             onChange={(e)=>setExpectedReturn(e.target.value)} />
         </div>
 
-        {/* Restricciones (solo si LIMITADO) */}
+        {/* Restricciones */}
         <div className="flex flex-wrap items-center gap-3">
-          <label className={`inline-flex items-center gap-1 text-sm ${restrictionsDisabled ? "opacity-50" : ""}`}>
-            <input type="checkbox" disabled={restrictionsDisabled} checked={!!noSprint}
+          <label className={`inline-flex items-center gap-1 text-sm ${clinicalState !== "LIMITADO" ? "opacity-50" : ""}`}>
+            <input type="checkbox" disabled={clinicalState !== "LIMITADO"} checked={!!noSprint}
               onChange={(e)=>setNoSprint(e.target.checked)} />
             No sprint
           </label>
-          <label className={`inline-flex items-center gap-1 text-sm ${restrictionsDisabled ? "opacity-50" : ""}`}>
-            <input type="checkbox" disabled={restrictionsDisabled} checked={!!noChangeOfDirection}
+          <label className={`inline-flex items-center gap-1 text-sm ${clinicalState !== "LIMITADO" ? "opacity-50" : ""}`}>
+            <input type="checkbox" disabled={clinicalState !== "LIMITADO"} checked={!!noChangeOfDirection}
               onChange={(e)=>setNoChangeOfDirection(e.target.checked)} />
             Sin cambios de dirección
           </label>
-          <label className={`inline-flex items-center gap-1 text-sm ${restrictionsDisabled ? "opacity-50" : ""}`}>
-            <input type="checkbox" disabled={restrictionsDisabled} checked={!!gymOnly}
+          <label className={`inline-flex items-center gap-1 text-sm ${clinicalState !== "LIMITADO" ? "opacity-50" : ""}`}>
+            <input type="checkbox" disabled={clinicalState !== "LIMITADO"} checked={!!gymOnly}
               onChange={(e)=>setGymOnly(e.target.checked)} />
             Solo gimnasio
           </label>
-          <label className={`inline-flex items-center gap-1 text-sm ${restrictionsDisabled ? "opacity-50" : ""}`}>
-            <input type="checkbox" disabled={restrictionsDisabled} checked={!!noContact}
+          <label className={`inline-flex items-center gap-1 text-sm ${clinicalState !== "LIMITADO" ? "opacity-50" : ""}`}>
+            <input type="checkbox" disabled={clinicalState !== "LIMITADO"} checked={!!noContact}
               onChange={(e)=>setNoContact(e.target.checked)} />
             Sin contacto
           </label>
           <input type="number" className="rounded-md border px-2 py-1 text-sm w-32"
-            placeholder="Tope min (cap)" disabled={restrictionsDisabled}
+            placeholder="Tope min (cap)" disabled={clinicalState !== "LIMITADO"}
             value={capMinutes}
             onChange={(e)=>setCapMinutes(e.target.value === "" ? "" : Number(e.target.value))} />
         </div>
 
-        {/* Info clínica libre */}
         <div className="grid md:grid-cols-3 gap-2">
           <input className="rounded-md border px-2 py-1 text-sm"
             placeholder="Diagnóstico breve (ej. Distensión isquios grado I)"
@@ -480,13 +485,9 @@ function Inner() {
             <option value="ENTRENAMIENTO">Entrenamiento</option>
             <option value="PARCIAL">Parcial</option>
           </select>
-          {/* Adjuntar (placeholder) */}
-          <button
-            type="button"
-            disabled
+          <button type="button" disabled
             className="rounded-md border px-2 py-1 text-sm text-gray-400 cursor-not-allowed"
-            title="Subida de estudios se habilita en la próxima fase"
-          >
+            title="Subida de estudios se habilita en la próxima fase">
             Adjuntar estudio (PDF/JPG) — próximamente
           </button>
         </div>
@@ -533,7 +534,7 @@ function Inner() {
       <section className="rounded-2xl border bg-white overflow-hidden">
         <div className="bg-gray-50 px-3 py-2 text-[12px] font-semibold uppercase">
           Entradas — {date}{" "}
-          <HelpTip text="Semáforo automático: Verde=disponible, Amarillo=limitado, Rojo=baja." />
+          <HelpTip text="Semáforo: Verde=disponible, Amarillo=limitado, Rojo=baja." />
         </div>
         {loading ? (
           <div className="p-4 text-gray-500">Cargando…</div>
