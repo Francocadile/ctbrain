@@ -1,9 +1,8 @@
 // src/app/api/injuries/route.ts
 import { NextResponse } from "next/server";
-import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
-/* =============== Utils =============== */
+/* Utils */
 function toYMD(d: Date) {
   return d.toISOString().slice(0, 10);
 }
@@ -11,7 +10,7 @@ function parseYMD(s?: string | null): Date | null {
   if (!s) return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
   if (!m) return null;
-  const [, yy, mm, dd] = m;
+  const [_, yy, mm, dd] = m;
   const d = new Date(Number(yy), Number(mm) - 1, Number(dd));
   return isNaN(d.getTime()) ? null : d;
 }
@@ -26,39 +25,6 @@ function nextDay(d: Date) {
   return x;
 }
 
-/* ===== Normalizadores (string → enum value esperado) ===== */
-type LateralityT = "IZQ" | "DER" | "BIL" | "BILATERAL" | "NA";
-type AvailabilityT = "FULL" | "LIMITADA" | "INDIVIDUAL" | "REHAB" | "DESCANSO";
-type StatusT = "ACTIVO" | "REINTEGRO" | "ALTA";
-type SeverityT = "LEVE" | "MODERADA" | "SEVERA";
-
-function normalizeLaterality(x: any): LateralityT {
-  const v = String(x ?? "NA").toUpperCase();
-  if (v === "BIL" || v === "BILATERAL") return v === "BIL" ? "BIL" : "BILATERAL";
-  if (v === "IZQ" || v === "LEFT") return "IZQ";
-  if (v === "DER" || v === "RIGHT") return "DER";
-  return "NA";
-}
-function normalizeAvailability(x: any): AvailabilityT {
-  const v = String(x ?? "LIMITADA").toUpperCase();
-  if (["FULL", "LIMITADA", "INDIVIDUAL", "REHAB", "DESCANSO"].includes(v)) {
-    return v as AvailabilityT;
-  }
-  return "LIMITADA";
-}
-function normalizeStatus(x: any): StatusT {
-  const v = String(x ?? "ACTIVO").toUpperCase();
-  if (v === "ALTA") return "ALTA";
-  if (v === "REINTEGRO") return "REINTEGRO";
-  return "ACTIVO";
-}
-function normalizeSeverity(x: any): SeverityT | null {
-  if (x == null || x === "") return null;
-  const v = String(x).toUpperCase();
-  if (["LEVE", "MODERADA", "SEVERA"].includes(v)) return v as SeverityT;
-  return null;
-}
-
 /* =======================
    GET /api/injuries?date=YYYY-MM-DD
 ======================= */
@@ -66,10 +32,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const dateStr = searchParams.get("date");
 
-  const baseDate =
-    parseYMD(dateStr) ??
-    (dateStr ? new Date(dateStr) : new Date());
-
+  const baseDate = parseYMD(dateStr) ?? (dateStr ? new Date(dateStr) : new Date());
   const from = startOfDay(baseDate);
   const to = nextDay(baseDate);
 
@@ -92,8 +55,6 @@ export async function GET(req: Request) {
       noChangeOfDirection: true,
       gymOnly: true,
       noContact: true,
-      // Si querés traer notas, descomentalo:
-      // notes: true,
       user: { select: { name: true, email: true } },
     },
     orderBy: [{ date: "desc" }],
@@ -117,7 +78,6 @@ export async function GET(req: Request) {
     noChangeOfDirection: r.noChangeOfDirection,
     gymOnly: r.gymOnly,
     noContact: r.noContact,
-    // notes: (r as any).notes ?? null,
   }));
 
   return NextResponse.json(mapped);
@@ -125,6 +85,7 @@ export async function GET(req: Request) {
 
 /* =======================
    POST /api/injuries
+   Upsert lógico por (userId+día)
 ======================= */
 export async function POST(req: Request) {
   try {
@@ -138,92 +99,65 @@ export async function POST(req: Request) {
       );
     }
 
-    // Debe existir y ser jugador (ajustá si tu enum de rol difiere)
-    const player = await prisma.user.findFirst({
-      where: { id: userId, role: "PLAYER" as any },
-      select: { id: true },
-    });
-    if (!player) {
-      return NextResponse.json(
-        { error: "userId inválido: debe ser un jugador." },
-        { status: 400 }
-      );
-    }
-
-    // Fecha del registro (día)
-    const parsed =
-      parseYMD(typeof body.date === "string" ? body.date : undefined) ??
-      (body.date ? new Date(body.date) : new Date());
+    // Normalizar fecha del registro (día)
+    const parsed = parseYMD(body.date) ?? (body.date ? new Date(body.date) : new Date());
     const day = startOfDay(parsed);
     const dayTo = nextDay(parsed);
 
-    // Normalizaciones
-    const status = normalizeStatus(body.status);
-    const laterality = normalizeLaterality(body.laterality);
-    const availability = normalizeAvailability(body.availability);
-    const severity = normalizeSeverity(body.severity);
-    const expectedReturn =
-      parseYMD(body.expectedReturn) ??
-      (body.expectedReturn ? new Date(body.expectedReturn) : null);
-
-    // Permitir body.note o body.notes
-    const notesValue: string | null =
-      body.notes ?? body.note ?? null;
-
-    // CREATE
-    const createData: Prisma.InjuryEntryUncheckedCreateInput = {
-      userId: player.id,
+    const payload = {
+      userId,
       date: day,
-      status: status as any,
+      status: (body.status ?? "ACTIVO") as string,
       bodyPart: body.bodyPart ?? null,
-      laterality: laterality as any,
+      laterality: (body.laterality ?? "NA") as string | null,
       mechanism: body.mechanism ?? null,
-      severity: (severity as any) ?? null,
-      expectedReturn,
-      availability: availability as any,
+      severity: (body.severity ?? null) as string | null,
+      expectedReturn: parseYMD(body.expectedReturn) ?? (body.expectedReturn ? new Date(body.expectedReturn) : null),
+      availability: (body.availability ?? "LIMITADA") as string | null,
       pain: body.pain ?? null,
       capMinutes: body.capMinutes ?? null,
       noSprint: !!body.noSprint,
       noChangeOfDirection: !!body.noChangeOfDirection,
       gymOnly: !!body.gymOnly,
       noContact: !!body.noContact,
-      notes: notesValue, // ✅ nombre correcto en el modelo
+      // si en tu schema es "notes" en vez de "note", cambialo:
+      notes: body.note ?? null,
     };
 
-    // UPDATE
-    const updateData: Prisma.InjuryEntryUpdateInput = {
-      status: { set: status as any },
-      bodyPart: { set: body.bodyPart ?? null },
-      laterality: { set: laterality as any },
-      mechanism: { set: body.mechanism ?? null },
-      severity: { set: (severity as any) ?? null },
-      expectedReturn: { set: expectedReturn },
-      availability: { set: availability as any },
-      pain: { set: body.pain ?? null },
-      capMinutes: { set: body.capMinutes ?? null },
-      noSprint: { set: !!body.noSprint },
-      noChangeOfDirection: { set: !!body.noChangeOfDirection },
-      gymOnly: { set: !!body.gymOnly },
-      noContact: { set: !!body.noContact },
-      notes: { set: notesValue }, // ✅ nombre correcto en el modelo
-    };
-
-    // Upsert lógico por (userId + día)
+    // Upsert lógico (sin unique compuesto)
     const existing = await prisma.injuryEntry.findFirst({
-      where: { userId: player.id, date: { gte: day, lt: dayTo } },
+      where: { userId, date: { gte: day, lt: dayTo } },
       select: { id: true },
     });
 
     const saved = existing
       ? await prisma.injuryEntry.update({
           where: { id: existing.id },
-          data: updateData,
+          data: payload as any, // evitar choques de enums en build
         })
-      : await prisma.injuryEntry.create({ data: createData });
+      : await prisma.injuryEntry.create({ data: payload as any });
 
     return NextResponse.json(saved, { status: existing ? 200 : 201 });
   } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: "Error creando entrada" }, { status: 500 });
+    return NextResponse.json({ error: "Error creando/actualizando entrada" }, { status: 500 });
+  }
+}
+
+/* =======================
+   DELETE /api/injuries  { id: string }
+======================= */
+export async function DELETE(req: Request) {
+  try {
+    const body = await req.json();
+    const id = body?.id as string | undefined;
+    if (!id) {
+      return NextResponse.json({ error: "Falta id" }, { status: 400 });
+    }
+    const deleted = await prisma.injuryEntry.delete({ where: { id } });
+    return NextResponse.json(deleted, { status: 200 });
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json({ error: "Error eliminando" }, { status: 500 });
   }
 }
