@@ -1,4 +1,3 @@
-// src/app/ct/injuries/page.tsx
 "use client";
 
 import * as React from "react";
@@ -7,10 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import HelpTip from "@/components/HelpTip";
 
-// (opcional) si querés evitar cualquier intento de pre-render:
-// export const dynamic = "force-dynamic";
-
-// ---------- Tipos ----------
 type InjuryStatus = "ACTIVO" | "REINTEGRO" | "ALTA";
 type Availability = "FULL" | "LIMITADA" | "INDIVIDUAL" | "REHAB" | "DESCANSO";
 
@@ -18,13 +13,13 @@ type InjuryRow = {
   id: string;
   userId: string;
   userName: string;
-  date: string; // YYYY-MM-DD
+  date: string;
   status: InjuryStatus;
   bodyPart: string | null;
   laterality: "IZQ" | "DER" | "BIL" | "NA" | null;
   mechanism: string | null;
   severity: "LEVE" | "MODERADA" | "SEVERA" | null;
-  expectedReturn: string | null; // YYYY-MM-DD | null
+  expectedReturn: string | null;
   availability: Availability | null;
   pain?: number | null;
   capMinutes?: number | null;
@@ -34,25 +29,23 @@ type InjuryRow = {
   noContact?: boolean | null;
 };
 
-type PlayerOpt = { id: string; label: string };
-
-// ---------- Utils ----------
 function toYMD(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-// ---------- Hook: jugadores para autocomplete ----------
+/* -------- Solo jugadores -------- */
+type PlayerOpt = { id: string; label: string };
+
 function usePlayers() {
   const [players, setPlayers] = React.useState<PlayerOpt[]>([]);
   React.useEffect(() => {
     fetch("/api/users/players")
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : []))
       .then((list) =>
         setPlayers(
-          list.map((u: any) => ({
-            id: u.id,
-            label: u.name || u.email || u.id,
-          }))
+          Array.isArray(list)
+            ? list.map((u: any) => ({ id: u.id, label: u.label }))
+            : []
         )
       )
       .catch(() => setPlayers([]));
@@ -60,7 +53,7 @@ function usePlayers() {
   return players;
 }
 
-// ---------- Wrapper con Suspense (requerido por useSearchParams) ----------
+/* ---------- Wrapper con Suspense ---------- */
 export default function InjuriesPage() {
   return (
     <Suspense fallback={<div className="p-4 text-gray-500">Cargando…</div>}>
@@ -69,7 +62,7 @@ export default function InjuriesPage() {
   );
 }
 
-// --------------------- Componente real de la página ----------------------
+/* ---------- Página real ---------- */
 function InjuriesPageInner() {
   const router = useRouter();
   const search = useSearchParams();
@@ -81,9 +74,6 @@ function InjuriesPageInner() {
   const [saving, setSaving] = useState(false);
   const [rows, setRows] = useState<InjuryRow[]>([]);
   const [q, setQ] = useState("");
-
-  // texto visible en el input (nombre/email). form.userId guarda el id real.
-  const [playerText, setPlayerText] = useState("");
 
   const [form, setForm] = useState<Partial<InjuryRow>>({
     userId: "",
@@ -119,7 +109,6 @@ function InjuriesPageInner() {
   }, [date]);
 
   useEffect(() => {
-    // mantener la fecha en la URL para copiar/pegar
     const url = `/ct/injuries?date=${date}`;
     router.replace(url as unknown as Route);
     loadDay();
@@ -127,13 +116,13 @@ function InjuriesPageInner() {
 
   async function saveQuick() {
     if (!form.userId) {
-      alert("Elegí un jugador (userId).");
+      alert("Elegí un jugador de la lista (obligatorio).");
       return;
     }
     setSaving(true);
     try {
       const payload = {
-        userId: form.userId,
+        userId: form.userId, // <- enviamos SIEMPRE el id
         date,
         status: form.status || "ACTIVO",
         bodyPart: form.bodyPart || null,
@@ -157,8 +146,6 @@ function InjuriesPageInner() {
       });
       if (!res.ok) throw new Error(await res.text());
 
-      // reset
-      setPlayerText("");
       setForm({
         userId: "",
         status: "ACTIVO",
@@ -177,6 +164,7 @@ function InjuriesPageInner() {
       });
       await loadDay();
     } catch (e: any) {
+      // Si el backend devuelve JSON de error, se mostrará aquí
       alert(e?.message || "Error al guardar");
     } finally {
       setSaving(false);
@@ -189,7 +177,7 @@ function InjuriesPageInner() {
         <div>
           <h1 className="text-lg font-bold">
             Lesionados (CT){" "}
-            <HelpTip text="Vista de estado clínico diario. El cuerpo médico carga y actualiza; el CT ve disponibilidad y restricciones para planificar." />
+            <HelpTip text="Vista diaria. El cuerpo médico carga y actualiza; el CT usa disponibilidad y restricciones para planificar." />
           </h1>
           <p className="text-xs text-gray-500">
             Fecha seleccionada: <b>{date}</b> • {rows.length} registro(s)
@@ -202,43 +190,33 @@ function InjuriesPageInner() {
             value={date}
             onChange={(e) => setDate(e.target.value)}
           />
-          <button
-            onClick={loadDay}
-            className="rounded-lg border px-2 py-1 text-sm hover:bg-gray-50"
-          >
+          <button onClick={loadDay} className="rounded-lg border px-2 py-1 text-sm hover:bg-gray-50">
             Recargar
           </button>
         </div>
       </header>
 
-      {/* Carga rápida */}
+      {/* CARGA RÁPIDA */}
       <section className="rounded-xl border bg-white p-3 space-y-2">
         <div className="text-[12px] font-semibold uppercase">
           Carga rápida{" "}
-          <HelpTip text="Carga mínima diaria: elegí jugador, estado y datos clave. Crea/actualiza el registro del día (upsert por jugador+fecha si aplica)." />
+          <HelpTip text="Seleccioná un JUGADOR (obligatorio) y datos clave. Se hace upsert por jugador+fecha." />
         </div>
 
         <div className="grid md:grid-cols-6 gap-2">
-          {/* Jugador con autocomplete: setea form.userId */}
-          <input
-            list="players"
+          {/* Jugador: SOLO jugadores, el value es el id */}
+          <select
             className="rounded-md border px-2 py-1 text-sm md:col-span-2"
-            placeholder="Jugador (nombre o email)"
-            value={playerText}
-            onChange={(e) => {
-              const v = e.target.value;
-              setPlayerText(v);
-              const hit =
-                players.find((p) => p.label === v) ||
-                players.find((p) => p.id === v);
-              setForm((f) => ({ ...f, userId: hit?.id ?? "" }));
-            }}
-          />
-          <datalist id="players">
+            value={form.userId || ""}
+            onChange={(e) => setForm((f) => ({ ...f, userId: e.target.value }))}
+          >
+            <option value="">Jugador (nombre o email)</option>
             {players.map((p) => (
-              <option key={p.id} value={p.label} />
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
             ))}
-          </datalist>
+          </select>
 
           <select
             className="rounded-md border px-2 py-1 text-sm"
@@ -373,10 +351,13 @@ function InjuriesPageInner() {
           <div className="ml-auto" />
           <button
             onClick={saveQuick}
-            disabled={saving}
+            disabled={saving || !form.userId}
             className={`rounded-lg px-3 py-1.5 text-sm ${
-              saving ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
+              saving || !form.userId
+                ? "bg-gray-200 text-gray-500"
+                : "bg-black text-white hover:opacity-90"
             }`}
+            title={!form.userId ? "Seleccioná un jugador" : "Guardar"}
           >
             Guardar
           </button>
@@ -398,7 +379,7 @@ function InjuriesPageInner() {
       <section className="rounded-2xl border bg-white overflow-hidden">
         <div className="bg-gray-50 px-3 py-2 text-[12px] font-semibold uppercase">
           Entradas — {date}{" "}
-          <HelpTip text="Listado para el día. ACTIVO: en tratamiento; REINTEGRO: retorno progresivo; ALTA: alta médica." />
+          <HelpTip text="ACTIVO: en tratamiento; REINTEGRO: retorno progresivo; ALTA: alta médica." />
         </div>
         {loading ? (
           <div className="p-4 text-gray-500">Cargando…</div>
