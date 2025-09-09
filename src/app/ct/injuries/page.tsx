@@ -1,18 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import HelpTip from "@/components/HelpTip";
 
+// (opcional) si querés evitar cualquier intento de pre-render:
+// export const dynamic = "force-dynamic";
+
 type InjuryStatus = "ACTIVO" | "REINTEGRO" | "ALTA";
-type Availability =
-  | "FULL"
-  | "LIMITADA"
-  | "INDIVIDUAL"
-  | "REHAB"
-  | "DESCANSO";
+type Availability = "FULL" | "LIMITADA" | "INDIVIDUAL" | "REHAB" | "DESCANSO";
 
 type InjuryRow = {
   id: string;
@@ -26,8 +24,6 @@ type InjuryRow = {
   severity: "LEVE" | "MODERADA" | "SEVERA" | null;
   expectedReturn: string | null; // YYYY-MM-DD | null
   availability: Availability | null;
-
-  // restricciones (opcionales)
   pain?: number | null;
   capMinutes?: number | null;
   noSprint?: boolean | null;
@@ -40,18 +36,27 @@ function toYMD(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
+// ---------- Wrapper con Suspense (requerido por useSearchParams) ----------
 export default function InjuriesPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-gray-500">Cargando…</div>}>
+      <InjuriesPageInner />
+    </Suspense>
+  );
+}
+
+// --------------------- Componente real de la página ----------------------
+function InjuriesPageInner() {
   const router = useRouter();
   const search = useSearchParams();
 
   const today = useMemo(() => toYMD(new Date()), []);
   const [date, setDate] = useState<string>(search.get("date") || today);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [saving, setSaving] = useState<boolean>(false);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [rows, setRows] = useState<InjuryRow[]>([]);
-  const [q, setQ] = useState<string>("");
+  const [q, setQ] = useState("");
 
-  // ---- Alta rápida (form mini) ----
   const [form, setForm] = useState<Partial<InjuryRow>>({
     userId: "",
     status: "ACTIVO",
@@ -85,7 +90,6 @@ export default function InjuriesPage() {
     }
   }, [date]);
 
-  // Mantiene la fecha en la URL sin romper typedRoutes (cast a Route)
   useEffect(() => {
     const url = `/ct/injuries?date=${date}`;
     router.replace(url as unknown as Route);
@@ -149,7 +153,6 @@ export default function InjuriesPage() {
 
   return (
     <div className="p-4 space-y-4">
-      {/* Header */}
       <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <h1 className="text-lg font-bold">
@@ -176,7 +179,7 @@ export default function InjuriesPage() {
         </div>
       </header>
 
-      {/* Alta rápida (MVP) */}
+      {/* Alta rápida */}
       <section className="rounded-xl border bg-white p-3 space-y-2">
         <div className="text-[12px] font-semibold uppercase">
           Alta rápida{" "}
@@ -259,7 +262,12 @@ export default function InjuriesPage() {
             className="rounded-md border px-2 py-1 text-sm"
             placeholder="Dolor (0-10)"
             value={form.pain ?? ""}
-            onChange={(e) => setForm((f) => ({ ...f, pain: e.target.value === "" ? null : Number(e.target.value) }))}
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                pain: e.target.value === "" ? null : Number(e.target.value),
+              }))
+            }
           />
           <input
             type="number"
@@ -339,7 +347,7 @@ export default function InjuriesPage() {
       <section className="rounded-2xl border bg-white overflow-hidden">
         <div className="bg-gray-50 px-3 py-2 text-[12px] font-semibold uppercase">
           Entradas — {date}{" "}
-          <HelpTip text="Listado para el día. Ordená por severidad mentalmente: ALTA = disponible; REINTEGRO = progresiva; ACTIVO = en tratamiento." />
+          <HelpTip text="Listado para el día. ACTIVO: en tratamiento; REINTEGRO: retorno progresivo; ALTA: alta médica." />
         </div>
         {loading ? (
           <div className="p-4 text-gray-500">Cargando…</div>
@@ -351,16 +359,12 @@ export default function InjuriesPage() {
               <thead>
                 <tr className="border-b bg-gray-50">
                   <th className="text-left px-3 py-2">Jugador</th>
-                  <th className="text-left px-3 py-2">
-                    Estado <HelpTip text="ACTIVO: lesionado; REINTEGRO: retorno progresivo; ALTA: alta médica." />
-                  </th>
+                  <th className="text-left px-3 py-2">Estado</th>
                   <th className="text-left px-3 py-2">Zona</th>
                   <th className="text-left px-3 py-2">Lat.</th>
                   <th className="text-left px-3 py-2">Mecanismo</th>
                   <th className="text-left px-3 py-2">Severidad</th>
-                  <th className="text-left px-3 py-2">
-                    Dispon. <HelpTip text="Disponibilidad práctica/partido según criterio médico." />
-                  </th>
+                  <th className="text-left px-3 py-2">Dispon.</th>
                   <th className="text-left px-3 py-2">ETR</th>
                   <th className="text-left px-3 py-2">Restricciones</th>
                 </tr>
@@ -402,7 +406,6 @@ export default function InjuriesPage() {
         )}
       </section>
 
-      {/* Nota operativa */}
       <div className="rounded-xl border bg-white p-3 text-xs text-gray-600">
         <b>Uso diario:</b> Cuerpo médico actualiza estado y restricciones. El CT usa
         “Disponibilidad” y “Cap min” para ajustar minutos planificados y tareas.
