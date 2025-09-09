@@ -26,10 +26,7 @@ function nextDay(d: Date) {
   return x;
 }
 
-/* ===== Normalizadores (string → enum value esperado) =====
-   Nota: uso unions de string y luego casteo a `any` al escribir en Prisma,
-   para no depender de los nombres exactos del enum en tu schema.
-*/
+/* ===== Normalizadores (string → enum value esperado) ===== */
 type LateralityT = "IZQ" | "DER" | "BIL" | "BILATERAL" | "NA";
 type AvailabilityT = "FULL" | "LIMITADA" | "INDIVIDUAL" | "REHAB" | "DESCANSO";
 type StatusT = "ACTIVO" | "REINTEGRO" | "ALTA";
@@ -95,6 +92,8 @@ export async function GET(req: Request) {
       noChangeOfDirection: true,
       gymOnly: true,
       noContact: true,
+      // Si querés traer notas, descomentalo:
+      // notes: true,
       user: { select: { name: true, email: true } },
     },
     orderBy: [{ date: "desc" }],
@@ -118,6 +117,7 @@ export async function GET(req: Request) {
     noChangeOfDirection: r.noChangeOfDirection,
     gymOnly: r.gymOnly,
     noContact: r.noContact,
+    // notes: (r as any).notes ?? null,
   }));
 
   return NextResponse.json(mapped);
@@ -157,7 +157,7 @@ export async function POST(req: Request) {
     const day = startOfDay(parsed);
     const dayTo = nextDay(parsed);
 
-    // Normalizaciones (string → valores esperados)
+    // Normalizaciones
     const status = normalizeStatus(body.status);
     const laterality = normalizeLaterality(body.laterality);
     const availability = normalizeAvailability(body.availability);
@@ -166,7 +166,11 @@ export async function POST(req: Request) {
       parseYMD(body.expectedReturn) ??
       (body.expectedReturn ? new Date(body.expectedReturn) : null);
 
-    // CREATE (tipado flexible con casts puntuales)
+    // Permitir body.note o body.notes
+    const notesValue: string | null =
+      body.notes ?? body.note ?? null;
+
+    // CREATE
     const createData: Prisma.InjuryEntryUncheckedCreateInput = {
       userId: player.id,
       date: day,
@@ -183,10 +187,10 @@ export async function POST(req: Request) {
       noChangeOfDirection: !!body.noChangeOfDirection,
       gymOnly: !!body.gymOnly,
       noContact: !!body.noContact,
-      note: body.note ?? null,
+      notes: notesValue, // ✅ nombre correcto en el modelo
     };
 
-    // UPDATE (usar { set: ... } + casts para enums)
+    // UPDATE
     const updateData: Prisma.InjuryEntryUpdateInput = {
       status: { set: status as any },
       bodyPart: { set: body.bodyPart ?? null },
@@ -201,7 +205,7 @@ export async function POST(req: Request) {
       noChangeOfDirection: { set: !!body.noChangeOfDirection },
       gymOnly: { set: !!body.gymOnly },
       noContact: { set: !!body.noContact },
-      note: { set: body.note ?? null },
+      notes: { set: notesValue }, // ✅ nombre correcto en el modelo
     };
 
     // Upsert lógico por (userId + día)
