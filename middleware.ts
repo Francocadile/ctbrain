@@ -1,52 +1,49 @@
-import { withAuth } from "next-auth/middleware";
+// middleware.ts
+import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
 
-/**
- * Protege rutas privadas y permite control por rol.
- * Requiere NEXTAUTH_SECRET configurada.
- */
-export default withAuth(
-  function middleware(req: NextRequest) {
-    // Si quisieras forzar roles por ruta, podés leer el token:
-    // const role = req.nextauth?.token?.role as string | undefined;
-    // const url  = req.nextUrl;
+// ✅ Solo protegemos rutas del CT (y lo que definas explícito)
+const CT_PATHS = [/^\/ct(?:\/|$)/, /^\/api\/sessions(?:\/|$)/];
 
-    // Ejemplo de control por rol para /admin (descomentar si querés bloquear por rol):
-    // if (url.pathname.startsWith("/admin") && role !== "ADMIN") {
-    //   url.pathname = "/"; // o "/login"
-    //   return Response.redirect(url);
-    // }
-  },
-  {
-    callbacks: {
-      /**
-       * Se ejecuta ANTES de dejar pasar la request.
-       * Si retorna true, permite el acceso.
-       * Si retorna false, redirige a /login automáticamente.
-       */
-      authorized: ({ token }) => {
-        // Si hay token => hay sesión
-        return !!token;
-      },
-    },
-    pages: {
-      signIn: "/login",
-    },
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+
+  // ✅ Whitelist explícito para la API de jugadores (la necesitan MÉDICO y CT)
+  if (pathname.startsWith("/api/users/players")) {
+    return NextResponse.next();
   }
-);
 
-/**
- * Indica qué rutas quedan protegidas por el middleware.
- * - /admin y subrutas
- * - /ct, /medico, /jugador, /directivo y sus subrutas
- * Agregá aquí cualquier otra sección privada.
- */
+  const needsCT = CT_PATHS.some((r) => r.test(pathname));
+  if (!needsCT) return NextResponse.next();
+
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  if (!token) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("callbackUrl", pathname);
+    return NextResponse.redirect(url);
+  }
+
+  const role = (token as any).role;
+  const isAdminOrCT = role === "CT" || role === "ADMIN";
+  if (!isAdminOrCT) {
+    const url = req.nextUrl.clone();
+    url.pathname =
+      role === "MEDICO" ? "/medico" :
+      role === "JUGADOR" ? "/player" :
+      role === "DIRECTIVO" ? "/directivo" : "/";
+    return NextResponse.redirect(url);
+  }
+
+  return NextResponse.next();
+}
+
+// ✅ Sacamos '/api/users/:path*' del matcher
 export const config = {
   matcher: [
-    "/admin/:path*",
     "/ct/:path*",
-    "/medico/:path*",
-    "/jugador/:path*",
-    "/directivo/:path*",
+    "/api/sessions/:path*",
+    // (no incluimos /api/users)
   ],
 };
