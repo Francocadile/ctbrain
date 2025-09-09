@@ -300,3 +300,188 @@ function MedInjuriesEditor() {
           >
             <option value="LEVE">Leve</option>
             <option value="MODERADA">Moderada</option>
+            <option value="SEVERA">Severa</option>
+          </select>
+
+          {/* ETR */}
+          <input
+            type="date"
+            className="rounded-md border px-2 py-1 text-sm"
+            placeholder="ETR (YYYY-MM-DD)"
+            value={form.expectedReturn || ""}
+            onChange={(e) => setForm((f) => ({ ...f, expectedReturn: e.target.value }))}
+          />
+
+          {/* Dolor */}
+          <input
+            type="number"
+            className="rounded-md border px-2 py-1 text-sm"
+            placeholder="Dolor (0-10)"
+            value={form.pain ?? ""}
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                pain: e.target.value === "" ? null : Number(e.target.value),
+              }))
+            }
+          />
+
+          {/* Cap min */}
+          <input
+            type="number"
+            className="rounded-md border px-2 py-1 text-sm"
+            placeholder="Tope min (cap)"
+            value={form.capMinutes ?? ""}
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                capMinutes: e.target.value === "" ? null : Number(e.target.value),
+              }))
+            }
+          />
+        </div>
+
+        {/* Flags operativos */}
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="inline-flex items-center gap-1 text-sm">
+            <input
+              type="checkbox"
+              checked={!!form.noSprint}
+              onChange={(e) => setForm((f) => ({ ...f, noSprint: e.target.checked }))}
+            />
+            No sprint
+          </label>
+          <label className="inline-flex items-center gap-1 text-sm">
+            <input
+              type="checkbox"
+              checked={!!form.noChangeOfDirection}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, noChangeOfDirection: e.target.checked }))
+              }
+            />
+            Sin cambios de dirección
+          </label>
+          <label className="inline-flex items-center gap-1 text-sm">
+            <input
+              type="checkbox"
+              checked={!!form.gymOnly}
+              onChange={(e) => setForm((f) => ({ ...f, gymOnly: e.target.checked }))}
+            />
+            Solo gimnasio
+          </label>
+          <label className="inline-flex items-center gap-1 text-sm">
+            <input
+              type="checkbox"
+              checked={!!form.noContact}
+              onChange={(e) => setForm((f) => ({ ...f, noContact: e.target.checked }))}
+            />
+            Sin contacto
+          </label>
+
+          <div className="ml-auto" />
+          <button
+            onClick={saveQuick}
+            disabled={saving}
+            className={`rounded-lg px-3 py-1.5 text-sm ${
+              saving ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
+            }`}
+          >
+            Guardar
+          </button>
+        </div>
+      </section>
+
+      {/* Filtros */}
+      <div className="flex items-center gap-2">
+        <input
+          className="w-full md:w-80 rounded-md border px-2 py-1.5 text-sm"
+          placeholder="Buscar por jugador, zona o mecanismo…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <span className="text-[12px] text-gray-500">{filtered.length} resultado(s)</span>
+      </div>
+
+      {/* Tabla del día */}
+      <section className="rounded-2xl border bg-white overflow-hidden">
+        <div className="bg-gray-50 px-3 py-2 text-[12px] font-semibold uppercase">
+          Entradas — {date}
+        </div>
+        {loading ? (
+          <div className="p-4 text-gray-500">Cargando…</div>
+        ) : filtered.length === 0 ? (
+          <div className="p-4 text-gray-500 italic">Sin datos</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b bg-gray-50">
+                  <Th>Jugador</Th>
+                  <Th>Estado</Th>
+                  <Th>Zona</Th>
+                  <Th>Lat.</Th>
+                  <Th>Mecanismo</Th>
+                  <Th>Severidad</Th>
+                  <Th>Dispon.</Th>
+                  <Th>ETR</Th>
+                  <Th>Restricciones</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((r) => (
+                  <tr key={r.id} className="border-b last:border-0 align-top">
+                    <Td className="font-medium">{r.userName}</Td>
+                    <Td>{r.status}</Td>
+                    <Td>{r.bodyPart || "—"}</Td>
+                    <Td>{r.laterality || "—"}</Td>
+                    <Td>{r.mechanism || "—"}</Td>
+                    <Td>{r.severity || "—"}</Td>
+                    <Td>{r.availability || "—"}</Td>
+                    <Td>{r.expectedReturn || "—"}</Td>
+                    <Td className="text-xs text-gray-700">
+                      <div className="space-y-0.5">
+                        {r.capMinutes ? <div>Cap: {r.capMinutes}′</div> : null}
+                        {typeof r.pain === "number" ? <div>Dolor: {r.pain}/10</div> : null}
+                        {r.noSprint ? <div>Sin sprint</div> : null}
+                        {r.noChangeOfDirection ? <div>Sin cambios dir.</div> : null}
+                        {r.gymOnly ? <div>Solo gym</div> : null}
+                        {r.noContact ? <div>Sin contacto</div> : null}
+                        {!r.capMinutes &&
+                        typeof r.pain !== "number" &&
+                        !r.noSprint &&
+                        !r.noChangeOfDirection &&
+                        !r.gymOnly &&
+                        !r.noContact ? (
+                          <span className="text-gray-400">—</span>
+                        ) : null}
+                      </div>
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <div className="rounded-xl border bg-white p-3 text-xs text-gray-600">
+        <b>Uso:</b> Esta vista es de <b>cuerpo médico</b> para registrar y actualizar. La vista del
+        <b> CT</b> es solo lectura.
+      </div>
+    </div>
+  );
+}
+
+function Th({ children }: { children: React.ReactNode }) {
+  return <th className="text-left px-3 py-2">{children}</th>;
+}
+function Td({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return <td className={`px-3 py-2 ${className}`}>{children}</td>;
+}
+
