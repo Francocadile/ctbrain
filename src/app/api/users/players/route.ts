@@ -1,15 +1,14 @@
 // src/app/api/users/players/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Role } from "@prisma/client"; // ✅ usar el enum real
+import { Role } from "@prisma/client";
 
-// Evita cacheo en Vercel/Edge
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
     const players = await prisma.user.findMany({
-      where: { role: Role.PLAYER }, // ✅ nada de "PLAYER" como string
+      where: { role: Role.JUGADOR }, // ✅ enum correcto según tu schema
       select: { id: true, name: true, email: true },
       orderBy: [{ name: "asc" }, { email: "asc" }],
     });
@@ -17,6 +16,9 @@ export async function GET() {
     return NextResponse.json(players);
   } catch (err) {
     console.error("GET /api/users/players error:", err);
-    return NextResponse.json({ error: "No se pudo listar jugadores" }, { status: 500 });
+    return NextResponse.json(
+      { error: "No se pudo listar jugadores" },
+      { status: 500 }
+    );
   }
 }
