@@ -7,8 +7,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET /api/dev/peek-users
- * Lista rápida (máx 100) de usuarios con su rol para diagnosticar.
- * Útil para verificar si realmente hay JUGADOR en la base que está usando Vercel.
+ * Muestra hasta 100 usuarios con su rol (para ver qué hay en la base).
  */
 export async function GET() {
   try {
