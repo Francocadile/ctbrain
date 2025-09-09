@@ -3,47 +3,45 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 
-// Prisma no funciona en Edge → forzamos Node.js
+// Prisma necesita Node, y no queremos cache
 export const runtime = "nodejs";
-// Evitamos ISR/caché para esta API
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/users/players
- * - Devuelve SIEMPRE un array de usuarios [{ id, name, email, role }]
- * - Si no hay JUGADOR, devuelve todos con header "x-fallback-all: 1" (para no bloquear la UI)
+ * Devuelve SOLO usuarios con rol JUGADOR.
+ * Si por algún motivo el enum no matchea, hace un fallback con SQL crudo
+ * buscando role IN ('JUGADOR','PLAYER') para cubrir bases.
  */
 export async function GET() {
   try {
-    const players = await prisma.user.findMany({
+    // 1) Camino normal: enum del schema
+    const viaEnum = await prisma.user.findMany({
       where: { role: Role.JUGADOR },
       select: { id: true, name: true, email: true, role: true },
       orderBy: [{ name: "asc" }, { email: "asc" }],
     });
 
-    if (players.length > 0) {
-      return NextResponse.json(players, {
-        headers: { "cache-control": "no-store" },
+    if (viaEnum.length > 0) {
+      return NextResponse.json(viaEnum, {
+        headers: { "cache-control": "no-store", "x-source": "enum" },
       });
     }
 
-    // Fallback: no hay JUGADOR → devolvemos todos para que el médico vea algo
-    const everyone = await prisma.user.findMany({
-      select: { id: true, name: true, email: true, role: true },
-      orderBy: [{ name: "asc" }, { email: "asc" }],
-    });
+    // 2) Fallback crudo: por si el enum/cliente no coincide,
+    // probamos directamente contra la tabla subyacente.
+    // Prisma por defecto mapea al modelo "User" -> tabla "User".
+    // Cubrimos dos etiquetas posibles: 'JUGADOR' y 'PLAYER'.
+    const raw = await prisma.$queryRaw<
+      Array<{ id: string; name: string | null; email: string | null; role: string }>
+    >`SELECT id, name, email, role FROM "User" WHERE role IN ('JUGADOR','PLAYER') ORDER BY name NULLS FIRST, email NULLS FIRST`;
 
-    return new NextResponse(JSON.stringify(everyone), {
-      status: 200,
-      headers: {
-        "content-type": "application/json",
-        "cache-control": "no-store",
-        "x-fallback-all": "1",
-      },
+    return NextResponse.json(raw, {
+      headers: { "cache-control": "no-store", "x-source": "raw-fallback" },
     });
-  } catch (err: any) {
+  } catch (err) {
     console.error("GET /api/users/players failed:", err);
-    // Devolvemos array vacío (no 500) para que el cliente maneje el estado sin romper
+    // Devolvemos [] (no 500) para que el cliente no se rompa
     return new NextResponse(JSON.stringify([]), {
       status: 200,
       headers: {
