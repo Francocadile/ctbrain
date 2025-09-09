@@ -1,9 +1,9 @@
 // src/app/api/injuries/route.ts
 import { NextResponse } from "next/server";
-import type { Prisma } from "@prisma/client"; // 👈 para usar Prisma.$Enums en tipos
-import { prisma } from "@/lib/prisma";        // 👈 tu instancia real
+import type { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 
-/* ================= Utils ================= */
+/* =============== Utils =============== */
 function toYMD(d: Date) {
   return d.toISOString().slice(0, 10);
 }
@@ -11,10 +11,9 @@ function parseYMD(s?: string | null): Date | null {
   if (!s) return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
   if (!m) return null;
-  const [_, yy, mm, dd] = m;
+  const [, yy, mm, dd] = m;
   const d = new Date(Number(yy), Number(mm) - 1, Number(dd));
-  if (isNaN(d.getTime())) return null;
-  return d;
+  return isNaN(d.getTime()) ? null : d;
 }
 function startOfDay(d: Date) {
   const x = new Date(d);
@@ -27,23 +26,27 @@ function nextDay(d: Date) {
   return x;
 }
 
-/* ===== Normalizadores (alinean strings del front con enums de Prisma) ===== */
-type LateralityT = Prisma.$Enums.Laterality;
-type AvailabilityT = Prisma.$Enums.Availability;
-type StatusT = Prisma.$Enums.InjuryStatus;
-type SeverityT = Prisma.$Enums.Severity;
+/* ===== Normalizadores (string → enum value esperado) =====
+   Nota: uso unions de string y luego casteo a `any` al escribir en Prisma,
+   para no depender de los nombres exactos del enum en tu schema.
+*/
+type LateralityT = "IZQ" | "DER" | "BIL" | "BILATERAL" | "NA";
+type AvailabilityT = "FULL" | "LIMITADA" | "INDIVIDUAL" | "REHAB" | "DESCANSO";
+type StatusT = "ACTIVO" | "REINTEGRO" | "ALTA";
+type SeverityT = "LEVE" | "MODERADA" | "SEVERA";
 
 function normalizeLaterality(x: any): LateralityT {
   const v = String(x ?? "NA").toUpperCase();
-  if (v === "BIL" || v === "BILATERAL") return "BILATERAL";
+  if (v === "BIL" || v === "BILATERAL") return v === "BIL" ? "BIL" : "BILATERAL";
   if (v === "IZQ" || v === "LEFT") return "IZQ";
   if (v === "DER" || v === "RIGHT") return "DER";
   return "NA";
 }
 function normalizeAvailability(x: any): AvailabilityT {
   const v = String(x ?? "LIMITADA").toUpperCase();
-  if (["FULL", "LIMITADA", "INDIVIDUAL", "REHAB", "DESCANSO"].includes(v))
+  if (["FULL", "LIMITADA", "INDIVIDUAL", "REHAB", "DESCANSO"].includes(v)) {
     return v as AvailabilityT;
+  }
   return "LIMITADA";
 }
 function normalizeStatus(x: any): StatusT {
@@ -154,7 +157,7 @@ export async function POST(req: Request) {
     const day = startOfDay(parsed);
     const dayTo = nextDay(parsed);
 
-    // Normalizaciones a enums reales
+    // Normalizaciones (string → valores esperados)
     const status = normalizeStatus(body.status);
     const laterality = normalizeLaterality(body.laterality);
     const availability = normalizeAvailability(body.availability);
@@ -163,17 +166,17 @@ export async function POST(req: Request) {
       parseYMD(body.expectedReturn) ??
       (body.expectedReturn ? new Date(body.expectedReturn) : null);
 
-    // CREATE
+    // CREATE (tipado flexible con casts puntuales)
     const createData: Prisma.InjuryEntryUncheckedCreateInput = {
       userId: player.id,
       date: day,
-      status,
+      status: status as any,
       bodyPart: body.bodyPart ?? null,
-      laterality,
+      laterality: laterality as any,
       mechanism: body.mechanism ?? null,
-      severity,
+      severity: (severity as any) ?? null,
       expectedReturn,
-      availability,
+      availability: availability as any,
       pain: body.pain ?? null,
       capMinutes: body.capMinutes ?? null,
       noSprint: !!body.noSprint,
@@ -183,15 +186,15 @@ export async function POST(req: Request) {
       note: body.note ?? null,
     };
 
-    // UPDATE (usar { set: ... } en enums/nullables/bools)
+    // UPDATE (usar { set: ... } + casts para enums)
     const updateData: Prisma.InjuryEntryUpdateInput = {
-      status: { set: status },
+      status: { set: status as any },
       bodyPart: { set: body.bodyPart ?? null },
-      laterality: { set: laterality },
+      laterality: { set: laterality as any },
       mechanism: { set: body.mechanism ?? null },
-      severity: { set: severity },
+      severity: { set: (severity as any) ?? null },
       expectedReturn: { set: expectedReturn },
-      availability: { set: availability },
+      availability: { set: availability as any },
       pain: { set: body.pain ?? null },
       capMinutes: { set: body.capMinutes ?? null },
       noSprint: { set: !!body.noSprint },
