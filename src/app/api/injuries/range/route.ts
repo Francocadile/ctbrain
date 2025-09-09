@@ -8,15 +8,14 @@ export async function GET(req: Request) {
   const startS = searchParams.get("start");
   const endS = searchParams.get("end");
   if (!startS || !endS) {
-    return NextResponse.json({ error: "start & end required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "start & end required" },
+      { status: 400 }
+    );
   }
 
   const start = new Date(startS);
   const end = new Date(endS);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    return NextResponse.json({ error: "invalid dates" }, { status: 400 });
-  }
-  // incluir todo el día 'end'
   end.setDate(end.getDate() + 1);
 
   const rows = await prisma.injuryEntry.findMany({
@@ -26,12 +25,12 @@ export async function GET(req: Request) {
       userId: true,
       date: true,
       status: true,
-      availability: true,
-      bodyPart: true,        // ⬅️ antes estaba "zone"
-      severity: true,
+      bodyPart: true,
+      laterality: true,
       mechanism: true,
-      laterality: true,      // ⬅️ antes estaba "side"
+      severity: true,
       expectedReturn: true,
+      availability: true,
       pain: true,
       capMinutes: true,
       noSprint: true,
@@ -43,7 +42,7 @@ export async function GET(req: Request) {
     orderBy: [{ date: "asc" }],
   });
 
-  const mapped = rows.map((r: any) => ({
+  const mapped = rows.map((r) => ({
     id: r.id,
     userId: r.userId,
     userName: r.user?.name || r.user?.email || "—",
