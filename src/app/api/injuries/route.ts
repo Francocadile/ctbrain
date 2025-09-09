@@ -1,91 +1,82 @@
+// src/app/api/injuries/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// GET /api/injuries?date=YYYY-MM-DD
-export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url);
-  const dateS = searchParams.get("date");
-  if (!dateS) {
-    return NextResponse.json({ error: "date requerido (YYYY-MM-DD)" }, { status: 400 });
-  }
-
-  const start = new Date(dateS);
-  if (Number.isNaN(start.getTime())) {
-    return NextResponse.json({ error: "date inválido" }, { status: 400 });
-  }
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-
-  const rows = await prisma.injuryEntry.findMany({
-    where: { date: { gte: start, lt: end } },
-    include: { user: { select: { name: true, email: true } } },
-    orderBy: [{ createdAt: "desc" }],
-  });
-
-  const mapped = rows.map((r) => ({
-    id: r.id,
-    userId: r.userId,
-    userName: r.user?.name ?? r.user?.email ?? "—",
-    date: r.date.toISOString().slice(0, 10),
-    status: r.status,
-    bodyPart: r.bodyPart,
-    laterality: r.laterality,
-    mechanism: r.mechanism,
-    severity: r.severity,
-    expectedReturn: r.expectedReturn
-      ? r.expectedReturn.toISOString().slice(0, 10)
-      : null,
-    availability: r.availability,
-    pain: r.pain,
-    capMinutes: r.capMinutes,
-    noSprint: r.noSprint,
-    noChangeOfDirection: r.noChangeOfDirection,
-    gymOnly: r.gymOnly,
-    noContact: r.noContact,
-  }));
-
-  return NextResponse.json(mapped);
+function isUUIDLike(s: string) {
+  return /^[0-9a-f-]{22,36}$/i.test(s); // flexible
 }
 
-// POST /api/injuries
 export async function POST(req: Request) {
   try {
-    const { userId, date, status, bodyPart } = await req.json();
+    const body = await req.json();
 
-    if (!userId || !date || !status) {
+    // Puede venir como userId o como 'player'/'jugador' por si hay forms viejos
+    let userId: string | undefined =
+      body.userId || body.player || body.jugador || "";
+
+    // Si no mandaron nada, error claro
+    if (!userId) {
       return NextResponse.json(
-        { error: "userId, date y status son obligatorios" },
+        { error: "Falta el jugador: enviá userId o nombre/email" },
         { status: 400 }
       );
     }
 
-    const user = await prisma.user.findUnique({ where: { id: userId } });
+    // Intentamos resolver el usuario:
+    // - Si parece UUID/ID -> buscamos por id
+    // - Si no -> buscamos por nombre o email exacto
+    let user = null as null | { id: string };
+    if (isUUIDLike(userId)) {
+      user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true },
+      });
+    } else {
+      user = await prisma.user.findFirst({
+        where: {
+          OR: [{ name: userId }, { email: userId }],
+        },
+        select: { id: true },
+      });
+    }
+
     if (!user) {
       return NextResponse.json(
-        { error: "userId inválido: debe ser el id del jugador" },
+        {
+          error:
+            "userId inválido: usá el id del jugador, o el nombre/email exactamente como figura en Usuarios.",
+        },
         { status: 400 }
       );
     }
 
-    const created = await prisma.injuryEntry.create({
-      data: {
-        userId,
-        date: new Date(date),
-        status,
-        bodyPart: bodyPart ?? null,
-      },
-    });
+    // Armamos los datos de la entrada
+    const data = {
+      userId: user.id,
+      date: body.date ? new Date(body.date) : new Date(),
+      status: body.status, // "Activo" | "Reintegro" | "Alta"
+      bodyPart: body.bodyPart ?? null,
+      laterality: body.laterality ?? null,
+      mechanism: body.mechanism ?? null,
+      severity: body.severity ?? null,
+      expectedReturn: body.expectedReturn ? new Date(body.expectedReturn) : null,
+      availability: body.availability ?? "Limitada", // "Out" | "Limitada" | "Full"
+      pain: body.pain ?? null,
+      capMinutes: body.capMinutes ?? null,
+      noSprint: !!body.noSprint,
+      noChangeOfDirection: !!body.noChangeOfDirection,
+      gymOnly: !!body.gymOnly,
+      noContact: !!body.noContact,
+      note: body.note ?? null,
+    };
 
+    const created = await prisma.injuryEntry.create({ data });
     return NextResponse.json(created, { status: 201 });
-  } catch (e: any) {
-    // unique (userId, date) => ya existe carga del día
-    if (e?.code === "P2002") {
-      return NextResponse.json(
-        { error: "Ya existe una entrada para ese jugador en ese día" },
-        { status: 409 }
-      );
-    }
+  } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: "Error interno al crear" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Error creando entrada" },
+      { status: 500 }
+    );
   }
 }
