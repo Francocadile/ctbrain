@@ -2,18 +2,48 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// GET /api/injuries?date=YYYY-MM-DD
+/* Utils */
+function toYMD(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+function parseYMD(s?: string | null): Date | null {
+  if (!s) return null;
+  // Espera "YYYY-MM-DD"
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return null;
+  const [_, yy, mm, dd] = m;
+  const d = new Date(Number(yy), Number(mm) - 1, Number(dd));
+  if (isNaN(d.getTime())) return null;
+  return d;
+}
+function startOfDay(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+function nextDay(d: Date) {
+  const x = startOfDay(d);
+  x.setDate(x.getDate() + 1);
+  return x;
+}
+
+/* =======================
+   GET /api/injuries?date=YYYY-MM-DD
+   Devuelve el listado del día (por fecha)
+======================= */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const dateStr = searchParams.get("date");
-  const date = dateStr ? new Date(dateStr) : new Date();
 
-  // rango [date, nextDay)
-  const next = new Date(date);
-  next.setDate(next.getDate() + 1);
+  const baseDate =
+    parseYMD(dateStr) ?? // si viene en YMD
+    (dateStr ? new Date(dateStr) : new Date()); // fallback
+
+  const from = startOfDay(baseDate);
+  const to = nextDay(baseDate);
 
   const rows = await prisma.injuryEntry.findMany({
-    where: { date: { gte: date, lt: next } },
+    where: { date: { gte: from, lt: to } },
     select: {
       id: true,
       userId: true,
@@ -40,15 +70,13 @@ export async function GET(req: Request) {
     id: r.id,
     userId: r.userId,
     userName: r.user?.name || r.user?.email || "—",
-    date: r.date.toISOString().slice(0, 10),
+    date: toYMD(r.date),
     status: r.status,
     bodyPart: r.bodyPart,
     laterality: r.laterality,
     mechanism: r.mechanism,
     severity: r.severity,
-    expectedReturn: r.expectedReturn
-      ? r.expectedReturn.toISOString().slice(0, 10)
-      : null,
+    expectedReturn: r.expectedReturn ? toYMD(r.expectedReturn) : null,
     availability: r.availability,
     pain: r.pain,
     capMinutes: r.capMinutes,
@@ -61,61 +89,65 @@ export async function GET(req: Request) {
   return NextResponse.json(mapped);
 }
 
-function isUUIDLike(s: string) {
-  return /^[0-9a-f-]{22,36}$/i.test(s);
-}
-
-// POST /api/injuries  (tolera userId, nombre o email)
+/* =======================
+   POST /api/injuries
+   Crea/actualiza (upsert lógico) por jugador+día.
+   Requiere userId de un usuario con rol PLAYER (ajustar si tu enum difiere).
+   Body esperado (parcial):
+   {
+     userId: string, date?: "YYYY-MM-DD",
+     status?: "ACTIVO" | "REINTEGRO" | "ALTA",
+     bodyPart?, laterality?, mechanism?, severity?,
+     expectedReturn?: "YYYY-MM-DD",
+     availability?, pain?, capMinutes?,
+     noSprint?, noChangeOfDirection?, gymOnly?, noContact?, note?
+   }
+======================= */
 export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    let userKey: string | undefined =
-      body.userId || body.player || body.jugador || "";
-
-    if (!userKey) {
+    const userId: string | undefined = body.userId;
+    if (!userId) {
       return NextResponse.json(
-        { error: "Falta el jugador: enviá userId o nombre/email" },
+        { error: "Falta userId: seleccioná un jugador de la lista." },
         { status: 400 }
       );
     }
 
-    // Resolver jugador por id o por name/email exacto
-    let user: { id: string } | null = null;
-    if (isUUIDLike(userKey)) {
-      user = await prisma.user.findUnique({
-        where: { id: userKey },
-        select: { id: true },
-      });
-    } else {
-      user = await prisma.user.findFirst({
-        where: { OR: [{ name: userKey }, { email: userKey }] },
-        select: { id: true },
-      });
-    }
-
-    if (!user) {
+    // Validación fuerte: debe existir y ser jugador
+    const player = await prisma.user.findFirst({
+      where: { id: userId, role: "PLAYER" as any }, // ⚠️ Cambiá a tu enum si no es "PLAYER"
+      select: { id: true },
+    });
+    if (!player) {
       return NextResponse.json(
-        {
-          error:
-            "userId inválido: usá el id del jugador, o el nombre/email exactamente como figura en Usuarios.",
-        },
+        { error: "userId inválido: debe ser un jugador." },
         { status: 400 }
       );
     }
+
+    // Normalizar fecha del registro (día)
+    const dateYMD = typeof body.date === "string" ? body.date : undefined;
+    const parsed = parseYMD(dateYMD) ?? (body.date ? new Date(body.date) : new Date());
+    const day = startOfDay(parsed);
+    const dayTo = nextDay(parsed);
 
     const payload = {
-      userId: user.id,
-      date: body.date ? new Date(body.date) : new Date(),
-      status: body.status, // "ACTIVO" | "REINTEGRO" | "ALTA"
+      userId: player.id,
+      date: day,
+      status: (body.status ?? "ACTIVO") as "ACTIVO" | "REINTEGRO" | "ALTA",
       bodyPart: body.bodyPart ?? null,
-      laterality: body.laterality ?? "NA",
+      laterality: (body.laterality ?? "NA") as "IZQ" | "DER" | "BIL" | "NA",
       mechanism: body.mechanism ?? null,
-      severity: body.severity ?? null,
-      expectedReturn: body.expectedReturn
-        ? new Date(body.expectedReturn)
-        : null,
-      availability: body.availability ?? "LIMITADA",
+      severity: (body.severity ?? null) as "LEVE" | "MODERADA" | "SEVERA" | null,
+      expectedReturn: parseYMD(body.expectedReturn) ?? (body.expectedReturn ? new Date(body.expectedReturn) : null),
+      availability: (body.availability ?? "LIMITADA") as
+        | "FULL"
+        | "LIMITADA"
+        | "INDIVIDUAL"
+        | "REHAB"
+        | "DESCANSO",
       pain: body.pain ?? null,
       capMinutes: body.capMinutes ?? null,
       noSprint: !!body.noSprint,
@@ -125,11 +157,20 @@ export async function POST(req: Request) {
       note: body.note ?? null,
     };
 
-    // upsert por (userId+date) si tenés unique compuesto; si no, create.
-    // Si NO tenés unique en el schema, dejá create:
-    const created = await prisma.injuryEntry.create({ data: payload });
+    // Upsert LÓGICO (sin requerir unique compuesto en el schema):
+    const existing = await prisma.injuryEntry.findFirst({
+      where: { userId: player.id, date: { gte: day, lt: dayTo } },
+      select: { id: true },
+    });
 
-    return NextResponse.json(created, { status: 201 });
+    const saved = existing
+      ? await prisma.injuryEntry.update({
+          where: { id: existing.id },
+          data: payload,
+        })
+      : await prisma.injuryEntry.create({ data: payload });
+
+    return NextResponse.json(saved, { status: existing ? 200 : 201 });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: "Error creando entrada" }, { status: 500 });
