@@ -1,6 +1,7 @@
 // src/app/api/injuries/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import type { Laterality } from "@prisma/client"; // 👈 usamos el enum real de Prisma
 
 /* Utils */
 function toYMD(d: Date) {
@@ -25,6 +26,15 @@ function nextDay(d: Date) {
   const x = startOfDay(d);
   x.setDate(x.getDate() + 1);
   return x;
+}
+
+/* Normalizadores para alinear valores con Prisma */
+function normalizeLaterality(x: any): Laterality {
+  // Acepta variantes desde el front y las mapea al enum del schema
+  if (x === "BIL" || x === "BILATERAL") return "BILATERAL";
+  if (x === "IZQ" || x === "LEFT") return "IZQ";
+  if (x === "DER" || x === "RIGHT") return "DER";
+  return "NA";
 }
 
 /* =======================
@@ -138,10 +148,12 @@ export async function POST(req: Request) {
       date: day,
       status: (body.status ?? "ACTIVO") as "ACTIVO" | "REINTEGRO" | "ALTA",
       bodyPart: body.bodyPart ?? null,
-      laterality: (body.laterality ?? "NA") as "IZQ" | "DER" | "BIL" | "NA",
+      laterality: normalizeLaterality(body.laterality), // 👈 aquí corregido
       mechanism: body.mechanism ?? null,
       severity: (body.severity ?? null) as "LEVE" | "MODERADA" | "SEVERA" | null,
-      expectedReturn: parseYMD(body.expectedReturn) ?? (body.expectedReturn ? new Date(body.expectedReturn) : null),
+      expectedReturn:
+        parseYMD(body.expectedReturn) ??
+        (body.expectedReturn ? new Date(body.expectedReturn) : null),
       availability: (body.availability ?? "LIMITADA") as
         | "FULL"
         | "LIMITADA"
@@ -157,7 +169,7 @@ export async function POST(req: Request) {
       note: body.note ?? null,
     };
 
-    // Upsert LÓGICO (sin requerir unique compuesto en el schema):
+    // Upsert LÓGICO (sin requerir unique compuesto en el schema)
     const existing = await prisma.injuryEntry.findFirst({
       where: { userId: player.id, date: { gte: day, lt: dayTo } },
       select: { id: true },
