@@ -1,11 +1,8 @@
-// src/app/medico/page.tsx
-"use client";
-
+import RoleGate from "@/components/auth/RoleGate";
 import Link from "next/link";
 import type { Route } from "next";
-import RoleGate from "@/components/auth/RoleGate";
 
-export default function MedicoPage() {
+export default async function MedicoPage() {
   return (
     <RoleGate allow={["MEDICO"]}>
       <main className="min-h-[70vh] px-6 py-10">
@@ -17,16 +14,32 @@ export default function MedicoPage() {
         </header>
 
         <section className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Card href={"/med/injuries"} title="Lesiones" desc="Altas, bajas y evolución clínica." />
-          <Card href={"/med/wellness"} title="Wellness" desc="Cuestionarios diarios y alertas automáticas." />
-          <Card href={"/med/protocolos"} title="Protocolos" desc="Intervenciones, guías y lineamientos." />
+          <Card title="Lesiones" desc="Altas, bajas y evolución clínica." href={"/med/injuries" as Route} />
+          <Card title="Wellness" desc="Cuestionarios diarios y alertas automáticas." />
+          <Card title="Protocolos" desc="Intervenciones, guías y lineamientos." />
         </section>
       </main>
     </RoleGate>
   );
 }
 
-function Card({ href, title, desc }: { href: Route; title: string; desc: string }) {
+function Card({
+  title,
+  desc,
+  href,
+}: {
+  title: string;
+  desc: string;
+  href?: Route;
+}) {
+  if (!href) {
+    return (
+      <div className="rounded-xl border bg-white p-5 shadow-sm">
+        <h3 className="font-semibold">{title}</h3>
+        <p className="text-sm text-gray-500">{desc}</p>
+      </div>
+    );
+  }
   return (
     <Link
       href={href}
