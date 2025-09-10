@@ -4,7 +4,6 @@
 export const dynamic = "force-dynamic";
 
 import * as React from "react";
-import Link from "next/link";
 import { usePlayers } from "../_hooks/usePlayers";
 
 export default function MedInjuriesPage() {
@@ -13,7 +12,6 @@ export default function MedInjuriesPage() {
 
   return (
     <main className="min-h-[70vh] px-6 py-10">
-      {/* Encabezado */}
       <header className="mb-6">
         <h1 className="text-2xl font-bold">Cargar parte clínico — Médico</h1>
         <p className="mt-1 text-sm text-gray-600">
@@ -21,17 +19,21 @@ export default function MedInjuriesPage() {
         </p>
         <p className="mt-2 text-xs text-gray-500">
           Atajo de prueba:{" "}
-          <Link href="/med/test-players" className="underline">
+          <a
+            href="/api/med/test-players"
+            className="underline"
+            target="_blank"
+            rel="noreferrer"
+          >
             ver lista de jugadores (test)
-          </Link>
+          </a>
         </p>
       </header>
 
-      {/* Tarjeta del formulario (skeleton básico por ahora) */}
       <section className="rounded-xl border bg-white p-5 shadow-sm space-y-4">
         <h2 className="font-semibold">Parte diario</h2>
 
-        {/* SELECT DE JUGADOR (usa usePlayers) */}
+        {/* SELECT DE JUGADOR */}
         <div className="grid gap-2">
           <label className="text-sm font-medium">Jugador</label>
           <select
@@ -56,7 +58,6 @@ export default function MedInjuriesPage() {
             ))}
           </select>
 
-          {/* Mensajes de estado opcionales */}
           {!loading && !error && players.length === 0 && (
             <p className="text-xs text-amber-600">
               No hay usuarios con rol <b>JUGADOR</b>. Agregá jugadores en “Usuarios”.
@@ -69,7 +70,7 @@ export default function MedInjuriesPage() {
           )}
         </div>
 
-        {/* El resto de campos se irán habilitando después de elegir jugador */}
+        {/* Campos demo (se habilitan al elegir jugador) */}
         <div className="grid gap-2">
           <label className="text-sm font-medium">Estado</label>
           <select
