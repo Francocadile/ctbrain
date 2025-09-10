@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { usePlayersMed } from "@/hooks/usePlayers"; // 👈 ruta correcta
+import { usePlayersMed } from "@/hooks/usePlayers";
 
 type Props = {
   value: string;                    // id del jugador seleccionado
@@ -19,7 +19,6 @@ export default function PlayerSelectMed({
   className,
 }: Props) {
   const { players, loading, error, reload } = usePlayersMed();
-
   const isDisabled = disabled || loading || !!error;
 
   return (
