@@ -4,7 +4,8 @@
 export const dynamic = "force-dynamic";
 
 import * as React from "react";
-import { usePlayers } from "../_hooks/usePlayers";
+import { usePlayers } from "@/hooks/usePlayers"; // 👈 usamos el hook unificado
+import HelpTip from "@/components/HelpTip";
 
 export default function MedInjuriesPage() {
   const { players, loading, error } = usePlayers();
@@ -31,7 +32,10 @@ export default function MedInjuriesPage() {
       </header>
 
       <section className="rounded-xl border bg-white p-5 shadow-sm space-y-4">
-        <h2 className="font-semibold">Parte diario</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="font-semibold">Parte diario</h2>
+          <HelpTip text="Primero seleccioná el jugador. Estos datos son de ejemplo; después conectamos con el POST real." />
+        </div>
 
         {/* SELECT DE JUGADOR */}
         <div className="grid gap-2">
@@ -78,13 +82,15 @@ export default function MedInjuriesPage() {
             disabled={!userId}
             defaultValue="LIMITADA"
           >
+            {/* Etiquetas según el diseño nuevo; valores de demo */}
             <option value="ALTA">Alta</option>
-            <option value="REINTEGRO">Reintegro</option>
-            <option value="ACTIVO">Baja</option>
-            <option value="LIMITADA">Limitada</option>
+            <option value="REINTEGRO">Reintegro (RTP)</option>
+            <option value="LIMITADA">Limitado</option>
+            <option value="BAJA">Baja</option>
           </select>
           <p className="text-xs text-gray-500">
-            (Campos demo — mañana enchufamos todo el flujo real.)
+            (Campos demo — en el siguiente paso conectamos al endpoint real y
+            validaciones por estado.)
           </p>
         </div>
 
