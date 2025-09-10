@@ -31,8 +31,6 @@ enum SessionType {
 // =========================
 // Enums clínicos (nuevo)
 // =========================
-
-// Estado del jugador para el parte diario
 enum ClinicalStatus {
   BAJA
   REINTEGRO
@@ -40,20 +38,17 @@ enum ClinicalStatus {
   ALTA
 }
 
-// Dónde ocurrió la baja
 enum LeaveStage {
   PARTIDO
   ENTRENAMIENTO
   EXTRADEPORTIVO
 }
 
-// Tipo de condición de la baja
 enum LeaveKind {
   LESION
   ENFERMEDAD
 }
 
-// Lateralidad anatómica
 enum Laterality {
   IZQ
   DER
@@ -61,14 +56,12 @@ enum Laterality {
   NA
 }
 
-// Severidad clínica de lesión
 enum Severity {
   LEVE
   MODERADA
   SEVERA
 }
 
-// Mecanismo de lesión
 enum Mechanism {
   SOBRECARGA
   IMPACTO
@@ -78,7 +71,6 @@ enum Mechanism {
   OTRO
 }
 
-// Sistema afectado (enfermedad)
 enum SystemAffected {
   RESPIRATORIO
   GASTROINTESTINAL
@@ -88,7 +80,6 @@ enum SystemAffected {
   OTRO
 }
 
-// Aptitud en enfermedad
 enum IllAptitude {
   SOLO_GIMNASIO
   AEROBICO_SUAVE
@@ -97,9 +88,8 @@ enum IllAptitude {
 }
 
 // =========================
-/* Modelos existentes */
+// Modelos existentes
 // =========================
-
 model User {
   id        String    @id @default(cuid())
   email     String    @unique
@@ -115,7 +105,6 @@ model User {
   plannerPrefs    PlannerPrefs?
   exercises       Exercise[]
 
-  // Relación con partes clínicos
   clinicalEntries ClinicalEntry[]
 }
 
