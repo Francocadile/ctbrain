@@ -7,6 +7,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/* =========================
+   Enums base existentes
+========================= */
 enum Role {
   ADMIN
   CT
@@ -23,33 +26,76 @@ enum SessionType {
   RECUPERACION
 }
 
-// ==== NUEVO ====
-enum InjuryStatus {
-  ACTIVO
+/* =========================
+   Enums clínicos (nuevo)
+========================= */
+/// Estado del jugador para el parte diario
+enum ClinicalStatus {
+  BAJA
   REINTEGRO
+  LIMITADO
   ALTA
 }
 
+/// Estadio de la BAJA
+enum LeaveStage {
+  PARTIDO
+  ENTRENAMIENTO
+  EXTRADEPORTIVO
+}
+
+/// Tipo de condición cuando está en BAJA
+enum ConditionType {
+  LESION
+  ENFERMEDAD
+}
+
+/// Lateralidad para lesiones
 enum Laterality {
   IZQ
   DER
-  BILATERAL
+  BIL
   NA
 }
 
+/// Severidad de lesión
 enum Severity {
   LEVE
   MODERADA
   SEVERA
 }
 
-enum Availability {
-  OUT
-  MODIFIED
-  FULL
+/// Mecanismo de lesión
+enum Mechanism {
+  SOBRECARGA
+  IMPACTO
+  TORSION
+  ESTIRAMIENTO
+  RECIDIVA
+  OTRO
 }
-// ===============
 
+/// Sistema afectado (enfermedad)
+enum DiseaseSystem {
+  RESPIRATORIO
+  GASTROINTESTINAL
+  OTORRINO
+  DERMATOLOGICO
+  GENERAL
+  OTRO
+}
+
+/// Qué está apto a hacer si cursa enfermedad
+enum ActivityAllowance {
+  NINGUNO
+  GIMNASIO
+  AEROBICO
+  TACTICO
+}
+
+/* =========================
+   Modelos existentes
+========================= */
 model User {
   id        String    @id @default(cuid())
   email     String    @unique
@@ -65,8 +111,11 @@ model User {
   plannerPrefs    PlannerPrefs?
   exercises       Exercise[]
 
-  // NUEVO
-  injuryEntries   InjuryEntry[]
+  // Parte clínico (nuevo)
+  clinicalEntries ClinicalEntry[]  @relation("UserClinicalEntries")
+
+  // Si querés mantener compatibilidad con código viejo,
+  // asegurate de haber eliminado cualquier referencia a InjuryEntry en el repo.
 }
 
 model Session {
@@ -190,35 +239,70 @@ model PlannerPrefs {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// ===== Lesiones (NUEVO) =====
-// Registro DIARIO por jugador (userId+date unique).
-// Incluye estado clínico, restricciones operativas y ETR.
-model InjuryEntry {
-  id         String        @id @default(cuid())
-  userId     String
-  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+/* =========================
+   Parte clínico (NUEVO)
+   - Registro DIARIO por jugador (userId+date unique)
+   - Sin "dolor" (llega por Wellness)
+========================= */
+model ClinicalEntry {
+  id        String   @id @default(cuid())
 
-  date       DateTime
-  status     InjuryStatus  @default(ACTIVO)
+  userId    String
+  user      User     @relation("UserClinicalEntries", fields: [userId], references: [id], onDelete: Cascade)
 
-  bodyPart   String?
-  laterality Laterality?
-  mechanism  String?
-  severity   Severity?
-  expectedReturn DateTime?
+  /// Día del registro (se guarda como 00:00 del día)
+  date      DateTime
 
-  availability Availability?
-  pain        Int?
-  notes       String?
+  /// Estado del jugador
+  status    ClinicalStatus
 
-  capMinutes  Int?
-  noSprint    Boolean         @default(false)
-  noChangeOfDirection Boolean @default(false)
-  gymOnly     Boolean         @default(false)
-  noContact   Boolean         @default(false)
+  /* --- Si estado = BAJA --- */
+  leaveStage      LeaveStage?
+  condition       ConditionType?
 
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  // a) Lesión
+  diagnosis       String?          // diagnóstico breve visible en dashboards
+  bodyPart        String?          // zona/parte (selector + "Otro" en UI)
+  laterality      Laterality?
+  mechanism       Mechanism?
+  severity        Severity?
+
+  // b) Enfermedad
+  diseaseSystem   DiseaseSystem?
+  diseaseSymptoms String?
+  contagious      Boolean?         // ¿contagioso?
+  isolationDays   Int?             // recomendación de aislamiento (días)
+  activityAllowance ActivityAllowance? // apto: gimnasio/aeróbico/táctico/ninguno
+  feverMaxC       Float?           // fiebre máxima °C
+
+  /* --- Cronología --- */
+  startDate       DateTime?        // fecha de inicio del episodio
+  daysMin         Int?             // estimado rango
+  daysMax         Int?
+  expectedReturn  DateTime?        // ETR (puede ser calculado o manual)
+  etrManual       Boolean          @default(false)
+
+  /* --- Restricciones (para REINTEGRO/LIMITADO) --- */
+  capMinutes          Int?
+  noSprint            Boolean       @default(false)
+  noChangeOfDirection Boolean       @default(false)
+  gymOnly             Boolean       @default(false)
+  noContact           Boolean       @default(false)
+
+  /* --- Documentación --- */
+  notes           String?          // informe libre
+  medSignedById   String           // firma médica (usuario médico)
+  medSignedAt     DateTime         @default(now())
+  medSignedBy     User             @relation(fields: [medSignedById], references: [id], onDelete: Restrict)
+
+  /* --- Plan/Protocolo semanal --- */
+  protocolObjectives String?
+  protocolTasks      String?
+  protocolControls   String?       // controles d3/d7, etc.
+  protocolCriteria   String?       // criterios de progresión
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@unique([userId, date], name: "userId_date")
   @@index([date])
