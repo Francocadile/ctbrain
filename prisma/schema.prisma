@@ -1,3 +1,5 @@
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,9 +9,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/* =========================
-   Enums base existentes
-========================= */
+// =========================
+// Enums base existentes
+// =========================
 enum Role {
   ADMIN
   CT
@@ -26,46 +28,47 @@ enum SessionType {
   RECUPERACION
 }
 
-/* =========================
-   Enums clínicos (nuevo)
-========================= */
-/// Estado del jugador para el parte diario
+// =========================
+// Enums clínicos (nuevo)
+// =========================
+
+// Estado del jugador para el parte diario
 enum ClinicalStatus {
   BAJA
   REINTEGRO
-  LIMITADO
+  LIMITADA
   ALTA
 }
 
-/// Estadio de la BAJA
+// Dónde ocurrió la baja
 enum LeaveStage {
   PARTIDO
   ENTRENAMIENTO
   EXTRADEPORTIVO
 }
 
-/// Tipo de condición cuando está en BAJA
-enum ConditionType {
+// Tipo de condición de la baja
+enum LeaveKind {
   LESION
   ENFERMEDAD
 }
 
-/// Lateralidad para lesiones
+// Lateralidad anatómica
 enum Laterality {
   IZQ
   DER
-  BIL
+  BILATERAL
   NA
 }
 
-/// Severidad de lesión
+// Severidad clínica de lesión
 enum Severity {
   LEVE
   MODERADA
   SEVERA
 }
 
-/// Mecanismo de lesión
+// Mecanismo de lesión
 enum Mechanism {
   SOBRECARGA
   IMPACTO
@@ -75,8 +78,8 @@ enum Mechanism {
   OTRO
 }
 
-/// Sistema afectado (enfermedad)
-enum DiseaseSystem {
+// Sistema afectado (enfermedad)
+enum SystemAffected {
   RESPIRATORIO
   GASTROINTESTINAL
   OTORRINO
@@ -85,17 +88,18 @@ enum DiseaseSystem {
   OTRO
 }
 
-/// Qué está apto a hacer si cursa enfermedad
-enum ActivityAllowance {
+// Aptitud en enfermedad
+enum IllAptitude {
+  SOLO_GIMNASIO
+  AEROBICO_SUAVE
+  CHARLAS_TACTICO
   NINGUNO
-  GIMNASIO
-  AEROBICO
-  TACTICO
 }
 
-/* =========================
-   Modelos existentes
-========================= */
+// =========================
+/* Modelos existentes */
+// =========================
+
 model User {
   id        String    @id @default(cuid())
   email     String    @unique
@@ -111,11 +115,8 @@ model User {
   plannerPrefs    PlannerPrefs?
   exercises       Exercise[]
 
-  // Parte clínico (nuevo)
-  clinicalEntries ClinicalEntry[]  @relation("UserClinicalEntries")
-
-  // Si querés mantener compatibilidad con código viejo,
-  // asegurate de haber eliminado cualquier referencia a InjuryEntry en el repo.
+  // Relación con partes clínicos
+  clinicalEntries ClinicalEntry[]
 }
 
 model Session {
@@ -239,70 +240,65 @@ model PlannerPrefs {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-/* =========================
-   Parte clínico (NUEVO)
-   - Registro DIARIO por jugador (userId+date unique)
-   - Sin "dolor" (llega por Wellness)
-========================= */
+// =========================
+// Parte clínico (NUEVO)
+// Registro DIARIO por jugador (userId+date unique)
+// Sin "dolor": ese dato viene de Wellness
+// =========================
 model ClinicalEntry {
   id        String   @id @default(cuid())
 
   userId    String
-  user      User     @relation("UserClinicalEntries", fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  /// Día del registro (se guarda como 00:00 del día)
   date      DateTime
-
-  /// Estado del jugador
   status    ClinicalStatus
 
-  /* --- Si estado = BAJA --- */
-  leaveStage      LeaveStage?
-  condition       ConditionType?
+  // Si estado = BAJA
+  leaveStage LeaveStage?
+  leaveKind  LeaveKind?
 
-  // a) Lesión
-  diagnosis       String?          // diagnóstico breve visible en dashboards
-  bodyPart        String?          // zona/parte (selector + "Otro" en UI)
-  laterality      Laterality?
-  mechanism       Mechanism?
-  severity        Severity?
+  // Si leaveKind = LESION
+  diagnosis  String?
+  bodyPart   String?
+  laterality Laterality?
+  mechanism  Mechanism?
+  severity   Severity?
 
-  // b) Enfermedad
-  diseaseSystem   DiseaseSystem?
-  diseaseSymptoms String?
-  contagious      Boolean?         // ¿contagioso?
-  isolationDays   Int?             // recomendación de aislamiento (días)
-  activityAllowance ActivityAllowance? // apto: gimnasio/aeróbico/táctico/ninguno
-  feverMaxC       Float?           // fiebre máxima °C
+  // Si leaveKind = ENFERMEDAD
+  illSystem        SystemAffected?
+  illSymptoms      String?
+  illContagious    Boolean?
+  illIsolationDays Int?
+  illAptitude      IllAptitude?
+  feverMax         Float?
 
-  /* --- Cronología --- */
-  startDate       DateTime?        // fecha de inicio del episodio
-  daysMin         Int?             // estimado rango
-  daysMax         Int?
-  expectedReturn  DateTime?        // ETR (puede ser calculado o manual)
-  etrManual       Boolean          @default(false)
+  // Cronología
+  startDate            DateTime?
+  daysMin              Int?
+  daysMax              Int?
+  expectedReturn       DateTime?
+  expectedReturnManual Boolean? @default(false)
 
-  /* --- Restricciones (para REINTEGRO/LIMITADO) --- */
+  // Restricciones (REINTEGRO / LIMITADA)
   capMinutes          Int?
-  noSprint            Boolean       @default(false)
-  noChangeOfDirection Boolean       @default(false)
-  gymOnly             Boolean       @default(false)
-  noContact           Boolean       @default(false)
+  noSprint            Boolean  @default(false)
+  noChangeOfDirection Boolean  @default(false)
+  gymOnly             Boolean  @default(false)
+  noContact           Boolean  @default(false)
 
-  /* --- Documentación --- */
-  notes           String?          // informe libre
-  medSignedById   String           // firma médica (usuario médico)
-  medSignedAt     DateTime         @default(now())
-  medSignedBy     User             @relation(fields: [medSignedById], references: [id], onDelete: Restrict)
+  // Documentación
+  notes        String?
+  medSignature String?
 
-  /* --- Plan/Protocolo semanal --- */
+  // Plan / Protocolo semanal
   protocolObjectives String?
   protocolTasks      String?
-  protocolControls   String?       // controles d3/d7, etc.
-  protocolCriteria   String?       // criterios de progresión
+  protocolControls   String?
+  protocolCriteria   String?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([userId, date], name: "userId_date")
   @@index([date])
