@@ -3,35 +3,19 @@
 
 import * as React from "react";
 
-/* ============
-   Tipos front
-   ============ */
-export type ClinicalStatus = "BAJA" | "REINTEGRO" | "LIMITADA" | "ALTA";
-export type LeaveStage = "PARTIDO" | "ENTRENAMIENTO" | "EXTRADEPORTIVO";
-export type LeaveKind = "LESION" | "ENFERMEDAD";
-export type Laterality = "IZQ" | "DER" | "BILATERAL" | "NA";
-export type Severity = "LEVE" | "MODERADA" | "SEVERA";
-export type Mechanism =
-  | "SOBRECARGA"
-  | "IMPACTO"
-  | "TORSION"
-  | "ESTIRAMIENTO"
-  | "RECIDIVA"
-  | "OTRO";
-export type SystemAffected =
-  | "RESPIRATORIO"
-  | "GASTROINTESTINAL"
-  | "OTORRINO"
-  | "DERMATOLOGICO"
-  | "GENERAL"
-  | "OTRO";
-export type IllAptitude =
-  | "SOLO_GIMNASIO"
-  | "AEROBICO_SUAVE"
-  | "CHARLAS_TACTICO"
-  | "NINGUNO";
+/** YYYY-MM-DD de hoy en local */
+export function todayYMD(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
 
-export type ClinicalRow = {
+/** Enums front (alineados a Prisma) */
+export type ClinicalStatus = "BAJA" | "REINTEGRO" | "LIMITADA" | "ALTA";
+
+/** Estructura que devuelve tu GET /api/med/clinical (ya mapeada en el backend) */
+export type Episode = {
   id: string;
   userId: string;
   userName: string;
@@ -39,29 +23,29 @@ export type ClinicalRow = {
   status: ClinicalStatus;
 
   // BAJA
-  leaveStage?: LeaveStage | null;
-  leaveKind?: LeaveKind | null;
+  leaveStage?: "PARTIDO" | "ENTRENAMIENTO" | "EXTRADEPORTIVO" | null;
+  leaveKind?: "LESION" | "ENFERMEDAD" | null;
 
-  // LESION
+  // Lesión
   diagnosis?: string | null;
   bodyPart?: string | null;
-  laterality?: Laterality | null;
-  mechanism?: Mechanism | null;
-  severity?: Severity | null;
+  laterality?: "IZQ" | "DER" | "BILATERAL" | "NA" | null;
+  mechanism?: "SOBRECARGA" | "IMPACTO" | "TORSION" | "ESTIRAMIENTO" | "RECIDIVA" | "OTRO" | null;
+  severity?: "LEVE" | "MODERADA" | "SEVERA" | null;
 
-  // ENFERMEDAD
-  illSystem?: SystemAffected | null;
+  // Enfermedad
+  illSystem?: "RESPIRATORIO" | "GASTROINTESTINAL" | "OTORRINO" | "DERMATOLOGICO" | "GENERAL" | "OTRO" | null;
   illSymptoms?: string | null;
   illContagious?: boolean | null;
   illIsolationDays?: number | null;
-  illAptitude?: IllAptitude | null;
+  illAptitude?: "SOLO_GIMNASIO" | "AEROBICO_SUAVE" | "CHARLAS_TACTICO" | "NINGUNO" | null;
   feverMax?: number | null;
 
   // Cronología
-  startDate?: string | null; // YYYY-MM-DD
+  startDate?: string | null; // YYYY-MM-DD | null
   daysMin?: number | null;
   daysMax?: number | null;
-  expectedReturn?: string | null; // YYYY-MM-DD
+  expectedReturn?: string | null; // YYYY-MM-DD | null
   expectedReturnManual?: boolean | null;
 
   // Restricciones
@@ -80,134 +64,64 @@ export type ClinicalRow = {
   protocolCriteria?: string | null;
 };
 
-export type UpsertPayload = {
-  userId: string;
-  date?: string; // YYYY-MM-DD (default hoy del server si se omite)
-  status: ClinicalStatus;
+type ErrorKind = null | "EMPTY" | "ERR";
 
-  // BAJA
-  leaveStage?: LeaveStage | null;
-  leaveKind?: LeaveKind | null;
+/** Hook para listar episodios por fecha y guardar (POST upsert) */
+export function useEpisodes(initialDate?: string) {
+  const [date, setDate] = React.useState<string>(initialDate || todayYMD());
+  const [items, setItems] = React.useState<Episode[]>([]);
+  const [loading, setLoading] = React.useState<boolean>(false);
+  const [error, setError] = React.useState<ErrorKind>(null);
 
-  // LESION
-  diagnosis?: string | null;
-  bodyPart?: string | null;
-  laterality?: Laterality | null;
-  mechanism?: Mechanism | null;
-  severity?: Severity | null;
-
-  // ENFERMEDAD
-  illSystem?: SystemAffected | null;
-  illSymptoms?: string | null;
-  illContagious?: boolean | null;
-  illIsolationDays?: number | null;
-  illAptitude?: IllAptitude | null;
-  feverMax?: number | null;
-
-  // Cronología
-  startDate?: string | null;
-  daysMin?: number | null;
-  daysMax?: number | null;
-  expectedReturn?: string | null;
-  expectedReturnManual?: boolean | null;
-
-  // Restricciones
-  capMinutes?: number | null;
-  noSprint?: boolean;
-  noChangeOfDirection?: boolean;
-  gymOnly?: boolean;
-  noContact?: boolean;
-
-  // Docs/plan
-  notes?: string | null;
-  medSignature?: string | null;
-  protocolObjectives?: string | null;
-  protocolTasks?: string | null;
-  protocolControls?: string | null;
-  protocolCriteria?: string | null;
-};
-
-type State<T> = {
-  data: T;
-  loading: boolean;
-  error: string | null;
-};
-
-/* ========================
-   Hook: listar por fecha
-   ======================== */
-export function useEpisodesList(initialDate?: string) {
-  const [date, setDate] = React.useState<string>(
-    initialDate || new Date().toISOString().slice(0, 10)
-  );
-  const [state, setState] = React.useState<State<ClinicalRow[]>>({
-    data: [],
-    loading: false,
-    error: null,
-  });
-
-  const load = React.useCallback(
-    async (d?: string) => {
-      const q = d || date;
-      setState((s) => ({ ...s, loading: true, error: null }));
-      try {
-        const res = await fetch(
-          `/api/med/clinical?date=${encodeURIComponent(q)}`,
-          { cache: "no-store" }
-        );
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const rows: ClinicalRow[] = await res.json();
-        setState({ data: rows ?? [], loading: false, error: null });
-      } catch (e: any) {
-        setState({ data: [], loading: false, error: e?.message || "Error" });
-      }
-    },
-    [date]
-  );
+  const reload = React.useCallback(async (d: string = date) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const q = new URLSearchParams();
+      if (d) q.set("date", d);
+      const res = await fetch(`/api/med/clinical?${q.toString()}`, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as Episode[];
+      setItems(Array.isArray(data) ? data : []);
+      if (!data || data.length === 0) setError("EMPTY");
+    } catch {
+      setItems([]);
+      setError("ERR");
+    } finally {
+      setLoading(false);
+    }
+  }, [date]);
 
   React.useEffect(() => {
-    load(date);
-  }, [date, load]);
+    reload(date);
+  }, [date, reload]);
+
+  /** Guarda/actualiza un episodio (upsert por userId+date en backend) */
+  async function saveEpisode(payload: Partial<Episode> & { userId: string; date?: string }) {
+    const body = { ...payload };
+    // Asegurar date
+    if (!body.date) body.date = date;
+
+    const res = await fetch("/api/med/clinical", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      throw new Error(`Error guardando episodio (${res.status}) ${txt}`);
+    }
+    await reload(body.date);
+    return res.json();
+  }
 
   return {
     date,
     setDate,
-    ...state,
-    reload: () => load(date),
+    items,
+    loading,
+    error,
+    reload,
+    saveEpisode,
   };
-}
-
-/* ========================
-   Hook: crear/actualizar
-   ======================== */
-export function useEpisodeUpsert() {
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [result, setResult] = React.useState<{ id?: string; date?: string } | null>(null);
-
-  const upsert = React.useCallback(async (payload: UpsertPayload) => {
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    try {
-      const res = await fetch("/api/med/clinical", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data?.error || `HTTP ${res.status}`);
-      }
-      setResult({ id: data?.id, date: data?.date });
-      return data;
-    } catch (e: any) {
-      setError(e?.message || "Error");
-      throw e;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  return { upsert, loading, error, result };
 }
