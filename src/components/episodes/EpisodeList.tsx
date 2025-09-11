@@ -7,14 +7,26 @@ import StatusBadge from "./StatusBadge";
 import RestrictionsChips from "./RestrictionsChips";
 
 type Props = {
-  /** Llamado al presionar “Nuevo episodio” */
   onNew?: (date?: string) => void;
-  /** Llamado al presionar “Editar” en una fila */
   onEdit?: (ep: Episode) => void;
-  /** Fecha inicial (YYYY-MM-DD). Por defecto: hoy */
   initialDate?: string;
   className?: string;
 };
+
+const rank: Record<string, number> = {
+  BAJA: 0,
+  REINTEGRO: 1,
+  LIMITADA: 2,
+  ALTA: 3,
+};
+
+function parseYMD(s?: string | null) {
+  if (!s) return null;
+  const [y, m, d] = s.split("-").map(Number);
+  const dt = new Date(y, (m || 1) - 1, d || 1);
+  dt.setHours(0, 0, 0, 0);
+  return isNaN(dt.getTime()) ? null : dt;
+}
 
 export default function EpisodeList({
   onNew,
@@ -26,25 +38,64 @@ export default function EpisodeList({
     initialDate || todayYMD()
   );
 
+  // ↪️ Sincronizar la fecha en la URL (?date=YYYY-MM-DD)
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("date", date);
+    window.history.replaceState({}, "", url.toString());
+  }, [date]);
+
   const [query, setQuery] = React.useState("");
+
+  const counts = React.useMemo(() => {
+    const c = { BAJA: 0, REINTEGRO: 0, LIMITADA: 0, ALTA: 0 };
+    for (const it of items) {
+      if (it.status in c) (c as any)[it.status] += 1;
+    }
+    return c;
+  }, [items]);
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((it) => {
-      const fields = [
-        it.userName,
-        it.diagnosis,
-        it.bodyPart,
-        it.notes,
-        it.protocolObjectives,
-        it.protocolTasks,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return fields.includes(q);
+    const base = q
+      ? items.filter((it) => {
+          const fields = [
+            it.userName,
+            it.diagnosis,
+            it.bodyPart,
+            it.notes,
+            it.protocolObjectives,
+            it.protocolTasks,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return fields.includes(q);
+        })
+      : items.slice();
+
+    // Orden: estado (BAJA→ALTA), ETR asc (vacíos al final), nombre
+    base.sort((a, b) => {
+      const ra = rank[a.status] ?? 99;
+      const rb = rank[b.status] ?? 99;
+      if (ra !== rb) return ra - rb;
+
+      const da = parseYMD(a.expectedReturn);
+      const db = parseYMD(b.expectedReturn);
+      if (da && db) {
+        const diff = da.getTime() - db.getTime();
+        if (diff !== 0) return diff;
+      } else if (da && !db) {
+        return -1; // con ETR primero
+      } else if (!da && db) {
+        return 1;
+      }
+
+      return (a.userName || "").localeCompare(b.userName || "");
     });
+
+    return base;
   }, [items, query]);
 
   function exportCSV() {
@@ -169,6 +220,22 @@ export default function EpisodeList({
             Nuevo episodio
           </button>
         </div>
+      </div>
+
+      {/* Contadores por estado */}
+      <div className="mb-3 flex flex-wrap gap-2 text-xs">
+        <span className="rounded-full bg-red-50 text-red-700 ring-1 ring-red-200 px-2 py-1">
+          BAJA: {counts.BAJA}
+        </span>
+        <span className="rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200 px-2 py-1">
+          REINTEGRO: {counts.REINTEGRO}
+        </span>
+        <span className="rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200 px-2 py-1">
+          LIMITADA: {counts.LIMITADA}
+        </span>
+        <span className="rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2 py-1">
+          ALTA: {counts.ALTA}
+        </span>
       </div>
 
       {/* Tabla */}
