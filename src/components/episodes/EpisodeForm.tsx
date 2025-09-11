@@ -140,76 +140,6 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
     }
   }, [startDate, daysEstimated, expectedReturnManual]);
 
-  // ---------- Duplicar desde ayer ----------
-  async function duplicateFromYesterday() {
-    setMsg(null);
-    setErr(null);
-    if (!userId) {
-      setMsg({ kind: "err", text: "Seleccioná un jugador para duplicar." });
-      return;
-    }
-    try {
-      const yday = addDays(date || todayYMD(), -1);
-      const res = await fetch(`/api/med/clinical?date=${yday}`, { cache: "no-store" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const list = (await res.json()) as Episode[];
-      const prev = list.find((x) => x.userId === userId);
-      if (!prev) {
-        setMsg({ kind: "err", text: "No hay parte del día anterior para este jugador." });
-        return;
-      }
-
-      // Copiamos todo excepto la fecha y la firma (se firma cada día)
-      setStatus(prev.status as Status);
-
-      // BAJA
-      setLeaveStage((prev.leaveStage as LeaveStage) ?? "");
-      setLeaveKind((prev.leaveKind as LeaveKind) ?? "");
-
-      // Lesión
-      setDiagnosis(prev.diagnosis ?? "");
-      setBodyPart(prev.bodyPart ?? "");
-      setLaterality((prev.laterality as Laterality) ?? "");
-      setMechanism((prev.mechanism as Mechanism) ?? "");
-      setSeverity((prev.severity as Severity) ?? "");
-
-      // Enfermedad
-      setIllSystem((prev.illSystem as IllSystem) ?? "");
-      setIllSymptoms(prev.illSymptoms ?? "");
-      setIllContagious(!!prev.illContagious);
-      setIllIsolationDays(prev.illIsolationDays ?? "");
-      setIllAptitude((prev.illAptitude as IllAptitude) ?? "");
-      setFeverMax(prev.feverMax ?? "");
-
-      // Cronología (estimados solo UI)
-      setStartDate(prev.startDate || startDate);
-      const est =
-        prev.startDate && prev.expectedReturn ? diffDays(prev.expectedReturn, prev.startDate) : "";
-      setDaysEstimated(est === "" ? "" : Number(est));
-      setExpectedReturnManual(!!prev.expectedReturnManual);
-      setExpectedReturn(prev.expectedReturn || "");
-
-      // Restricciones
-      setCapMinutes(prev.capMinutes ?? "");
-      setNoSprint(!!prev.noSprint);
-      setNoChangeOfDirection(!!prev.noChangeOfDirection);
-      setGymOnly(!!prev.gymOnly);
-      setNoContact(!!prev.noContact);
-
-      // Docs/plan
-      setNotes(prev.notes ?? "");
-      setMedSignature(""); // obligar a firmar cada día
-      setProtocolObjectives(prev.protocolObjectives ?? "");
-      setProtocolTasks(prev.protocolTasks ?? "");
-      setProtocolControls(prev.protocolControls ?? "");
-      setProtocolCriteria(prev.protocolCriteria ?? "");
-
-      setMsg({ kind: "ok", text: `Duplicado desde ${yday}. Revisá y guardá.` });
-    } catch (e: any) {
-      setMsg({ kind: "err", text: e?.message || "No se pudo duplicar." });
-    }
-  }
-
   // ---------- Submit ----------
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -701,15 +631,6 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
           disabled={saving}
         >
           Cancelar
-        </button>
-        <button
-          type="button"
-          onClick={duplicateFromYesterday}
-          className="h-10 rounded-md border px-4 text-sm hover:bg-gray-50"
-          disabled={saving || !userId}
-          title={!userId ? "Seleccioná un jugador primero" : "Duplicar el parte de ayer"}
-        >
-          Duplicar desde ayer
         </button>
         <button
           type="submit"
