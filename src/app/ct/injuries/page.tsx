@@ -4,11 +4,10 @@
 export const dynamic = "force-dynamic";
 
 import * as React from "react";
-import { Suspense, useMemo, useEffect, useState, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useMemo, useEffect, useState, useCallback, Suspense } from "react";
 import HelpTip from "@/components/HelpTip";
 
-type InjuryStatus = "ACTIVO" | "REINTEGRO" | "ALTA";
+type InjuryStatus = "BAJA" | "REINTEGRO" | "LIMITADA" | "ALTA";
 type Laterality = "IZQ" | "DER" | "BILATERAL" | "NA" | null;
 type Severity = "LEVE" | "MODERADA" | "SEVERA" | null;
 type Availability = "OUT" | "MODIFIED" | "FULL" | null;
@@ -32,8 +31,38 @@ type Row = {
   noContact?: boolean | null;
 };
 
+type Analytics = {
+  range: { start: string; end: string };
+  totals: {
+    episodes: number;
+    playersAffected: number;
+    avgEstimatedDays: number | null;
+    statusCounts: Record<InjuryStatus, number>;
+  };
+  bodyPartTop: { name: string; count: number }[];
+  mechanismTop: { name: string; count: number }[];
+  topPlayersByDaysOut: { userId: string; name: string; daysOut: number; episodes: number }[];
+  recent: {
+    id: string;
+    userId: string;
+    userName: string;
+    date: string;
+    status: InjuryStatus;
+    bodyPart: string | null;
+    mechanism: string | null;
+    severity: Severity;
+    startDate: string | null;
+    expectedReturn: string | null;
+  }[];
+};
+
 function toYMD(d: Date) {
   return d.toISOString().slice(0, 10);
+}
+function monthRange(d = new Date()) {
+  const s = new Date(d.getFullYear(), d.getMonth(), 1);
+  const e = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  return { start: toYMD(s), end: toYMD(e) };
 }
 
 export default function CtInjuriesPage() {
@@ -45,18 +74,31 @@ export default function CtInjuriesPage() {
 }
 
 function CtInjuriesInner() {
-  const search = useSearchParams();
   const today = useMemo(() => toYMD(new Date()), []);
-  const [date, setDate] = useState<string>(search.get("date") || today);
+  const [date, setDate] = useState<string>(today);
 
+  // rango para analytics (mes seleccionado)
+  const [month, setMonth] = useState<string>(today.slice(0, 7)); // YYYY-MM
+  const { start, end } = useMemo(() => {
+    const [y, m] = month.split("-").map(Number);
+    const base = new Date(y, (m || 1) - 1, 1);
+    return monthRange(base);
+  }, [month]);
+
+  // datos diarios (tabla)
   const [rows, setRows] = useState<Row[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [loadingRows, setLoadingRows] = useState(false);
+  const [errRows, setErrRows] = useState<string | null>(null);
   const [q, setQ] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setErr(null);
+  // analytics (tiles + charts)
+  const [an, setAn] = useState<Analytics | null>(null);
+  const [loadingAn, setLoadingAn] = useState(false);
+  const [errAn, setErrAn] = useState<string | null>(null);
+
+  const loadRows = useCallback(async () => {
+    setLoadingRows(true);
+    setErrRows(null);
     try {
       const res = await fetch(`/api/med/clinical?date=${date}`, { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -64,39 +106,53 @@ function CtInjuriesInner() {
       setRows(Array.isArray(data) ? data : []);
     } catch (e: any) {
       setRows([]);
-      setErr(e?.message || "Error");
+      setErrRows(e?.message || "Error");
     } finally {
-      setLoading(false);
+      setLoadingRows(false);
     }
   }, [date]);
 
-  useEffect(() => {
-    // actualizar la URL sin romper typedRoutes (usamos history)
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.searchParams.set("date", date);
-      window.history.replaceState({}, "", url.toString());
+  const loadAnalytics = useCallback(async () => {
+    setLoadingAn(true);
+    setErrAn(null);
+    try {
+      const res = await fetch(`/api/med/clinical/analytics?start=${start}&end=${end}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = (await res.json()) as Analytics;
+      setAn(data);
+    } catch (e: any) {
+      setAn(null);
+      setErrAn(e?.message || "Error");
+    } finally {
+      setLoadingAn(false);
     }
-    load();
-  }, [date, load]);
+  }, [start, end]);
+
+  useEffect(() => {
+    loadRows();
+  }, [date, loadRows]);
+
+  useEffect(() => {
+    loadAnalytics();
+  }, [start, end, loadAnalytics]);
 
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
     if (!t) return rows;
-    return rows.filter((r) =>
-      (r.userName || "").toLowerCase().includes(t) ||
-      (r.bodyPart || "").toLowerCase().includes(t) ||
-      (r.mechanism || "").toLowerCase().includes(t)
+    return rows.filter(
+      (r) =>
+        (r.userName || "").toLowerCase().includes(t) ||
+        (r.bodyPart || "").toLowerCase().includes(t) ||
+        (r.mechanism || "").toLowerCase().includes(t)
     );
   }, [rows, q]);
 
   function badgeColor(r: Row) {
-    // Semáforo (apoyado en tu schema actual):
-    // Verde: ALTA o FULL
-    // Amarillo: REINTEGRO o MODIFIED
-    // Rojo: ACTIVO o OUT
-    if (r.status === "ALTA" || r.availability === "FULL") return "bg-green-100 text-green-700 border-green-200";
-    if (r.status === "REINTEGRO" || r.availability === "MODIFIED")
+    if (r.status === "ALTA" || r.availability === "FULL")
+      return "bg-green-100 text-green-700 border-green-200";
+    if (r.status === "REINTEGRO" || r.status === "LIMITADA" || r.availability === "MODIFIED")
       return "bg-amber-100 text-amber-700 border-amber-200";
     return "bg-red-100 text-red-700 border-red-200";
   }
@@ -147,59 +203,178 @@ function CtInjuriesInner() {
     URL.revokeObjectURL(a.href);
   }
 
+  // pequeños “bar charts” sin librerías
+  function BarList({
+    items,
+    max,
+  }: {
+    items: { name: string; count: number }[];
+    max?: number;
+  }) {
+    const m = max ?? Math.max(1, ...items.map((i) => i.count));
+    return (
+      <div className="space-y-2">
+        {items.map((i) => (
+          <div key={i.name} className="grid grid-cols-[1fr_auto] items-center gap-3">
+            <div className="h-2 rounded bg-gray-100">
+              <div
+                className="h-2 rounded bg-gray-800"
+                style={{ width: `${Math.min(100, (i.count / m) * 100)}%` }}
+                title={`${i.count}`}
+              />
+            </div>
+            <div className="text-xs text-gray-700 whitespace-nowrap">{i.name} ({i.count})</div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-[70vh] px-6 py-10">
       <header className="mb-6 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Parte clínico — Vista CT (solo lectura)</h1>
+          <h1 className="text-2xl font-bold">Parte clínico — Vista CT (tablero)</h1>
           <p className="mt-1 text-sm text-gray-600">
-            Información diaria cargada por el cuerpo médico.{" "}
-            <HelpTip text="El CT ve disponibilidad, ETR y restricciones para planificar. No edita acá." />
+            Métricas del período + lista diaria.{" "}
+            <HelpTip text="Semáforo: Verde=Alta/Full · Amarillo=Reintegro/Modified · Rojo=Activo/Out" />
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <label className="text-sm">Mes</label>
           <input
-            type="date"
+            type="month"
             className="h-10 rounded-md border px-3 text-sm"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
           />
-          <button
-            onClick={load}
-            className="h-10 rounded-md border px-4 text-sm hover:bg-gray-50"
-          >
-            Recargar
-          </button>
-          <button
-            onClick={exportCSV}
-            disabled={filtered.length === 0}
-            className="h-10 rounded-md bg-black px-4 text-sm text-white disabled:opacity-50"
-          >
-            Exportar CSV
-          </button>
         </div>
       </header>
 
-      <div className="mb-3 flex items-center gap-2">
-        <input
-          className="w-full md:w-80 rounded-md border px-3 py-2 text-sm"
-          placeholder="Buscar por jugador, zona o mecanismo…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <span className="text-xs text-gray-500">{filtered.length} resultado(s)</span>
-      </div>
+      {/* Tiles + Charts */}
+      <section className="mb-6 rounded-2xl border bg-white p-5">
+        {loadingAn ? (
+          <div className="text-gray-500">Cargando métricas…</div>
+        ) : errAn ? (
+          <div className="text-red-600">Error al cargar métricas: {errAn}</div>
+        ) : an ? (
+          <>
+            <div className="mb-4 text-xs text-gray-500">
+              Rango: {an.range.start} → {an.range.end}
+            </div>
+            <div className="grid gap-4 sm:grid-cols-4">
+              <div className="rounded-xl border p-4">
+                <div className="text-xs text-gray-500">Episodios</div>
+                <div className="text-2xl font-bold">{an.totals.episodes}</div>
+              </div>
+              <div className="rounded-xl border p-4">
+                <div className="text-xs text-gray-500">Jugadores afectados</div>
+                <div className="text-2xl font-bold">{an.totals.playersAffected}</div>
+              </div>
+              <div className="rounded-xl border p-4">
+                <div className="text-xs text-gray-500">Prom. días estimados</div>
+                <div className="text-2xl font-bold">
+                  {an.totals.avgEstimatedDays ?? "—"}
+                </div>
+              </div>
+              <div className="rounded-xl border p-4">
+                <div className="text-xs text-gray-500">Estados</div>
+                <div className="text-sm">
+                  BAJA {an.totals.statusCounts.BAJA} · RTP {an.totals.statusCounts.REINTEGRO} · LIM{" "}
+                  {an.totals.statusCounts.LIMITADA} · ALTA {an.totals.statusCounts.ALTA}
+                </div>
+              </div>
+            </div>
 
+            <div className="mt-6 grid gap-6 md:grid-cols-2">
+              <div className="rounded-xl border p-4">
+                <div className="mb-3 text-sm font-semibold">Top zonas</div>
+                {an.bodyPartTop.length ? (
+                  <BarList items={an.bodyPartTop} />
+                ) : (
+                  <div className="text-xs text-gray-500">Sin datos</div>
+                )}
+              </div>
+              <div className="rounded-xl border p-4">
+                <div className="mb-3 text-sm font-semibold">Top mecanismos</div>
+                {an.mechanismTop.length ? (
+                  <BarList items={an.mechanismTop} />
+                ) : (
+                  <div className="text-xs text-gray-500">Sin datos</div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-xl border p-4">
+              <div className="mb-3 text-sm font-semibold">Top jugadores por días fuera (estimado)</div>
+              {an.topPlayersByDaysOut.length ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-[480px] text-sm">
+                    <thead>
+                      <tr className="border-b bg-gray-50">
+                        <th className="px-3 py-2 text-left">Jugador</th>
+                        <th className="px-3 py-2 text-right">Días</th>
+                        <th className="px-3 py-2 text-right">Episodios</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {an.topPlayersByDaysOut.map((p) => (
+                        <tr key={p.userId} className="border-b last:border-0">
+                          <td className="px-3 py-2">{p.name}</td>
+                          <td className="px-3 py-2 text-right">{p.daysOut}</td>
+                          <td className="px-3 py-2 text-right">{p.episodes}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-xs text-gray-500">Sin datos</div>
+              )}
+            </div>
+          </>
+        ) : null}
+      </section>
+
+      {/* Lista diaria + CSV (lo que ya tenías) */}
       <section className="rounded-2xl border bg-white overflow-hidden">
-        <div className="bg-gray-50 px-3 py-2 text-[12px] font-semibold uppercase">
-          Entradas — {date}{" "}
-          <HelpTip text="Semáforo: Verde=Alta/Full · Amarillo=Reintegro/Modified · Rojo=Activo/Out" />
+        <div className="flex flex-col gap-2 border-b bg-gray-50 p-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-2">
+            <label className="text-sm">Fecha</label>
+            <input
+              type="date"
+              className="h-10 rounded-md border px-3 text-sm"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              className="w-full md:w-80 rounded-md border px-3 py-2 text-sm"
+              placeholder="Buscar por jugador, zona o mecanismo…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+            <button
+              onClick={loadRows}
+              className="h-10 rounded-md border px-4 text-sm hover:bg-gray-50"
+            >
+              Recargar
+            </button>
+            <button
+              onClick={exportCSV}
+              disabled={filtered.length === 0}
+              className="h-10 rounded-md bg-black px-4 text-sm text-white disabled:opacity-50"
+            >
+              Exportar CSV
+            </button>
+          </div>
         </div>
 
-        {loading ? (
+        {loadingRows ? (
           <div className="p-4 text-gray-500">Cargando…</div>
-        ) : err ? (
-          <div className="p-4 text-red-600">Error al cargar: {err}</div>
+        ) : errRows ? (
+          <div className="p-4 text-red-600">Error al cargar: {errRows}</div>
         ) : filtered.length === 0 ? (
           <div className="p-4 text-gray-500 italic">Sin datos</div>
         ) : (
@@ -262,8 +437,7 @@ function CtInjuriesInner() {
       </section>
 
       <div className="rounded-xl border bg-white p-3 text-xs text-gray-600 mt-3">
-        <b>Nota:</b> Esta vista es solo lectura. Los médicos editan el parte en su panel;
-        el CT lo usa para planificar cargas, minutos y tareas.
+        <b>Nota:</b> Vista de lectura para CT. Los datos se cargan en el panel médico.
       </div>
     </main>
   );
