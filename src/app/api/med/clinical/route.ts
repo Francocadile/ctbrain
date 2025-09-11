@@ -43,7 +43,7 @@ function nextDay(d: Date) {
   return x;
 }
 
-/* =============== GET =============== */
+/* =============== GET (lista por día) =============== */
 export async function GET(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
   const role = (token as any)?.role as string | undefined;
@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
     feverMax: r.feverMax,
 
     startDate: r.startDate ? toYMD(r.startDate) : null,
-    // ❌ sin daysMin/daysMax
+    // ❌ flujo nuevo sin daysMin/daysMax
     expectedReturn: r.expectedReturn ? toYMD(r.expectedReturn) : null,
     expectedReturnManual: r.expectedReturnManual,
 
@@ -141,28 +141,39 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Fecha del parte
     const dateYMD = typeof body.date === "string" ? body.date : undefined;
     const parsed =
       parseYMD(dateYMD) ?? (body.date ? new Date(body.date) : new Date());
     const day = startOfDay(parsed);
     const dayTo = nextDay(parsed);
 
-    // Cronología / cálculo ETR (podemos leer daysMax si viene, pero no lo guardamos)
+    // Cronología / ETR (flujo nuevo)
     const startDate =
       parseYMD(body.startDate) ??
       (body.startDate ? new Date(body.startDate) : null);
 
-    const daysMax = body.daysMax ?? body.daysEstimated ?? null;
+    // Preferimos daysEstimated; aceptamos daysMax (legado) como fallback
+    const daysEstimated: number | null =
+      typeof body.daysEstimated === "number"
+        ? body.daysEstimated
+        : typeof body.daysMax === "number"
+        ? body.daysMax
+        : null;
 
     let expectedReturn =
       parseYMD(body.expectedReturn) ??
       (body.expectedReturn ? new Date(body.expectedReturn) : null);
 
-    let expectedReturnManual = !!body.expectedReturnManual;
+    // Si viene expectedReturnManual explícito, lo respetamos; si lo calculamos, será false
+    let expectedReturnManual: boolean =
+      typeof body.expectedReturnManual === "boolean"
+        ? body.expectedReturnManual
+        : false;
 
-    if (!expectedReturn && startDate && Number.isInteger(daysMax)) {
+    if (!expectedReturn && startDate && Number.isInteger(daysEstimated)) {
       const tmp = new Date(startDate);
-      tmp.setDate(tmp.getDate() + Number(daysMax));
+      tmp.setDate(tmp.getDate() + Number(daysEstimated));
       expectedReturn = tmp;
       expectedReturnManual = false;
     }
@@ -174,24 +185,30 @@ export async function POST(req: NextRequest) {
       status: body.status as ClinicalStatus,
 
       // baja
-      leaveStage: body.leaveStage ?? null,
-      leaveKind: body.leaveKind ?? null,
+      leaveStage: (body.leaveStage as LeaveStage) ?? null,
+      leaveKind: (body.leaveKind as LeaveKind) ?? null,
 
       // lesión
       diagnosis: body.diagnosis ?? null,
       bodyPart: body.bodyPart ?? null,
-      laterality: body.laterality ?? null,
-      mechanism: body.mechanism ?? null,
-      severity: body.severity ?? null,
+      laterality: (body.laterality as Laterality) ?? null,
+      mechanism: (body.mechanism as Mechanism) ?? null,
+      severity: (body.severity as Severity) ?? null,
 
       // enfermedad
-      illSystem: body.illSystem ?? null,
+      illSystem: (body.illSystem as SystemAffected) ?? null,
       illSymptoms: body.illSymptoms ?? null,
       illContagious:
         typeof body.illContagious === "boolean" ? body.illContagious : null,
-      illIsolationDays: body.illIsolationDays ?? null,
-      illAptitude: body.illAptitude ?? null,
-      feverMax: body.feverMax ?? null,
+      illIsolationDays:
+        typeof body.illIsolationDays === "number"
+          ? body.illIsolationDays
+          : null,
+      illAptitude: (body.illAptitude as IllAptitude) ?? null,
+      feverMax:
+        typeof body.feverMax === "number" || body.feverMax === null
+          ? body.feverMax
+          : null,
 
       // cronología
       startDate: startDate,
@@ -199,7 +216,8 @@ export async function POST(req: NextRequest) {
       expectedReturnManual: expectedReturnManual,
 
       // restricciones
-      capMinutes: body.capMinutes ?? null,
+      capMinutes:
+        typeof body.capMinutes === "number" ? body.capMinutes : null,
       noSprint: !!body.noSprint,
       noChangeOfDirection: !!body.noChangeOfDirection,
       gymOnly: !!body.gymOnly,
