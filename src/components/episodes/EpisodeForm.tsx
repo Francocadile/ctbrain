@@ -15,6 +15,7 @@ type Severity = "LEVE" | "MODERADA" | "SEVERA";
 type IllSystem = "RESPIRATORIO" | "GASTROINTESTINAL" | "OTORRINO" | "DERMATOLOGICO" | "GENERAL" | "OTRO";
 type IllAptitude = "SOLO_GIMNASIO" | "AEROBICO_SUAVE" | "CHARLAS_TACTICO" | "NINGUNO";
 
+// util
 function addDays(ymd: string, days: number) {
   const [y, m, d] = ymd.split("-").map((n) => Number(n));
   const dt = new Date(y, (m || 1) - 1, d || 1);
@@ -23,6 +24,15 @@ function addDays(ymd: string, days: number) {
   const mm = String(dt.getMonth() + 1).padStart(2, "0");
   const dd = String(dt.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+function diffDays(toYmd: string, fromYmd: string): number {
+  const [y1, m1, d1] = toYmd.split("-").map(Number);
+  const [y0, m0, d0] = fromYmd.split("-").map(Number);
+  const a = new Date(y1, (m1 || 1) - 1, d1 || 1);
+  const b = new Date(y0, (m0 || 1) - 1, d0 || 1);
+  a.setHours(0, 0, 0, 0);
+  b.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.round((a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24)));
 }
 
 type Props = {
@@ -71,12 +81,13 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
   );
   const [feverMax, setFeverMax] = React.useState<number | "">(initial?.feverMax ?? "");
 
-  // Cronología — un único “días estimados” (guardamos min=max)
+  // Cronología — “días estimados” solo UI (min/max ya no existen en DB)
   const [startDate, setStartDate] = React.useState<string>(initial?.startDate ?? date);
-  const [daysEstimated, setDaysEstimated] = React.useState<number | "">(
-    // si venimos de un episodio con min/max, tomamos cualquiera como estimado
-    (initial as any)?.daysMax ?? (initial as any)?.daysMin ?? ""
-  );
+  const initialEstimated =
+    initial?.expectedReturn && (initial?.startDate ?? startDate)
+      ? diffDays(initial.expectedReturn, initial.startDate ?? startDate)
+      : "";
+  const [daysEstimated, setDaysEstimated] = React.useState<number | "">(initialEstimated);
   const [expectedReturn, setExpectedReturn] = React.useState<string>(
     initial?.expectedReturn ??
       (startDate && Number(daysEstimated) ? addDays(startDate, Number(daysEstimated)) : "")
@@ -170,14 +181,10 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
       setIllAptitude((prev.illAptitude as IllAptitude) ?? "");
       setFeverMax(prev.feverMax ?? "");
 
-      // Cronología
+      // Cronología (estimados solo UI)
       setStartDate(prev.startDate || startDate);
       const est =
-        typeof (prev as any).daysMax === "number"
-          ? (prev as any).daysMax
-          : typeof (prev as any).daysMin === "number"
-          ? (prev as any).daysMin
-          : "";
+        prev.startDate && prev.expectedReturn ? diffDays(prev.expectedReturn, prev.startDate) : "";
       setDaysEstimated(est === "" ? "" : Number(est));
       setExpectedReturnManual(!!prev.expectedReturnManual);
       setExpectedReturn(prev.expectedReturn || "");
@@ -209,7 +216,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
     setErr(null);
     setMsg(null);
 
-    // Validaciones mínimas (cerramos criterioso)
+    // Validaciones mínimas
     if (!userId) return setErr("Seleccioná un jugador.");
     if (!status) return setErr("Seleccioná el estado.");
     if (!medSignature.trim()) return setErr("La firma del médico es obligatoria.");
@@ -245,10 +252,8 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
           isBAJA && leaveKind === "ENFERMEDAD" && illIsolationDays !== "" ? Number(illIsolationDays) : null,
         illAptitude: isBAJA && leaveKind === "ENFERMEDAD" ? (illAptitude || null) : null,
         feverMax: isBAJA && leaveKind === "ENFERMEDAD" && feverMax !== "" ? Number(feverMax) : null,
-        // Cronología (min=max=días estimados si existe)
+        // Cronología (ya sin daysMin/daysMax)
         startDate: startDate || null,
-        daysMin: daysEstimated !== "" ? Number(daysEstimated) : null,
-        daysMax: daysEstimated !== "" ? Number(daysEstimated) : null,
         expectedReturn: expectedReturn || null,
         expectedReturnManual: expectedReturnManual || false,
         // Restricciones
@@ -318,7 +323,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
       </div>
 
       {/* Si BAJA => Estadio + Tipo */}
-      {isBAJA && (
+      {status === "BAJA" && (
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="text-sm font-medium">Estadio de la baja</label>
@@ -352,7 +357,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
       )}
 
       {/* Lesión */}
-      {isBAJA && leaveKind === "LESION" && (
+      {status === "BAJA" && leaveKind === "LESION" && (
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className="text-sm font-medium">Diagnóstico breve</label>
@@ -428,7 +433,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
       )}
 
       {/* Enfermedad */}
-      {isBAJA && leaveKind === "ENFERMEDAD" && (
+      {status === "BAJA" && leaveKind === "ENFERMEDAD" && (
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="text-sm font-medium">Sistema afectado</label>
@@ -537,7 +542,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
             disabled={saving}
           />
           <p className="mt-1 text-xs text-gray-500">
-            Guardamos min=max con este valor (control al cuerpo médico).
+            Se usa para calcular el ETR. (min/max ya no se guardan).
           </p>
         </div>
 
