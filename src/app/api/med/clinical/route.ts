@@ -20,13 +20,15 @@ export const revalidate = 0;
 
 /* Utils */
 function toYMD(d: Date) {
-  return d.toISOString().slice(0, 10);
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x.toISOString().slice(0, 10);
 }
 function parseYMD(s?: string | null): Date | null {
   if (!s) return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
   if (!m) return null;
-  const [, yy, mm, dd] = m;
+  const [_, yy, mm, dd] = m;
   const d = new Date(Number(yy), Number(mm) - 1, Number(dd));
   return isNaN(d.getTime()) ? null : d;
 }
@@ -61,57 +63,10 @@ export async function GET(req: NextRequest) {
   const from = startOfDay(baseDate);
   const to = nextDay(baseDate);
 
+  // 👇 Traemos TODOS los scalars y sólo incluimos user
   const rows = await prisma.clinicalEntry.findMany({
     where: { date: { gte: from, lt: to } },
-    select: {
-      id: true,
-      userId: true,
-      date: true,
-      status: true,
-
-      // baja
-      leaveStage: true,
-      leaveKind: true,
-
-      // lesión
-      diagnosis: true,
-      bodyPart: true,
-      laterality: true,
-      mechanism: true,
-      severity: true,
-
-      // enfermedad
-      illSystem: true,
-      illSymptoms: true,
-      illContagious: true,
-      illIsolationDays: true,
-      illAptitude: true,
-      feverMax: true,
-
-      // cronología
-      startDate: true,
-      daysMin: true,
-      daysMax: true,
-      expectedReturn: true,
-      expectedReturnManual: true,
-
-      // restricciones
-      capMinutes: true,
-      noSprint: true,
-      noChangeOfDirection: true,
-      gymOnly: true,
-      noContact: true,
-
-      // docs y plan
-      notes: true,
-      medSignature: true,
-      protocolObjectives: true,
-      protocolTasks: true,
-      protocolControls: true,
-      protocolCriteria: true,
-
-      user: { select: { name: true, email: true } },
-    },
+    include: { user: { select: { name: true, email: true } } },
     orderBy: [{ date: "desc" }, { updatedAt: "desc" }],
   });
 
@@ -186,7 +141,6 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    // debe existir el usuario
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { id: true },
@@ -205,19 +159,12 @@ export async function POST(req: NextRequest) {
     const day = startOfDay(parsed);
     const dayTo = nextDay(parsed);
 
-    // Cronología:
+    // Cronología: cálculo de ETR si corresponde
     const startDate =
       parseYMD(body.startDate) ??
       (body.startDate ? new Date(body.startDate) : null);
-
-    // Compat: daysPlanned ó daysMin/Max
-    const daysPlanned: number | null =
-      Number.isInteger(body.daysPlanned) ? Number(body.daysPlanned) : null;
-
-    const daysMin: number | null =
-      daysPlanned ?? (Number.isInteger(body.daysMin) ? Number(body.daysMin) : null);
-    const daysMax: number | null =
-      daysPlanned ?? (Number.isInteger(body.daysMax) ? Number(body.daysMax) : null);
+    const daysMin = body.daysMin ?? null;
+    const daysMax = body.daysMax ?? null;
 
     let expectedReturn =
       parseYMD(body.expectedReturn) ??
@@ -225,11 +172,9 @@ export async function POST(req: NextRequest) {
 
     let expectedReturnManual = !!body.expectedReturnManual;
 
-    // Si no llega ETR, lo calculamos con startDate + (daysPlanned || daysMax)
-    if (!expectedReturn && startDate && (daysPlanned ?? daysMax) != null) {
-      const addDays = Number(daysPlanned ?? daysMax);
+    if (!expectedReturn && startDate && Number.isInteger(daysMax)) {
       const tmp = new Date(startDate);
-      tmp.setDate(tmp.getDate() + addDays);
+      tmp.setDate(tmp.getDate() + Number(daysMax));
       expectedReturn = tmp;
       expectedReturnManual = false;
     }
@@ -240,46 +185,41 @@ export async function POST(req: NextRequest) {
       date: day,
       status: body.status as ClinicalStatus,
 
-      // BAJA
-      leaveStage: (body.leaveStage as LeaveStage) ?? null,
-      leaveKind: (body.leaveKind as LeaveKind) ?? null,
+      // baja
+      leaveStage: body.leaveStage ?? null,
+      leaveKind: body.leaveKind ?? null,
 
-      // LESION
+      // lesión
       diagnosis: body.diagnosis ?? null,
       bodyPart: body.bodyPart ?? null,
-      laterality: (body.laterality as Laterality) ?? null,
-      mechanism: (body.mechanism as Mechanism) ?? null,
-      severity: (body.severity as Severity) ?? null,
+      laterality: body.laterality ?? null,
+      mechanism: body.mechanism ?? null,
+      severity: body.severity ?? null,
 
-      // ENFERMEDAD
-      illSystem: (body.illSystem as SystemAffected) ?? null,
+      // enfermedad
+      illSystem: body.illSystem ?? null,
       illSymptoms: body.illSymptoms ?? null,
       illContagious:
         typeof body.illContagious === "boolean" ? body.illContagious : null,
-      illIsolationDays: Number.isInteger(body.illIsolationDays)
-        ? Number(body.illIsolationDays)
-        : null,
-      illAptitude: (body.illAptitude as IllAptitude) ?? null,
-      feverMax:
-        typeof body.feverMax === "number" ? Number(body.feverMax) : null,
+      illIsolationDays: body.illIsolationDays ?? null,
+      illAptitude: body.illAptitude ?? null,
+      feverMax: body.feverMax ?? null,
 
-      // Cronología
+      // cronología
       startDate: startDate,
       daysMin: daysMin,
       daysMax: daysMax,
       expectedReturn: expectedReturn,
       expectedReturnManual: expectedReturnManual,
 
-      // Restricciones
-      capMinutes: Number.isInteger(body.capMinutes)
-        ? Number(body.capMinutes)
-        : null,
+      // restricciones
+      capMinutes: body.capMinutes ?? null,
       noSprint: !!body.noSprint,
       noChangeOfDirection: !!body.noChangeOfDirection,
       gymOnly: !!body.gymOnly,
       noContact: !!body.noContact,
 
-      // Docs/plan
+      // docs/plan
       notes: body.notes ?? null,
       medSignature: body.medSignature ?? null,
       protocolObjectives: body.protocolObjectives ?? null,
