@@ -29,8 +29,6 @@ enum SessionType {
 }
 
 // =========================
-// Enums clínicos (nuevo)
-// =========================
 enum ClinicalStatus {
   BAJA
   REINTEGRO
@@ -87,8 +85,6 @@ enum IllAptitude {
   NINGUNO
 }
 
-// =========================
-// Modelos existentes
 // =========================
 model User {
   id        String    @id @default(cuid())
@@ -264,8 +260,7 @@ model ClinicalEntry {
 
   // Cronología
   startDate            DateTime?
-  daysMin              Int?
-  daysMax              Int?
+  daysPlanned          Int?              // único valor estimado de días
   expectedReturn       DateTime?
   expectedReturnManual Boolean? @default(false)
 
@@ -291,5 +286,8 @@ model ClinicalEntry {
 
   @@unique([userId, date], name: "userId_date")
   @@index([date])
+  @@index([status, date])
+  @@index([leaveKind])
+  @@index([bodyPart])
   @@index([userId, date])
 }
