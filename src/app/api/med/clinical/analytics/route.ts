@@ -2,12 +2,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getToken } from "next-auth/jwt";
-import { ClinicalStatus, LeaveKind } from "@prisma/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+/* Utils */
+function toYMD(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x.toISOString().slice(0, 10);
+}
 function parseYMD(s?: string | null): Date | null {
   if (!s) return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
@@ -21,144 +26,135 @@ function startOfDay(d: Date) {
   x.setHours(0, 0, 0, 0);
   return x;
 }
-function addDays(d: Date, n: number) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
+function nextDay(d: Date) {
+  const x = startOfDay(d);
+  x.setDate(x.getDate() + 1);
   return x;
 }
 
 /**
  * GET /api/med/clinical/analytics?from=YYYY-MM-DD&to=YYYY-MM-DD
- * Permisos: MEDICO, CT, ADMIN
- * Default: últimos 30 días.
+ * Roles: MEDICO, CT, ADMIN
+ * Devuelve métricas agregadas para tableros.
  */
 export async function GET(req: NextRequest) {
+  // Auth
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
   const role = (token as any)?.role as string | undefined;
   if (!token || !["MEDICO", "CT", "ADMIN"].includes(role ?? "")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const sp = req.nextUrl.searchParams;
-  const fromStr = sp.get("from");
-  const toStr = sp.get("to");
+  // Rango de fechas (default: últimos 60 días)
+  const { searchParams } = req.nextUrl;
+  const fromStr = searchParams.get("from");
+  const toStr = searchParams.get("to");
 
-  let to = parseYMD(toStr) ?? new Date();
-  let from = parseYMD(fromStr) ?? addDays(to, -30);
+  const today = startOfDay(new Date());
+  const defaultFrom = new Date(today);
+  defaultFrom.setDate(defaultFrom.getDate() - 60);
 
-  from = startOfDay(from);
-  to = startOfDay(addDays(to, 1)); // [from, to)
+  const from = startOfDay(parseYMD(fromStr) ?? defaultFrom);
+  const to = startOfDay(parseYMD(toStr) ?? today);
+  const toExclusive = nextDay(to);
 
-  // base filter
-  const where = { date: { gte: from, lt: to } } as const;
-
-  // 1) conteos por status
-  const all = await prisma.clinicalEntry.findMany({
-    where,
-    select: {
-      status: true,
-      leaveKind: true,
-      bodyPart: true,
-      mechanism: true,
-      severity: true,
-      diagnosis: true,
-      illSystem: true,
-      illSymptoms: true,
-      daysMax: true,
-      daysMin: true,
-      userId: true,
-      user: { select: { name: true, email: true } },
-    },
+  // Traemos todas las columnas y sólo incluimos user (sin select de scalars para evitar errores de tipos)
+  const rows = await prisma.clinicalEntry.findMany({
+    where: { date: { gte: from, lt: toExclusive } },
+    include: { user: { select: { name: true, email: true } } },
+    orderBy: [{ date: "desc" }, { updatedAt: "desc" }],
   });
 
-  const total = all.length;
-  const byStatus: Record<ClinicalStatus, number> = {
-    BAJA: 0,
-    REINTEGRO: 0,
-    LIMITADA: 0,
-    ALTA: 0,
+  // Helpers de agregación
+  const countBy = <K extends string>(arr: any[], key: (r: any) => K | null | undefined) => {
+    const m = new Map<K, number>();
+    for (const r of arr) {
+      const k = key(r);
+      if (!k) continue;
+      m.set(k, (m.get(k as K) ?? 0) + 1);
+    }
+    return Object.fromEntries(m.entries());
   };
-  for (const r of all) byStatus[r.status]++;
 
-  // 2) zonas más frecuentes (solo lesión)
-  const zones = new Map<string, number>();
-  // 3) mecanismos (lesión)
-  const mechs = new Map<string, number>();
-  // 4) severidad (lesión)
-  const sev = new Map<string, number>();
-  // 5) diagnósticos (lesión)
-  const dx = new Map<string, number>();
-  // 6) sistema afectado (enfermedad)
-  const systems = new Map<string, number>();
-  // 7) promedio días estimados (min==max según UI)
-  const daysArr: number[] = [];
-  // 8) top jugadores por días estimados acumulados
-  const byPlayer = new Map<string, { name: string; days: number }>();
+  // Top-N por conteo
+  const topN = (obj: Record<string, number>, n = 8) =>
+    Object.entries(obj)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, n)
+      .map(([k, v]) => ({ key: k, count: v }));
 
-  for (const r of all) {
-    // promedio días
-    const d = (r.daysMax ?? r.daysMin) ?? null;
-    if (typeof d === "number" && d >= 0) daysArr.push(d);
-
-    // por jugador
-    if (!byPlayer.has(r.userId)) {
-      byPlayer.set(r.userId, {
-        name: r.user?.name || r.user?.email || r.userId,
-        days: 0,
-      });
+  // Aproximación de “días de baja” para un registro:
+  // 1) daysMax || daysMin
+  // 2) sino (expectedReturn - startDate) en días
+  // 3) sino 0
+  const daysOutFor = (r: any): number => {
+    const dmax = (r as any).daysMax ?? null;
+    const dmin = (r as any).daysMin ?? null;
+    if (Number.isFinite(dmax)) return Number(dmax);
+    if (Number.isFinite(dmin)) return Number(dmin);
+    if (r.startDate && r.expectedReturn) {
+      const a = startOfDay(new Date(r.startDate));
+      const b = startOfDay(new Date(r.expectedReturn));
+      const diff = Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
+      return Number.isFinite(diff) ? Math.max(0, diff) : 0;
     }
-    if (typeof d === "number" && d >= 0) {
-      byPlayer.get(r.userId)!.days += d;
-    }
+    return 0;
+  };
 
-    if (r.leaveKind === LeaveKind.LESION) {
-      if (r.bodyPart) zones.set(r.bodyPart, (zones.get(r.bodyPart) || 0) + 1);
-      if (r.mechanism)
-        mechs.set(r.mechanism, (mechs.get(r.mechanism) || 0) + 1);
-      if (r.severity)
-        sev.set(r.severity, (sev.get(r.severity) || 0) + 1);
-      if (r.diagnosis) dx.set(r.diagnosis, (dx.get(r.diagnosis) || 0) + 1);
-    } else if (r.leaveKind === LeaveKind.ENFERMEDAD) {
-      if (r.illSystem)
-        systems.set(r.illSystem, (systems.get(r.illSystem) || 0) + 1);
-    }
+  // Métricas básicas
+  const total = rows.length;
+
+  const byStatus = countBy(rows, (r) => r.status);
+  const byKind = countBy(rows, (r) => r.leaveKind || undefined);
+  const byMechanism = countBy(rows, (r) => r.mechanism || undefined);
+  const bySeverity = countBy(rows, (r) => r.severity || undefined);
+
+  const byBodyPartAll = countBy(rows, (r) => (r.bodyPart ? r.bodyPart.trim().toLowerCase() : undefined));
+  const byBodyPart = topN(byBodyPartAll, 10);
+
+  // Promedios
+  const daysSeries = rows.map(daysOutFor).filter((n) => Number.isFinite(n) && n > 0);
+  const avgDaysOut = daysSeries.length
+    ? Math.round((daysSeries.reduce((a, b) => a + b, 0) / daysSeries.length) * 10) / 10
+    : 0;
+
+  // Jugadores con más días de baja acumulados en el rango
+  const byPlayerDays = new Map<string, { userId: string; userName: string; days: number }>();
+  for (const r of rows) {
+    const k = r.userId;
+    const prev = byPlayerDays.get(k) ?? {
+      userId: r.userId,
+      userName: r.user?.name || r.user?.email || "—",
+      days: 0,
+    };
+    prev.days += daysOutFor(r);
+    byPlayerDays.set(k, prev);
   }
-
-  const avgDays =
-    daysArr.length > 0
-      ? Math.round(
-          (daysArr.reduce((a, b) => a + b, 0) / daysArr.length) * 10
-        ) / 10
-      : 0;
-
-  const topPlayers = Array.from(byPlayer.entries())
-    .map(([userId, v]) => ({ userId, userName: v.name, days: v.days }))
+  const topPlayers = Array.from(byPlayerDays.values())
     .sort((a, b) => b.days - a.days)
-    .slice(0, 5);
+    .slice(0, 8);
 
-  const toPairs = (m: Map<string, number>) =>
-    Array.from(m.entries())
-      .map(([key, count]) => ({ key, count }))
-      .sort((a, b) => b.count - a.count);
+  // Tendencia simple por fecha (conteo de episodios por día)
+  const byDateAll = countBy(rows, (r) => toYMD(r.date));
+  const trend = Object.entries(byDateAll)
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([date, count]) => ({ date, count }));
 
-  const payload = {
-    range: {
-      from: from.toISOString(),
-      to: to.toISOString(),
-      days: Math.ceil((+to - +from) / 86400000),
+  // Respuesta
+  return NextResponse.json({
+    range: { from: toYMD(from), to: toYMD(to) },
+    totals: {
+      episodes: total,
+      avgDaysOut,
     },
-    total,
-    byStatus,
-    zones: toPairs(zones),
-    mechanisms: toPairs(mechs),
-    severities: toPairs(sev),
-    diagnoses: toPairs(dx),
-    systems: toPairs(systems),
-    avgEstimatedDays: avgDays,
-    topPlayersByEstimatedDays: topPlayers,
-  };
-
-  return NextResponse.json(payload, {
-    headers: { "cache-control": "no-store" },
-  });
+    breakdowns: {
+      byStatus,
+      byKind,
+      bySeverity,
+      byMechanism,
+      topBodyParts: byBodyPart,
+      topPlayers, // [{ userId, userName, days }]
+      trendDaily: trend, // [{ date, count }]
+    },
+  }, { headers: { "cache-control": "no-store" } });
 }
