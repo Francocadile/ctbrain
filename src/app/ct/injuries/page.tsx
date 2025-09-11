@@ -30,7 +30,7 @@ type Row = {
   mechanism: string | null;
   severity: Severity;
   expectedReturn: string | null; // YYYY-MM-DD | null
-  availability: Availability;
+  availability: Availability; // <- garantizamos valor derivado si no llega desde API
   capMinutes?: number | null;
   noSprint?: boolean | null;
   noChangeOfDirection?: boolean | null;
@@ -75,6 +75,19 @@ function monthRange(d = new Date()) {
   const s = new Date(d.getFullYear(), d.getMonth(), 1);
   const e = new Date(d.getFullYear(), d.getMonth() + 1, 0);
   return { start: toYMD(s), end: toYMD(e) };
+}
+function deriveAvailability(status: InjuryStatus | undefined, apiAvail?: Availability | null): Availability {
+  if (apiAvail) return apiAvail;
+  switch (status) {
+    case "ALTA":
+      return "FULL";
+    case "REINTEGRO":
+    case "LIMITADA":
+      return "MODIFIED";
+    case "BAJA":
+    default:
+      return "OUT";
+  }
 }
 
 export default function CtInjuriesPage() {
@@ -141,7 +154,14 @@ function CtInjuriesInner() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setRows(Array.isArray(data) ? data : []);
+
+      // Derivar availability si no viene desde API
+      const normalized: Row[] = (Array.isArray(data) ? data : []).map((r: any) => ({
+        ...r,
+        availability: deriveAvailability(r?.status, r?.availability ?? null),
+      }));
+
+      setRows(normalized);
     } catch (e: any) {
       setRows([]);
       setErrRows(e?.message || "Error");
