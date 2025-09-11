@@ -18,9 +18,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-/* helpers */
+/* Utils */
 function toYMD(d: Date) {
-  return d.toISOString().slice(0, 10);
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x.toISOString().slice(0, 10);
 }
 function parseYMD(s?: string | null): Date | null {
   if (!s) return null;
@@ -31,9 +33,10 @@ function parseYMD(s?: string | null): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-/* ---------------- GET /api/med/clinical/[id] ----------------
-   Lectura por ID. Permisos: MEDICO, CT o ADMIN
----------------------------------------------------------------- */
+/* =======================
+   GET /api/med/clinical/[id]
+   MEDICO, CT o ADMIN (lectura)
+======================= */
 export async function GET(
   req: NextRequest,
   ctx: { params: { id: string } }
@@ -44,16 +47,67 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const id = ctx.params?.id;
-  if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
-
+  const id = ctx.params.id;
   const r = await prisma.clinicalEntry.findUnique({
     where: { id },
-    include: { user: { select: { name: true, email: true } } },
-  });
-  if (!r) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    select: {
+      id: true,
+      userId: true,
+      date: true,
+      status: true,
 
-  const data = {
+      // baja
+      leaveStage: true,
+      leaveKind: true,
+
+      // lesión
+      diagnosis: true,
+      bodyPart: true,
+      laterality: true,
+      mechanism: true,
+      severity: true,
+
+      // enfermedad
+      illSystem: true,
+      illSymptoms: true,
+      illContagious: true,
+      illIsolationDays: true,
+      illAptitude: true,
+      feverMax: true,
+
+      // cronología  ✅ incluimos daysMin/daysMax (antes faltaba)
+      startDate: true,
+      daysMin: true,
+      daysMax: true,
+      expectedReturn: true,
+      expectedReturnManual: true,
+
+      // restricciones
+      capMinutes: true,
+      noSprint: true,
+      noChangeOfDirection: true,
+      gymOnly: true,
+      noContact: true,
+
+      // docs/plan
+      notes: true,
+      medSignature: true,
+      protocolObjectives: true,
+      protocolTasks: true,
+      protocolControls: true,
+      protocolCriteria: true,
+
+      user: { select: { name: true, email: true } },
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
+  if (!r) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  return NextResponse.json({
     id: r.id,
     userId: r.userId,
     userName: r.user?.name || r.user?.email || "—",
@@ -94,14 +148,17 @@ export async function GET(
     protocolTasks: r.protocolTasks,
     protocolControls: r.protocolControls,
     protocolCriteria: r.protocolCriteria,
-  };
 
-  return NextResponse.json(data, { headers: { "cache-control": "no-store" } });
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  });
 }
 
-/* ---------------- PATCH /api/med/clinical/[id] ---------------
-   Update parcial por ID. Permisos: MEDICO o ADMIN
----------------------------------------------------------------- */
+/* =======================
+   PATCH /api/med/clinical/[id]
+   Solo MEDICO o ADMIN
+   Acepta parcial; solo aplica lo enviado
+======================= */
 export async function PATCH(
   req: NextRequest,
   ctx: { params: { id: string } }
@@ -112,156 +169,151 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const id = ctx.params?.id;
-  if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+  const id = ctx.params.id;
+  const body = await req.json().catch(() => ({} as Record<string, any>));
+  const clean = <T extends object>(o: T) =>
+    Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
 
-  const body = await req.json().catch(() => ({}));
+  // Reglas de ETR auto si no se manda y viene startDate+daysMax
+  let expectedReturn: Date | null | undefined =
+    body.expectedReturn === undefined
+      ? undefined
+      : parseYMD(body.expectedReturn) ?? (body.expectedReturn ? new Date(body.expectedReturn) : null);
 
-  // fechas
-  const date =
-    parseYMD(body.date) ?? (body.date ? new Date(body.date) : undefined);
-  const startDate =
-    parseYMD(body.startDate) ??
-    (body.startDate ? new Date(body.startDate) : undefined);
-  const expectedReturn =
-    parseYMD(body.expectedReturn) ??
-    (body.expectedReturn ? new Date(body.expectedReturn) : undefined);
+  let expectedReturnManual: boolean | undefined = body.expectedReturnManual;
 
-  // construimos UPDATE usando { set: ... } (necesario para enums / nullables)
-  const data: Prisma.ClinicalEntryUncheckedUpdateInput = {
-    ...(date ? { date: { set: date } } : {}),
-    ...(body.status ? { status: { set: body.status as ClinicalStatus } } : {}),
+  if (expectedReturn === undefined && body.startDate !== undefined && body.daysMax !== undefined) {
+    const s = parseYMD(body.startDate) ?? (body.startDate ? new Date(body.startDate) : null);
+    const max = typeof body.daysMax === "number" ? body.daysMax : null;
+    if (s && Number.isInteger(max)) {
+      const tmp = new Date(s);
+      tmp.setDate(tmp.getDate() + Number(max));
+      expectedReturn = tmp;
+      if (expectedReturnManual === undefined) expectedReturnManual = false;
+    }
+  }
 
+  const upd: Prisma.ClinicalEntryUncheckedUpdateInput = clean({
+    // estado base
+    status: body.status as ClinicalStatus | undefined
+      ? { set: body.status as ClinicalStatus }
+      : undefined,
+
+    // baja
     leaveStage:
-      "leaveStage" in body
-        ? ({ set: (body.leaveStage ?? null) as LeaveStage | null } as any)
-        : undefined,
+      body.leaveStage === undefined
+        ? undefined
+        : { set: (body.leaveStage as LeaveStage) ?? null },
     leaveKind:
-      "leaveKind" in body
-        ? ({ set: (body.leaveKind ?? null) as LeaveKind | null } as any)
-        : undefined,
+      body.leaveKind === undefined
+        ? undefined
+        : { set: (body.leaveKind as LeaveKind) ?? null },
 
-    diagnosis:
-      "diagnosis" in body ? { set: body.diagnosis ?? null } : undefined,
-    bodyPart: "bodyPart" in body ? { set: body.bodyPart ?? null } : undefined,
+    // lesión
+    diagnosis: body.diagnosis === undefined ? undefined : { set: body.diagnosis ?? null },
+    bodyPart: body.bodyPart === undefined ? undefined : { set: body.bodyPart ?? null },
     laterality:
-      "laterality" in body
-        ? ({ set: (body.laterality ?? null) as Laterality | null } as any)
-        : undefined,
+      body.laterality === undefined ? undefined : { set: (body.laterality as Laterality) ?? null },
     mechanism:
-      "mechanism" in body
-        ? ({ set: (body.mechanism ?? null) as Mechanism | null } as any)
-        : undefined,
+      body.mechanism === undefined ? undefined : { set: (body.mechanism as Mechanism) ?? null },
     severity:
-      "severity" in body
-        ? ({ set: (body.severity ?? null) as Severity | null } as any)
-        : undefined,
+      body.severity === undefined ? undefined : { set: (body.severity as Severity) ?? null },
 
+    // enfermedad
     illSystem:
-      "illSystem" in body
-        ? ({ set: (body.illSystem ?? null) as SystemAffected | null } as any)
-        : undefined,
-    illSymptoms:
-      "illSymptoms" in body ? { set: body.illSymptoms ?? null } : undefined,
+      body.illSystem === undefined
+        ? undefined
+        : { set: (body.illSystem as SystemAffected) ?? null },
+    illSymptoms: body.illSymptoms === undefined ? undefined : { set: body.illSymptoms ?? null },
     illContagious:
-      "illContagious" in body
-        ? { set: typeof body.illContagious === "boolean" ? body.illContagious : null }
-        : undefined,
+      body.illContagious === undefined ? undefined : { set: body.illContagious ?? null },
     illIsolationDays:
-      "illIsolationDays" in body
-        ? { set: body.illIsolationDays ?? null }
-        : undefined,
+      body.illIsolationDays === undefined ? undefined : { set: body.illIsolationDays ?? null },
     illAptitude:
-      "illAptitude" in body
-        ? ({ set: (body.illAptitude ?? null) as IllAptitude | null } as any)
-        : undefined,
-    feverMax: "feverMax" in body ? { set: body.feverMax ?? null } : undefined,
+      body.illAptitude === undefined
+        ? undefined
+        : { set: (body.illAptitude as IllAptitude) ?? null },
+    feverMax: body.feverMax === undefined ? undefined : { set: body.feverMax ?? null },
 
-    startDate: "startDate" in body ? { set: startDate ?? null } : undefined,
+    // cronología
+    startDate:
+      body.startDate === undefined
+        ? undefined
+        : { set: parseYMD(body.startDate) ?? (body.startDate ? new Date(body.startDate) : null) },
     daysMin:
-      "daysMin" in body ? { set: body.daysMin ?? null } : undefined,
+      body.daysMin === undefined ? undefined : { set: body.daysMin ?? null },
     daysMax:
-      "daysMax" in body ? { set: body.daysMax ?? null } : undefined,
+      body.daysMax === undefined ? undefined : { set: body.daysMax ?? null },
     expectedReturn:
-      "expectedReturn" in body ? { set: expectedReturn ?? null } : undefined,
+      expectedReturn === undefined ? undefined : { set: expectedReturn },
     expectedReturnManual:
-      "expectedReturnManual" in body
-        ? { set: !!body.expectedReturnManual }
-        : undefined,
+      expectedReturnManual === undefined ? undefined : { set: expectedReturnManual },
 
+    // restricciones
     capMinutes:
-      "capMinutes" in body ? { set: body.capMinutes ?? null } : undefined,
-    noSprint: "noSprint" in body ? { set: !!body.noSprint } : undefined,
+      body.capMinutes === undefined ? undefined : { set: body.capMinutes ?? null },
+    noSprint: body.noSprint === undefined ? undefined : { set: !!body.noSprint },
     noChangeOfDirection:
-      "noChangeOfDirection" in body
-        ? { set: !!body.noChangeOfDirection }
-        : undefined,
-    gymOnly: "gymOnly" in body ? { set: !!body.gymOnly } : undefined,
-    noContact: "noContact" in body ? { set: !!body.noContact } : undefined,
+      body.noChangeOfDirection === undefined ? undefined : { set: !!body.noChangeOfDirection },
+    gymOnly: body.gymOnly === undefined ? undefined : { set: !!body.gymOnly },
+    noContact: body.noContact === undefined ? undefined : { set: !!body.noContact },
 
-    notes: "notes" in body ? { set: body.notes ?? null } : undefined,
+    // docs/plan
+    notes: body.notes === undefined ? undefined : { set: body.notes ?? null },
     medSignature:
-      "medSignature" in body ? { set: body.medSignature ?? null } : undefined,
+      body.medSignature === undefined ? undefined : { set: body.medSignature ?? null },
     protocolObjectives:
-      "protocolObjectives" in body
-        ? { set: body.protocolObjectives ?? null }
-        : undefined,
+      body.protocolObjectives === undefined ? undefined : { set: body.protocolObjectives ?? null },
     protocolTasks:
-      "protocolTasks" in body ? { set: body.protocolTasks ?? null } : undefined,
+      body.protocolTasks === undefined ? undefined : { set: body.protocolTasks ?? null },
     protocolControls:
-      "protocolControls" in body
-        ? { set: body.protocolControls ?? null }
-        : undefined,
+      body.protocolControls === undefined ? undefined : { set: body.protocolControls ?? null },
     protocolCriteria:
-      "protocolCriteria" in body
-        ? { set: body.protocolCriteria ?? null }
-        : undefined,
-  };
+      body.protocolCriteria === undefined ? undefined : { set: body.protocolCriteria ?? null },
+  });
 
   try {
-    const updated = await prisma.clinicalEntry.update({
+    const saved = await prisma.clinicalEntry.update({
       where: { id },
-      data,
-      select: { id: true, status: true, date: true, updatedAt: true },
+      data: upd,
+      select: { id: true, date: true, status: true },
     });
+
     return NextResponse.json(
-      {
-        ok: true,
-        id: updated.id,
-        status: updated.status,
-        date: toYMD(updated.date),
-      },
-      { headers: { "cache-control": "no-store" } }
+      { ok: true, id: saved.id, date: toYMD(saved.date), status: saved.status },
+      { status: 200 }
     );
   } catch (e: any) {
-    return NextResponse.json(
-      { error: "Update failed", detail: e?.message },
-      { status: 500 }
-    );
+    if (e?.code === "P2025") {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    console.error("PATCH /api/med/clinical/[id] error:", e);
+    return NextResponse.json({ error: "Update error" }, { status: 500 });
   }
 }
 
-/* ---------------- (Opcional) DELETE por ID ------------------ */
+/* =======================
+   DELETE /api/med/clinical/[id]
+   Solo ADMIN (o MEDICO si querés permitir)
+======================= */
 export async function DELETE(
   req: NextRequest,
   ctx: { params: { id: string } }
 ) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
   const role = (token as any)?.role as string | undefined;
-  if (!token || !["MEDICO", "ADMIN"].includes(role ?? "")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!token || !["ADMIN"].includes(role ?? "")) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const id = ctx.params?.id;
-  if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
-
   try {
-    await prisma.clinicalEntry.delete({ where: { id } });
+    await prisma.clinicalEntry.delete({ where: { id: ctx.params.id } });
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json(
-      { error: "Delete failed", detail: e?.message },
-      { status: 500 }
-    );
+    if (e?.code === "P2025") {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    console.error("DELETE /api/med/clinical/[id] error:", e);
+    return NextResponse.json({ error: "Delete error" }, { status: 500 });
   }
 }
