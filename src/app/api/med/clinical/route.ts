@@ -43,12 +43,8 @@ function nextDay(d: Date) {
   return x;
 }
 
-/* =======================
-   GET /api/med/clinical?date=YYYY-MM-DD
-   Lista del día (por fecha) para Médico/CT
-======================= */
+/* =============== GET =============== */
 export async function GET(req: NextRequest) {
-  // --- Auth: MEDICO, CT o ADMIN pueden leer ---
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
   const role = (token as any)?.role as string | undefined;
   if (!token || !["MEDICO", "CT", "ADMIN"].includes(role ?? "")) {
@@ -63,7 +59,6 @@ export async function GET(req: NextRequest) {
   const from = startOfDay(baseDate);
   const to = nextDay(baseDate);
 
-  // Traemos todos los scalars e incluimos user
   const rows = await prisma.clinicalEntry.findMany({
     where: { date: { gte: from, lt: to } },
     include: { user: { select: { name: true, email: true } } },
@@ -94,7 +89,7 @@ export async function GET(req: NextRequest) {
     feverMax: r.feverMax,
 
     startDate: r.startDate ? toYMD(r.startDate) : null,
-    // ❌ quitamos daysMin/daysMax para no romper tipos
+    // ❌ sin daysMin/daysMax
     expectedReturn: r.expectedReturn ? toYMD(r.expectedReturn) : null,
     expectedReturnManual: r.expectedReturnManual,
 
@@ -117,13 +112,8 @@ export async function GET(req: NextRequest) {
   });
 }
 
-/* =======================
-   POST /api/med/clinical
-   Upsert lógico por (userId + date)
-   Solo MEDICO o ADMIN
-======================= */
+/* =============== POST (upsert por userId+date) =============== */
 export async function POST(req: NextRequest) {
-  // --- Auth ---
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
   const role = (token as any)?.role as string | undefined;
   if (!token || !["MEDICO", "ADMIN"].includes(role ?? "")) {
@@ -151,21 +141,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Fecha base del parte
     const dateYMD = typeof body.date === "string" ? body.date : undefined;
     const parsed =
       parseYMD(dateYMD) ?? (body.date ? new Date(body.date) : new Date());
     const day = startOfDay(parsed);
     const dayTo = nextDay(parsed);
 
-    // Cronología: cálculo de ETR si corresponde
+    // Cronología / cálculo ETR (podemos leer daysMax si viene, pero no lo guardamos)
     const startDate =
       parseYMD(body.startDate) ??
       (body.startDate ? new Date(body.startDate) : null);
 
-    // Si tu schema mantiene daysMin/daysMax:
-    const daysMin = body.daysMin ?? null;
-    const daysMax = body.daysMax ?? null;
+    const daysMax = body.daysMax ?? body.daysEstimated ?? null;
 
     let expectedReturn =
       parseYMD(body.expectedReturn) ??
@@ -180,7 +167,7 @@ export async function POST(req: NextRequest) {
       expectedReturnManual = false;
     }
 
-    // CREATE payload
+    // CREATE payload (❌ sin daysMin/daysMax)
     const createData: Prisma.ClinicalEntryUncheckedCreateInput = {
       userId: user.id,
       date: day,
@@ -208,9 +195,6 @@ export async function POST(req: NextRequest) {
 
       // cronología
       startDate: startDate,
-      // Si tu schema ya no tiene estos campos, podés eliminarlos de acá también:
-      daysMin: daysMin as any,
-      daysMax: daysMax as any,
       expectedReturn: expectedReturn,
       expectedReturnManual: expectedReturnManual,
 
@@ -230,7 +214,7 @@ export async function POST(req: NextRequest) {
       protocolCriteria: body.protocolCriteria ?? null,
     };
 
-    // UPDATE payload
+    // UPDATE payload (❌ sin daysMin/daysMax)
     const updateData: Prisma.ClinicalEntryUncheckedUpdateInput = {
       status: { set: createData.status },
 
@@ -251,9 +235,6 @@ export async function POST(req: NextRequest) {
       feverMax: { set: createData.feverMax },
 
       startDate: { set: createData.startDate },
-      // Si quitaste daysMin/daysMax del schema, también quitá estas dos líneas:
-      daysMin: { set: (createData as any).daysMin },
-      daysMax: { set: (createData as any).daysMax },
       expectedReturn: { set: createData.expectedReturn },
       expectedReturnManual: { set: createData.expectedReturnManual },
 
@@ -285,12 +266,7 @@ export async function POST(req: NextRequest) {
       : await prisma.clinicalEntry.create({ data: createData });
 
     return NextResponse.json(
-      {
-        ok: true,
-        id: saved.id,
-        status: saved.status,
-        date: toYMD(saved.date),
-      },
+      { ok: true, id: saved.id, status: saved.status, date: toYMD(saved.date) },
       { status: existing ? 200 : 201 }
     );
   } catch (e: any) {
