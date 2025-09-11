@@ -4,11 +4,29 @@
 export const dynamic = "force-dynamic";
 
 import * as React from "react";
+import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import EpisodeForm from "@/components/episodes/EpisodeForm";
 import { todayYMD } from "@/hooks/useEpisodes";
 
 export default function MedInjuryNewPage() {
+  // ⚠️ Requerido por Next.js cuando usamos useSearchParams en Client Components
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-[70vh] px-6 py-8">
+          <div className="rounded-xl border bg-white p-5 text-gray-500">
+            Cargando…
+          </div>
+        </main>
+      }
+    >
+      <NewEpisodeInner />
+    </Suspense>
+  );
+}
+
+function NewEpisodeInner() {
   const router = useRouter();
   const search = useSearchParams();
 
@@ -23,7 +41,8 @@ export default function MedInjuryNewPage() {
       <header className="mb-6">
         <h1 className="text-2xl font-bold">Nuevo episodio clínico</h1>
         <p className="mt-1 text-sm text-gray-600">
-          Cargá el parte del día. El ETR se calcula automáticamente desde “Días estimados” (podés editarlo).
+          Cargá el parte del día. El ETR se calcula automáticamente desde “Días
+          estimados” (podés editarlo).
         </p>
       </header>
 
