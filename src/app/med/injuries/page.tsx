@@ -9,11 +9,11 @@ import HelpTip from "@/components/HelpTip";
 import EpisodeForm from "@/components/episodes/EpisodeForm";
 import EpisodeList from "@/components/episodes/EpisodeList";
 
-type Tab = "nuevo" | "lista";
+type Tab = "lista" | "nuevo";
 
 export default function MedInjuriesPage() {
   const router = useRouter();
-  const [tab, setTab] = React.useState<Tab>("nuevo");
+  const [tab, setTab] = React.useState<Tab>("lista"); // ⬅️ arranca en LISTA
   const [formDefaultDate, setFormDefaultDate] = React.useState<string | undefined>(undefined);
 
   return (
@@ -37,18 +37,8 @@ export default function MedInjuriesPage() {
         </p>
       </header>
 
-      {/* Tabs */}
+      {/* Tabs: primero Lista, después Nuevo */}
       <div className="mb-4 flex gap-2">
-        <button
-          className={`rounded-md px-3 py-2 text-sm ring-1 ${
-            tab === "nuevo"
-              ? "bg-black text-white ring-black"
-              : "bg-white text-gray-700 ring-gray-200 hover:bg-gray-50"
-          }`}
-          onClick={() => setTab("nuevo")}
-        >
-          Nuevo
-        </button>
         <button
           className={`rounded-md px-3 py-2 text-sm ring-1 ${
             tab === "lista"
@@ -59,16 +49,19 @@ export default function MedInjuriesPage() {
         >
           Lista del día
         </button>
+        <button
+          className={`rounded-md px-3 py-2 text-sm ring-1 ${
+            tab === "nuevo"
+              ? "bg-black text-white ring-black"
+              : "bg-white text-gray-700 ring-gray-200 hover:bg-gray-50"
+          }`}
+          onClick={() => setTab("nuevo")}
+        >
+          Nuevo
+        </button>
       </div>
 
-      {tab === "nuevo" ? (
-        <section className="rounded-xl border bg-white p-5 shadow-sm">
-          <EpisodeForm
-            defaultDate={formDefaultDate}
-            onSaved={() => setTab("lista")}
-          />
-        </section>
-      ) : (
+      {tab === "lista" ? (
         <section className="rounded-xl border bg-white p-5 shadow-sm">
           <EpisodeList
             onNew={(d) => {
@@ -76,6 +69,13 @@ export default function MedInjuriesPage() {
               setTab("nuevo");
             }}
             onEdit={(ep) => router.push(`/med/injuries/${ep.id}`)}
+          />
+        </section>
+      ) : (
+        <section className="rounded-xl border bg-white p-5 shadow-sm">
+          <EpisodeForm
+            defaultDate={formDefaultDate}
+            onSaved={() => setTab("lista")}
           />
         </section>
       )}
