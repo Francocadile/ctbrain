@@ -9,11 +9,12 @@ import HelpTip from "@/components/HelpTip";
 import EpisodeForm from "@/components/episodes/EpisodeForm";
 import EpisodeList from "@/components/episodes/EpisodeList";
 
-type Tab = "list" | "new";
+type Tab = "nuevo" | "lista";
 
 export default function MedInjuriesPage() {
-  const [tab, setTab] = React.useState<Tab>("list");
   const router = useRouter();
+  const [tab, setTab] = React.useState<Tab>("nuevo");
+  const [formDefaultDate, setFormDefaultDate] = React.useState<string | undefined>(undefined);
 
   return (
     <main className="min-h-[70vh] px-6 py-10">
@@ -21,27 +22,9 @@ export default function MedInjuriesPage() {
         <h1 className="text-2xl font-bold">Parte clínico — Médico</h1>
         <p className="mt-1 text-sm text-gray-600">
           Vos editás; el CT lo ve en lectura con semáforo y ETR.{" "}
-          <HelpTip text="Incluye lesión/enfermedad, ETR automático (editable), restricciones y plan semanal." />
+          <HelpTip text="Incluye lesión/enfermedad, cronología con ETR automático (editable), restricciones y plan semanal." />
         </p>
-      </header>
-
-      {/* Tabs */}
-      <div className="mb-4 flex gap-2">
-        <button
-          type="button"
-          onClick={() => setTab("list")}
-          className={`h-9 rounded-md border px-3 text-sm ${tab === "list" ? "bg-black text-white" : "bg-white"}`}
-        >
-          Listado
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab("new")}
-          className={`h-9 rounded-md border px-3 text-sm ${tab === "new" ? "bg-black text-white" : "bg-white"}`}
-        >
-          Nuevo
-        </button>
-        <div className="ml-auto text-xs text-gray-500">
+        <p className="mt-2 text-xs text-gray-500">
           Atajo:{" "}
           <a
             href="/api/med/users/players"
@@ -51,20 +34,48 @@ export default function MedInjuriesPage() {
           >
             ver jugadores (JSON)
           </a>
-        </div>
+        </p>
+      </header>
+
+      {/* Tabs */}
+      <div className="mb-4 flex gap-2">
+        <button
+          className={`rounded-md px-3 py-2 text-sm ring-1 ${
+            tab === "nuevo"
+              ? "bg-black text-white ring-black"
+              : "bg-white text-gray-700 ring-gray-200 hover:bg-gray-50"
+          }`}
+          onClick={() => setTab("nuevo")}
+        >
+          Nuevo
+        </button>
+        <button
+          className={`rounded-md px-3 py-2 text-sm ring-1 ${
+            tab === "lista"
+              ? "bg-black text-white ring-black"
+              : "bg-white text-gray-700 ring-gray-200 hover:bg-gray-50"
+          }`}
+          onClick={() => setTab("lista")}
+        >
+          Lista del día
+        </button>
       </div>
 
-      {tab === "list" ? (
-        <EpisodeList
-          onNew={() => setTab("new")}
-          onEdit={(ep) => router.push(`/med/injuries/${ep.id}`)}
-          className="shadow-sm"
-        />
-      ) : (
+      {tab === "nuevo" ? (
         <section className="rounded-xl border bg-white p-5 shadow-sm">
           <EpisodeForm
-            onSaved={() => setTab("list")}
-            onCancel={() => setTab("list")}
+            defaultDate={formDefaultDate}
+            onSaved={() => setTab("lista")}
+          />
+        </section>
+      ) : (
+        <section className="rounded-xl border bg-white p-5 shadow-sm">
+          <EpisodeList
+            onNew={(d) => {
+              setFormDefaultDate(d);
+              setTab("nuevo");
+            }}
+            onEdit={(ep) => router.push(`/med/injuries/${ep.id}`)}
           />
         </section>
       )}
