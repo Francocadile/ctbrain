@@ -1,5 +1,7 @@
 // src/app/medico/page.tsx
 import RoleGate from "@/components/auth/RoleGate";
+import Link from "next/link";
+import type { Route } from "next";
 
 export default async function MedicoPage() {
   return (
@@ -13,14 +15,14 @@ export default async function MedicoPage() {
         </header>
 
         <section className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Card de Lesiones sin enlace (deshabilitada por ahora) */}
+          {/* Lesiones -> ahora enlaza a /med/injuries */}
           <Card
             title="Lesiones"
             desc="Altas, bajas y evolución clínica."
-            disabledNote="Módulo en reconstrucción — volvemos a habilitar mañana."
+            href={"/med/injuries" as Route}
           />
 
-          {/* Estas dos quedan como info (sin enlaces) */}
+          {/* Informativas (sin enlace por ahora) */}
           <Card
             title="Wellness"
             desc="Cuestionarios diarios y alertas automáticas."
@@ -38,17 +40,19 @@ export default async function MedicoPage() {
 function Card({
   title,
   desc,
+  href,
   disabledNote,
 }: {
   title: string;
   desc: string;
+  href?: Route;
   disabledNote?: string;
 }) {
-  return (
+  const Inner = (
     <div
       className={`rounded-xl border bg-white p-5 shadow-sm ${
-        disabledNote ? "opacity-60 pointer-events-none" : "hover:shadow"
-      }`}
+        href && !disabledNote ? "hover:shadow transition" : ""
+      } ${disabledNote ? "opacity-60" : ""}`}
     >
       <h3 className="font-semibold">{title}</h3>
       <p className="text-sm text-gray-500">{desc}</p>
@@ -57,4 +61,10 @@ function Card({
       ) : null}
     </div>
   );
+
+  if (href && !disabledNote) {
+    return <Link href={href} className="block">{Inner}</Link>;
+  }
+
+  return <div className="block pointer-events-none">{Inner}</div>;
 }
