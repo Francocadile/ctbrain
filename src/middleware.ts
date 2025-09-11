@@ -1,33 +1,103 @@
+// src/middleware.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-const CT_PATHS = [/^\/ct(?:\/|$)/, /^\/api\/sessions(?:\/|$)/, /^\/api\/users(?:\/|$)/];
+// Rutas que requieren CT o ADMIN
+const CT_PATHS = [
+  /^\/ct(?:\/|$)/,
+  /^\/api\/ct(?:\/|$)/,
+  // heredado de tu setup previo
+  /^\/api\/sessions(?:\/|$)/,
+  /^\/api\/users(?:\/|$)/,
+];
+
+// Rutas que requieren MEDICO o ADMIN
+const MED_PATHS = [
+  /^\/med(?:\/|$)/,
+  /^\/api\/med(?:\/|$)/,
+];
+
+function matchAny(pathname: string, patterns: RegExp[]) {
+  return patterns.some((r) => r.test(pathname));
+}
+
+function roleHome(role?: string) {
+  switch (role) {
+    case "MEDICO":
+      return "/medico";
+    case "CT":
+      return "/ct";
+    case "JUGADOR":
+      return "/player";
+    case "DIRECTIVO":
+      return "/directivo";
+    case "ADMIN":
+      return "/"; // admin puede ir al root o a un dashboard propio si lo tuvieras
+    default:
+      return "/";
+  }
+}
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  // Solo vigilamos rutas de CT y nuestras APIs
-  const needsCT = CT_PATHS.some((r) => r.test(pathname));
-  if (!needsCT) return NextResponse.next();
+  const isAPI = pathname.startsWith("/api");
 
+  // ¿Qué guard aplica?
+  const needsCT = matchAny(pathname, CT_PATHS);
+  const needsMED = matchAny(pathname, MED_PATHS);
+
+  if (!needsCT && !needsMED) {
+    return NextResponse.next();
+  }
+
+  // Auth
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
   if (!token) {
+    if (isAPI) {
+      return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      });
+    }
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(url);
   }
 
-  const role = (token as any).role;
-  const isAdminOrCT = role === "CT" || role === "ADMIN";
-  if (!isAdminOrCT) {
-    // Redirige al home del rol del usuario
-    const url = req.nextUrl.clone();
-    url.pathname =
-      role === "MEDICO" ? "/medico" :
-      role === "JUGADOR" ? "/player" :
-      role === "DIRECTIVO" ? "/directivo" : "/";
-    return NextResponse.redirect(url);
+  const role = (token as any).role as string | undefined;
+
+  // Guard para CT
+  if (needsCT) {
+    const allowed = role === "CT" || role === "ADMIN";
+    if (!allowed) {
+      if (isAPI) {
+        return new NextResponse(JSON.stringify({ error: "Forbidden", role }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      const url = req.nextUrl.clone();
+      url.pathname = roleHome(role);
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // Guard para MEDICO
+  if (needsMED) {
+    const allowed = role === "MEDICO" || role === "ADMIN";
+    if (!allowed) {
+      if (isAPI) {
+        return new NextResponse(JSON.stringify({ error: "Forbidden", role }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      const url = req.nextUrl.clone();
+      url.pathname = roleHome(role);
+      return NextResponse.redirect(url);
+    }
   }
 
   return NextResponse.next();
@@ -35,8 +105,14 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
+    // CT
     "/ct/:path*",
+    "/api/ct/:path*",
     "/api/sessions/:path*",
     "/api/users/:path*",
+
+    // Médico
+    "/med/:path*",
+    "/api/med/:path*",
   ],
 };
