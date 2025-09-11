@@ -32,6 +32,8 @@ function parseYMD(s?: string | null): Date | null {
   const d = new Date(Number(yy), Number(mm) - 1, Number(dd));
   return isNaN(d.getTime()) ? null : d;
 }
+const clean = <T extends object>(o: T) =>
+  Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
 
 /* =======================
    GET /api/med/clinical/[id]
@@ -50,9 +52,7 @@ export async function GET(
   const id = ctx.params.id;
   const r = await prisma.clinicalEntry.findUnique({
     where: { id },
-    include: {
-      user: { select: { name: true, email: true } },
-    },
+    include: { user: { select: { name: true, email: true } } },
   });
 
   if (!r) {
@@ -84,7 +84,7 @@ export async function GET(
 
     // cronología
     startDate: r.startDate ? toYMD(r.startDate) : null,
-    // Si tu client generado no trae estos campos por tipado, los leemos de todos modos
+    // mantenemos lectura tolerante por si aún existen en DB, pero no se usan en el flujo nuevo
     daysMin: (r as any).daysMin ?? null,
     daysMax: (r as any).daysMax ?? null,
     expectedReturn: r.expectedReturn ? toYMD(r.expectedReturn) : null,
@@ -126,33 +126,47 @@ export async function PATCH(
 
   const id = ctx.params.id;
   const body = await req.json().catch(() => ({} as Record<string, any>));
-  const clean = <T extends object>(o: T) =>
-    Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
 
-  // ETR auto si no viene y hay startDate+daysMax
+  // --- Cálculo de ETR (flujo nuevo) ---
+  // 1) Si viene expectedReturn (string) -> usarlo.
+  // 2) Si no viene, y hay startDate + daysEstimated (o daysMax legado) -> startDate + N días.
   let expectedReturn: Date | null | undefined =
     body.expectedReturn === undefined
       ? undefined
-      : parseYMD(body.expectedReturn) ?? (body.expectedReturn ? new Date(body.expectedReturn) : null);
+      : parseYMD(body.expectedReturn) ??
+        (body.expectedReturn ? new Date(body.expectedReturn) : null);
 
   let expectedReturnManual: boolean | undefined = body.expectedReturnManual;
 
-  if (expectedReturn === undefined && body.startDate !== undefined && body.daysMax !== undefined) {
-    const s = parseYMD(body.startDate) ?? (body.startDate ? new Date(body.startDate) : null);
-    const max = typeof body.daysMax === "number" ? body.daysMax : null;
-    if (s && Number.isInteger(max)) {
+  if (expectedReturn === undefined) {
+    const s =
+      body.startDate === undefined
+        ? undefined
+        : parseYMD(body.startDate) ??
+          (body.startDate ? new Date(body.startDate) : null);
+
+    const nDays: number | null =
+      typeof body.daysEstimated === "number"
+        ? body.daysEstimated
+        : typeof body.daysMax === "number" // compat. legado
+        ? body.daysMax
+        : null;
+
+    if (s && Number.isInteger(nDays)) {
       const tmp = new Date(s);
-      tmp.setDate(tmp.getDate() + Number(max));
+      tmp.setDate(tmp.getDate() + Number(nDays));
       expectedReturn = tmp;
       if (expectedReturnManual === undefined) expectedReturnManual = false;
     }
   }
 
   const upd: Prisma.ClinicalEntryUncheckedUpdateInput = clean({
-    status: body.status as ClinicalStatus | undefined
-      ? { set: body.status as ClinicalStatus }
-      : undefined,
+    status:
+      body.status === undefined
+        ? undefined
+        : { set: body.status as ClinicalStatus },
 
+    // baja
     leaveStage:
       body.leaveStage === undefined
         ? undefined
@@ -163,44 +177,67 @@ export async function PATCH(
         : { set: (body.leaveKind as LeaveKind) ?? null },
 
     // lesión
-    diagnosis: body.diagnosis === undefined ? undefined : { set: body.diagnosis ?? null },
-    bodyPart: body.bodyPart === undefined ? undefined : { set: body.bodyPart ?? null },
+    diagnosis:
+      body.diagnosis === undefined ? undefined : { set: body.diagnosis ?? null },
+    bodyPart:
+      body.bodyPart === undefined ? undefined : { set: body.bodyPart ?? null },
     laterality:
-      body.laterality === undefined ? undefined : { set: (body.laterality as Laterality) ?? null },
+      body.laterality === undefined
+        ? undefined
+        : { set: (body.laterality as Laterality) ?? null },
     mechanism:
-      body.mechanism === undefined ? undefined : { set: (body.mechanism as Mechanism) ?? null },
+      body.mechanism === undefined
+        ? undefined
+        : { set: (body.mechanism as Mechanism) ?? null },
     severity:
-      body.severity === undefined ? undefined : { set: (body.severity as Severity) ?? null },
+      body.severity === undefined
+        ? undefined
+        : { set: (body.severity as Severity) ?? null },
 
     // enfermedad
     illSystem:
       body.illSystem === undefined
         ? undefined
         : { set: (body.illSystem as SystemAffected) ?? null },
-    illSymptoms: body.illSymptoms === undefined ? undefined : { set: body.illSymptoms ?? null },
+    illSymptoms:
+      body.illSymptoms === undefined
+        ? undefined
+        : { set: body.illSymptoms ?? null },
     illContagious:
-      body.illContagious === undefined ? undefined : { set: body.illContagious ?? null },
+      body.illContagious === undefined
+        ? undefined
+        : { set: body.illContagious ?? null },
     illIsolationDays:
-      body.illIsolationDays === undefined ? undefined : { set: body.illIsolationDays ?? null },
+      body.illIsolationDays === undefined
+        ? undefined
+        : { set: body.illIsolationDays ?? null },
     illAptitude:
       body.illAptitude === undefined
         ? undefined
         : { set: (body.illAptitude as IllAptitude) ?? null },
-    feverMax: body.feverMax === undefined ? undefined : { set: body.feverMax ?? null },
+    feverMax:
+      body.feverMax === undefined ? undefined : { set: body.feverMax ?? null },
 
     // cronología
     startDate:
       body.startDate === undefined
         ? undefined
-        : { set: parseYMD(body.startDate) ?? (body.startDate ? new Date(body.startDate) : null) },
-    daysMin: body.daysMin === undefined ? undefined : { set: body.daysMin ?? null },
-    daysMax: body.daysMax === undefined ? undefined : { set: body.daysMax ?? null },
-    expectedReturn: expectedReturn === undefined ? undefined : { set: expectedReturn },
+        : {
+            set:
+              parseYMD(body.startDate) ??
+              (body.startDate ? new Date(body.startDate) : null),
+          },
+    // ❌ quitamos daysMin/daysMax del update para el flujo nuevo
+    expectedReturn:
+      expectedReturn === undefined ? undefined : { set: expectedReturn },
     expectedReturnManual:
-      expectedReturnManual === undefined ? undefined : { set: expectedReturnManual },
+      expectedReturnManual === undefined
+        ? undefined
+        : { set: expectedReturnManual },
 
     // restricciones
-    capMinutes: body.capMinutes === undefined ? undefined : { set: body.capMinutes ?? null },
+    capMinutes:
+      body.capMinutes === undefined ? undefined : { set: body.capMinutes ?? null },
     noSprint: body.noSprint === undefined ? undefined : { set: !!body.noSprint },
     noChangeOfDirection:
       body.noChangeOfDirection === undefined ? undefined : { set: !!body.noChangeOfDirection },
@@ -209,9 +246,12 @@ export async function PATCH(
 
     // docs/plan
     notes: body.notes === undefined ? undefined : { set: body.notes ?? null },
-    medSignature: body.medSignature === undefined ? undefined : { set: body.medSignature ?? null },
+    medSignature:
+      body.medSignature === undefined ? undefined : { set: body.medSignature ?? null },
     protocolObjectives:
-      body.protocolObjectives === undefined ? undefined : { set: body.protocolObjectives ?? null },
+      body.protocolObjectives === undefined
+        ? undefined
+        : { set: body.protocolObjectives ?? null },
     protocolTasks:
       body.protocolTasks === undefined ? undefined : { set: body.protocolTasks ?? null },
     protocolControls:
