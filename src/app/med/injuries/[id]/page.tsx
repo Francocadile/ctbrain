@@ -18,6 +18,7 @@ export default function MedEpisodeEditPage() {
 
   React.useEffect(() => {
     let active = true;
+
     async function load() {
       setLoading(true);
       setErr(null);
@@ -34,6 +35,7 @@ export default function MedEpisodeEditPage() {
         if (active) setLoading(false);
       }
     }
+
     if (id) load();
     return () => {
       active = false;
