@@ -3,6 +3,9 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
+// Rutas públicas de auth que nunca deben ser interceptadas por el guard
+const PUBLIC_API = [/^\/api\/auth(?:\/|$)/];
+
 // Rutas que requieren CT o ADMIN
 const CT_PATHS = [
   /^\/ct(?:\/|$)/,
@@ -15,7 +18,7 @@ const CT_PATHS = [
 // Rutas que requieren MEDICO o ADMIN
 const MED_PATHS = [
   /^\/med(?:\/|$)/,
-  /^\/api\/med(?:\/|$)/,
+  /^\/api\/med(?:\/|$)/, // cubre /api/med/clinical y cualquier subruta
 ];
 
 function matchAny(pathname: string, patterns: RegExp[]) {
@@ -33,7 +36,7 @@ function roleHome(role?: string) {
     case "DIRECTIVO":
       return "/directivo";
     case "ADMIN":
-      return "/"; // admin puede ir al root o a un dashboard propio si lo tuvieras
+      return "/";
     default:
       return "/";
   }
@@ -43,10 +46,16 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isAPI = pathname.startsWith("/api");
 
+  // Bypass explícito para endpoints públicos de NextAuth
+  if (matchAny(pathname, PUBLIC_API)) {
+    return NextResponse.next();
+  }
+
   // ¿Qué guard aplica?
   const needsCT = matchAny(pathname, CT_PATHS);
   const needsMED = matchAny(pathname, MED_PATHS);
 
+  // Si no coincide con ninguna zona protegida, continuar
   if (!needsCT && !needsMED) {
     return NextResponse.next();
   }
@@ -100,6 +109,7 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  // OK
   return NextResponse.next();
 }
 
