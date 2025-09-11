@@ -9,7 +9,7 @@ import HelpTip from "@/components/HelpTip"; // ✅ default export
 
 type Status = "BAJA" | "REINTEGRO" | "LIMITADA" | "ALTA";
 type LeaveStage = "PARTIDO" | "ENTRENAMIENTO" | "EXTRADEPORTIVO";
-type ConditionType = "LESION" | "ENFERMEDAD";
+type LeaveKind = "LESION" | "ENFERMEDAD";
 type Laterality = "IZQ" | "DER" | "BILATERAL" | "NA";
 type Mechanism = "SOBRECARGA" | "IMPACTO" | "TORSION" | "ESTIRAMIENTO" | "RECIDIVA" | "OTRO";
 type Severity = "LEVE" | "MODERADA" | "SEVERA";
@@ -44,7 +44,7 @@ export default function MedInjuriesPage() {
 
   // si BAJA -> estadio y tipo condición
   const [leaveStage, setLeaveStage] = React.useState<LeaveStage>("ENTRENAMIENTO");
-  const [conditionType, setConditionType] = React.useState<ConditionType>("LESION");
+  const [leaveKind, setLeaveKind] = React.useState<LeaveKind>("LESION");
 
   // subcampos LESION
   const [diagnosis, setDiagnosis] = React.useState("");
@@ -56,16 +56,17 @@ export default function MedInjuriesPage() {
   // subcampos ENFERMEDAD
   const [illSystem, setIllSystem] = React.useState("GENERAL");
   const [illSymptoms, setIllSymptoms] = React.useState("");
-  const [contagious, setContagious] = React.useState<"SI" | "NO">("NO");
-  const [isolationDays, setIsolationDays] = React.useState<number | "">("");
-  const [illApt, setIllApt] = React.useState<"GIMNASIO" | "AEROBICO" | "TACTICO" | "NINGUNO">("GIMNASIO");
-  const [maxFever, setMaxFever] = React.useState<number | "">("");
+  const [illContagiousUI, setIllContagiousUI] = React.useState<"SI" | "NO">("NO");
+  const [illIsolationDaysUI, setIllIsolationDaysUI] = React.useState<number | "">("");
+  const [illAptUI, setIllAptUI] = React.useState<"GIMNASIO" | "AEROBICO" | "TACTICO" | "NINGUNO">("GIMNASIO");
+  const [feverMaxUI, setFeverMaxUI] = React.useState<number | "">("");
 
   // cronología
   const [startDate, setStartDate] = React.useState<string>(todayYMD());
   const [daysMin, setDaysMin] = React.useState<number | "">("");
   const [daysMax, setDaysMax] = React.useState<number | "">("");
   const [expectedReturn, setExpectedReturn] = React.useState<string>(""); // editable
+  const [expectedReturnManual, setExpectedReturnManual] = React.useState(false);
 
   // restricciones (solo para REINTEGRO / LIMITADA)
   const [noSprint, setNoSprint] = React.useState(false);
@@ -81,7 +82,7 @@ export default function MedInjuriesPage() {
   // protocolo
   const [protocolObjectives, setProtocolObjectives] = React.useState("");
   const [protocolTasks, setProtocolTasks] = React.useState("");
-  const [protocolChecks, setProtocolChecks] = React.useState("");
+  const [protocolControls, setProtocolControls] = React.useState("");
   const [protocolCriteria, setProtocolCriteria] = React.useState("");
 
   // ui
@@ -89,24 +90,35 @@ export default function MedInjuriesPage() {
   const [msg, setMsg] = React.useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   // reglas: autocalcular ETR cuando cambian startDate/daysMin/daysMax si el usuario no lo tocó manualmente
-  const [etrTouched, setEtrTouched] = React.useState(false);
   React.useEffect(() => {
-    if (etrTouched) return;
+    if (expectedReturnManual) return;
     if (!startDate) return;
-    if (daysMin === "" || daysMax === "") return;
+    if (daysMax === "") return;
     const base = ymdToDate(startDate);
     const maxN = typeof daysMax === "number" ? daysMax : parseInt(String(daysMax) || "0", 10);
     if (Number.isFinite(maxN)) {
       const etr = addDays(base, maxN as number);
       setExpectedReturn(toYMD(etr));
     }
-  }, [startDate, daysMin, daysMax, etrTouched]);
+  }, [startDate, daysMax, expectedReturnManual]);
 
   const isBAJA = status === "BAJA";
   const isLimitedOrRTP = status === "LIMITADA" || status === "REINTEGRO";
-
-  // restricciones bloqueadas si BAJA
   const restrictionsDisabled = !isLimitedOrRTP;
+
+  // Mapea aptitud UI -> enum de la DB
+  function mapIllAptUIToEnum(v: typeof illAptUI) {
+    switch (v) {
+      case "GIMNASIO":
+        return "SOLO_GIMNASIO";
+      case "AEROBICO":
+        return "AEROBICO_SUAVE";
+      case "TACTICO":
+        return "CHARLAS_TACTICO";
+      default:
+        return "NINGUNO";
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -126,37 +138,50 @@ export default function MedInjuriesPage() {
 
       const payload: Record<string, any> = {
         userId,
-        date: todayYMD(), // parte del día (se guarda como startOfDay en la API)
+        date: todayYMD(), // parte del día (la API lo normaliza a startOfDay)
         status, // BAJA | REINTEGRO | LIMITADA | ALTA
         notes,
         medSignature,
         // protocolo
-        protocolObjectives,
-        protocolTasks,
-        protocolChecks,
-        protocolCriteria,
+        protocolObjectives: protocolObjectives || null,
+        protocolTasks: protocolTasks || null,
+        protocolControls: protocolControls || null,
+        protocolCriteria: protocolCriteria || null,
       };
 
       // BAJA -> estadio + tipo de condición + cronología
       if (isBAJA) {
         payload.leaveStage = leaveStage; // PARTIDO | ENTRENAMIENTO | EXTRADEPORTIVO
+        payload.leaveKind = leaveKind; // LESION | ENFERMEDAD
 
-        payload.conditionType = conditionType; // LESION | ENFERMEDAD
-        if (conditionType === "LESION") {
+        if (leaveKind === "LESION") {
           payload.diagnosis = diagnosis || null;
           payload.bodyPart = bodyPart || null;
-          payload.laterality = laterality;
-          payload.mechanism = mechanism;
-          payload.severity = severity;
+          payload.laterality = laterality || null;
+          payload.mechanism = mechanism || null;
+          payload.severity = severity || null;
+          // limpia campos de enfermedad
+          payload.illSystem = null;
+          payload.illSymptoms = null;
+          payload.illContagious = null;
+          payload.illIsolationDays = null;
+          payload.illAptitude = null;
+          payload.feverMax = null;
         } else {
           // ENFERMEDAD
-          payload.diagnosis = diagnosis || null; // breve
+          payload.diagnosis = diagnosis || null; // breve visible
           payload.illSystem = illSystem || null;
           payload.illSymptoms = illSymptoms || null;
-          payload.contagious = contagious === "SI";
-          payload.isolationDays = isolationDays === "" ? null : Number(isolationDays);
-          payload.illApt = illApt; // aptitudes recomendadas
-          payload.maxFever = maxFever === "" ? null : Number(maxFever);
+          payload.illContagious = illContagiousUI === "SI";
+          payload.illIsolationDays =
+            illIsolationDaysUI === "" ? null : Number(illIsolationDaysUI);
+          payload.illAptitude = mapIllAptUIToEnum(illAptUI);
+          payload.feverMax = feverMaxUI === "" ? null : Number(feverMaxUI);
+          // limpia campos de lesión
+          payload.bodyPart = null;
+          payload.laterality = null;
+          payload.mechanism = null;
+          payload.severity = null;
         }
 
         // cronología
@@ -164,6 +189,7 @@ export default function MedInjuriesPage() {
         payload.daysMin = daysMin === "" ? null : Number(daysMin);
         payload.daysMax = daysMax === "" ? null : Number(daysMax);
         payload.expectedReturn = expectedReturn || null;
+        payload.expectedReturnManual = !!expectedReturnManual;
       }
 
       // REINTEGRO / LIMITADA -> restricciones
@@ -173,6 +199,10 @@ export default function MedInjuriesPage() {
         payload.noContact = !!noContact;
         payload.gymOnly = !!gymOnly;
         payload.capMinutes = capMinutes === "" ? null : Number(capMinutes);
+        // limpia campos de BAJA para no pisar con nulos si no corresponde
+        payload.leaveStage = null;
+        payload.leaveKind = null;
+        payload.diagnosis = diagnosis ? diagnosis : null; // opcionalmente deja breve visible
       }
 
       const res = await fetch("/api/med/clinical", {
@@ -267,10 +297,10 @@ export default function MedInjuriesPage() {
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="radio"
-                    name="ctype"
+                    name="leavekind"
                     value="LESION"
-                    checked={conditionType === "LESION"}
-                    onChange={() => setConditionType("LESION")}
+                    checked={leaveKind === "LESION"}
+                    onChange={() => setLeaveKind("LESION")}
                     disabled={saving}
                   />
                   Lesión
@@ -278,10 +308,10 @@ export default function MedInjuriesPage() {
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="radio"
-                    name="ctype"
+                    name="leavekind"
                     value="ENFERMEDAD"
-                    checked={conditionType === "ENFERMEDAD"}
-                    onChange={() => setConditionType("ENFERMEDAD")}
+                    checked={leaveKind === "ENFERMEDAD"}
+                    onChange={() => setLeaveKind("ENFERMEDAD")}
                     disabled={saving}
                   />
                   Enfermedad
@@ -290,7 +320,7 @@ export default function MedInjuriesPage() {
             </section>
 
             {/* Campos de LESION */}
-            {conditionType === "LESION" && (
+            {leaveKind === "LESION" && (
               <section className="grid gap-3 border rounded-lg p-4">
                 <div className="grid gap-2">
                   <label className="text-sm font-medium">
@@ -367,7 +397,7 @@ export default function MedInjuriesPage() {
             )}
 
             {/* Campos de ENFERMEDAD */}
-            {conditionType === "ENFERMEDAD" && (
+            {leaveKind === "ENFERMEDAD" && (
               <section className="grid gap-3 border rounded-lg p-4">
                 <div className="grid gap-2">
                   <label className="text-sm font-medium">Diagnóstico breve</label>
@@ -402,8 +432,8 @@ export default function MedInjuriesPage() {
                     <label className="text-sm font-medium">¿Contagioso?</label>
                     <select
                       className="h-10 w-full rounded-md border px-3 text-sm"
-                      value={contagious}
-                      onChange={(e) => setContagious(e.target.value as "SI" | "NO")}
+                      value={illContagiousUI}
+                      onChange={(e) => setIllContagiousUI(e.target.value as "SI" | "NO")}
                       disabled={saving}
                     >
                       <option value="NO">No</option>
@@ -412,15 +442,15 @@ export default function MedInjuriesPage() {
                   </div>
                 </div>
 
-                {contagious === "SI" && (
+                {illContagiousUI === "SI" && (
                   <div className="grid gap-2">
                     <label className="text-sm font-medium">Recomendación de aislamiento (días)</label>
                     <input
                       type="number"
                       min={0}
                       className="h-10 w-full rounded-md border px-3 text-sm"
-                      value={isolationDays}
-                      onChange={(e) => setIsolationDays(e.target.value === "" ? "" : Number(e.target.value))}
+                      value={illIsolationDaysUI}
+                      onChange={(e) => setIllIsolationDaysUI(e.target.value === "" ? "" : Number(e.target.value))}
                       disabled={saving}
                     />
                   </div>
@@ -442,8 +472,8 @@ export default function MedInjuriesPage() {
                     <label className="text-sm font-medium">Apto para</label>
                     <select
                       className="h-10 w-full rounded-md border px-3 text-sm"
-                      value={illApt}
-                      onChange={(e) => setIllApt(e.target.value as any)}
+                      value={illAptUI}
+                      onChange={(e) => setIllAptUI(e.target.value as any)}
                       disabled={saving}
                     >
                       <option value="GIMNASIO">Solo gimnasio</option>
@@ -458,8 +488,8 @@ export default function MedInjuriesPage() {
                       type="number"
                       step="0.1"
                       className="h-10 w-full rounded-md border px-3 text-sm"
-                      value={maxFever}
-                      onChange={(e) => setMaxFever(e.target.value === "" ? "" : Number(e.target.value))}
+                      value={feverMaxUI}
+                      onChange={(e) => setFeverMaxUI(e.target.value === "" ? "" : Number(e.target.value))}
                       disabled={saving}
                     />
                   </div>
@@ -505,21 +535,26 @@ export default function MedInjuriesPage() {
               </div>
 
               <div className="grid gap-1">
-                <label className="text-sm font-medium">
-                  ETR (fecha estimada de retorno)
-                  <span className="ml-2 text-xs text-gray-500">
-                    {etrTouched ? " (ajustada manualmente)" : " (auto desde máx)"}
-                  </span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">
+                    ETR (fecha estimada de retorno)
+                  </label>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={expectedReturnManual}
+                      onChange={(e) => setExpectedReturnManual(e.target.checked)}
+                      disabled={saving}
+                    />
+                    Editar manual
+                  </label>
+                </div>
                 <input
                   type="date"
                   className="h-10 w-full rounded-md border px-3 text-sm"
                   value={expectedReturn || ""}
-                  onChange={(e) => {
-                    setExpectedReturn(e.target.value);
-                    setEtrTouched(true);
-                  }}
-                  disabled={saving}
+                  onChange={(e) => setExpectedReturn(e.target.value)}
+                  disabled={!expectedReturnManual || saving}
                 />
               </div>
             </section>
@@ -601,7 +636,7 @@ export default function MedInjuriesPage() {
               className="h-10 w-full rounded-md border px-3 text-sm"
               value={medSignature}
               onChange={(e) => setMedSignature(e.target.value)}
-              placeholder='Ej: "Dr. GC"'
+              placeholder='Ej: "Dr. XX"'
               disabled={saving}
             />
           </div>
@@ -634,8 +669,8 @@ export default function MedInjuriesPage() {
             <label className="text-sm font-medium">Controles (día 3/7)</label>
             <textarea
               className="min-h-[70px] w-full rounded-md border p-3 text-sm"
-              value={protocolChecks}
-              onChange={(e) => setProtocolChecks(e.target.value)}
+              value={protocolControls}
+              onChange={(e) => setProtocolControls(e.target.value)}
               placeholder="Qué revisar y cuándo…"
               disabled={saving}
             />
