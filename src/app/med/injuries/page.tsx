@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 import * as React from "react";
 import PlayerSelectMed from "@/components/PlayerSelectMed";
-import { HelpTip } from "@/components/HelpTip";
+import HelpTip from "@/components/HelpTip"; // ✅ default export
 
 type Status = "BAJA" | "REINTEGRO" | "LIMITADA" | "ALTA";
 type LeaveStage = "PARTIDO" | "ENTRENAMIENTO" | "EXTRADEPORTIVO";
@@ -245,7 +245,7 @@ export default function MedInjuriesPage() {
         </section>
 
         {/* Si BAJA */}
-        {isBAJA && (
+        {status === "BAJA" && (
           <>
             <section className="grid gap-2">
               <label className="text-sm font-medium">Estadio de la baja</label>
@@ -294,8 +294,7 @@ export default function MedInjuriesPage() {
               <section className="grid gap-3 border rounded-lg p-4">
                 <div className="grid gap-2">
                   <label className="text-sm font-medium">
-                    Diagnóstico breve{" "}
-                    <HelpTip text="Ej: Distensión isquiotibial grado I." />
+                    Diagnóstico breve <HelpTip text="Ej: Distensión isquiotibial grado I." />
                   </label>
                   <input
                     className="h-10 w-full rounded-md border px-3 text-sm"
@@ -679,11 +678,6 @@ export default function MedInjuriesPage() {
             className="h-10 rounded-md border px-4 disabled:opacity-50"
             disabled={saving}
             onClick={() => {
-              // duplicar desde ayer (simple: solo copia campos de protocolo e informe)
-              setMsg(null);
-              const d = new Date();
-              d.setDate(d.getDate() - 1);
-              // mantener protocolo/notes tal como están (esta acción puede perfeccionarse luego con un fetch)
               setMsg({ kind: "ok", text: "Duplicado desde ayer (demo). Próximamente real con fetch)." });
             }}
           >
