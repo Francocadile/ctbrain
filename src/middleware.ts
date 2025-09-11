@@ -3,9 +3,6 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-// Rutas públicas de auth que nunca deben ser interceptadas por el guard
-const PUBLIC_API = [/^\/api\/auth(?:\/|$)/];
-
 // Rutas que requieren CT o ADMIN
 const CT_PATHS = [
   /^\/ct(?:\/|$)/,
@@ -15,11 +12,18 @@ const CT_PATHS = [
   /^\/api\/users(?:\/|$)/,
 ];
 
-// Rutas que requieren MEDICO o ADMIN
+// Rutas que requieren MEDICO o ADMIN (por defecto)
 const MED_PATHS = [
   /^\/med(?:\/|$)/,
-  /^\/api\/med(?:\/|$)/, // cubre /api/med/clinical y cualquier subruta
+  /^\/api\/med(?:\/|$)/,
 ];
+
+// --- excepciones: CT puede LEER (GET) endpoints clínicos ---
+function isClinicalReadForCT(pathname: string, method: string) {
+  if (method !== "GET") return false;
+  // /api/med/clinical y /api/med/clinical/analytics (+ subrutas)
+  return /^\/api\/med\/clinical(?:\/|$)/.test(pathname);
+}
 
 function matchAny(pathname: string, patterns: RegExp[]) {
   return patterns.some((r) => r.test(pathname));
@@ -46,16 +50,10 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isAPI = pathname.startsWith("/api");
 
-  // Bypass explícito para endpoints públicos de NextAuth
-  if (matchAny(pathname, PUBLIC_API)) {
-    return NextResponse.next();
-  }
-
   // ¿Qué guard aplica?
   const needsCT = matchAny(pathname, CT_PATHS);
   const needsMED = matchAny(pathname, MED_PATHS);
 
-  // Si no coincide con ninguna zona protegida, continuar
   if (!needsCT && !needsMED) {
     return NextResponse.next();
   }
@@ -77,7 +75,7 @@ export async function middleware(req: NextRequest) {
 
   const role = (token as any).role as string | undefined;
 
-  // Guard para CT
+  // Guard CT
   if (needsCT) {
     const allowed = role === "CT" || role === "ADMIN";
     if (!allowed) {
@@ -93,9 +91,10 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // Guard para MEDICO
+  // Guard Médico (con excepción de lectura para CT)
   if (needsMED) {
-    const allowed = role === "MEDICO" || role === "ADMIN";
+    const allowCTReadOnly = role === "CT" && isClinicalReadForCT(pathname, req.method);
+    const allowed = role === "MEDICO" || role === "ADMIN" || allowCTReadOnly;
     if (!allowed) {
       if (isAPI) {
         return new NextResponse(JSON.stringify({ error: "Forbidden", role }), {
@@ -109,7 +108,6 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // OK
   return NextResponse.next();
 }
 
