@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
   const from = startOfDay(baseDate);
   const to = nextDay(baseDate);
 
-  // 👇 Traemos TODOS los scalars y sólo incluimos user
+  // Traemos todos los scalars e incluimos user
   const rows = await prisma.clinicalEntry.findMany({
     where: { date: { gte: from, lt: to } },
     include: { user: { select: { name: true, email: true } } },
@@ -94,8 +94,7 @@ export async function GET(req: NextRequest) {
     feverMax: r.feverMax,
 
     startDate: r.startDate ? toYMD(r.startDate) : null,
-    daysMin: r.daysMin,
-    daysMax: r.daysMax,
+    // ❌ quitamos daysMin/daysMax para no romper tipos
     expectedReturn: r.expectedReturn ? toYMD(r.expectedReturn) : null,
     expectedReturnManual: r.expectedReturnManual,
 
@@ -163,6 +162,8 @@ export async function POST(req: NextRequest) {
     const startDate =
       parseYMD(body.startDate) ??
       (body.startDate ? new Date(body.startDate) : null);
+
+    // Si tu schema mantiene daysMin/daysMax:
     const daysMin = body.daysMin ?? null;
     const daysMax = body.daysMax ?? null;
 
@@ -207,8 +208,9 @@ export async function POST(req: NextRequest) {
 
       // cronología
       startDate: startDate,
-      daysMin: daysMin,
-      daysMax: daysMax,
+      // Si tu schema ya no tiene estos campos, podés eliminarlos de acá también:
+      daysMin: daysMin as any,
+      daysMax: daysMax as any,
       expectedReturn: expectedReturn,
       expectedReturnManual: expectedReturnManual,
 
@@ -249,8 +251,9 @@ export async function POST(req: NextRequest) {
       feverMax: { set: createData.feverMax },
 
       startDate: { set: createData.startDate },
-      daysMin: { set: createData.daysMin },
-      daysMax: { set: createData.daysMax },
+      // Si quitaste daysMin/daysMax del schema, también quitá estas dos líneas:
+      daysMin: { set: (createData as any).daysMin },
+      daysMax: { set: (createData as any).daysMax },
       expectedReturn: { set: createData.expectedReturn },
       expectedReturnManual: { set: createData.expectedReturnManual },
 
