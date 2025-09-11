@@ -17,8 +17,7 @@ type IllAptitude = "SOLO_GIMNASIO" | "AEROBICO_SUAVE" | "CHARLAS_TACTICO" | "NIN
 
 function addDays(ymd: string, days: number) {
   const [y, m, d] = ymd.split("-").map((n) => Number(n));
-  const dt = new Date(y, m - 1, d);
-  dt.setHours(0, 0, 0, 0);
+  const dt = new Date(y, (m || 1) - 1, d || 1);
   dt.setDate(dt.getDate() + days);
   const yyyy = dt.getFullYear();
   const mm = String(dt.getMonth() + 1).padStart(2, "0");
@@ -26,26 +25,10 @@ function addDays(ymd: string, days: number) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function diffDays(aYMD?: string | null, bYMD?: string | null) {
-  if (!aYMD || !bYMD) return null;
-  const [ay, am, ad] = aYMD.split("-").map(Number);
-  const [by, bm, bd] = bYMD.split("-").map(Number);
-  const a = new Date(ay, (am || 1) - 1, ad || 1);
-  const b = new Date(by, (bm || 1) - 1, bd || 1);
-  a.setHours(0, 0, 0, 0);
-  b.setHours(0, 0, 0, 0);
-  const ms = b.getTime() - a.getTime();
-  return Math.max(0, Math.round(ms / 86400000));
-}
-
 type Props = {
-  /** Si viene, estamos editando; si no, es nuevo */
   initial?: Partial<Episode>;
-  /** Fecha por defecto del parte (YYYY-MM-DD). Si no viene, hoy. */
   defaultDate?: string;
-  /** Cerrar formulario sin guardar */
   onCancel?: () => void;
-  /** Callback tras guardar */
   onSaved?: () => void;
 };
 
@@ -53,9 +36,9 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
   const { saveEpisode } = useEpisodes(defaultDate || todayYMD());
 
   // --------- estado base ---------
-  const [date, setDate] = React.useState<string>(initial?.date ?? (defaultDate || todayYMD()));
   const [userId, setUserId] = React.useState(initial?.userId ?? "");
   const [status, setStatus] = React.useState<Status>((initial?.status as Status) ?? "LIMITADA");
+  const [date, setDate] = React.useState<string>(initial?.date ?? (defaultDate || todayYMD()));
 
   // BAJA
   const [leaveStage, setLeaveStage] = React.useState<LeaveStage | "">((initial?.leaveStage as LeaveStage) ?? "");
@@ -88,18 +71,18 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
   );
   const [feverMax, setFeverMax] = React.useState<number | "">(initial?.feverMax ?? "");
 
-  // Cronología — ahora usamos “días estimados” único
-  const initialDaysEstimated =
-    diffDays(initial?.startDate ?? date, initial?.expectedReturn ?? null) ?? "";
-
+  // Cronología — un único “días estimados” (guardamos min=max)
   const [startDate, setStartDate] = React.useState<string>(initial?.startDate ?? date);
-  const [daysEstimated, setDaysEstimated] = React.useState<number | "">(initialDaysEstimated);
-  const [expectedReturnManual, setExpectedReturnManual] = React.useState<boolean>(
-    !!initial?.expectedReturnManual
+  const [daysEstimated, setDaysEstimated] = React.useState<number | "">(
+    // si venimos de un episodio con min/max, tomamos cualquiera como estimado
+    (initial as any)?.daysMax ?? (initial as any)?.daysMin ?? ""
   );
   const [expectedReturn, setExpectedReturn] = React.useState<string>(
     initial?.expectedReturn ??
       (startDate && Number(daysEstimated) ? addDays(startDate, Number(daysEstimated)) : "")
+  );
+  const [expectedReturnManual, setExpectedReturnManual] = React.useState<boolean>(
+    !!initial?.expectedReturnManual
   );
 
   // Restricciones (REINTEGRO/LIMITADA)
@@ -128,6 +111,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
   );
 
   const [saving, setSaving] = React.useState(false);
+  const [msg, setMsg] = React.useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [err, setErr] = React.useState<string | null>(null);
 
   // --------- reglas UI ---------
@@ -145,20 +129,97 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
     }
   }, [startDate, daysEstimated, expectedReturnManual]);
 
+  // ---------- Duplicar desde ayer ----------
+  async function duplicateFromYesterday() {
+    setMsg(null);
+    setErr(null);
+    if (!userId) {
+      setMsg({ kind: "err", text: "Seleccioná un jugador para duplicar." });
+      return;
+    }
+    try {
+      const yday = addDays(date || todayYMD(), -1);
+      const res = await fetch(`/api/med/clinical?date=${yday}`, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const list = (await res.json()) as Episode[];
+      const prev = list.find((x) => x.userId === userId);
+      if (!prev) {
+        setMsg({ kind: "err", text: "No hay parte del día anterior para este jugador." });
+        return;
+      }
+
+      // Copiamos todo excepto la fecha y la firma (se firma cada día)
+      setStatus(prev.status as Status);
+
+      // BAJA
+      setLeaveStage((prev.leaveStage as LeaveStage) ?? "");
+      setLeaveKind((prev.leaveKind as LeaveKind) ?? "");
+
+      // Lesión
+      setDiagnosis(prev.diagnosis ?? "");
+      setBodyPart(prev.bodyPart ?? "");
+      setLaterality((prev.laterality as Laterality) ?? "");
+      setMechanism((prev.mechanism as Mechanism) ?? "");
+      setSeverity((prev.severity as Severity) ?? "");
+
+      // Enfermedad
+      setIllSystem((prev.illSystem as IllSystem) ?? "");
+      setIllSymptoms(prev.illSymptoms ?? "");
+      setIllContagious(!!prev.illContagious);
+      setIllIsolationDays(prev.illIsolationDays ?? "");
+      setIllAptitude((prev.illAptitude as IllAptitude) ?? "");
+      setFeverMax(prev.feverMax ?? "");
+
+      // Cronología
+      setStartDate(prev.startDate || startDate);
+      const est =
+        typeof (prev as any).daysMax === "number"
+          ? (prev as any).daysMax
+          : typeof (prev as any).daysMin === "number"
+          ? (prev as any).daysMin
+          : "";
+      setDaysEstimated(est === "" ? "" : Number(est));
+      setExpectedReturnManual(!!prev.expectedReturnManual);
+      setExpectedReturn(prev.expectedReturn || "");
+
+      // Restricciones
+      setCapMinutes(prev.capMinutes ?? "");
+      setNoSprint(!!prev.noSprint);
+      setNoChangeOfDirection(!!prev.noChangeOfDirection);
+      setGymOnly(!!prev.gymOnly);
+      setNoContact(!!prev.noContact);
+
+      // Docs/plan
+      setNotes(prev.notes ?? "");
+      setMedSignature(""); // obligar a firmar cada día
+      setProtocolObjectives(prev.protocolObjectives ?? "");
+      setProtocolTasks(prev.protocolTasks ?? "");
+      setProtocolControls(prev.protocolControls ?? "");
+      setProtocolCriteria(prev.protocolCriteria ?? "");
+
+      setMsg({ kind: "ok", text: `Duplicado desde ${yday}. Revisá y guardá.` });
+    } catch (e: any) {
+      setMsg({ kind: "err", text: e?.message || "No se pudo duplicar." });
+    }
+  }
+
+  // ---------- Submit ----------
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
+    setMsg(null);
 
-    // Validaciones mínimas
+    // Validaciones mínimas (cerramos criterioso)
     if (!userId) return setErr("Seleccioná un jugador.");
     if (!status) return setErr("Seleccioná el estado.");
+    if (!medSignature.trim()) return setErr("La firma del médico es obligatoria.");
 
     if (isBAJA) {
       if (!leaveKind) return setErr("Indicá si es LESIÓN o ENFERMEDAD.");
-      if (leaveKind === "LESION" && !diagnosis.trim()) return setErr("Para lesión, el diagnóstico es obligatorio.");
-      if (leaveKind === "ENFERMEDAD" && !illSymptoms.trim() && !diagnosis.trim()) {
+      if (leaveKind === "LESION" && !diagnosis.trim())
+        return setErr("Para lesión, el diagnóstico es obligatorio.");
+      if (leaveKind === "ENFERMEDAD" && !illSymptoms.trim() && !diagnosis.trim())
         return setErr("Para enfermedad, indicá síntomas o diagnóstico breve.");
-      }
     }
 
     setSaving(true);
@@ -184,8 +245,10 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
           isBAJA && leaveKind === "ENFERMEDAD" && illIsolationDays !== "" ? Number(illIsolationDays) : null,
         illAptitude: isBAJA && leaveKind === "ENFERMEDAD" ? (illAptitude || null) : null,
         feverMax: isBAJA && leaveKind === "ENFERMEDAD" && feverMax !== "" ? Number(feverMax) : null,
-        // Cronología (min=max=días estimados)
+        // Cronología (min=max=días estimados si existe)
         startDate: startDate || null,
+        daysMin: daysEstimated !== "" ? Number(daysEstimated) : null,
+        daysMax: daysEstimated !== "" ? Number(daysEstimated) : null,
         expectedReturn: expectedReturn || null,
         expectedReturnManual: expectedReturnManual || false,
         // Restricciones
@@ -205,6 +268,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
       };
 
       await saveEpisode(payload);
+      setMsg({ kind: "ok", text: "Parte clínico guardado correctamente." });
       onSaved?.();
     } catch (e: any) {
       setErr(e?.message || "No se pudo guardar.");
@@ -220,7 +284,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
         <div>
           <label className="text-sm font-medium">Jugador</label>
           <div className="mt-1">
-            <PlayerSelectMed value={userId} onChange={setUserId} disabled={!!initial?.id} />
+            <PlayerSelectMed value={userId} onChange={setUserId} disabled={!!initial?.id || saving} />
           </div>
           <p className="mt-1 text-xs text-gray-500">El CT lo verá en lectura.</p>
         </div>
@@ -232,6 +296,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
             className="mt-1 h-10 w-full rounded-md border px-3 text-sm"
             value={date}
             onChange={(e) => setDate(e.target.value)}
+            disabled={saving}
           />
         </div>
       </div>
@@ -243,6 +308,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
           className="h-10 w-full rounded-md border px-3 text-sm"
           value={status}
           onChange={(e) => setStatus(e.target.value as Status)}
+          disabled={saving}
         >
           <option value="BAJA">BAJA</option>
           <option value="REINTEGRO">REINTEGRO (RTP)</option>
@@ -260,6 +326,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               className="mt-1 h-10 w-full rounded-md border px-3 text-sm"
               value={leaveStage}
               onChange={(e) => setLeaveStage(e.target.value as LeaveStage)}
+              disabled={saving}
             >
               <option value="">—</option>
               <option value="PARTIDO">Partido (competencia)</option>
@@ -274,6 +341,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               className="mt-1 h-10 w-full rounded-md border px-3 text-sm"
               value={leaveKind}
               onChange={(e) => setLeaveKind(e.target.value as LeaveKind)}
+              disabled={saving}
             >
               <option value="">—</option>
               <option value="LESION">Lesión</option>
@@ -293,6 +361,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               value={diagnosis}
               onChange={(e) => setDiagnosis(e.target.value)}
               placeholder='Ej: "Distensión isquiotibial grado I"'
+              disabled={saving}
             />
           </div>
 
@@ -303,6 +372,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               value={bodyPart}
               onChange={(e) => setBodyPart(e.target.value)}
               placeholder="Ej: Isquiotibiales, tobillo..."
+              disabled={saving}
             />
           </div>
 
@@ -312,6 +382,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               className="mt-1 h-10 w-full rounded-md border px-3 text-sm"
               value={laterality}
               onChange={(e) => setLaterality(e.target.value as Laterality)}
+              disabled={saving}
             >
               <option value="">—</option>
               <option value="IZQ">Izq</option>
@@ -327,6 +398,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               className="mt-1 h-10 w-full rounded-md border px-3 text-sm"
               value={mechanism}
               onChange={(e) => setMechanism(e.target.value as Mechanism)}
+              disabled={saving}
             >
               <option value="">—</option>
               <option value="SOBRECARGA">Sobrecarga</option>
@@ -344,6 +416,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               className="mt-1 h-10 w-full rounded-md border px-3 text-sm"
               value={severity}
               onChange={(e) => setSeverity(e.target.value as Severity)}
+              disabled={saving}
             >
               <option value="">—</option>
               <option value="LEVE">Leve</option>
@@ -363,6 +436,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               className="mt-1 h-10 w-full rounded-md border px-3 text-sm"
               value={illSystem}
               onChange={(e) => setIllSystem(e.target.value as IllSystem)}
+              disabled={saving}
             >
               <option value="">—</option>
               <option value="RESPIRATORIO">Respiratorio</option>
@@ -381,6 +455,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               value={illSymptoms}
               onChange={(e) => setIllSymptoms(e.target.value)}
               placeholder="Ej: fiebre, tos, malestar..."
+              disabled={saving}
             />
           </div>
 
@@ -390,6 +465,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               type="checkbox"
               checked={illContagious}
               onChange={(e) => setIllContagious(e.target.checked)}
+              disabled={saving}
             />
             {illContagious && (
               <input
@@ -399,6 +475,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
                 placeholder="Días aislamiento"
                 value={illIsolationDays}
                 onChange={(e) => setIllIsolationDays(e.target.value === "" ? "" : Number(e.target.value))}
+                disabled={saving}
               />
             )}
           </div>
@@ -409,6 +486,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               className="mt-1 h-10 w-full rounded-md border px-3 text-sm"
               value={illAptitude}
               onChange={(e) => setIllAptitude(e.target.value as IllAptitude)}
+              disabled={saving}
             >
               <option value="">—</option>
               <option value="SOLO_GIMNASIO">Solo gimnasio</option>
@@ -426,6 +504,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               className="mt-1 h-10 w-full rounded-md border px-3 text-sm"
               value={feverMax}
               onChange={(e) => setFeverMax(e.target.value === "" ? "" : Number(e.target.value))}
+              disabled={saving}
             />
           </div>
         </div>
@@ -440,6 +519,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
             className="mt-1 h-10 w-full rounded-md border px-3 text-sm"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
+            disabled={saving}
           />
         </div>
 
@@ -454,9 +534,10 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
             onChange={(e) =>
               setDaysEstimated(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))
             }
+            disabled={saving}
           />
           <p className="mt-1 text-xs text-gray-500">
-            Control: se usa como estimado único (min=max implícito).
+            Guardamos min=max con este valor (control al cuerpo médico).
           </p>
         </div>
 
@@ -468,6 +549,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
                 type="checkbox"
                 checked={expectedReturnManual}
                 onChange={(e) => setExpectedReturnManual(e.target.checked)}
+                disabled={saving}
               />
               Editar manual
             </label>
@@ -477,7 +559,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
             className="mt-1 h-10 w-full rounded-md border px-3 text-sm"
             value={expectedReturn || ""}
             onChange={(e) => setExpectedReturn(e.target.value)}
-            disabled={!expectedReturnManual}
+            disabled={!expectedReturnManual || saving}
           />
         </div>
       </div>
@@ -493,10 +575,11 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               className="mt-1 h-10 w-full rounded-md border px-3 text-sm"
               value={capMinutes}
               onChange={(e) => setCapMinutes(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
+              disabled={saving}
             />
           </div>
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={noSprint} onChange={(e) => setNoSprint(e.target.checked)} />
+            <input type="checkbox" checked={noSprint} onChange={(e) => setNoSprint(e.target.checked)} disabled={saving} />
             <span className="text-sm">Sin sprint</span>
           </label>
           <label className="flex items-center gap-2">
@@ -504,15 +587,16 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               type="checkbox"
               checked={noChangeOfDirection}
               onChange={(e) => setNoChangeOfDirection(e.target.checked)}
+              disabled={saving}
             />
             <span className="text-sm">Sin cambios de dirección</span>
           </label>
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={gymOnly} onChange={(e) => setGymOnly(e.target.checked)} />
+            <input type="checkbox" checked={gymOnly} onChange={(e) => setGymOnly(e.target.checked)} disabled={saving} />
             <span className="text-sm">Solo gimnasio</span>
           </label>
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={noContact} onChange={(e) => setNoContact(e.target.checked)} />
+            <input type="checkbox" checked={noContact} onChange={(e) => setNoContact(e.target.checked)} disabled={saving} />
             <span className="text-sm">Sin contacto</span>
           </label>
         </div>
@@ -528,6 +612,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Evolución, tratamientos, observaciones…"
+            disabled={saving}
           />
         </div>
         <div>
@@ -537,6 +622,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
             value={medSignature}
             onChange={(e) => setMedSignature(e.target.value)}
             placeholder="Ej: Dr. XX"
+            disabled={saving}
           />
         </div>
       </div>
@@ -555,6 +641,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               rows={3}
               value={protocolObjectives}
               onChange={(e) => setProtocolObjectives(e.target.value)}
+              disabled={saving}
             />
           </div>
           <div>
@@ -564,6 +651,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               rows={3}
               value={protocolTasks}
               onChange={(e) => setProtocolTasks(e.target.value)}
+              disabled={saving}
             />
           </div>
           <div>
@@ -573,6 +661,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               rows={3}
               value={protocolControls}
               onChange={(e) => setProtocolControls(e.target.value)}
+              disabled={saving}
             />
           </div>
           <div>
@@ -582,20 +671,40 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               rows={3}
               value={protocolCriteria}
               onChange={(e) => setProtocolCriteria(e.target.value)}
+              disabled={saving}
             />
           </div>
         </div>
       </div>
 
       {err && <p className="text-sm text-red-600">{err}</p>}
+      {msg && (
+        <div
+          className={`rounded-md p-3 text-sm ${
+            msg.kind === "ok" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+          }`}
+        >
+          {msg.text}
+        </div>
+      )}
 
       <div className="flex items-center justify-end gap-3 pt-2">
         <button
           type="button"
           onClick={onCancel}
           className="h-10 rounded-md border px-4 text-sm hover:bg-gray-50"
+          disabled={saving}
         >
           Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={duplicateFromYesterday}
+          className="h-10 rounded-md border px-4 text-sm hover:bg-gray-50"
+          disabled={saving || !userId}
+          title={!userId ? "Seleccioná un jugador primero" : "Duplicar el parte de ayer"}
+        >
+          Duplicar desde ayer
         </button>
         <button
           type="submit"
