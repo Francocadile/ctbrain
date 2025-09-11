@@ -3,35 +3,43 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { Route } from "next"; // typedRoutes
 
 function NavItem({
   href,
   children,
+  active,
   soon,
 }: {
   href?: Route;
   children: React.ReactNode;
+  active?: boolean;
   soon?: boolean;
 }) {
+  const base =
+    "block rounded-md px-2 py-1.5 text-sm transition";
+  const activeCls = active ? "bg-black text-white" : "hover:bg-gray-100";
   if (!href) {
     return (
-      <span className="block rounded-md px-2 py-1.5 text-sm text-gray-400 cursor-not-allowed">
+      <span className={`${base} text-gray-400 cursor-not-allowed`}>
         {children} {soon && <small className="ml-1">PRONTO</small>}
       </span>
     );
   }
   return (
-    <Link
-      href={href}
-      className="block rounded-md px-2 py-1.5 text-sm hover:bg-gray-100 transition"
-    >
+    <Link href={href} className={`${base} ${activeCls}`}>
       {children}
     </Link>
   );
 }
 
 export default function CTLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+
+  const isActive = (prefix: string) =>
+    pathname === prefix || pathname?.startsWith(prefix + "/");
+
   return (
     <div className="min-h-screen flex bg-gray-50">
       {/* Sidebar */}
@@ -41,7 +49,12 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
         </div>
         <ul className="space-y-0.5 mb-2">
           <li>
-            <NavItem href={"/ct" satisfies Route}>Dashboard / Inicio rápido</NavItem>
+            <NavItem
+              href={"/ct" satisfies Route}
+              active={pathname === "/ct"}
+            >
+              Dashboard / Inicio rápido
+            </NavItem>
           </li>
         </ul>
 
@@ -50,21 +63,37 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
         </div>
         <ul className="space-y-0.5 mb-2">
           <li>
-            <NavItem href={"/ct/metrics/wellness" satisfies Route}>
+            <NavItem
+              href={"/ct/metrics/wellness" satisfies Route}
+              active={isActive("/ct/metrics/wellness")}
+            >
               Wellness (día)
             </NavItem>
           </li>
           <li>
-            <NavItem href={"/ct/metrics/rpe" satisfies Route}>RPE (día)</NavItem>
+            <NavItem
+              href={"/ct/metrics/rpe" satisfies Route}
+              active={isActive("/ct/metrics/rpe")}
+            >
+              RPE (día)
+            </NavItem>
           </li>
           <li>
-            <NavItem href={"/ct/metrics/rpe/semana" satisfies Route}>
+            <NavItem
+              href={"/ct/metrics/rpe/semana" satisfies Route}
+              active={isActive("/ct/metrics/rpe/semana")}
+            >
               RPE (semana)
             </NavItem>
           </li>
           {/* Mientras typedRoutes no “vea” la ruta en el union, usamos assertion */}
           <li>
-            <NavItem href={"/ct/injuries" as Route}>Lesionados</NavItem>
+            <NavItem
+              href={"/ct/injuries" as Route}
+              active={isActive("/ct/injuries")}
+            >
+              Lesionados
+            </NavItem>
           </li>
         </ul>
 
@@ -73,16 +102,26 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
         </div>
         <ul className="space-y-0.5 mb-2">
           <li>
-            <NavItem href={"/ct/plan-semanal" satisfies Route}>
+            <NavItem
+              href={"/ct/plan-semanal" satisfies Route}
+              active={isActive("/ct/plan-semanal")}
+            >
               Plan semanal (Editor)
             </NavItem>
           </li>
           <li>
-            <NavItem href={"/ct/sessions" satisfies Route}>Sesiones</NavItem>
+            <NavItem
+              href={"/ct/sessions" satisfies Route}
+              active={isActive("/ct/sessions")}
+            >
+              Sesiones
+            </NavItem>
           </li>
           {/* Ejercicios -> redirige al buscador */}
           <li>
-            <NavItem href={"/ct/exercises" as any}>Ejercicios</NavItem>
+            <NavItem href={"/ct/exercises" as Route} active={isActive("/ct/exercises")}>
+              Ejercicios
+            </NavItem>
           </li>
         </ul>
       </aside>
