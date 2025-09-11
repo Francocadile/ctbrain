@@ -18,11 +18,24 @@ type IllAptitude = "SOLO_GIMNASIO" | "AEROBICO_SUAVE" | "CHARLAS_TACTICO" | "NIN
 function addDays(ymd: string, days: number) {
   const [y, m, d] = ymd.split("-").map((n) => Number(n));
   const dt = new Date(y, m - 1, d);
+  dt.setHours(0, 0, 0, 0);
   dt.setDate(dt.getDate() + days);
   const yyyy = dt.getFullYear();
   const mm = String(dt.getMonth() + 1).padStart(2, "0");
   const dd = String(dt.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function diffDays(aYMD?: string | null, bYMD?: string | null) {
+  if (!aYMD || !bYMD) return null;
+  const [ay, am, ad] = aYMD.split("-").map(Number);
+  const [by, bm, bd] = bYMD.split("-").map(Number);
+  const a = new Date(ay, (am || 1) - 1, ad || 1);
+  const b = new Date(by, (bm || 1) - 1, bd || 1);
+  a.setHours(0, 0, 0, 0);
+  b.setHours(0, 0, 0, 0);
+  const ms = b.getTime() - a.getTime();
+  return Math.max(0, Math.round(ms / 86400000));
 }
 
 type Props = {
@@ -40,9 +53,9 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
   const { saveEpisode } = useEpisodes(defaultDate || todayYMD());
 
   // --------- estado base ---------
+  const [date, setDate] = React.useState<string>(initial?.date ?? (defaultDate || todayYMD()));
   const [userId, setUserId] = React.useState(initial?.userId ?? "");
   const [status, setStatus] = React.useState<Status>((initial?.status as Status) ?? "LIMITADA");
-  const [date, setDate] = React.useState<string>(initial?.date ?? (defaultDate || todayYMD()));
 
   // BAJA
   const [leaveStage, setLeaveStage] = React.useState<LeaveStage | "">((initial?.leaveStage as LeaveStage) ?? "");
@@ -75,16 +88,18 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
   );
   const [feverMax, setFeverMax] = React.useState<number | "">(initial?.feverMax ?? "");
 
-  // Cronología — usamos “días estimados” único (tu preferencia)
+  // Cronología — ahora usamos “días estimados” único
+  const initialDaysEstimated =
+    diffDays(initial?.startDate ?? date, initial?.expectedReturn ?? null) ?? "";
+
   const [startDate, setStartDate] = React.useState<string>(initial?.startDate ?? date);
-  const [daysEstimated, setDaysEstimated] = React.useState<number | "">(
-    initial?.daysMax ?? "" // si existía, tomamos el max como estimado
-  );
-  const [expectedReturn, setExpectedReturn] = React.useState<string>(
-    initial?.expectedReturn ?? (startDate && Number(daysEstimated) ? addDays(startDate, Number(daysEstimated)) : "")
-  );
+  const [daysEstimated, setDaysEstimated] = React.useState<number | "">(initialDaysEstimated);
   const [expectedReturnManual, setExpectedReturnManual] = React.useState<boolean>(
     !!initial?.expectedReturnManual
+  );
+  const [expectedReturn, setExpectedReturn] = React.useState<string>(
+    initial?.expectedReturn ??
+      (startDate && Number(daysEstimated) ? addDays(startDate, Number(daysEstimated)) : "")
   );
 
   // Restricciones (REINTEGRO/LIMITADA)
@@ -169,10 +184,8 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
           isBAJA && leaveKind === "ENFERMEDAD" && illIsolationDays !== "" ? Number(illIsolationDays) : null,
         illAptitude: isBAJA && leaveKind === "ENFERMEDAD" ? (illAptitude || null) : null,
         feverMax: isBAJA && leaveKind === "ENFERMEDAD" && feverMax !== "" ? Number(feverMax) : null,
-        // Cronología (guardamos min=max=días estimados si existe)
+        // Cronología (min=max=días estimados)
         startDate: startDate || null,
-        daysMin: daysEstimated !== "" ? Number(daysEstimated) : null,
-        daysMax: daysEstimated !== "" ? Number(daysEstimated) : null,
         expectedReturn: expectedReturn || null,
         expectedReturnManual: expectedReturnManual || false,
         // Restricciones
@@ -443,7 +456,7 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
             }
           />
           <p className="mt-1 text-xs text-gray-500">
-            Guardamos min=max con este valor (control al cuerpo médico).
+            Control: se usa como estimado único (min=max implícito).
           </p>
         </div>
 
@@ -482,26 +495,26 @@ export default function EpisodeForm({ initial, defaultDate, onCancel, onSaved }:
               onChange={(e) => setCapMinutes(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
             />
           </div>
-          <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2">
             <input type="checkbox" checked={noSprint} onChange={(e) => setNoSprint(e.target.checked)} />
             <span className="text-sm">Sin sprint</span>
-          </div>
-          <div className="flex items-center gap-2">
+          </label>
+          <label className="flex items-center gap-2">
             <input
               type="checkbox"
               checked={noChangeOfDirection}
               onChange={(e) => setNoChangeOfDirection(e.target.checked)}
             />
             <span className="text-sm">Sin cambios de dirección</span>
-          </div>
-          <div className="flex items-center gap-2">
+          </label>
+          <label className="flex items-center gap-2">
             <input type="checkbox" checked={gymOnly} onChange={(e) => setGymOnly(e.target.checked)} />
             <span className="text-sm">Solo gimnasio</span>
-          </div>
-          <div className="flex items-center gap-2">
+          </label>
+          <label className="flex items-center gap-2">
             <input type="checkbox" checked={noContact} onChange={(e) => setNoContact(e.target.checked)} />
             <span className="text-sm">Sin contacto</span>
-          </div>
+          </label>
         </div>
       )}
 
