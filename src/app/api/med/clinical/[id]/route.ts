@@ -50,56 +50,8 @@ export async function GET(
   const id = ctx.params.id;
   const r = await prisma.clinicalEntry.findUnique({
     where: { id },
-    select: {
-      id: true,
-      userId: true,
-      date: true,
-      status: true,
-
-      // baja
-      leaveStage: true,
-      leaveKind: true,
-
-      // lesión
-      diagnosis: true,
-      bodyPart: true,
-      laterality: true,
-      mechanism: true,
-      severity: true,
-
-      // enfermedad
-      illSystem: true,
-      illSymptoms: true,
-      illContagious: true,
-      illIsolationDays: true,
-      illAptitude: true,
-      feverMax: true,
-
-      // cronología  ✅ incluimos daysMin/daysMax (antes faltaba)
-      startDate: true,
-      daysMin: true,
-      daysMax: true,
-      expectedReturn: true,
-      expectedReturnManual: true,
-
-      // restricciones
-      capMinutes: true,
-      noSprint: true,
-      noChangeOfDirection: true,
-      gymOnly: true,
-      noContact: true,
-
-      // docs/plan
-      notes: true,
-      medSignature: true,
-      protocolObjectives: true,
-      protocolTasks: true,
-      protocolControls: true,
-      protocolCriteria: true,
-
+    include: {
       user: { select: { name: true, email: true } },
-      createdAt: true,
-      updatedAt: true,
     },
   });
 
@@ -130,18 +82,22 @@ export async function GET(
     illAptitude: r.illAptitude,
     feverMax: r.feverMax,
 
+    // cronología
     startDate: r.startDate ? toYMD(r.startDate) : null,
-    daysMin: r.daysMin,
-    daysMax: r.daysMax,
+    // Si tu client generado no trae estos campos por tipado, los leemos de todos modos
+    daysMin: (r as any).daysMin ?? null,
+    daysMax: (r as any).daysMax ?? null,
     expectedReturn: r.expectedReturn ? toYMD(r.expectedReturn) : null,
     expectedReturnManual: r.expectedReturnManual,
 
+    // restricciones
     capMinutes: r.capMinutes,
     noSprint: r.noSprint,
     noChangeOfDirection: r.noChangeOfDirection,
     gymOnly: r.gymOnly,
     noContact: r.noContact,
 
+    // docs/plan
     notes: r.notes,
     medSignature: r.medSignature,
     protocolObjectives: r.protocolObjectives,
@@ -157,7 +113,6 @@ export async function GET(
 /* =======================
    PATCH /api/med/clinical/[id]
    Solo MEDICO o ADMIN
-   Acepta parcial; solo aplica lo enviado
 ======================= */
 export async function PATCH(
   req: NextRequest,
@@ -174,7 +129,7 @@ export async function PATCH(
   const clean = <T extends object>(o: T) =>
     Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
 
-  // Reglas de ETR auto si no se manda y viene startDate+daysMax
+  // ETR auto si no viene y hay startDate+daysMax
   let expectedReturn: Date | null | undefined =
     body.expectedReturn === undefined
       ? undefined
@@ -194,12 +149,10 @@ export async function PATCH(
   }
 
   const upd: Prisma.ClinicalEntryUncheckedUpdateInput = clean({
-    // estado base
     status: body.status as ClinicalStatus | undefined
       ? { set: body.status as ClinicalStatus }
       : undefined,
 
-    // baja
     leaveStage:
       body.leaveStage === undefined
         ? undefined
@@ -240,18 +193,14 @@ export async function PATCH(
       body.startDate === undefined
         ? undefined
         : { set: parseYMD(body.startDate) ?? (body.startDate ? new Date(body.startDate) : null) },
-    daysMin:
-      body.daysMin === undefined ? undefined : { set: body.daysMin ?? null },
-    daysMax:
-      body.daysMax === undefined ? undefined : { set: body.daysMax ?? null },
-    expectedReturn:
-      expectedReturn === undefined ? undefined : { set: expectedReturn },
+    daysMin: body.daysMin === undefined ? undefined : { set: body.daysMin ?? null },
+    daysMax: body.daysMax === undefined ? undefined : { set: body.daysMax ?? null },
+    expectedReturn: expectedReturn === undefined ? undefined : { set: expectedReturn },
     expectedReturnManual:
       expectedReturnManual === undefined ? undefined : { set: expectedReturnManual },
 
     // restricciones
-    capMinutes:
-      body.capMinutes === undefined ? undefined : { set: body.capMinutes ?? null },
+    capMinutes: body.capMinutes === undefined ? undefined : { set: body.capMinutes ?? null },
     noSprint: body.noSprint === undefined ? undefined : { set: !!body.noSprint },
     noChangeOfDirection:
       body.noChangeOfDirection === undefined ? undefined : { set: !!body.noChangeOfDirection },
@@ -260,8 +209,7 @@ export async function PATCH(
 
     // docs/plan
     notes: body.notes === undefined ? undefined : { set: body.notes ?? null },
-    medSignature:
-      body.medSignature === undefined ? undefined : { set: body.medSignature ?? null },
+    medSignature: body.medSignature === undefined ? undefined : { set: body.medSignature ?? null },
     protocolObjectives:
       body.protocolObjectives === undefined ? undefined : { set: body.protocolObjectives ?? null },
     protocolTasks:
@@ -294,7 +242,7 @@ export async function PATCH(
 
 /* =======================
    DELETE /api/med/clinical/[id]
-   Solo ADMIN (o MEDICO si querés permitir)
+   Solo ADMIN
 ======================= */
 export async function DELETE(
   req: NextRequest,
