@@ -6,15 +6,10 @@ export const dynamic = "force-dynamic";
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import HelpTip from "@/components/HelpTip";
-import EpisodeForm from "@/components/episodes/EpisodeForm";
 import EpisodeList from "@/components/episodes/EpisodeList";
-
-type Tab = "lista" | "nuevo";
 
 export default function MedInjuriesPage() {
   const router = useRouter();
-  const [tab, setTab] = React.useState<Tab>("lista"); // ⬅️ arranca en LISTA
-  const [formDefaultDate, setFormDefaultDate] = React.useState<string | undefined>(undefined);
 
   return (
     <main className="min-h-[70vh] px-6 py-10">
@@ -37,48 +32,16 @@ export default function MedInjuriesPage() {
         </p>
       </header>
 
-      {/* Tabs: primero Lista, después Nuevo */}
-      <div className="mb-4 flex gap-2">
-        <button
-          className={`rounded-md px-3 py-2 text-sm ring-1 ${
-            tab === "lista"
-              ? "bg-black text-white ring-black"
-              : "bg-white text-gray-700 ring-gray-200 hover:bg-gray-50"
-          }`}
-          onClick={() => setTab("lista")}
-        >
-          Lista del día
-        </button>
-        <button
-          className={`rounded-md px-3 py-2 text-sm ring-1 ${
-            tab === "nuevo"
-              ? "bg-black text-white ring-black"
-              : "bg-white text-gray-700 ring-gray-200 hover:bg-gray-50"
-          }`}
-          onClick={() => setTab("nuevo")}
-        >
-          Nuevo
-        </button>
-      </div>
-
-      {tab === "lista" ? (
-        <section className="rounded-xl border bg-white p-5 shadow-sm">
-          <EpisodeList
-            onNew={(d) => {
-              setFormDefaultDate(d);
-              setTab("nuevo");
-            }}
-            onEdit={(ep) => router.push(`/med/injuries/${ep.id}`)}
-          />
-        </section>
-      ) : (
-        <section className="rounded-xl border bg-white p-5 shadow-sm">
-          <EpisodeForm
-            defaultDate={formDefaultDate}
-            onSaved={() => setTab("lista")}
-          />
-        </section>
-      )}
+      {/* Lista del día + acciones */}
+      <section className="rounded-xl border bg-white p-5 shadow-sm">
+        <EpisodeList
+          onNew={(d) => {
+            const qs = d ? `?date=${encodeURIComponent(d)}` : "";
+            router.push(`/med/injuries/new${qs}`);
+          }}
+          onEdit={(ep) => router.push(`/med/injuries/${ep.id}`)}
+        />
+      </section>
     </main>
   );
 }
