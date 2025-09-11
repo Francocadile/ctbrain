@@ -6,7 +6,7 @@ import type { Prisma } from "@prisma/client";
 import {
   ClinicalStatus,
   LeaveStage,
-  LeaveKind,         // 👈 antes decía ConditionType
+  LeaveKind,
   Laterality,
   Mechanism,
   Severity,
@@ -26,7 +26,7 @@ function parseYMD(s?: string | null): Date | null {
   if (!s) return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
   if (!m) return null;
-  const [_, yy, mm, dd] = m;
+  const [, yy, mm, dd] = m;
   const d = new Date(Number(yy), Number(mm) - 1, Number(dd));
   return isNaN(d.getTime()) ? null : d;
 }
@@ -200,16 +200,24 @@ export async function POST(req: NextRequest) {
 
     // Fecha base del parte
     const dateYMD = typeof body.date === "string" ? body.date : undefined;
-    const parsed = parseYMD(dateYMD) ?? (body.date ? new Date(body.date) : new Date());
+    const parsed =
+      parseYMD(dateYMD) ?? (body.date ? new Date(body.date) : new Date());
     const day = startOfDay(parsed);
     const dayTo = nextDay(parsed);
 
-    // Cronología: cálculo de ETR si corresponde
+    // Cronología:
     const startDate =
       parseYMD(body.startDate) ??
       (body.startDate ? new Date(body.startDate) : null);
-    const daysMin = body.daysMin ?? null;
-    const daysMax = body.daysMax ?? null;
+
+    // Compat: daysPlanned ó daysMin/Max
+    const daysPlanned: number | null =
+      Number.isInteger(body.daysPlanned) ? Number(body.daysPlanned) : null;
+
+    const daysMin: number | null =
+      daysPlanned ?? (Number.isInteger(body.daysMin) ? Number(body.daysMin) : null);
+    const daysMax: number | null =
+      daysPlanned ?? (Number.isInteger(body.daysMax) ? Number(body.daysMax) : null);
 
     let expectedReturn =
       parseYMD(body.expectedReturn) ??
@@ -217,53 +225,61 @@ export async function POST(req: NextRequest) {
 
     let expectedReturnManual = !!body.expectedReturnManual;
 
-    if (!expectedReturn && startDate && Number.isInteger(daysMax)) {
+    // Si no llega ETR, lo calculamos con startDate + (daysPlanned || daysMax)
+    if (!expectedReturn && startDate && (daysPlanned ?? daysMax) != null) {
+      const addDays = Number(daysPlanned ?? daysMax);
       const tmp = new Date(startDate);
-      tmp.setDate(tmp.getDate() + Number(daysMax));
+      tmp.setDate(tmp.getDate() + addDays);
       expectedReturn = tmp;
       expectedReturnManual = false;
     }
 
-    // CREATE payload (tipado para evitar TS)
+    // CREATE payload
     const createData: Prisma.ClinicalEntryUncheckedCreateInput = {
       userId: user.id,
       date: day,
       status: body.status as ClinicalStatus,
 
-      // baja
-      leaveStage: body.leaveStage ?? null,
-      leaveKind: body.leaveKind ?? null,
+      // BAJA
+      leaveStage: (body.leaveStage as LeaveStage) ?? null,
+      leaveKind: (body.leaveKind as LeaveKind) ?? null,
 
-      // lesión
+      // LESION
       diagnosis: body.diagnosis ?? null,
       bodyPart: body.bodyPart ?? null,
-      laterality: body.laterality ?? null,
-      mechanism: body.mechanism ?? null,
-      severity: body.severity ?? null,
+      laterality: (body.laterality as Laterality) ?? null,
+      mechanism: (body.mechanism as Mechanism) ?? null,
+      severity: (body.severity as Severity) ?? null,
 
-      // enfermedad
-      illSystem: body.illSystem ?? null,
+      // ENFERMEDAD
+      illSystem: (body.illSystem as SystemAffected) ?? null,
       illSymptoms: body.illSymptoms ?? null,
-      illContagious: typeof body.illContagious === "boolean" ? body.illContagious : null,
-      illIsolationDays: body.illIsolationDays ?? null,
-      illAptitude: body.illAptitude ?? null,
-      feverMax: body.feverMax ?? null,
+      illContagious:
+        typeof body.illContagious === "boolean" ? body.illContagious : null,
+      illIsolationDays: Number.isInteger(body.illIsolationDays)
+        ? Number(body.illIsolationDays)
+        : null,
+      illAptitude: (body.illAptitude as IllAptitude) ?? null,
+      feverMax:
+        typeof body.feverMax === "number" ? Number(body.feverMax) : null,
 
-      // cronología
+      // Cronología
       startDate: startDate,
       daysMin: daysMin,
       daysMax: daysMax,
       expectedReturn: expectedReturn,
       expectedReturnManual: expectedReturnManual,
 
-      // restricciones
-      capMinutes: body.capMinutes ?? null,
+      // Restricciones
+      capMinutes: Number.isInteger(body.capMinutes)
+        ? Number(body.capMinutes)
+        : null,
       noSprint: !!body.noSprint,
       noChangeOfDirection: !!body.noChangeOfDirection,
       gymOnly: !!body.gymOnly,
       noContact: !!body.noContact,
 
-      // docs/plan
+      // Docs/plan
       notes: body.notes ?? null,
       medSignature: body.medSignature ?? null,
       protocolObjectives: body.protocolObjectives ?? null,
@@ -272,7 +288,7 @@ export async function POST(req: NextRequest) {
       protocolCriteria: body.protocolCriteria ?? null,
     };
 
-    // UPDATE payload — usar { set: ... } para enums/nullable
+    // UPDATE payload
     const updateData: Prisma.ClinicalEntryUncheckedUpdateInput = {
       status: { set: createData.status },
 
@@ -312,7 +328,7 @@ export async function POST(req: NextRequest) {
       protocolCriteria: { set: createData.protocolCriteria },
     };
 
-    // Upsert LÓGICO: si existe (userId + día), update; si no, create
+    // Upsert por (userId + día)
     const existing = await prisma.clinicalEntry.findFirst({
       where: { userId: user.id, date: { gte: day, lt: dayTo } },
       select: { id: true },
