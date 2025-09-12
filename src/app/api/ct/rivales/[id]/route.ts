@@ -1,10 +1,28 @@
 // src/app/api/ct/rivales/[id]/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type Rival as RivalRow } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
-const prisma = new PrismaClient();
 
+// Evitar múltiples clientes en dev/hot-reload
+const prisma = (globalThis as any).__prisma__ ?? new PrismaClient();
+if (process.env.NODE_ENV !== "production") {
+  (globalThis as any).__prisma__ = prisma;
+}
+
+function toDTO(r: RivalRow) {
+  return {
+    id: r.id,
+    name: r.name,
+    logoUrl: r.logoUrl ?? null,
+    coach: r.coach ?? null,
+    baseSystem: r.baseSystem ?? null,
+    nextMatchDate: r.nextMatchDate ? r.nextMatchDate.toISOString() : null,
+    nextMatchCompetition: r.nextMatchCompetition ?? null,
+  };
+}
+
+// GET /api/ct/rivales/:id
 export async function GET(
   _req: Request,
   { params }: { params: { id: string } }
@@ -13,25 +31,16 @@ export async function GET(
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
-    const r = await prisma.rival.findUnique({ where: { id } });
-    if (!r) return new NextResponse("No encontrado", { status: 404 });
+    const row = await prisma.rival.findUnique({ where: { id } });
+    if (!row) return new NextResponse("No encontrado", { status: 404 });
 
-    const data = {
-      id: r.id,
-      name: r.name,
-      logoUrl: r.logoUrl ?? null,
-      coach: r.coach ?? null,
-      baseSystem: r.baseSystem ?? null,
-      nextMatchDate: r.nextMatchDate ? r.nextMatchDate.toISOString() : null,
-      nextMatchCompetition: r.nextMatchCompetition ?? null,
-    };
-
-    return NextResponse.json({ data });
+    return NextResponse.json({ data: toDTO(row) });
   } catch (e: any) {
     return new NextResponse(e?.message || "Error", { status: 500 });
   }
 }
 
+// PUT /api/ct/rivales/:id
 export async function PUT(
   req: Request,
   { params }: { params: { id: string } }
@@ -56,22 +65,13 @@ export async function PUT(
       },
     });
 
-    const data = {
-      id: row.id,
-      name: row.name,
-      logoUrl: row.logoUrl ?? null,
-      coach: row.coach ?? null,
-      baseSystem: row.baseSystem ?? null,
-      nextMatchDate: row.nextMatchDate ? row.nextMatchDate.toISOString() : null,
-      nextMatchCompetition: row.nextMatchCompetition ?? null,
-    };
-
-    return NextResponse.json({ data });
+    return NextResponse.json({ data: toDTO(row) });
   } catch (e: any) {
     return new NextResponse(e?.message || "Error", { status: 500 });
   }
 }
 
+// DELETE /api/ct/rivales/:id
 export async function DELETE(
   _req: Request,
   { params }: { params: { id: string } }
