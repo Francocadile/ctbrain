@@ -6,7 +6,7 @@ export type Rival = { id: string; name: string; logoUrl: string | null };
 
 const PLACES_KEY = "ct_places";
 const KINDS_KEY = "ct_exercise_kinds";
-const RIVALS_KEY = "ct_rivals";
+const RIVALS_KEY = "ct_rivales";
 
 export const DEFAULT_PLACES = [
   "Complejo Deportivo",
@@ -126,11 +126,11 @@ export async function replaceKinds(next: string[]): Promise<string[]> {
 }
 
 // ----------------- RIVALES -----------------
-export async function getRivals(): Promise<Rival[]> {
-  const api = await safeFetch<{ data: Rival[] }>("/api/rivals");
-  if (api?.data) {
-    try { localStorage.setItem(RIVALS_KEY, JSON.stringify(api.data)); } catch {}
-    return api.data;
+export async function getRivales(): Promise<Rival[]> {
+  const api = await safeFetch<Rival[]>("/api/ct/rivales");
+  if (api) {
+    try { localStorage.setItem(RIVALS_KEY, JSON.stringify(api)); } catch {}
+    return api;
   }
   try {
     const raw = localStorage.getItem(RIVALS_KEY);
@@ -142,26 +142,23 @@ export async function getRivals(): Promise<Rival[]> {
 export async function upsertRival(r: Partial<Rival> & { name: string }): Promise<Rival> {
   const body = { id: r.id, name: r.name.trim(), logoUrl: r.logoUrl ?? null };
 
-  // Intento API (POST si no tiene id, PUT si tiene)
-  const api = await safeFetch<{ data: Rival }>(
-    r.id ? `/api/rivals/${encodeURIComponent(r.id)}` : "/api/rivals",
+  const api = await safeFetch<Rival>(
+    r.id ? `/api/ct/rivales/${encodeURIComponent(r.id)}` : "/api/ct/rivales",
     {
       method: r.id ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     }
   );
-  if (api?.data) {
-    // refresco cache local
-    const list = await getRivals();
-    const idx = list.findIndex((x) => x.id === api.data.id);
-    if (idx >= 0) list[idx] = api.data; else list.push(api.data);
+  if (api) {
+    const list = await getRivales();
+    const idx = list.findIndex((x) => x.id === api.id);
+    if (idx >= 0) list[idx] = api; else list.push(api);
     try { localStorage.setItem(RIVALS_KEY, JSON.stringify(list)); } catch {}
-    return api.data;
+    return api;
   }
 
-  // Local
-  const list = await getRivals();
+  const list = await getRivales();
   const id = r.id ?? uuid();
   const rival: Rival = { id, name: body.name, logoUrl: body.logoUrl };
   const idx = list.findIndex((x) => x.id === id);
@@ -171,18 +168,16 @@ export async function upsertRival(r: Partial<Rival> & { name: string }): Promise
 }
 
 export async function deleteRival(id: string): Promise<{ ok: true }> {
-  // Intento API
-  const api = await safeFetch<{ ok: true }>(`/api/rivals/${encodeURIComponent(id)}`, {
+  const api = await safeFetch<{ ok: true }>(`/api/ct/rivales/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
   if (api?.ok) {
-    const list = (await getRivals()).filter((r) => r.id !== id);
+    const list = (await getRivales()).filter((r) => r.id !== id);
     try { localStorage.setItem(RIVALS_KEY, JSON.stringify(list)); } catch {}
     return { ok: true };
   }
 
-  // Local
-  const list = (await getRivals()).filter((r) => r.id !== id);
+  const list = (await getRivales()).filter((r) => r.id !== id);
   try { localStorage.setItem(RIVALS_KEY, JSON.stringify(list)); } catch {}
   return { ok: true };
 }
