@@ -1,10 +1,10 @@
 // src/app/api/ct/rivales/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type Rival as RivalRow } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-// Evitar crear múltiples clientes en dev/hot-reload
+// Evitar múltiples clientes en dev/hot-reload
 const prisma =
   (globalThis as any).__prisma__ ?? new PrismaClient();
 if (process.env.NODE_ENV !== "production") {
@@ -14,11 +14,11 @@ if (process.env.NODE_ENV !== "production") {
 // GET /api/ct/rivales  -> lista de rivales (ordenada)
 export async function GET() {
   try {
-    const items = await prisma.rival.findMany({
+    const items: RivalRow[] = await prisma.rival.findMany({
       orderBy: [{ name: "asc" }],
     });
 
-    const data = items.map((r) => ({
+    const data = items.map((r: RivalRow) => ({
       id: r.id,
       name: r.name,
       logoUrl: r.logoUrl ?? null,
@@ -34,7 +34,7 @@ export async function GET() {
   }
 }
 
-// POST /api/ct/rivales  -> crear (o upsert por nombre para evitar duplicados)
+// POST /api/ct/rivales  -> crear (upsert por nombre para evitar duplicados)
 export async function POST(req: Request) {
   try {
     const body = await req.json();
