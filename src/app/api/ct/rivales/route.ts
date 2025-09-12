@@ -3,8 +3,15 @@ import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
-const prisma = new PrismaClient();
 
+// Evitar crear múltiples clientes en dev/hot-reload
+const prisma =
+  (globalThis as any).__prisma__ ?? new PrismaClient();
+if (process.env.NODE_ENV !== "production") {
+  (globalThis as any).__prisma__ = prisma;
+}
+
+// GET /api/ct/rivales  -> lista de rivales (ordenada)
 export async function GET() {
   try {
     const items = await prisma.rival.findMany({
@@ -27,21 +34,19 @@ export async function GET() {
   }
 }
 
+// POST /api/ct/rivales  -> crear (o upsert por nombre para evitar duplicados)
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const name = String(body?.name || "").trim();
     if (!name) return new NextResponse("name requerido", { status: 400 });
 
-    // Campos opcionales
     const logoUrl = body?.logoUrl ?? null;
     const coach = body?.coach ?? null;
     const baseSystem = body?.baseSystem ?? null;
-    const nextMatchDate =
-      body?.nextMatchDate ? new Date(body.nextMatchDate) : null;
+    const nextMatchDate = body?.nextMatchDate ? new Date(body.nextMatchDate) : null;
     const nextMatchCompetition = body?.nextMatchCompetition ?? null;
 
-    // Upsert por nombre para evitar duplicados
     const row = await prisma.rival.upsert({
       where: { name },
       update: {
