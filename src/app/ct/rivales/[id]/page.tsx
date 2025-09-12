@@ -1,7 +1,8 @@
 // src/app/ct/rivales/[id]/page.tsx
 "use client";
 
-import { useParams } from "next/navigation";
+import Link from "next/link";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 type Tab = "resumen" | "plan" | "videos" | "stats" | "notas";
@@ -14,15 +15,28 @@ type Rival = {
 
 export default function RivalFichaPage() {
   const { id } = useParams<{ id: string }>();
-  const [tab, setTab] = useState<Tab>("resumen");
+  const search = useSearchParams();
+  const router = useRouter();
+
+  const initialTab = (search.get("tab") as Tab) || "resumen";
+  const [tab, setTab] = useState<Tab>(initialTab);
+
   const [loading, setLoading] = useState(true);
   const [rival, setRival] = useState<Rival | null>(null);
+
+  function switchTab(next: Tab) {
+    setTab(next);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", next);
+    window.history.replaceState(null, "", url.toString());
+  }
 
   async function load() {
     if (!id) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/ct/rivals/${id}`, { cache: "no-store" });
+      // ✅ Ruta API correcta en español
+      const res = await fetch(`/api/ct/rivales/${id}`, { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setRival(data);
@@ -47,11 +61,23 @@ export default function RivalFichaPage() {
   }
 
   if (!rival) {
-    return <div className="p-4 text-red-500">Rival no encontrado</div>;
+    return (
+      <div className="p-4 space-y-3">
+        <div className="text-red-500">Rival no encontrado</div>
+        <Link href="/ct/rivales" className="text-sm underline">← Volver a Rivales</Link>
+      </div>
+    );
   }
 
   return (
     <div className="p-4 space-y-4">
+      {/* Breadcrumb */}
+      <div className="text-sm text-gray-600">
+        <Link href="/ct/rivales" className="underline">Rivales</Link>
+        <span className="mx-1">/</span>
+        <span className="font-medium">{rival.name}</span>
+      </div>
+
       {/* Header */}
       <header className="flex items-center gap-4 border-b pb-3">
         {rival.logoUrl ? (
@@ -85,7 +111,7 @@ export default function RivalFichaPage() {
         ].map((t) => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key as Tab)}
+            onClick={() => switchTab(t.key as Tab)}
             className={`px-3 py-2 text-sm font-medium border-b-2 ${
               tab === t.key
                 ? "border-black text-black"
@@ -103,8 +129,7 @@ export default function RivalFichaPage() {
           <div>
             <h2 className="text-lg font-semibold mb-2">Resumen</h2>
             <p className="text-sm text-gray-600">
-              Aquí se mostrarán datos básicos del rival (DT, sistema, próximos
-              partidos).
+              Aquí se mostrarán datos básicos del rival (DT, sistema, próximos partidos).
             </p>
           </div>
         )}
