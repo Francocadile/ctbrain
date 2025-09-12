@@ -143,7 +143,9 @@ export async function getRivales(): Promise<Rival[]> {
   return [];
 }
 
-export async function upsertRival(r: Partial<Rival> & { name: string }): Promise<Rival> {
+export async function upsertRival(
+  r: Partial<Rival> & { name: string }
+): Promise<Rival> {
   const body = {
     id: r.id ?? null,
     name: r.name.trim(),
@@ -157,6 +159,7 @@ export async function upsertRival(r: Partial<Rival> & { name: string }): Promise
   const url = r.id ? `/api/ct/rivales/${encodeURIComponent(r.id)}` : "/api/ct/rivales";
   const method = r.id ? "PUT" : "POST";
 
+  // --- API primero ---
   const api = await safeFetch<{ data: Rival }>(url, {
     method,
     headers: { "Content-Type": "application/json" },
@@ -171,10 +174,19 @@ export async function upsertRival(r: Partial<Rival> & { name: string }): Promise
     return api.data;
   }
 
-  // Local fallback
+  // --- Fallback local (sin duplicar 'id') ---
   const list = await getRivales();
   const id = r.id ?? uuid();
-  const rival: Rival = { id, ...body, name: body.name } as Rival;
+  const rival: Rival = {
+    id,
+    name: body.name,
+    logoUrl: body.logoUrl,
+    coach: body.coach ?? null,
+    baseSystem: body.baseSystem ?? null,
+    nextMatchDate: body.nextMatchDate ?? null,
+    nextMatchCompetition: body.nextMatchCompetition ?? null,
+  };
+
   const idx = list.findIndex((x) => x.id === id);
   if (idx >= 0) list[idx] = rival; else list.push(rival);
   try { localStorage.setItem(RIVALS_KEY, JSON.stringify(list)); } catch {}
