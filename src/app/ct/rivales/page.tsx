@@ -114,7 +114,7 @@ export default function RivalesPage() {
             list.map((r) => (
               <Link
                 key={r.id}
-                href={`/ct/rivales/${r.id}`}
+                href={{ pathname: "/ct/rivales/[id]", query: { id: r.id } }}
                 className="flex flex-col items-center rounded-lg border bg-white p-3 hover:shadow-md transition"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
