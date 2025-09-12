@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useSearchParams, useRouter } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 type Tab = "resumen" | "plan" | "videos" | "stats" | "notas";
@@ -11,12 +11,15 @@ type Rival = {
   id: string;
   name: string;
   logoUrl: string | null;
+  coach: string | null;
+  baseSystem: string | null;
+  nextMatchDate: string | null;        // ISO string
+  nextMatchCompetition: string | null;
 };
 
 export default function RivalFichaPage() {
   const { id } = useParams<{ id: string }>();
   const search = useSearchParams();
-  const router = useRouter();
 
   const initialTab = (search.get("tab") as Tab) || "resumen";
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -35,13 +38,12 @@ export default function RivalFichaPage() {
     if (!id) return;
     setLoading(true);
     try {
-      // ✅ Ruta API correcta en español
       const res = await fetch(`/api/ct/rivales/${id}`, { cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        setRival(data);
-      } else {
+      if (!res.ok) {
         setRival(null);
+      } else {
+        const json = await res.json();
+        setRival(json?.data ?? null); // ✅ ahora consumimos { data }
       }
     } catch (e) {
       console.error(e);
@@ -64,10 +66,17 @@ export default function RivalFichaPage() {
     return (
       <div className="p-4 space-y-3">
         <div className="text-red-500">Rival no encontrado</div>
-        <Link href="/ct/rivales" className="text-sm underline">← Volver a Rivales</Link>
+        <Link href="/ct/rivales" className="text-sm underline">
+          ← Volver a Rivales
+        </Link>
       </div>
     );
   }
+
+  const nextMatchPretty =
+    rival.nextMatchDate
+      ? new Date(rival.nextMatchDate).toLocaleDateString()
+      : "—";
 
   return (
     <div className="p-4 space-y-4">
@@ -93,10 +102,12 @@ export default function RivalFichaPage() {
         <div>
           <h1 className="text-xl font-bold">{rival.name}</h1>
           <p className="text-sm text-gray-600">
-            {/* Placeholder, luego lo traemos de la DB */}
-            DT: <b>—</b> • Sistema base: —
+            DT: <b>{rival.coach || "—"}</b> • Sistema base: {rival.baseSystem || "—"}
           </p>
-          <p className="text-sm text-gray-600">Próximo partido: —</p>
+          <p className="text-sm text-gray-600">
+            Próximo partido: {nextMatchPretty}
+            {rival.nextMatchCompetition ? ` • ${rival.nextMatchCompetition}` : ""}
+          </p>
         </div>
       </header>
 
@@ -126,47 +137,55 @@ export default function RivalFichaPage() {
       {/* Contenido por tab */}
       <section className="rounded-xl border bg-white p-4">
         {tab === "resumen" && (
-          <div>
-            <h2 className="text-lg font-semibold mb-2">Resumen</h2>
-            <p className="text-sm text-gray-600">
-              Aquí se mostrarán datos básicos del rival (DT, sistema, próximos partidos).
-            </p>
+          <div className="space-y-3">
+            <h2 className="text-lg font-semibold">Resumen</h2>
+            <div className="grid md:grid-cols-3 gap-3">
+              <div className="rounded-lg border p-3">
+                <div className="text-xs text-gray-500">Director Técnico</div>
+                <div className="text-sm font-medium">{rival.coach || "—"}</div>
+              </div>
+              <div className="rounded-lg border p-3">
+                <div className="text-xs text-gray-500">Sistema base</div>
+                <div className="text-sm font-medium">{rival.baseSystem || "—"}</div>
+              </div>
+              <div className="rounded-lg border p-3">
+                <div className="text-xs text-gray-500">Próximo partido</div>
+                <div className="text-sm font-medium">
+                  {nextMatchPretty}
+                  {rival.nextMatchCompetition ? ` • ${rival.nextMatchCompetition}` : ""}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
         {tab === "plan" && (
-          <div>
-            <h2 className="text-lg font-semibold mb-2">Plan de partido</h2>
+          <div className="space-y-2">
+            <h2 className="text-lg font-semibold">Plan de partido</h2>
             <p className="text-sm text-gray-600">
-              Aquí el CT podrá subir la charla oficial y un informe visual.
+              Aquí el CT podrá subir la charla oficial (solo CT) y el informe visual (CT + jugadores).
             </p>
           </div>
         )}
 
         {tab === "videos" && (
-          <div>
-            <h2 className="text-lg font-semibold mb-2">Videos</h2>
-            <p className="text-sm text-gray-600">
-              Clips del rival y nuestros enfrentamientos.
-            </p>
+          <div className="space-y-2">
+            <h2 className="text-lg font-semibold">Videos</h2>
+            <p className="text-sm text-gray-600">Clips del rival y nuestros enfrentamientos.</p>
           </div>
         )}
 
         {tab === "stats" && (
-          <div>
-            <h2 className="text-lg font-semibold mb-2">Estadísticas</h2>
-            <p className="text-sm text-gray-600">
-              Últimos partidos, goles a favor/en contra, posesión.
-            </p>
+          <div className="space-y-2">
+            <h2 className="text-lg font-semibold">Estadísticas</h2>
+            <p className="text-sm text-gray-600">Últimos partidos, GF/GC, posesión, etc.</p>
           </div>
         )}
 
         {tab === "notas" && (
-          <div>
-            <h2 className="text-lg font-semibold mb-2">Notas internas</h2>
-            <p className="text-sm text-gray-600">
-              Solo visible para CT: observaciones y checklist.
-            </p>
+          <div className="space-y-2">
+            <h2 className="text-lg font-semibold">Notas internas</h2>
+            <p className="text-sm text-gray-600">Solo visible para CT: observaciones y checklist.</p>
           </div>
         )}
       </section>
