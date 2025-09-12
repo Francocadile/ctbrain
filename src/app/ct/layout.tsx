@@ -124,6 +124,17 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
             </NavItem>
           </li>
         </ul>
+
+        <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
+          TÉCNICA
+        </div>
+        <ul className="space-y-0.5 mb-2">
+          <li>
+            <NavItem href={"/ct/rivals" as Route} active={isActive("/ct/rivals")}>
+              Rivales / Plan de partido
+            </NavItem>
+          </li>
+        </ul>
       </aside>
 
       {/* Contenido */}
