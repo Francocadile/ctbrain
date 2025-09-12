@@ -86,7 +86,6 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
               RPE (semana)
             </NavItem>
           </li>
-          {/* Mientras typedRoutes no “vea” la ruta en el union, usamos assertion */}
           <li>
             <NavItem
               href={"/ct/injuries" as Route}
@@ -117,7 +116,6 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
               Sesiones
             </NavItem>
           </li>
-          {/* Ejercicios -> redirige al buscador */}
           <li>
             <NavItem href={"/ct/exercises" as Route} active={isActive("/ct/exercises")}>
               Ejercicios
@@ -130,7 +128,7 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
         </div>
         <ul className="space-y-0.5 mb-2">
           <li>
-            <NavItem href={"/ct/rivals" as Route} active={isActive("/ct/rivals")}>
+            <NavItem href={"/ct/rivales" as Route} active={isActive("/ct/rivales")}>
               Rivales / Plan de partido
             </NavItem>
           </li>
