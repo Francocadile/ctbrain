@@ -2,40 +2,75 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Tab = "resumen" | "plan" | "videos" | "stats" | "notas";
+
+type Rival = {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+};
 
 export default function RivalFichaPage() {
   const { id } = useParams<{ id: string }>();
   const [tab, setTab] = useState<Tab>("resumen");
+  const [loading, setLoading] = useState(true);
+  const [rival, setRival] = useState<Rival | null>(null);
 
-  // TODO: luego conectar a DB/API. Por ahora mock:
-  const rival = {
-    id,
-    name: "Club Atlético Ejemplo",
-    logoUrl: "https://via.placeholder.com/80x80.png?text=Logo",
-    coach: "DT Ejemplo",
-    system: "1-4-3-3",
-    nextMatch: "Fecha 12 — vs Nosotros",
-  };
+  async function load() {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/ct/rivals/${id}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setRival(data);
+      } else {
+        setRival(null);
+      }
+    } catch (e) {
+      console.error(e);
+      setRival(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  if (loading) {
+    return <div className="p-4 text-gray-500">Cargando…</div>;
+  }
+
+  if (!rival) {
+    return <div className="p-4 text-red-500">Rival no encontrado</div>;
+  }
 
   return (
     <div className="p-4 space-y-4">
       {/* Header */}
       <header className="flex items-center gap-4 border-b pb-3">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={rival.logoUrl}
-          alt={rival.name}
-          className="h-16 w-16 rounded border object-contain bg-white"
-        />
+        {rival.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={rival.logoUrl}
+            alt={rival.name}
+            className="h-16 w-16 rounded border object-contain bg-white"
+          />
+        ) : (
+          <div className="h-16 w-16 rounded border bg-gray-100" />
+        )}
         <div>
           <h1 className="text-xl font-bold">{rival.name}</h1>
           <p className="text-sm text-gray-600">
-            DT: <b>{rival.coach}</b> • Sistema base: {rival.system}
+            {/* Placeholder, luego lo traemos de la DB */}
+            DT: <b>—</b> • Sistema base: —
           </p>
-          <p className="text-sm text-gray-600">{rival.nextMatch}</p>
+          <p className="text-sm text-gray-600">Próximo partido: —</p>
         </div>
       </header>
 
@@ -52,7 +87,9 @@ export default function RivalFichaPage() {
             key={t.key}
             onClick={() => setTab(t.key as Tab)}
             className={`px-3 py-2 text-sm font-medium border-b-2 ${
-              tab === t.key ? "border-black text-black" : "border-transparent text-gray-500 hover:text-black"
+              tab === t.key
+                ? "border-black text-black"
+                : "border-transparent text-gray-500 hover:text-black"
             }`}
           >
             {t.label}
@@ -65,38 +102,46 @@ export default function RivalFichaPage() {
         {tab === "resumen" && (
           <div>
             <h2 className="text-lg font-semibold mb-2">Resumen</h2>
-            <p className="text-sm text-gray-600">Escudo, nombre, DT, sistema base y próximos partidos.</p>
+            <p className="text-sm text-gray-600">
+              Aquí se mostrarán datos básicos del rival (DT, sistema, próximos
+              partidos).
+            </p>
           </div>
         )}
 
         {tab === "plan" && (
           <div>
             <h2 className="text-lg font-semibold mb-2">Plan de partido</h2>
-            <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
-              <li><b>Charla oficial</b> (solo CT) → Subir archivo PDF/PPT.</li>
-              <li><b>Informe rival</b> (CT + jugadores) → fortalezas, debilidades, jugadores clave, balón parado.</li>
-            </ul>
+            <p className="text-sm text-gray-600">
+              Aquí el CT podrá subir la charla oficial y un informe visual.
+            </p>
           </div>
         )}
 
         {tab === "videos" && (
           <div>
             <h2 className="text-lg font-semibold mb-2">Videos</h2>
-            <p className="text-sm text-gray-600">Clips del rival y nuestros contra ellos.</p>
+            <p className="text-sm text-gray-600">
+              Clips del rival y nuestros enfrentamientos.
+            </p>
           </div>
         )}
 
         {tab === "stats" && (
           <div>
             <h2 className="text-lg font-semibold mb-2">Estadísticas</h2>
-            <p className="text-sm text-gray-600">Últimos 5 partidos, goles a favor/en contra, posesión, etc.</p>
+            <p className="text-sm text-gray-600">
+              Últimos partidos, goles a favor/en contra, posesión.
+            </p>
           </div>
         )}
 
         {tab === "notas" && (
           <div>
             <h2 className="text-lg font-semibold mb-2">Notas internas</h2>
-            <p className="text-sm text-gray-600">Solo visible para el CT. Observaciones y checklist.</p>
+            <p className="text-sm text-gray-600">
+              Solo visible para CT: observaciones y checklist.
+            </p>
           </div>
         )}
       </section>
