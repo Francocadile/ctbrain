@@ -125,8 +125,18 @@ model Rival {
   id        String   @id @default(cuid())
   name      String   @unique
   logoUrl   String?
+
+  // ---------- NUEVO (opcionales) ----------
+  coach                 String?    // DT
+  baseSystem            String?    // p.ej. "4-3-3", "4-2-3-1"
+  nextMatchDate         DateTime?  // próximo partido contra nosotros
+  nextMatchCompetition  String?    // torneo/categoría del próximo partido
+  // ----------------------------------------
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([nextMatchDate])
 }
 
 model Place {
