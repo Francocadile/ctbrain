@@ -2,11 +2,19 @@
 // Fuente única de verdad para "lugares", "tipos de ejercicio" y "rivales".
 // Intenta API -> fallback a localStorage -> fallback a defaults.
 
-export type Rival = { id: string; name: string; logoUrl: string | null };
+export type Rival = {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  coach?: string | null;
+  baseSystem?: string | null;
+  nextMatchDate?: string | null;        // ISO
+  nextMatchCompetition?: string | null;
+};
 
 const PLACES_KEY = "ct_places";
 const KINDS_KEY = "ct_exercise_kinds";
-const RIVALS_KEY = "ct_rivales";
+const RIVALS_KEY = "ct_rivals";
 
 export const DEFAULT_PLACES = [
   "Complejo Deportivo",
@@ -31,8 +39,7 @@ async function safeFetch<T = any>(
   timeoutMs = 6000
 ): Promise<T | null> {
   try {
-    const base =
-      typeof window === "undefined" ? "" : window.location.origin;
+    const base = typeof window === "undefined" ? "" : window.location.origin;
     const full = url.startsWith("http") ? url : `${base}${url}`;
     const ctrl = new AbortController();
     const id = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -90,7 +97,6 @@ export async function addKind(name: string): Promise<string[]> {
   const n = (name || "").trim();
   if (!n) return listKinds();
 
-  // Intento API
   const api = await safeFetch<{ data: string[] }>("/api/exercise-kinds", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -102,7 +108,6 @@ export async function addKind(name: string): Promise<string[]> {
     return api.data;
   }
 
-  // Local
   const current = await listKinds();
   if (!current.includes(n)) current.push(n);
   try { localStorage.setItem(KINDS_KEY, JSON.stringify(current)); } catch {}
@@ -113,7 +118,6 @@ export async function addKind(name: string): Promise<string[]> {
 export async function replaceKinds(next: string[]): Promise<string[]> {
   const cleaned = Array.from(new Set((next || []).map((s) => s.trim()).filter(Boolean)));
 
-  // Intento API
   const api = await safeFetch<{ data: string[] }>("/api/exercise-kinds", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -127,10 +131,10 @@ export async function replaceKinds(next: string[]): Promise<string[]> {
 
 // ----------------- RIVALES -----------------
 export async function getRivales(): Promise<Rival[]> {
-  const api = await safeFetch<Rival[]>("/api/ct/rivales");
-  if (api) {
-    try { localStorage.setItem(RIVALS_KEY, JSON.stringify(api)); } catch {}
-    return api;
+  const api = await safeFetch<{ data: Rival[] }>("/api/ct/rivales");
+  if (api?.data) {
+    try { localStorage.setItem(RIVALS_KEY, JSON.stringify(api.data)); } catch {}
+    return api.data;
   }
   try {
     const raw = localStorage.getItem(RIVALS_KEY);
@@ -140,27 +144,37 @@ export async function getRivales(): Promise<Rival[]> {
 }
 
 export async function upsertRival(r: Partial<Rival> & { name: string }): Promise<Rival> {
-  const body = { id: r.id, name: r.name.trim(), logoUrl: r.logoUrl ?? null };
+  const body = {
+    id: r.id ?? null,
+    name: r.name.trim(),
+    logoUrl: r.logoUrl ?? null,
+    coach: r.coach ?? null,
+    baseSystem: r.baseSystem ?? null,
+    nextMatchDate: r.nextMatchDate ?? null,
+    nextMatchCompetition: r.nextMatchCompetition ?? null,
+  };
 
-  const api = await safeFetch<Rival>(
-    r.id ? `/api/ct/rivales/${encodeURIComponent(r.id)}` : "/api/ct/rivales",
-    {
-      method: r.id ? "PUT" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }
-  );
-  if (api) {
+  const url = r.id ? `/api/ct/rivales/${encodeURIComponent(r.id)}` : "/api/ct/rivales";
+  const method = r.id ? "PUT" : "POST";
+
+  const api = await safeFetch<{ data: Rival }>(url, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (api?.data) {
     const list = await getRivales();
-    const idx = list.findIndex((x) => x.id === api.id);
-    if (idx >= 0) list[idx] = api; else list.push(api);
+    const idx = list.findIndex((x) => x.id === api.data.id);
+    if (idx >= 0) list[idx] = api.data; else list.push(api.data);
     try { localStorage.setItem(RIVALS_KEY, JSON.stringify(list)); } catch {}
-    return api;
+    return api.data;
   }
 
+  // Local fallback
   const list = await getRivales();
   const id = r.id ?? uuid();
-  const rival: Rival = { id, name: body.name, logoUrl: body.logoUrl };
+  const rival: Rival = { id, ...body, name: body.name } as Rival;
   const idx = list.findIndex((x) => x.id === id);
   if (idx >= 0) list[idx] = rival; else list.push(rival);
   try { localStorage.setItem(RIVALS_KEY, JSON.stringify(list)); } catch {}
@@ -177,6 +191,7 @@ export async function deleteRival(id: string): Promise<{ ok: true }> {
     return { ok: true };
   }
 
+  // Local
   const list = (await getRivales()).filter((r) => r.id !== id);
   try { localStorage.setItem(RIVALS_KEY, JSON.stringify(list)); } catch {}
   return { ok: true };
