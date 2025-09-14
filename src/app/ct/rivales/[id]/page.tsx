@@ -34,6 +34,29 @@ type RivalPlan = {
   report: RivalReport;
 };
 
+// ---------- helpers ----------
+function isValidDate(d: Date) {
+  return d instanceof Date && !Number.isNaN(d.getTime());
+}
+function fmtNextMatch(dateISO?: string | null, competition?: string | null) {
+  if (!dateISO) return "—";
+  const d = new Date(dateISO);
+  if (!isValidDate(d)) return "—";
+  try {
+    const fmt = d.toLocaleString(undefined, {
+      weekday: "short",
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    return `${fmt}${competition ? ` • ${competition}` : ""}`;
+  } catch {
+    return "—";
+  }
+}
+// -------------------------------------
+
 export default function RivalFichaPage() {
   const { id } = useParams<{ id: string }>();
   const search = useSearchParams();
@@ -81,7 +104,20 @@ export default function RivalFichaPage() {
     const res = await fetch(`/api/ct/rivales/${id}`, { cache: "no-store" });
     if (!res.ok) throw new Error("rival not found");
     const json = await res.json();
-    setRival(json?.data as RivalBasics);
+    const data = (json?.data ?? null) as RivalBasics | null;
+    setRival(
+      data && typeof data === "object"
+        ? {
+            id: String(data.id),
+            name: String(data.name),
+            logoUrl: data.logoUrl ?? null,
+            coach: data.coach ?? null,
+            baseSystem: data.baseSystem ?? null,
+            nextMatchDate: data.nextMatchDate ?? null,
+            nextMatchCompetition: data.nextMatchCompetition ?? null,
+          }
+        : null
+    );
   }
 
   async function loadPlan() {
@@ -124,7 +160,7 @@ export default function RivalFichaPage() {
     try {
       await Promise.all([loadBasics(), loadPlan()]);
     } catch (e) {
-      console.error(e);
+      console.error("[Rivales ficha] Error cargando datos:", e);
       setRival(null);
     } finally {
       setLoading(false);
@@ -200,23 +236,11 @@ export default function RivalFichaPage() {
     );
   }
 
-  // ✅ Null-safe: no accedemos a propiedades si rival aún no está
-  const nextMatchLabel = useMemo(() => {
-    if (!rival || !rival.nextMatchDate) return "—";
-    try {
-      const d = new Date(rival.nextMatchDate);
-      const fmt = d.toLocaleString(undefined, {
-        weekday: "short",
-        day: "2-digit",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      return `${fmt}${rival.nextMatchCompetition ? ` • ${rival.nextMatchCompetition}` : ""}`;
-    } catch {
-      return "—";
-    }
-  }, [rival]);
+  // ✅ Totalmente seguro contra fechas inválidas
+  const nextMatchLabel = useMemo(
+    () => fmtNextMatch(rival.nextMatchDate, rival.nextMatchCompetition),
+    [rival.nextMatchDate, rival.nextMatchCompetition]
+  );
 
   return (
     <div className="p-4 space-y-4">
