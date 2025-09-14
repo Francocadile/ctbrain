@@ -7,13 +7,14 @@ import { useEffect, useMemo, useState } from "react";
 
 type Tab = "resumen" | "plan" | "videos" | "stats" | "notas";
 
-type Rival = {
+// === Tipos que devuelve nuestra API ===
+type RivalBasics = {
   id: string;
   name: string;
   logoUrl: string | null;
   coach?: string | null;
   baseSystem?: string | null;
-  nextMatchDate?: string | null;
+  nextMatchDate?: string | null;        // ISO
   nextMatchCompetition?: string | null;
 };
 
@@ -22,7 +23,10 @@ type RivalReport = {
   strengths?: string[];
   weaknesses?: string[];
   keyPlayers?: string[];
-  setPieces?: { for?: string[]; against?: string[] };
+  setPieces?: {
+    for?: string[];
+    against?: string[];
+  };
 };
 
 type RivalPlan = {
@@ -30,198 +34,192 @@ type RivalPlan = {
   report: RivalReport;
 };
 
-// ---------------- utils ----------------
-function arrToLines(a?: string[]) {
-  return (a || []).join("\n");
-}
-function linesToArr(s: string) {
-  return s
-    .split("\n")
-    .map((x) => x.trim())
-    .filter(Boolean);
-}
-function safeGetData<T = any>(json: any): T {
-  return (json && (json.data ?? json)) as T;
-}
-function isoToDateInput(iso?: string | null) {
-  if (!iso) return "";
-  try {
-    return new Date(iso).toISOString().slice(0, 10);
-  } catch {
-    return "";
-  }
-}
-
-// ---------------- page ----------------
 export default function RivalFichaPage() {
   const { id } = useParams<{ id: string }>();
   const search = useSearchParams();
+
   const initialTab = (search.get("tab") as Tab) || "resumen";
-
   const [tab, setTab] = useState<Tab>(initialTab);
+
   const [loading, setLoading] = useState(true);
-  const [rival, setRival] = useState<Rival | null>(null);
+  const [rival, setRival] = useState<RivalBasics | null>(null);
 
-  // Resumen (edición)
-  const [editResumen, setEditResumen] = useState(false);
-  const [savingResumen, setSavingResumen] = useState(false);
-  const [resumenForm, setResumenForm] = useState<{
-    coach: string;
-    baseSystem: string;
-    nextMatchDate: string; // yyyy-mm-dd
-    nextMatchCompetition: string;
-  }>({ coach: "", baseSystem: "", nextMatchDate: "", nextMatchCompetition: "" });
-
-  // Plan
+  // ——— Plan (solo CT) ———
+  const isCT = true; // TODO: integrar con auth real
   const [planLoading, setPlanLoading] = useState(true);
   const [savingPlan, setSavingPlan] = useState(false);
-  const [plan, setPlan] = useState<RivalPlan>({
-    charlaUrl: null,
-    report: { system: null, strengths: [], weaknesses: [], keyPlayers: [], setPieces: { for: [], against: [] } },
-  });
+  const [plan, setPlan] = useState<RivalPlan>(() => ({
+    charlaUrl: "",
+    report: {
+      system: "",
+      strengths: [],
+      weaknesses: [],
+      keyPlayers: [],
+      setPieces: { for: [], against: [] },
+    },
+  }));
 
-  function switchTab(next: Tab) {
+  // Helpers
+  function setURLTab(next: Tab) {
     setTab(next);
     const url = new URL(window.location.href);
     url.searchParams.set("tab", next);
     window.history.replaceState(null, "", url.toString());
   }
 
-  async function loadRival() {
-    if (!id) return;
-    try {
-      const res = await fetch(`/api/ct/rivales/${id}`, { cache: "no-store" });
-      if (!res.ok) throw new Error("not ok");
-      const json = await res.json();
-      const r = safeGetData<Rival>(json);
-      setRival(r);
-      // sync form resumen
-      setResumenForm({
-        coach: r.coach ?? "",
-        baseSystem: r.baseSystem ?? "",
-        nextMatchDate: isoToDateInput(r.nextMatchDate),
-        nextMatchCompetition: r.nextMatchCompetition ?? "",
-      });
-    } catch {
-      setRival(null);
-    }
+  function linesToArray(s: string): string[] {
+    return s
+      .split("\n")
+      .map((x) => x.trim())
+      .filter(Boolean);
+  }
+  function arrayToLines(a?: string[]): string {
+    return (a || []).join("\n");
+  }
+
+  async function loadBasics() {
+    const res = await fetch(`/api/ct/rivales/${id}`, { cache: "no-store" });
+    if (!res.ok) throw new Error("rival not found");
+    const json = await res.json();
+    setRival(json?.data as RivalBasics);
   }
 
   async function loadPlan() {
-    if (!id) return;
-    setPlanLoading(true);
-    try {
-      const res = await fetch(`/api/ct/rivales/${id}/plan`, { cache: "no-store" });
-      if (!res.ok) throw new Error("not ok");
-      const json = await res.json();
-      const p = safeGetData<RivalPlan>(json);
+    const res = await fetch(`/api/ct/rivales/${id}/plan`, { cache: "no-store" });
+    if (!res.ok) {
+      // si aún no existe, mantenemos defaults
       setPlan({
-        charlaUrl: p.charlaUrl ?? null,
+        charlaUrl: "",
         report: {
-          system: p.report?.system ?? null,
-          strengths: p.report?.strengths ?? [],
-          weaknesses: p.report?.weaknesses ?? [],
-          keyPlayers: p.report?.keyPlayers ?? [],
-          setPieces: {
-            for: p.report?.setPieces?.for ?? [],
-            against: p.report?.setPieces?.against ?? [],
-          },
+          system: "",
+          strengths: [],
+          weaknesses: [],
+          keyPlayers: [],
+          setPieces: { for: [], against: [] },
         },
       });
-    } catch {
-      // deja plan por defecto
+      return;
+    }
+    const json = await res.json();
+    const data = (json?.data || {}) as RivalPlan;
+    setPlan({
+      charlaUrl: data.charlaUrl ?? "",
+      report: {
+        system: data.report?.system ?? "",
+        strengths: data.report?.strengths ?? [],
+        weaknesses: data.report?.weaknesses ?? [],
+        keyPlayers: data.report?.keyPlayers ?? [],
+        setPieces: {
+          for: data.report?.setPieces?.for ?? [],
+          against: data.report?.setPieces?.against ?? [],
+        },
+      },
+    });
+  }
+
+  async function loadAll() {
+    if (!id) return;
+    setLoading(true);
+    setPlanLoading(true);
+    try {
+      await Promise.all([loadBasics(), loadPlan()]);
+    } catch (e) {
+      console.error(e);
+      setRival(null);
     } finally {
+      setLoading(false);
       setPlanLoading(false);
     }
   }
 
+  useEffect(() => {
+    loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  // Guardar plan
   async function savePlan(e: React.FormEvent) {
     e.preventDefault();
-    if (!id) return;
     setSavingPlan(true);
     try {
+      const payload: RivalPlan = {
+        charlaUrl: plan.charlaUrl?.trim() ? plan.charlaUrl.trim() : null,
+        report: {
+          system: plan.report.system?.trim() ? plan.report.system.trim() : null,
+          strengths: plan.report.strengths || [],
+          weaknesses: plan.report.weaknesses || [],
+          keyPlayers: plan.report.keyPlayers || [],
+          setPieces: {
+            for: plan.report.setPieces?.for || [],
+            against: plan.report.setPieces?.against || [],
+          },
+        },
+      };
+
       const res = await fetch(`/api/ct/rivales/${id}/plan`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(plan),
+        body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(await res.text());
-      await loadPlan();
+      if (!res.ok) throw new Error("No se pudo guardar el plan");
+
+      const json = await res.json();
+      const data = (json?.data || {}) as RivalPlan;
+      setPlan({
+        charlaUrl: data.charlaUrl ?? "",
+        report: {
+          system: data.report?.system ?? "",
+          strengths: data.report?.strengths ?? [],
+          weaknesses: data.report?.weaknesses ?? [],
+          keyPlayers: data.report?.keyPlayers ?? [],
+          setPieces: {
+            for: data.report?.setPieces?.for ?? [],
+            against: data.report?.setPieces?.against ?? [],
+          },
+        },
+      });
     } catch (err: any) {
-      alert(err?.message || "No se pudo guardar el plan");
+      alert(err?.message || "Error al guardar");
     } finally {
       setSavingPlan(false);
     }
   }
 
-  async function saveResumen(e: React.FormEvent) {
-    e.preventDefault();
-    if (!id || !rival) return;
-    setSavingResumen(true);
-    try {
-      const payload = {
-        name: rival.name,
-        logoUrl: rival.logoUrl,
-        coach: resumenForm.coach.trim() || null,
-        baseSystem: resumenForm.baseSystem.trim() || null,
-        nextMatchDate: resumenForm.nextMatchDate ? new Date(resumenForm.nextMatchDate).toISOString() : null,
-        nextMatchCompetition: resumenForm.nextMatchCompetition.trim() || null,
-      };
-      const res = await fetch(`/api/ct/rivales/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      await loadRival();
-      setEditResumen(false);
-    } catch (err: any) {
-      alert(err?.message || "No se pudo guardar el resumen");
-    } finally {
-      setSavingResumen(false);
-    }
+  if (loading) {
+    return <div className="p-4 text-gray-500">Cargando…</div>;
   }
-
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      await Promise.all([loadRival(), loadPlan()]);
-      setLoading(false);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
-
-  const headerInfo = useMemo(() => {
-    if (!rival) return { dt: "—", sistema: "—", proximo: "—" };
-    const dt = rival.coach || "—";
-    const sistema = rival.baseSystem || "—";
-    const proximo = rival.nextMatchDate
-      ? new Date(rival.nextMatchDate).toLocaleDateString()
-      : "—";
-    const comp = rival.nextMatchCompetition ? ` (${rival.nextMatchCompetition})` : "";
-    return { dt, sistema, proximo: proximo + comp };
-  }, [rival]);
-
-  if (loading) return <div className="p-4 text-gray-500">Cargando…</div>;
 
   if (!rival) {
     return (
       <div className="p-4 space-y-3">
         <div className="text-red-500">Rival no encontrado</div>
-        <Link href="/ct/rivales" className="text-sm underline">
-          ← Volver a Rivales
-        </Link>
+        <Link href="/ct/rivales" className="text-sm underline">← Volver a Rivales</Link>
       </div>
     );
   }
+
+  const nextMatchLabel = useMemo(() => {
+    if (!rival.nextMatchDate) return "—";
+    try {
+      const d = new Date(rival.nextMatchDate);
+      const fmt = d.toLocaleString(undefined, {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      return `${fmt}${rival.nextMatchCompetition ? ` • ${rival.nextMatchCompetition}` : ""}`;
+    } catch {
+      return "—";
+    }
+  }, [rival.nextMatchDate, rival.nextMatchCompetition]);
 
   return (
     <div className="p-4 space-y-4">
       {/* Breadcrumb */}
       <div className="text-sm text-gray-600">
-        <Link href="/ct/rivales" className="underline">
-          Rivales
-        </Link>
+        <Link href="/ct/rivales" className="underline">Rivales</Link>
         <span className="mx-1">/</span>
         <span className="font-medium">{rival.name}</span>
       </div>
@@ -241,9 +239,9 @@ export default function RivalFichaPage() {
         <div>
           <h1 className="text-xl font-bold">{rival.name}</h1>
           <p className="text-sm text-gray-600">
-            DT: <b>{headerInfo.dt}</b> • Sistema base: {headerInfo.sistema}
+            DT: <b>{rival.coach || "—"}</b> • Sistema base: {rival.baseSystem || "—"}
           </p>
-          <p className="text-sm text-gray-600">Próximo partido: {headerInfo.proximo}</p>
+          <p className="text-sm text-gray-600">Próximo partido: {nextMatchLabel}</p>
         </div>
       </header>
 
@@ -258,9 +256,9 @@ export default function RivalFichaPage() {
         ].map((t) => (
           <button
             key={t.key}
-            onClick={() => switchTab(t.key as Tab)}
+            onClick={() => setURLTab(t.key as Tab)}
             className={`px-3 py-2 text-sm font-medium border-b-2 ${
-              tab === (t.key as Tab)
+              tab === t.key
                 ? "border-black text-black"
                 : "border-transparent text-gray-500 hover:text-black"
             }`}
@@ -273,299 +271,300 @@ export default function RivalFichaPage() {
       {/* Contenido por tab */}
       <section className="rounded-xl border bg-white p-4">
         {tab === "resumen" && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Resumen</h2>
-              {!editResumen ? (
-                <button
-                  className="text-xs rounded-lg border px-2 py-1 hover:bg-gray-50"
-                  onClick={() => setEditResumen(true)}
-                >
-                  Editar
-                </button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <button
-                    className="text-xs rounded-lg border px-2 py-1 hover:bg-gray-50"
-                    onClick={() => {
-                      // reset form a valores actuales
-                      setResumenForm({
-                        coach: rival.coach ?? "",
-                        baseSystem: rival.baseSystem ?? "",
-                        nextMatchDate: isoToDateInput(rival.nextMatchDate),
-                        nextMatchCompetition: rival.nextMatchCompetition ?? "",
-                      });
-                      setEditResumen(false);
-                    }}
-                    type="button"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {!editResumen ? (
-              <div className="grid md:grid-cols-2 gap-4 text-sm">
-                <div className="space-y-1">
-                  <div className="text-gray-500">Director técnico</div>
-                  <div className="font-medium">{rival.coach || "—"}</div>
-                </div>
-                <div className="space-y-1">
-                  <div className="text-gray-500">Sistema base</div>
-                  <div className="font-medium">{rival.baseSystem || "—"}</div>
-                </div>
-                <div className="space-y-1">
-                  <div className="text-gray-500">Próximo partido</div>
-                  <div className="font-medium">
-                    {rival.nextMatchDate
-                      ? new Date(rival.nextMatchDate).toLocaleDateString()
-                      : "—"}
-                    {rival.nextMatchCompetition ? ` — ${rival.nextMatchCompetition}` : ""}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <form onSubmit={saveResumen} className="grid md:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-[11px] text-gray-500">Director técnico</label>
-                  <input
-                    className="w-full rounded-md border px-2 py-1.5 text-sm"
-                    placeholder='p.ej. "Martín Demichelis"'
-                    value={resumenForm.coach}
-                    onChange={(e) => setResumenForm((f) => ({ ...f, coach: e.target.value }))}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[11px] text-gray-500">Sistema base</label>
-                  <input
-                    className="w-full rounded-md border px-2 py-1.5 text-sm"
-                    placeholder='p.ej. "4-3-3"'
-                    value={resumenForm.baseSystem}
-                    onChange={(e) => setResumenForm((f) => ({ ...f, baseSystem: e.target.value }))}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[11px] text-gray-500">Fecha próximo partido</label>
-                  <input
-                    type="date"
-                    className="w-full rounded-md border px-2 py-1.5 text-sm"
-                    value={resumenForm.nextMatchDate}
-                    onChange={(e) => setResumenForm((f) => ({ ...f, nextMatchDate: e.target.value }))}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[11px] text-gray-500">Competición</label>
-                  <input
-                    className="w-full rounded-md border px-2 py-1.5 text-sm"
-                    placeholder="Liga Profesional, Copa…"
-                    value={resumenForm.nextMatchCompetition}
-                    onChange={(e) =>
-                      setResumenForm((f) => ({ ...f, nextMatchCompetition: e.target.value }))
-                    }
-                  />
-                </div>
-
-                <div className="md:col-span-2 flex items-center gap-2 pt-1">
-                  <button
-                    type="submit"
-                    disabled={savingResumen}
-                    className={`px-3 py-1.5 rounded-xl text-xs ${
-                      savingResumen ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
-                    }`}
-                  >
-                    {savingResumen ? "Guardando…" : "Guardar"}
-                  </button>
-                  <button
-                    type="button"
-                    className="px-3 py-1.5 rounded-xl text-xs border hover:bg-gray-50"
-                    onClick={() => {
-                      setResumenForm({
-                        coach: rival.coach ?? "",
-                        baseSystem: rival.baseSystem ?? "",
-                        nextMatchDate: isoToDateInput(rival.nextMatchDate),
-                        nextMatchCompetition: rival.nextMatchCompetition ?? "",
-                      });
-                      setEditResumen(false);
-                    }}
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </form>
-            )}
+          <div className="space-y-2">
+            <h2 className="text-lg font-semibold">Resumen</h2>
+            <ul className="text-sm text-gray-700 list-disc pl-4">
+              <li>DT: {rival.coach || "—"}</li>
+              <li>Sistema base: {rival.baseSystem || "—"}</li>
+              <li>Próximo partido: {nextMatchLabel}</li>
+            </ul>
+            <p className="text-xs text-gray-500 mt-2">
+              * Estos campos se pueden editar desde el listado de rivales (o
+              más adelante desde esta ficha).
+            </p>
           </div>
         )}
 
         {tab === "plan" && (
-          <div className="space-y-6">
-            <h2 className="text-lg font-semibold">Plan de partido</h2>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Plan de partido</h2>
+              {!isCT && (
+                <span className="text-[11px] px-2 py-1 rounded-md bg-amber-100 text-amber-800">
+                  Vista jugador (solo Informe)
+                </span>
+              )}
+            </div>
 
             {/* Charla oficial (solo CT) */}
-            <form onSubmit={savePlan} className="space-y-4">
-              <div className="rounded-lg border p-3">
-                <div className="text-xs font-semibold text-gray-500 mb-2">
-                  Charla oficial (solo CT)
+            {isCT && (
+              <form onSubmit={savePlan} className="space-y-4">
+                <div className="rounded-lg border bg-gray-50 p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">
+                    Charla oficial (PDF/PPT/Keynote) – Solo CT
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-gray-500">URL del archivo</label>
+                      <input
+                        className="w-full rounded-md border px-2 py-1.5 text-sm"
+                        placeholder="https://drive.google.com/…"
+                        value={plan.charlaUrl || ""}
+                        onChange={(e) =>
+                          setPlan((p) => ({ ...p, charlaUrl: e.target.value }))
+                        }
+                      />
+                      <p className="text-[11px] text-gray-500">
+                        Pegá el enlace compartible (Drive, Dropbox, etc.). Opcional.
+                      </p>
+                    </div>
+                    {plan.charlaUrl ? (
+                      <div className="flex items-end">
+                        <a
+                          href={plan.charlaUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs underline"
+                        >
+                          Abrir charla en nueva pestaña →
+                        </a>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-                <input
-                  className="w-full rounded-md border px-2 py-1.5 text-sm"
-                  placeholder="URL a PDF / PPT / Keynote (Drive, etc.)"
-                  value={plan.charlaUrl ?? ""}
-                  onChange={(e) =>
-                    setPlan((p) => ({ ...p, charlaUrl: e.target.value.trim() || null }))
-                  }
-                />
-                <p className="text-[11px] text-gray-500 mt-1">
-                  Sube el archivo a tu drive y pega el enlace compartible (solo CT).
-                </p>
+
+                {/* Informe visual (CT + jugadores) */}
+                <div className="rounded-lg border p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">
+                    Informe visual (visible para jugadores)
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-3">
+                    {/* Sistema */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-gray-500">Sistema</label>
+                      <input
+                        className="w-full rounded-md border px-2 py-1.5 text-sm"
+                        placeholder='Ej: "4-3-3"'
+                        value={plan.report.system || ""}
+                        onChange={(e) =>
+                          setPlan((p) => ({
+                            ...p,
+                            report: { ...p.report, system: e.target.value },
+                          }))
+                        }
+                      />
+                    </div>
+
+                    {/* Jugadores clave */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-gray-500">
+                        Jugadores clave (1 por línea)
+                      </label>
+                      <textarea
+                        className="w-full rounded-md border px-2 py-1.5 text-sm h-24"
+                        placeholder="Ej: Pérez 10&#10;Gómez 9"
+                        value={arrayToLines(plan.report.keyPlayers)}
+                        onChange={(e) =>
+                          setPlan((p) => ({
+                            ...p,
+                            report: {
+                              ...p.report,
+                              keyPlayers: linesToArray(e.target.value),
+                            },
+                          }))
+                        }
+                      />
+                    </div>
+
+                    {/* Fortalezas */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-gray-500">
+                        Fortalezas (1 por línea)
+                      </label>
+                      <textarea
+                        className="w-full rounded-md border px-2 py-1.5 text-sm h-24"
+                        placeholder="Presión alta&#10;Transiciones rápidas"
+                        value={arrayToLines(plan.report.strengths)}
+                        onChange={(e) =>
+                          setPlan((p) => ({
+                            ...p,
+                            report: {
+                              ...p.report,
+                              strengths: linesToArray(e.target.value),
+                            },
+                          }))
+                        }
+                      />
+                    </div>
+
+                    {/* Debilidades */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-gray-500">
+                        Debilidades (1 por línea)
+                      </label>
+                      <textarea
+                        className="w-full rounded-md border px-2 py-1.5 text-sm h-24"
+                        placeholder="Lentitud en repliegue&#10;Laterales dejan espalda"
+                        value={arrayToLines(plan.report.weaknesses)}
+                        onChange={(e) =>
+                          setPlan((p) => ({
+                            ...p,
+                            report: {
+                              ...p.report,
+                              weaknesses: linesToArray(e.target.value),
+                            },
+                          }))
+                        }
+                      />
+                    </div>
+
+                    {/* Balón parado a favor */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-gray-500">
+                        Balón parado – A favor (1 por línea)
+                      </label>
+                      <textarea
+                        className="w-full rounded-md border px-2 py-1.5 text-sm h-24"
+                        placeholder="Córner cerrado primer palo&#10;Tiro libre directo"
+                        value={arrayToLines(plan.report.setPieces?.for)}
+                        onChange={(e) =>
+                          setPlan((p) => ({
+                            ...p,
+                            report: {
+                              ...p.report,
+                              setPieces: {
+                                for: linesToArray(e.target.value),
+                                against: p.report.setPieces?.against || [],
+                              },
+                            },
+                          }))
+                        }
+                      />
+                    </div>
+
+                    {/* Balón parado en contra */}
+                    <div className="space-y-1">
+                      <label className="text-[11px] text-gray-500">
+                        Balón parado – En contra (1 por línea)
+                      </label>
+                      <textarea
+                        className="w-full rounded-md border px-2 py-1.5 text-sm h-24"
+                        placeholder="Córner segundos palos&#10;Saques de banda largos"
+                        value={arrayToLines(plan.report.setPieces?.against)}
+                        onChange={(e) =>
+                          setPlan((p) => ({
+                            ...p,
+                            report: {
+                              ...p.report,
+                              setPieces: {
+                                for: p.report.setPieces?.for || [],
+                                against: linesToArray(e.target.value),
+                              },
+                            },
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={savingPlan}
+                      className={`px-3 py-1.5 rounded-xl text-xs ${
+                        savingPlan
+                          ? "bg-gray-200 text-gray-500"
+                          : "bg-black text-white hover:opacity-90"
+                      }`}
+                    >
+                      {savingPlan ? "Guardando…" : "Guardar plan"}
+                    </button>
+                    {planLoading && (
+                      <span className="ml-3 text-xs text-gray-500">Cargando plan…</span>
+                    )}
+                  </div>
+                </div>
+              </form>
+            )}
+
+            {/* Vista jugador (si no es CT): solo render del informe */}
+            {!isCT && (
+              <div className="space-y-3">
+                {planLoading ? (
+                  <div className="text-gray-500 text-sm">Cargando…</div>
+                ) : (
+                  <>
+                    {plan.charlaUrl ? null : null}
+                    <div className="grid md:grid-cols-2 gap-3">
+                      <InfoBlock title="Sistema" content={plan.report.system || "—"} />
+                      <ListBlock title="Jugadores clave" items={plan.report.keyPlayers} />
+                      <ListBlock title="Fortalezas" items={plan.report.strengths} />
+                      <ListBlock title="Debilidades" items={plan.report.weaknesses} />
+                      <ListBlock title="Balón parado (a favor)" items={plan.report.setPieces?.for} />
+                      <ListBlock title="Balón parado (en contra)" items={plan.report.setPieces?.against} />
+                    </div>
+                  </>
+                )}
               </div>
-
-              {/* Informe visual (CT + jugadores) */}
-              <div className="rounded-lg border p-3 space-y-3">
-                <div className="text-xs font-semibold text-gray-500">Informe rival</div>
-
-                <div className="grid md:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-gray-500">Sistema</label>
-                    <input
-                      className="w-full rounded-md border px-2 py-1.5 text-sm"
-                      placeholder='p.ej. "4-3-3"'
-                      value={plan.report.system ?? ""}
-                      onChange={(e) =>
-                        setPlan((p) => ({
-                          ...p,
-                          report: { ...p.report, system: e.target.value.trim() || null },
-                        }))
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-gray-500">Jugadores clave (uno por línea)</label>
-                    <textarea
-                      className="w-full rounded-md border px-2 py-1.5 text-sm h-28"
-                      placeholder={"#10 — Enganche\n#9 — Referente de área"}
-                      value={arrToLines(plan.report.keyPlayers)}
-                      onChange={(e) =>
-                        setPlan((p) => ({
-                          ...p,
-                          report: { ...p.report, keyPlayers: linesToArr(e.target.value) },
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-gray-500">Fortalezas (una por línea)</label>
-                    <textarea
-                      className="w-full rounded-md border px-2 py-1.5 text-sm h-28"
-                      placeholder={"Presión alta organizada\nTransiciones rápidas"}
-                      value={arrToLines(plan.report.strengths)}
-                      onChange={(e) =>
-                        setPlan((p) => ({
-                          ...p,
-                          report: { ...p.report, strengths: linesToArr(e.target.value) },
-                        }))
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-gray-500">Debilidades (una por línea)</label>
-                    <textarea
-                      className="w-full rounded-md border px-2 py-1.5 text-sm h-28"
-                      placeholder={"Laterales dejan espacio a la espalda\nSufren centros cruzados"}
-                      value={arrToLines(plan.report.weaknesses)}
-                      onChange={(e) =>
-                        setPlan((p) => ({
-                          ...p,
-                          report: { ...p.report, weaknesses: linesToArr(e.target.value) },
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-gray-500">Balón parado a favor (una por línea)</label>
-                    <textarea
-                      className="w-full rounded-md border px-2 py-1.5 text-sm h-28"
-                      placeholder={"Córners cerrados al 1er palo\nFaltas laterales — segunda jugada"}
-                      value={arrToLines(plan.report.setPieces?.for)}
-                      onChange={(e) =>
-                        setPlan((p) => ({
-                          ...p,
-                          report: {
-                            ...p.report,
-                            setPieces: { ...(p.report.setPieces || {}), for: linesToArr(e.target.value) },
-                          },
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[11px] text-gray-500">Balón parado en contra (una por línea)</label>
-                    <textarea
-                      className="w-full rounded-md border px-2 py-1.5 text-sm h-28"
-                      placeholder={"Marcan en zona — atacar segundo palo\nRápidos en contras post-córner"}
-                      value={arrToLines(plan.report.setPieces?.against)}
-                      onChange={(e) =>
-                        setPlan((p) => ({
-                          ...p,
-                          report: {
-                            ...p.report,
-                            setPieces: { ...(p.report.setPieces || {}), against: linesToArr(e.target.value) },
-                          },
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="submit"
-                  disabled={savingPlan}
-                  className={`px-3 py-1.5 rounded-xl text-xs ${
-                    savingPlan ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
-                  }`}
-                >
-                  {savingPlan ? "Guardando…" : "Guardar plan"}
-                </button>
-                {planLoading && <span className="text-xs text-gray-500">Cargando plan…</span>}
-              </div>
-            </form>
+            )}
           </div>
         )}
 
         {tab === "videos" && (
           <div>
             <h2 className="text-lg font-semibold mb-2">Videos</h2>
-            <p className="text-sm text-gray-600">Clips del rival y nuestros enfrentamientos (próximamente).</p>
+            <p className="text-sm text-gray-600">
+              Clips del rival y nuestros enfrentamientos. (Próximo paso)
+            </p>
           </div>
         )}
 
         {tab === "stats" && (
           <div>
             <h2 className="text-lg font-semibold mb-2">Estadísticas</h2>
-            <p className="text-sm text-gray-600">Últimos partidos, GF/GC, posesión (próximamente).</p>
+            <p className="text-sm text-gray-600">
+              Últimos partidos, GF/GC, posesión, etc. (Próximo paso)
+            </p>
           </div>
         )}
 
         {tab === "notas" && (
           <div>
             <h2 className="text-lg font-semibold mb-2">Notas internas</h2>
-            <p className="text-sm text-gray-600">Solo visible para CT: observaciones y checklist (próximamente).</p>
+            <p className="text-sm text-gray-600">
+              Solo visible para CT: observaciones y checklist. (Próximo paso)
+            </p>
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+// ——— Componentes pequeños para vista jugador ———
+function InfoBlock({ title, content }: { title: string; content?: string | null }) {
+  return (
+    <div className="rounded-lg border p-3">
+      <div className="text-[12px] font-semibold uppercase tracking-wide mb-1">{title}</div>
+      <div className="text-sm text-gray-800">{content || "—"}</div>
+    </div>
+  );
+}
+
+function ListBlock({ title, items }: { title: string; items?: string[] }) {
+  return (
+    <div className="rounded-lg border p-3">
+      <div className="text-[12px] font-semibold uppercase tracking-wide mb-1">{title}</div>
+      {items && items.length ? (
+        <ul className="list-disc pl-4 text-sm text-gray-800 space-y-0.5">
+          {items.map((it, i) => (
+            <li key={i}>{it}</li>
+          ))}
+        </ul>
+      ) : (
+        <div className="text-sm text-gray-500">—</div>
+      )}
     </div>
   );
 }
