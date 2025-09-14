@@ -136,7 +136,29 @@ model Rival {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relación 1-1 con plan
+  plan      RivalPlan?
+
   @@index([nextMatchDate])
+}
+
+model RivalPlan {
+  id        String   @id @default(cuid())
+  rivalId   String   @unique
+  rival     Rival    @relation(fields: [rivalId], references: [id], onDelete: Cascade)
+
+  // Charla oficial (solo CT). Guardamos URL a PDF/PPT/Keynote (Drive, etc).
+  charlaUrl String?
+
+  // Informe visual (CT + jugadores). Estructura flexible.
+  // Sugerido: { system?: string, strengths?: string[], weaknesses?: string[], keyPlayers?: string[], setPieces?: { for?: string[], against?: string[] } }
+  report    Json     @default("{}")
+
+  // En caso de necesitar flags de visibilidad futura:
+  // visibleToPlayers Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Place {
@@ -270,7 +292,7 @@ model ClinicalEntry {
 
   // Cronología
   startDate            DateTime?
-  daysPlanned          Int?              // único valor estimado de días
+  daysPlanned          Int?
   expectedReturn       DateTime?
   expectedReturnManual Boolean? @default(false)
 
