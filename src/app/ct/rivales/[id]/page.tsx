@@ -43,7 +43,16 @@ function linesToArr(s: string) {
 function safeGetData<T = any>(json: any): T {
   return (json && (json.data ?? json)) as T;
 }
+function isoToDateInput(iso?: string | null) {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toISOString().slice(0, 10);
+  } catch {
+    return "";
+  }
+}
 
+// ---------------- page ----------------
 export default function RivalFichaPage() {
   const { id } = useParams<{ id: string }>();
   const search = useSearchParams();
@@ -53,7 +62,17 @@ export default function RivalFichaPage() {
   const [loading, setLoading] = useState(true);
   const [rival, setRival] = useState<Rival | null>(null);
 
-  // plan
+  // Resumen (edición)
+  const [editResumen, setEditResumen] = useState(false);
+  const [savingResumen, setSavingResumen] = useState(false);
+  const [resumenForm, setResumenForm] = useState<{
+    coach: string;
+    baseSystem: string;
+    nextMatchDate: string; // yyyy-mm-dd
+    nextMatchCompetition: string;
+  }>({ coach: "", baseSystem: "", nextMatchDate: "", nextMatchCompetition: "" });
+
+  // Plan
   const [planLoading, setPlanLoading] = useState(true);
   const [savingPlan, setSavingPlan] = useState(false);
   const [plan, setPlan] = useState<RivalPlan>({
@@ -74,7 +93,15 @@ export default function RivalFichaPage() {
       const res = await fetch(`/api/ct/rivales/${id}`, { cache: "no-store" });
       if (!res.ok) throw new Error("not ok");
       const json = await res.json();
-      setRival(safeGetData<Rival>(json));
+      const r = safeGetData<Rival>(json);
+      setRival(r);
+      // sync form resumen
+      setResumenForm({
+        coach: r.coach ?? "",
+        baseSystem: r.baseSystem ?? "",
+        nextMatchDate: isoToDateInput(r.nextMatchDate),
+        nextMatchCompetition: r.nextMatchCompetition ?? "",
+      });
     } catch {
       setRival(null);
     }
@@ -124,6 +151,34 @@ export default function RivalFichaPage() {
       alert(err?.message || "No se pudo guardar el plan");
     } finally {
       setSavingPlan(false);
+    }
+  }
+
+  async function saveResumen(e: React.FormEvent) {
+    e.preventDefault();
+    if (!id || !rival) return;
+    setSavingResumen(true);
+    try {
+      const payload = {
+        name: rival.name,
+        logoUrl: rival.logoUrl,
+        coach: resumenForm.coach.trim() || null,
+        baseSystem: resumenForm.baseSystem.trim() || null,
+        nextMatchDate: resumenForm.nextMatchDate ? new Date(resumenForm.nextMatchDate).toISOString() : null,
+        nextMatchCompetition: resumenForm.nextMatchCompetition.trim() || null,
+      };
+      const res = await fetch(`/api/ct/rivales/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await loadRival();
+      setEditResumen(false);
+    } catch (err: any) {
+      alert(err?.message || "No se pudo guardar el resumen");
+    } finally {
+      setSavingResumen(false);
     }
   }
 
@@ -218,11 +273,130 @@ export default function RivalFichaPage() {
       {/* Contenido por tab */}
       <section className="rounded-xl border bg-white p-4">
         {tab === "resumen" && (
-          <div>
-            <h2 className="text-lg font-semibold mb-2">Resumen</h2>
-            <p className="text-sm text-gray-600">
-              Aquí se mostrarán datos básicos del rival (DT, sistema, próximos partidos).
-            </p>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Resumen</h2>
+              {!editResumen ? (
+                <button
+                  className="text-xs rounded-lg border px-2 py-1 hover:bg-gray-50"
+                  onClick={() => setEditResumen(true)}
+                >
+                  Editar
+                </button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <button
+                    className="text-xs rounded-lg border px-2 py-1 hover:bg-gray-50"
+                    onClick={() => {
+                      // reset form a valores actuales
+                      setResumenForm({
+                        coach: rival.coach ?? "",
+                        baseSystem: rival.baseSystem ?? "",
+                        nextMatchDate: isoToDateInput(rival.nextMatchDate),
+                        nextMatchCompetition: rival.nextMatchCompetition ?? "",
+                      });
+                      setEditResumen(false);
+                    }}
+                    type="button"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {!editResumen ? (
+              <div className="grid md:grid-cols-2 gap-4 text-sm">
+                <div className="space-y-1">
+                  <div className="text-gray-500">Director técnico</div>
+                  <div className="font-medium">{rival.coach || "—"}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-gray-500">Sistema base</div>
+                  <div className="font-medium">{rival.baseSystem || "—"}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-gray-500">Próximo partido</div>
+                  <div className="font-medium">
+                    {rival.nextMatchDate
+                      ? new Date(rival.nextMatchDate).toLocaleDateString()
+                      : "—"}
+                    {rival.nextMatchCompetition ? ` — ${rival.nextMatchCompetition}` : ""}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={saveResumen} className="grid md:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[11px] text-gray-500">Director técnico</label>
+                  <input
+                    className="w-full rounded-md border px-2 py-1.5 text-sm"
+                    placeholder='p.ej. "Martín Demichelis"'
+                    value={resumenForm.coach}
+                    onChange={(e) => setResumenForm((f) => ({ ...f, coach: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] text-gray-500">Sistema base</label>
+                  <input
+                    className="w-full rounded-md border px-2 py-1.5 text-sm"
+                    placeholder='p.ej. "4-3-3"'
+                    value={resumenForm.baseSystem}
+                    onChange={(e) => setResumenForm((f) => ({ ...f, baseSystem: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] text-gray-500">Fecha próximo partido</label>
+                  <input
+                    type="date"
+                    className="w-full rounded-md border px-2 py-1.5 text-sm"
+                    value={resumenForm.nextMatchDate}
+                    onChange={(e) => setResumenForm((f) => ({ ...f, nextMatchDate: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] text-gray-500">Competición</label>
+                  <input
+                    className="w-full rounded-md border px-2 py-1.5 text-sm"
+                    placeholder="Liga Profesional, Copa…"
+                    value={resumenForm.nextMatchCompetition}
+                    onChange={(e) =>
+                      setResumenForm((f) => ({ ...f, nextMatchCompetition: e.target.value }))
+                    }
+                  />
+                </div>
+
+                <div className="md:col-span-2 flex items-center gap-2 pt-1">
+                  <button
+                    type="submit"
+                    disabled={savingResumen}
+                    className={`px-3 py-1.5 rounded-xl text-xs ${
+                      savingResumen ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
+                    }`}
+                  >
+                    {savingResumen ? "Guardando…" : "Guardar"}
+                  </button>
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-xl text-xs border hover:bg-gray-50"
+                    onClick={() => {
+                      setResumenForm({
+                        coach: rival.coach ?? "",
+                        baseSystem: rival.baseSystem ?? "",
+                        nextMatchDate: isoToDateInput(rival.nextMatchDate),
+                        nextMatchCompetition: rival.nextMatchCompetition ?? "",
+                      });
+                      setEditResumen(false);
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         )}
 
