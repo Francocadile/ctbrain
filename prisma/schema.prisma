@@ -1,116 +1,306 @@
-// src/app/api/ct/rivales/[id]/plan/route.ts
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+// prisma/schema.prisma
 
-export const dynamic = "force-dynamic";
-const prisma = new PrismaClient();
-
-// Estructuras de datos esperadas
-type RivalReport = {
-  system?: string | null;
-  strengths?: string[];
-  weaknesses?: string[];
-  keyPlayers?: string[];
-  setPieces?: {
-    for?: string[];
-    against?: string[];
-  };
-};
-
-type RivalPlan = {
-  charlaUrl: string | null;
-  report: RivalReport;
-};
-
-export async function GET(
-  _req: Request,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const id = String(params?.id || "");
-    if (!id) return new NextResponse("id requerido", { status: 400 });
-
-    const r = await prisma.rival.findUnique({
-      where: { id },
-      select: {
-        planCharlaUrl: true,
-        planReport: true,
-      },
-    });
-
-    if (!r) return new NextResponse("No encontrado", { status: 404 });
-
-    const data: RivalPlan = {
-      charlaUrl: r.planCharlaUrl ?? null,
-      report: (r.planReport as RivalReport) || {},
-    };
-
-    return NextResponse.json({ data });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
-  }
+generator client {
+  provider = "prisma-client-js"
 }
 
-export async function PUT(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const id = String(params?.id || "");
-    if (!id) return new NextResponse("id requerido", { status: 400 });
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 
-    const body = (await req.json()) as RivalPlan | undefined;
-    if (!body) return new NextResponse("body requerido", { status: 400 });
+// =========================
+// Enums base existentes
+// =========================
+enum Role {
+  ADMIN
+  CT
+  MEDICO
+  JUGADOR
+  DIRECTIVO
+}
 
-    const charlaUrl =
-      typeof body.charlaUrl === "string" && body.charlaUrl.trim()
-        ? body.charlaUrl.trim()
-        : null;
+enum SessionType {
+  GENERAL
+  FUERZA
+  TACTICA
+  AEROBICO
+  RECUPERACION
+}
 
-    // Sanitizar mínimamente el reporte
-    const report: RivalReport = {
-      system:
-        typeof body.report?.system === "string" && body.report.system.trim()
-          ? body.report.system.trim()
-          : null,
-      strengths: Array.isArray(body.report?.strengths)
-        ? body.report!.strengths.map((s) => String(s).trim()).filter(Boolean)
-        : [],
-      weaknesses: Array.isArray(body.report?.weaknesses)
-        ? body.report!.weaknesses.map((s) => String(s).trim()).filter(Boolean)
-        : [],
-      keyPlayers: Array.isArray(body.report?.keyPlayers)
-        ? body.report!.keyPlayers.map((s) => String(s).trim()).filter(Boolean)
-        : [],
-      setPieces: {
-        for: Array.isArray(body.report?.setPieces?.for)
-          ? body.report!.setPieces!.for!.map((s) => String(s).trim()).filter(Boolean)
-          : [],
-        against: Array.isArray(body.report?.setPieces?.against)
-          ? body.report!.setPieces!.against!.map((s) => String(s).trim()).filter(Boolean)
-          : [],
-      },
-    };
+// =========================
+enum ClinicalStatus {
+  BAJA
+  REINTEGRO
+  LIMITADA
+  ALTA
+}
 
-    const row = await prisma.rival.update({
-      where: { id },
-      data: {
-        planCharlaUrl: charlaUrl,
-        planReport: report as any, // Prisma Json
-      },
-      select: {
-        planCharlaUrl: true,
-        planReport: true,
-      },
-    });
+enum LeaveStage {
+  PARTIDO
+  ENTRENAMIENTO
+  EXTRADEPORTIVO
+}
 
-    const data: RivalPlan = {
-      charlaUrl: row.planCharlaUrl ?? null,
-      report: (row.planReport as RivalReport) || {},
-    };
+enum LeaveKind {
+  LESION
+  ENFERMEDAD
+}
 
-    return NextResponse.json({ data });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
-  }
+enum Laterality {
+  IZQ
+  DER
+  BILATERAL
+  NA
+}
+
+enum Severity {
+  LEVE
+  MODERADA
+  SEVERA
+}
+
+enum Mechanism {
+  SOBRECARGA
+  IMPACTO
+  TORSION
+  ESTIRAMIENTO
+  RECIDIVA
+  OTRO
+}
+
+enum SystemAffected {
+  RESPIRATORIO
+  GASTROINTESTINAL
+  OTORRINO
+  DERMATOLOGICO
+  GENERAL
+  OTRO
+}
+
+enum IllAptitude {
+  SOLO_GIMNASIO
+  AEROBICO_SUAVE
+  CHARLAS_TACTICO
+  NINGUNO
+}
+
+// =========================
+// Modelos
+// =========================
+model User {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String?
+  password  String?
+  role      Role      @default(JUGADOR)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  sessions        Session[]      @relation("UserSessions")
+  rpeEntries      RPEEntry[]
+  wellnessEntries WellnessEntry[]
+  plannerPrefs    PlannerPrefs?
+  exercises       Exercise[]
+
+  clinicalEntries ClinicalEntry[]
+}
+
+model Session {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  date        DateTime
+  type        SessionType  @default(GENERAL)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  createdBy   String
+  user        User         @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([date])
+  @@index([type])
+  @@index([createdBy])
+}
+
+model Rival {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  logoUrl   String?
+
+  // Datos básicos
+  coach                 String?
+  baseSystem            String?
+  nextMatchDate         DateTime?
+  nextMatchCompetition  String?
+
+  // Plan de partido (embebido)
+  planCharlaUrl String?
+  planReport    Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([nextMatchDate])
+}
+
+model Place {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ExerciseKind {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  exercises  Exercise[]
+}
+
+model Exercise {
+  id          String        @id @default(cuid())
+
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  kindId      String?
+  kind        ExerciseKind? @relation(fields: [kindId], references: [id], onDelete: SetNull)
+
+  space       String?
+  players     String?
+  duration    String?
+  description String?
+  imageUrl    String?
+
+  tags        String[]      @default([])
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([userId, title])
+  @@index([kindId])
+}
+
+model RPEEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date      DateTime
+  rpe       Int
+  duration  Int?
+  load      Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([date])
+  @@index([userId, date])
+}
+
+model WellnessEntry {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date            DateTime
+
+  sleepQuality    Int
+  sleepHours      Float?
+  fatigue         Int
+  muscleSoreness  Int
+  stress          Int
+  mood            Int
+  comment         String?
+
+  total           Int?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([date])
+  @@index([userId, date])
+}
+
+model PlannerPrefs {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  rowLabels Json     @default("{}")
+  places    Json     @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// =========================
+// Parte clínico (NUEVO)
+// =========================
+model ClinicalEntry {
+  id        String   @id @default(cuid())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date      DateTime
+  status    ClinicalStatus
+
+  // Si estado = BAJA
+  leaveStage LeaveStage?
+  leaveKind  LeaveKind?
+
+  // Si leaveKind = LESION
+  diagnosis  String?
+  bodyPart   String?
+  laterality Laterality?
+  mechanism  Mechanism?
+  severity   Severity?
+
+  // Si leaveKind = ENFERMEDAD
+  illSystem        SystemAffected?
+  illSymptoms      String?
+  illContagious    Boolean?
+  illIsolationDays Int?
+  illAptitude      IllAptitude?
+  feverMax         Float?
+
+  // Cronología
+  startDate            DateTime?
+  daysPlanned          Int?
+  expectedReturn       DateTime?
+  expectedReturnManual Boolean? @default(false)
+
+  // Restricciones (REINTEGRO / LIMITADA)
+  capMinutes          Int?
+  noSprint            Boolean  @default(false)
+  noChangeOfDirection Boolean  @default(false)
+  gymOnly             Boolean  @default(false)
+  noContact           Boolean  @default(false)
+
+  // Documentación
+  notes        String?
+  medSignature String?
+
+  // Plan / Protocolo semanal
+  protocolObjectives String?
+  protocolTasks      String?
+  protocolControls   String?
+  protocolCriteria   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date], name: "userId_date")
+  @@index([date])
+  @@index([status, date])
+  @@index([leaveKind])
+  @@index([bodyPart])
+  @@index([userId, date])
 }
