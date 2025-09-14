@@ -14,7 +14,7 @@ type RivalBasics = {
   logoUrl: string | null;
   coach?: string | null;
   baseSystem?: string | null;
-  nextMatchDate?: string | null;        // ISO
+  nextMatchDate?: string | null; // ISO
   nextMatchCompetition?: string | null;
 };
 
@@ -193,13 +193,16 @@ export default function RivalFichaPage() {
     return (
       <div className="p-4 space-y-3">
         <div className="text-red-500">Rival no encontrado</div>
-        <Link href="/ct/rivales" className="text-sm underline">← Volver a Rivales</Link>
+        <Link href="/ct/rivales" className="text-sm underline">
+          ← Volver a Rivales
+        </Link>
       </div>
     );
   }
 
+  // ✅ Null-safe: no accedemos a propiedades si rival aún no está
   const nextMatchLabel = useMemo(() => {
-    if (!rival.nextMatchDate) return "—";
+    if (!rival || !rival.nextMatchDate) return "—";
     try {
       const d = new Date(rival.nextMatchDate);
       const fmt = d.toLocaleString(undefined, {
@@ -213,13 +216,15 @@ export default function RivalFichaPage() {
     } catch {
       return "—";
     }
-  }, [rival.nextMatchDate, rival.nextMatchCompetition]);
+  }, [rival]);
 
   return (
     <div className="p-4 space-y-4">
       {/* Breadcrumb */}
       <div className="text-sm text-gray-600">
-        <Link href="/ct/rivales" className="underline">Rivales</Link>
+        <Link href="/ct/rivales" className="underline">
+          Rivales
+        </Link>
         <span className="mx-1">/</span>
         <span className="font-medium">{rival.name}</span>
       </div>
