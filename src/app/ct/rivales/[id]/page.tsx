@@ -34,6 +34,8 @@ type RivalPlan = {
   report: RivalReport;
 };
 
+type RivalVideo = { title?: string | null; url: string };
+
 export default function RivalFichaPage() {
   const { id } = useParams<{ id: string }>();
   const search = useSearchParams();
@@ -67,6 +69,13 @@ export default function RivalFichaPage() {
   const [nextMatch, setNextMatch] = useState<string>(""); // datetime-local value
   const [nextComp, setNextComp] = useState("");
 
+  // ——— Videos ———
+  const [videos, setVideos] = useState<RivalVideo[]>([]);
+  const [loadingVideos, setLoadingVideos] = useState(true);
+  const [savingVideos, setSavingVideos] = useState(false);
+  const [newVidTitle, setNewVidTitle] = useState("");
+  const [newVidUrl, setNewVidUrl] = useState("");
+
   // Helpers
   function setURLTab(next: Tab) {
     setTab(next);
@@ -89,7 +98,6 @@ export default function RivalFichaPage() {
   function isoToLocalInput(iso?: string | null): string {
     if (!iso) return "";
     const d = new Date(iso);
-    // yyyy-MM-ddTHH:mm (sin zona)
     const pad = (n: number) => String(n).padStart(2, "0");
     const yyyy = d.getFullYear();
     const MM = pad(d.getMonth() + 1);
@@ -100,7 +108,6 @@ export default function RivalFichaPage() {
   }
   function localInputToIso(localVal?: string): string | null {
     if (!localVal) return null;
-    // Interpretar como hora local del usuario
     const d = new Date(localVal);
     if (isNaN(d.getTime())) return null;
     return d.toISOString();
@@ -113,7 +120,7 @@ export default function RivalFichaPage() {
     const rb = json?.data as RivalBasics;
     setRival(rb);
 
-    // precargar campos de edición
+    // precargar edición
     setCoach(rb.coach || "");
     setBaseSystem(rb.baseSystem || "");
     setNextMatch(isoToLocalInput(rb.nextMatchDate));
@@ -123,7 +130,6 @@ export default function RivalFichaPage() {
   async function loadPlan() {
     const res = await fetch(`/api/ct/rivales/${id}/plan`, { cache: "no-store" });
     if (!res.ok) {
-      // si aún no existe, mantenemos defaults
       setPlan({
         charlaUrl: "",
         report: {
@@ -153,12 +159,27 @@ export default function RivalFichaPage() {
     });
   }
 
+  async function loadVideos() {
+    setLoadingVideos(true);
+    try {
+      const res = await fetch(`/api/ct/rivales/${id}/videos`, { cache: "no-store" });
+      if (!res.ok) {
+        setVideos([]);
+        return;
+      }
+      const json = await res.json();
+      setVideos(Array.isArray(json?.data) ? json.data : []);
+    } finally {
+      setLoadingVideos(false);
+    }
+  }
+
   async function loadAll() {
     if (!id) return;
     setLoading(true);
     setPlanLoading(true);
     try {
-      await Promise.all([loadBasics(), loadPlan()]);
+      await Promise.all([loadBasics(), loadPlan(), loadVideos()]);
     } catch (e) {
       console.error(e);
       setRival(null);
@@ -173,7 +194,6 @@ export default function RivalFichaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Cálculo simple del próximo partido (sin useMemo para evitar hook-order issues)
   function getNextMatchLabel(r?: RivalBasics | null) {
     if (!r?.nextMatchDate) return "—";
     try {
@@ -209,14 +229,12 @@ export default function RivalFichaPage() {
           },
         },
       };
-
       const res = await fetch(`/api/ct/rivales/${id}/plan`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error("No se pudo guardar el plan");
-
       const json = await res.json();
       const data = (json?.data || {}) as RivalPlan;
       setPlan({
@@ -246,36 +264,61 @@ export default function RivalFichaPage() {
     setSavingBasics(true);
     try {
       const payload = {
-        name: rival.name, // requerido por la API
+        name: rival.name,
         logoUrl: rival.logoUrl ?? null,
         coach: coach.trim() || null,
         baseSystem: baseSystem.trim() || null,
         nextMatchDate: localInputToIso(nextMatch),
         nextMatchCompetition: nextComp.trim() || null,
       };
-
       const res = await fetch(`/api/ct/rivales/${rival.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error("No se pudo guardar los datos");
-
       const json = await res.json();
       const data = json?.data as RivalBasics;
-
       setRival(data);
-      // sincronzar inputs
       setCoach(data.coach || "");
       setBaseSystem(data.baseSystem || "");
       setNextMatch(isoToLocalInput(data.nextMatchDate));
       setNextComp(data.nextMatchCompetition || "");
-
       setEditingBasics(false);
     } catch (err: any) {
       alert(err?.message || "Error al guardar");
     } finally {
       setSavingBasics(false);
+    }
+  }
+
+  // Videos: helpers
+  function addVideoLocal() {
+    const url = newVidUrl.trim();
+    if (!url) return;
+    setVideos((v) => [{ title: newVidTitle.trim() || null, url }, ...v]);
+    setNewVidTitle("");
+    setNewVidUrl("");
+  }
+  function removeVideoLocal(idx: number) {
+    setVideos((v) => v.filter((_, i) => i !== idx));
+  }
+  async function saveVideos() {
+    setSavingVideos(true);
+    try {
+      const payload = { videos };
+      const res = await fetch(`/api/ct/rivales/${id}/videos`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("No se pudo guardar videos");
+      const json = await res.json();
+      setVideos(Array.isArray(json?.data) ? json.data : []);
+    } catch (err: any) {
+      alert(err?.message || "Error al guardar videos");
+    } finally {
+      setSavingVideos(false);
     }
   }
 
@@ -323,7 +366,6 @@ export default function RivalFichaPage() {
           <p className="text-sm text-gray-600">Próximo partido: {nextMatchLabel}</p>
         </div>
 
-        {/* Toggle editar básicos */}
         {isCT && tab === "resumen" && (
           <button
             onClick={() => setEditingBasics((v) => !v)}
@@ -445,7 +487,6 @@ export default function RivalFichaPage() {
               )}
             </div>
 
-            {/* Charla oficial (solo CT) */}
             {isCT && (
               <form onSubmit={savePlan} className="space-y-4">
                 <div className="rounded-lg border bg-gray-50 p-3">
@@ -482,14 +523,12 @@ export default function RivalFichaPage() {
                   </div>
                 </div>
 
-                {/* Informe visual (CT + jugadores) */}
                 <div className="rounded-lg border p-3">
                   <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">
                     Informe visual (visible para jugadores)
                   </div>
 
                   <div className="grid md:grid-cols-2 gap-3">
-                    {/* Sistema */}
                     <div className="space-y-1">
                       <label className="text-[11px] text-gray-500">Sistema</label>
                       <input
@@ -505,7 +544,6 @@ export default function RivalFichaPage() {
                       />
                     </div>
 
-                    {/* Jugadores clave */}
                     <div className="space-y-1">
                       <label className="text-[11px] text-gray-500">
                         Jugadores clave (1 por línea)
@@ -526,7 +564,6 @@ export default function RivalFichaPage() {
                       />
                     </div>
 
-                    {/* Fortalezas */}
                     <div className="space-y-1">
                       <label className="text-[11px] text-gray-500">
                         Fortalezas (1 por línea)
@@ -547,7 +584,6 @@ export default function RivalFichaPage() {
                       />
                     </div>
 
-                    {/* Debilidades */}
                     <div className="space-y-1">
                       <label className="text-[11px] text-gray-500">
                         Debilidades (1 por línea)
@@ -568,7 +604,6 @@ export default function RivalFichaPage() {
                       />
                     </div>
 
-                    {/* Balón parado a favor */}
                     <div className="space-y-1">
                       <label className="text-[11px] text-gray-500">
                         Balón parado – A favor (1 por línea)
@@ -592,7 +627,6 @@ export default function RivalFichaPage() {
                       />
                     </div>
 
-                    {/* Balón parado en contra */}
                     <div className="space-y-1">
                       <label className="text-[11px] text-gray-500">
                         Balón parado – En contra (1 por línea)
@@ -636,35 +670,101 @@ export default function RivalFichaPage() {
                 </div>
               </form>
             )}
-
-            {/* Vista jugador (si no es CT): solo render del informe */}
-            {!isCT && (
-              <div className="space-y-3">
-                {planLoading ? (
-                  <div className="text-gray-500 text-sm">Cargando…</div>
-                ) : (
-                  <>
-                    {plan.charlaUrl ? null : null}
-                    <div className="grid md:grid-cols-2 gap-3">
-                      <InfoBlock title="Sistema" content={plan.report.system || "—"} />
-                      <ListBlock title="Jugadores clave" items={plan.report.keyPlayers} />
-                      <ListBlock title="Fortalezas" items={plan.report.strengths} />
-                      <ListBlock title="Debilidades" items={plan.report.weaknesses} />
-                      <ListBlock title="Balón parado (a favor)" items={plan.report.setPieces?.for} />
-                      <ListBlock title="Balón parado (en contra)" items={plan.report.setPieces?.against} />
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
           </div>
         )}
 
         {tab === "videos" && (
-          <div>
-            <h2 className="text-lg font-semibold mb-2">Videos</h2>
-            <p className="text-sm text-gray-600">
-              Clips del rival y nuestros enfrentamientos. (Próximo paso)
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold">Videos</h2>
+
+            {isCT && (
+              <div className="rounded-lg border p-3 bg-gray-50">
+                <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">
+                  Agregar enlace (YouTube, Drive, Vimeo, etc.)
+                </div>
+                <div className="grid md:grid-cols-3 gap-2">
+                  <input
+                    className="rounded-md border px-2 py-1.5 text-sm"
+                    placeholder="Título (opcional)"
+                    value={newVidTitle}
+                    onChange={(e) => setNewVidTitle(e.target.value)}
+                  />
+                  <input
+                    className="rounded-md border px-2 py-1.5 text-sm md:col-span-2"
+                    placeholder="https://…"
+                    value={newVidUrl}
+                    onChange={(e) => setNewVidUrl(e.target.value)}
+                  />
+                </div>
+                <div className="pt-2 flex items-center gap-2">
+                  <button
+                    onClick={addVideoLocal}
+                    className="px-3 py-1.5 rounded-xl text-xs bg-black text-white hover:opacity-90"
+                  >
+                    Añadir a la lista
+                  </button>
+                  <button
+                    onClick={saveVideos}
+                    disabled={savingVideos}
+                    className={`px-3 py-1.5 rounded-xl text-xs ${
+                      savingVideos
+                        ? "bg-gray-200 text-gray-500"
+                        : "bg-emerald-600 text-white hover:opacity-90"
+                    }`}
+                  >
+                    {savingVideos ? "Guardando…" : "Guardar cambios"}
+                  </button>
+                  {loadingVideos && (
+                    <span className="text-xs text-gray-500">Cargando…</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-lg border">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left px-3 py-2">Título</th>
+                    <th className="text-left px-3 py-2">URL</th>
+                    {isCT && <th className="px-3 py-2 text-right">Acciones</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {videos.length === 0 ? (
+                    <tr>
+                      <td className="px-3 py-3 text-gray-500" colSpan={3}>
+                        No hay videos cargados.
+                      </td>
+                    </tr>
+                  ) : (
+                    videos.map((v, i) => (
+                      <tr key={i} className="border-t">
+                        <td className="px-3 py-2">{v.title || "—"}</td>
+                        <td className="px-3 py-2">
+                          <a href={v.url} target="_blank" rel="noreferrer" className="underline">
+                            {v.url}
+                          </a>
+                        </td>
+                        {isCT && (
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              onClick={() => removeVideoLocal(i)}
+                              className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50"
+                            >
+                              Borrar
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="text-xs text-gray-500">
+              * En el futuro podemos embeber los players (YouTube, Drive) directamente acá.
             </p>
           </div>
         )}
