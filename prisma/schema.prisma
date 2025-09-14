@@ -126,41 +126,22 @@ model Rival {
   name      String   @unique
   logoUrl   String?
 
-  // ---------- Datos básicos ----------
-  coach                 String?
-  baseSystem            String?
-  nextMatchDate         DateTime?
-  nextMatchCompetition  String?
+  // ---------- NUEVO (opcionales) ----------
+  coach                 String?   // DT
+  baseSystem            String?   // p.ej. "4-3-3", "4-2-3-1"
+  nextMatchDate         DateTime? // próximo partido contra nosotros
+  nextMatchCompetition  String?   // torneo/categoría del próximo partido
 
-  // ---------- Plan de partido ----------
-  planCharlaUrl String?
-  planReport    Json?    @default("{}")  // <- opcional para no romper filas viejas
+  // Plan de partido (en Rival)
+  planCharlaUrl         String?
+  planReport            Json?     @default("{}")
+  planVideos            Json?     @default("[]") // <<<<<< NUEVO: [{title?, url}]
+  // ----------------------------------------
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  // Relación con videos
-  videos   RivalVideo[]
 
   @@index([nextMatchDate])
-}
-
-model RivalVideo {
-  id        String   @id @default(cuid())
-  rivalId   String
-  rival     Rival    @relation(fields: [rivalId], references: [id], onDelete: Cascade)
-
-  title     String
-  url       String
-  tags      String[] @default([])
-  visibleToPlayers Boolean @default(true)
-  order     Int      @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([rivalId, order])
-  @@index([visibleToPlayers])
 }
 
 model Place {
@@ -261,6 +242,8 @@ model PlannerPrefs {
 
 // =========================
 // Parte clínico (NUEVO)
+// Registro DIARIO por jugador (userId+date unique)
+// Sin "dolor": ese dato viene de Wellness
 // =========================
 model ClinicalEntry {
   id        String   @id @default(cuid())
