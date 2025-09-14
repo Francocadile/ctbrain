@@ -136,7 +136,8 @@ model Rival {
   planCharlaUrl         String?
   planReport            Json?     @default("{}")
   planVideos            Json?     @default("[]")
-  planStats             Json?     @default("{}")   // << NUEVO
+  planStats             Json?     @default("{}")
+  planNotes             Json?     @default("{}")  // << NUEVO
   // -------------------------------------
 
   createdAt DateTime @default(now())
