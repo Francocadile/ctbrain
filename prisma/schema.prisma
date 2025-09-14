@@ -86,8 +86,6 @@ enum IllAptitude {
 }
 
 // =========================
-// Modelos
-// =========================
 model User {
   id        String    @id @default(cuid())
   email     String    @unique
@@ -128,20 +126,41 @@ model Rival {
   name      String   @unique
   logoUrl   String?
 
-  // Datos básicos
-  coach                 String?
-  baseSystem            String?
-  nextMatchDate         DateTime?
-  nextMatchCompetition  String?
+  // ---------- Datos básicos ----------
+  coach                 String?    // DT
+  baseSystem            String?    // p.ej. "4-3-3"
+  nextMatchDate         DateTime?  // próximo partido contra nosotros
+  nextMatchCompetition  String?    // torneo/categoría del próximo partido
 
-  // Plan de partido (embebido)
+  // ---------- Plan de partido (plano en Rival) ----------
   planCharlaUrl String?
-  planReport    Json?
+  planReport    Json     @default("{}")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relación con videos
+  videos   RivalVideo[]
+
   @@index([nextMatchDate])
+}
+
+model RivalVideo {
+  id        String   @id @default(cuid())
+  rivalId   String
+  rival     Rival    @relation(fields: [rivalId], references: [id], onDelete: Cascade)
+
+  title     String
+  url       String
+  tags      String[] @default([])   // etiquetas libres
+  visibleToPlayers Boolean @default(true)
+  order     Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([rivalId, order])
+  @@index([visibleToPlayers])
 }
 
 model Place {
@@ -242,6 +261,8 @@ model PlannerPrefs {
 
 // =========================
 // Parte clínico (NUEVO)
+// Registro DIARIO por jugador (userId+date unique)
+// Sin "dolor": ese dato viene de Wellness
 // =========================
 model ClinicalEntry {
   id        String   @id @default(cuid())
