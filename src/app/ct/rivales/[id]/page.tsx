@@ -1,20 +1,18 @@
-// src/app/ct/rivales/[id]/page.tsx
 "use client";
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { Component, ReactNode, useEffect, useMemo, useState } from "react";
 
 type Tab = "resumen" | "plan" | "videos" | "stats" | "notas";
 
-// === Tipos que devuelve nuestra API ===
 type RivalBasics = {
   id: string;
   name: string;
   logoUrl: string | null;
   coach?: string | null;
   baseSystem?: string | null;
-  nextMatchDate?: string | null; // ISO
+  nextMatchDate?: string | null;        // ISO
   nextMatchCompetition?: string | null;
 };
 
@@ -34,7 +32,44 @@ type RivalPlan = {
   report: RivalReport;
 };
 
+// ============ ErrorBoundary (debug visible en UI) ============
+class ErrorBoundary extends Component<{ children: ReactNode }, { err?: any }> {
+  state = { err: undefined as any };
+  static getDerivedStateFromError(err: any) {
+    return { err };
+  }
+  componentDidCatch(err: any, info: any) {
+    // eslint-disable-next-line no-console
+    console.error("[Rivales ficha] Client error:", err, info);
+  }
+  render() {
+    if (!this.state.err) return this.props.children;
+    return (
+      <div className="p-4">
+        <div className="rounded-lg border bg-red-50 p-3 text-red-800">
+          <div className="font-semibold mb-1">Ocurrió un error en esta pantalla.</div>
+          <div className="text-sm whitespace-pre-wrap break-words">
+            {String(this.state.err?.message || this.state.err)}
+          </div>
+          {this.state.err?.stack ? (
+            <details className="mt-2 text-xs whitespace-pre-wrap">
+              <summary>Ver stack</summary>
+              {this.state.err.stack}
+            </details>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+}
+// =============================================================
+
 // ---------- helpers ----------
+function normId(idParam: unknown): string | null {
+  if (typeof idParam === "string") return idParam;
+  if (Array.isArray(idParam) && idParam.length) return String(idParam[0]);
+  return null;
+}
 function isValidDate(d: Date) {
   return d instanceof Date && !Number.isNaN(d.getTime());
 }
@@ -55,10 +90,20 @@ function fmtNextMatch(dateISO?: string | null, competition?: string | null) {
     return "—";
   }
 }
+function linesToArray(s: string): string[] {
+  return s
+    .split("\n")
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+function arrayToLines(a?: string[]): string {
+  return (a || []).join("\n");
+}
 // -------------------------------------
 
-export default function RivalFichaPage() {
-  const { id } = useParams<{ id: string }>();
+function RivalFichaPageInner() {
+  const params = useParams<{ id: string | string[] }>();
+  const id = normId(params?.id);
   const search = useSearchParams();
 
   const initialTab = (search.get("tab") as Tab) || "resumen";
@@ -82,27 +127,21 @@ export default function RivalFichaPage() {
     },
   }));
 
-  // Helpers
   function setURLTab(next: Tab) {
     setTab(next);
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", next);
-    window.history.replaceState(null, "", url.toString());
-  }
-
-  function linesToArray(s: string): string[] {
-    return s
-      .split("\n")
-      .map((x) => x.trim())
-      .filter(Boolean);
-  }
-  function arrayToLines(a?: string[]): string {
-    return (a || []).join("\n");
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", next);
+      window.history.replaceState(null, "", url.toString());
+    } catch {
+      /* noop */
+    }
   }
 
   async function loadBasics() {
-    const res = await fetch(`/api/ct/rivales/${id}`, { cache: "no-store" });
-    if (!res.ok) throw new Error("rival not found");
+    if (!id) throw new Error("id inválido");
+    const res = await fetch(`/api/ct/rivales/${encodeURIComponent(id)}`, { cache: "no-store" });
+    if (!res.ok) throw new Error(`rival not found (${res.status})`);
     const json = await res.json();
     const data = (json?.data ?? null) as RivalBasics | null;
     setRival(
@@ -121,9 +160,12 @@ export default function RivalFichaPage() {
   }
 
   async function loadPlan() {
-    const res = await fetch(`/api/ct/rivales/${id}/plan`, { cache: "no-store" });
+    if (!id) return;
+    const res = await fetch(`/api/ct/rivales/${encodeURIComponent(id)}/plan`, {
+      cache: "no-store",
+    });
     if (!res.ok) {
-      // si aún no existe, mantenemos defaults
+      // si aún no existe, defaults
       setPlan({
         charlaUrl: "",
         report: {
@@ -176,6 +218,7 @@ export default function RivalFichaPage() {
   // Guardar plan
   async function savePlan(e: React.FormEvent) {
     e.preventDefault();
+    if (!id) return;
     setSavingPlan(true);
     try {
       const payload: RivalPlan = {
@@ -192,7 +235,7 @@ export default function RivalFichaPage() {
         },
       };
 
-      const res = await fetch(`/api/ct/rivales/${id}/plan`, {
+      const res = await fetch(`/api/ct/rivales/${encodeURIComponent(id)}/plan`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -221,22 +264,17 @@ export default function RivalFichaPage() {
     }
   }
 
-  if (loading) {
-    return <div className="p-4 text-gray-500">Cargando…</div>;
-  }
+  if (loading) return <div className="p-4 text-gray-500">Cargando…</div>;
 
   if (!rival) {
     return (
       <div className="p-4 space-y-3">
         <div className="text-red-500">Rival no encontrado</div>
-        <Link href="/ct/rivales" className="text-sm underline">
-          ← Volver a Rivales
-        </Link>
+        <Link href="/ct/rivales" className="text-sm underline">← Volver a Rivales</Link>
       </div>
     );
   }
 
-  // ✅ Totalmente seguro contra fechas inválidas
   const nextMatchLabel = useMemo(
     () => fmtNextMatch(rival.nextMatchDate, rival.nextMatchCompetition),
     [rival.nextMatchDate, rival.nextMatchCompetition]
@@ -246,9 +284,7 @@ export default function RivalFichaPage() {
     <div className="p-4 space-y-4">
       {/* Breadcrumb */}
       <div className="text-sm text-gray-600">
-        <Link href="/ct/rivales" className="underline">
-          Rivales
-        </Link>
+        <Link href="/ct/rivales" className="underline">Rivales</Link>
         <span className="mx-1">/</span>
         <span className="font-medium">{rival.name}</span>
       </div>
@@ -523,17 +559,14 @@ export default function RivalFichaPage() {
                 {planLoading ? (
                   <div className="text-gray-500 text-sm">Cargando…</div>
                 ) : (
-                  <>
-                    {plan.charlaUrl ? null : null}
-                    <div className="grid md:grid-cols-2 gap-3">
-                      <InfoBlock title="Sistema" content={plan.report.system || "—"} />
-                      <ListBlock title="Jugadores clave" items={plan.report.keyPlayers} />
-                      <ListBlock title="Fortalezas" items={plan.report.strengths} />
-                      <ListBlock title="Debilidades" items={plan.report.weaknesses} />
-                      <ListBlock title="Balón parado (a favor)" items={plan.report.setPieces?.for} />
-                      <ListBlock title="Balón parado (en contra)" items={plan.report.setPieces?.against} />
-                    </div>
-                  </>
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <InfoBlock title="Sistema" content={plan.report.system || "—"} />
+                    <ListBlock title="Jugadores clave" items={plan.report.keyPlayers} />
+                    <ListBlock title="Fortalezas" items={plan.report.strengths} />
+                    <ListBlock title="Debilidades" items={plan.report.weaknesses} />
+                    <ListBlock title="Balón parado (a favor)" items={plan.report.setPieces?.for} />
+                    <ListBlock title="Balón parado (en contra)" items={plan.report.setPieces?.against} />
+                  </div>
                 )}
               </div>
             )}
@@ -595,5 +628,14 @@ function ListBlock({ title, items }: { title: string; items?: string[] }) {
         <div className="text-sm text-gray-500">—</div>
       )}
     </div>
+  );
+}
+
+// Export con ErrorBoundary para ver el fallo si vuelve a ocurrir
+export default function RivalFichaPage() {
+  return (
+    <ErrorBoundary>
+      <RivalFichaPageInner />
+    </ErrorBoundary>
   );
 }
