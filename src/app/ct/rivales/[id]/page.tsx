@@ -1,11 +1,13 @@
+// src/app/ct/rivales/[id]/page.tsx
 "use client";
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { Component, ReactNode, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 type Tab = "resumen" | "plan" | "videos" | "stats" | "notas";
 
+// === Tipos que devuelve nuestra API ===
 type RivalBasics = {
   id: string;
   name: string;
@@ -32,78 +34,8 @@ type RivalPlan = {
   report: RivalReport;
 };
 
-// ============ ErrorBoundary (debug visible en UI) ============
-class ErrorBoundary extends Component<{ children: ReactNode }, { err?: any }> {
-  state = { err: undefined as any };
-  static getDerivedStateFromError(err: any) {
-    return { err };
-  }
-  componentDidCatch(err: any, info: any) {
-    // eslint-disable-next-line no-console
-    console.error("[Rivales ficha] Client error:", err, info);
-  }
-  render() {
-    if (!this.state.err) return this.props.children;
-    return (
-      <div className="p-4">
-        <div className="rounded-lg border bg-red-50 p-3 text-red-800">
-          <div className="font-semibold mb-1">Ocurrió un error en esta pantalla.</div>
-          <div className="text-sm whitespace-pre-wrap break-words">
-            {String(this.state.err?.message || this.state.err)}
-          </div>
-          {this.state.err?.stack ? (
-            <details className="mt-2 text-xs whitespace-pre-wrap">
-              <summary>Ver stack</summary>
-              {this.state.err.stack}
-            </details>
-          ) : null}
-        </div>
-      </div>
-    );
-  }
-}
-// =============================================================
-
-// ---------- helpers ----------
-function normId(idParam: unknown): string | null {
-  if (typeof idParam === "string") return idParam;
-  if (Array.isArray(idParam) && idParam.length) return String(idParam[0]);
-  return null;
-}
-function isValidDate(d: Date) {
-  return d instanceof Date && !Number.isNaN(d.getTime());
-}
-function fmtNextMatch(dateISO?: string | null, competition?: string | null) {
-  if (!dateISO) return "—";
-  const d = new Date(dateISO);
-  if (!isValidDate(d)) return "—";
-  try {
-    const fmt = d.toLocaleString(undefined, {
-      weekday: "short",
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    return `${fmt}${competition ? ` • ${competition}` : ""}`;
-  } catch {
-    return "—";
-  }
-}
-function linesToArray(s: string): string[] {
-  return s
-    .split("\n")
-    .map((x) => x.trim())
-    .filter(Boolean);
-}
-function arrayToLines(a?: string[]): string {
-  return (a || []).join("\n");
-}
-// -------------------------------------
-
-function RivalFichaPageInner() {
-  const params = useParams<{ id: string | string[] }>();
-  const id = normId(params?.id);
+export default function RivalFichaPage() {
+  const { id } = useParams<{ id: string }>();
   const search = useSearchParams();
 
   const initialTab = (search.get("tab") as Tab) || "resumen";
@@ -127,45 +59,35 @@ function RivalFichaPageInner() {
     },
   }));
 
+  // Helpers
   function setURLTab(next: Tab) {
     setTab(next);
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.set("tab", next);
-      window.history.replaceState(null, "", url.toString());
-    } catch {
-      /* noop */
-    }
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", next);
+    window.history.replaceState(null, "", url.toString());
+  }
+
+  function linesToArray(s: string): string[] {
+    return s
+      .split("\n")
+      .map((x) => x.trim())
+      .filter(Boolean);
+  }
+  function arrayToLines(a?: string[]): string {
+    return (a || []).join("\n");
   }
 
   async function loadBasics() {
-    if (!id) throw new Error("id inválido");
-    const res = await fetch(`/api/ct/rivales/${encodeURIComponent(id)}`, { cache: "no-store" });
-    if (!res.ok) throw new Error(`rival not found (${res.status})`);
+    const res = await fetch(`/api/ct/rivales/${id}`, { cache: "no-store" });
+    if (!res.ok) throw new Error("rival not found");
     const json = await res.json();
-    const data = (json?.data ?? null) as RivalBasics | null;
-    setRival(
-      data && typeof data === "object"
-        ? {
-            id: String(data.id),
-            name: String(data.name),
-            logoUrl: data.logoUrl ?? null,
-            coach: data.coach ?? null,
-            baseSystem: data.baseSystem ?? null,
-            nextMatchDate: data.nextMatchDate ?? null,
-            nextMatchCompetition: data.nextMatchCompetition ?? null,
-          }
-        : null
-    );
+    setRival(json?.data as RivalBasics);
   }
 
   async function loadPlan() {
-    if (!id) return;
-    const res = await fetch(`/api/ct/rivales/${encodeURIComponent(id)}/plan`, {
-      cache: "no-store",
-    });
+    const res = await fetch(`/api/ct/rivales/${id}/plan`, { cache: "no-store" });
     if (!res.ok) {
-      // si aún no existe, defaults
+      // si aún no existe, mantenemos defaults
       setPlan({
         charlaUrl: "",
         report: {
@@ -202,7 +124,7 @@ function RivalFichaPageInner() {
     try {
       await Promise.all([loadBasics(), loadPlan()]);
     } catch (e) {
-      console.error("[Rivales ficha] Error cargando datos:", e);
+      console.error(e);
       setRival(null);
     } finally {
       setLoading(false);
@@ -215,10 +137,27 @@ function RivalFichaPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // 🔧 SIN useMemo: cálculo simple y seguro en cada render
+  function getNextMatchLabel(r?: RivalBasics | null) {
+    if (!r?.nextMatchDate) return "—";
+    try {
+      const d = new Date(r.nextMatchDate);
+      const fmt = d.toLocaleString(undefined, {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      return `${fmt}${r.nextMatchCompetition ? ` • ${r.nextMatchCompetition}` : ""}`;
+    } catch {
+      return "—";
+    }
+  }
+
   // Guardar plan
   async function savePlan(e: React.FormEvent) {
     e.preventDefault();
-    if (!id) return;
     setSavingPlan(true);
     try {
       const payload: RivalPlan = {
@@ -235,7 +174,7 @@ function RivalFichaPageInner() {
         },
       };
 
-      const res = await fetch(`/api/ct/rivales/${encodeURIComponent(id)}/plan`, {
+      const res = await fetch(`/api/ct/rivales/${id}/plan`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -264,7 +203,9 @@ function RivalFichaPageInner() {
     }
   }
 
-  if (loading) return <div className="p-4 text-gray-500">Cargando…</div>;
+  if (loading) {
+    return <div className="p-4 text-gray-500">Cargando…</div>;
+  }
 
   if (!rival) {
     return (
@@ -275,10 +216,7 @@ function RivalFichaPageInner() {
     );
   }
 
-  const nextMatchLabel = useMemo(
-    () => fmtNextMatch(rival.nextMatchDate, rival.nextMatchCompetition),
-    [rival.nextMatchDate, rival.nextMatchCompetition]
-  );
+  const nextMatchLabel = getNextMatchLabel(rival);
 
   return (
     <div className="p-4 space-y-4">
@@ -559,14 +497,17 @@ function RivalFichaPageInner() {
                 {planLoading ? (
                   <div className="text-gray-500 text-sm">Cargando…</div>
                 ) : (
-                  <div className="grid md:grid-cols-2 gap-3">
-                    <InfoBlock title="Sistema" content={plan.report.system || "—"} />
-                    <ListBlock title="Jugadores clave" items={plan.report.keyPlayers} />
-                    <ListBlock title="Fortalezas" items={plan.report.strengths} />
-                    <ListBlock title="Debilidades" items={plan.report.weaknesses} />
-                    <ListBlock title="Balón parado (a favor)" items={plan.report.setPieces?.for} />
-                    <ListBlock title="Balón parado (en contra)" items={plan.report.setPieces?.against} />
-                  </div>
+                  <>
+                    {plan.charlaUrl ? null : null}
+                    <div className="grid md:grid-cols-2 gap-3">
+                      <InfoBlock title="Sistema" content={plan.report.system || "—"} />
+                      <ListBlock title="Jugadores clave" items={plan.report.keyPlayers} />
+                      <ListBlock title="Fortalezas" items={plan.report.strengths} />
+                      <ListBlock title="Debilidades" items={plan.report.weaknesses} />
+                      <ListBlock title="Balón parado (a favor)" items={plan.report.setPieces?.for} />
+                      <ListBlock title="Balón parado (en contra)" items={plan.report.setPieces?.against} />
+                    </div>
+                  </>
                 )}
               </div>
             )}
@@ -628,14 +569,5 @@ function ListBlock({ title, items }: { title: string; items?: string[] }) {
         <div className="text-sm text-gray-500">—</div>
       )}
     </div>
-  );
-}
-
-// Export con ErrorBoundary para ver el fallo si vuelve a ocurrir
-export default function RivalFichaPage() {
-  return (
-    <ErrorBoundary>
-      <RivalFichaPageInner />
-    </ErrorBoundary>
   );
 }
