@@ -59,6 +59,14 @@ export default function RivalFichaPage() {
     },
   }));
 
+  // ——— Edición de básicos (Resumen) ———
+  const [editingBasics, setEditingBasics] = useState(false);
+  const [savingBasics, setSavingBasics] = useState(false);
+  const [coach, setCoach] = useState("");
+  const [baseSystem, setBaseSystem] = useState("");
+  const [nextMatch, setNextMatch] = useState<string>(""); // datetime-local value
+  const [nextComp, setNextComp] = useState("");
+
   // Helpers
   function setURLTab(next: Tab) {
     setTab(next);
@@ -77,11 +85,39 @@ export default function RivalFichaPage() {
     return (a || []).join("\n");
   }
 
+  // datetime-local helpers
+  function isoToLocalInput(iso?: string | null): string {
+    if (!iso) return "";
+    const d = new Date(iso);
+    // yyyy-MM-ddTHH:mm (sin zona)
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    const MM = pad(d.getMonth() + 1);
+    const dd = pad(d.getDate());
+    const hh = pad(d.getHours());
+    const mm = pad(d.getMinutes());
+    return `${yyyy}-${MM}-${dd}T${hh}:${mm}`;
+  }
+  function localInputToIso(localVal?: string): string | null {
+    if (!localVal) return null;
+    // Interpretar como hora local del usuario
+    const d = new Date(localVal);
+    if (isNaN(d.getTime())) return null;
+    return d.toISOString();
+  }
+
   async function loadBasics() {
     const res = await fetch(`/api/ct/rivales/${id}`, { cache: "no-store" });
     if (!res.ok) throw new Error("rival not found");
     const json = await res.json();
-    setRival(json?.data as RivalBasics);
+    const rb = json?.data as RivalBasics;
+    setRival(rb);
+
+    // precargar campos de edición
+    setCoach(rb.coach || "");
+    setBaseSystem(rb.baseSystem || "");
+    setNextMatch(isoToLocalInput(rb.nextMatchDate));
+    setNextComp(rb.nextMatchCompetition || "");
   }
 
   async function loadPlan() {
@@ -137,7 +173,7 @@ export default function RivalFichaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // 🔧 SIN useMemo: cálculo simple y seguro en cada render
+  // Cálculo simple del próximo partido (sin useMemo para evitar hook-order issues)
   function getNextMatchLabel(r?: RivalBasics | null) {
     if (!r?.nextMatchDate) return "—";
     try {
@@ -203,6 +239,46 @@ export default function RivalFichaPage() {
     }
   }
 
+  // Guardar básicos (Resumen)
+  async function saveBasics(e: React.FormEvent) {
+    e.preventDefault();
+    if (!rival) return;
+    setSavingBasics(true);
+    try {
+      const payload = {
+        name: rival.name, // requerido por la API
+        logoUrl: rival.logoUrl ?? null,
+        coach: coach.trim() || null,
+        baseSystem: baseSystem.trim() || null,
+        nextMatchDate: localInputToIso(nextMatch),
+        nextMatchCompetition: nextComp.trim() || null,
+      };
+
+      const res = await fetch(`/api/ct/rivales/${rival.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("No se pudo guardar los datos");
+
+      const json = await res.json();
+      const data = json?.data as RivalBasics;
+
+      setRival(data);
+      // sincronzar inputs
+      setCoach(data.coach || "");
+      setBaseSystem(data.baseSystem || "");
+      setNextMatch(isoToLocalInput(data.nextMatchDate));
+      setNextComp(data.nextMatchCompetition || "");
+
+      setEditingBasics(false);
+    } catch (err: any) {
+      alert(err?.message || "Error al guardar");
+    } finally {
+      setSavingBasics(false);
+    }
+  }
+
   if (loading) {
     return <div className="p-4 text-gray-500">Cargando…</div>;
   }
@@ -239,13 +315,23 @@ export default function RivalFichaPage() {
         ) : (
           <div className="h-16 w-16 rounded border bg-gray-100" />
         )}
-        <div>
+        <div className="flex-1">
           <h1 className="text-xl font-bold">{rival.name}</h1>
           <p className="text-sm text-gray-600">
             DT: <b>{rival.coach || "—"}</b> • Sistema base: {rival.baseSystem || "—"}
           </p>
           <p className="text-sm text-gray-600">Próximo partido: {nextMatchLabel}</p>
         </div>
+
+        {/* Toggle editar básicos */}
+        {isCT && tab === "resumen" && (
+          <button
+            onClick={() => setEditingBasics((v) => !v)}
+            className="text-xs px-3 py-1.5 rounded-xl border hover:bg-gray-50"
+          >
+            {editingBasics ? "Cancelar" : "Editar"}
+          </button>
+        )}
       </header>
 
       {/* Tabs */}
@@ -274,17 +360,77 @@ export default function RivalFichaPage() {
       {/* Contenido por tab */}
       <section className="rounded-xl border bg-white p-4">
         {tab === "resumen" && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <h2 className="text-lg font-semibold">Resumen</h2>
-            <ul className="text-sm text-gray-700 list-disc pl-4">
-              <li>DT: {rival.coach || "—"}</li>
-              <li>Sistema base: {rival.baseSystem || "—"}</li>
-              <li>Próximo partido: {nextMatchLabel}</li>
-            </ul>
-            <p className="text-xs text-gray-500 mt-2">
-              * Estos campos se pueden editar desde el listado de rivales (o
-              más adelante desde esta ficha).
-            </p>
+
+            {!editingBasics ? (
+              <>
+                <ul className="text-sm text-gray-700 list-disc pl-4">
+                  <li>DT: {rival.coach || "—"}</li>
+                  <li>Sistema base: {rival.baseSystem || "—"}</li>
+                  <li>Próximo partido: {nextMatchLabel}</li>
+                </ul>
+                <p className="text-xs text-gray-500 mt-2">
+                  * Estos campos se pueden editar desde aquí (solo CT).
+                </p>
+              </>
+            ) : (
+              <form onSubmit={saveBasics} className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] text-gray-500">Director Técnico</label>
+                  <input
+                    className="w-full rounded-md border px-2 py-1.5 text-sm"
+                    value={coach}
+                    onChange={(e) => setCoach(e.target.value)}
+                    placeholder="Ej: Martín Demichelis"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] text-gray-500">Sistema base</label>
+                  <input
+                    className="w-full rounded-md border px-2 py-1.5 text-sm"
+                    value={baseSystem}
+                    onChange={(e) => setBaseSystem(e.target.value)}
+                    placeholder='Ej: "4-3-3"'
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] text-gray-500">Próximo partido (fecha y hora)</label>
+                  <input
+                    type="datetime-local"
+                    className="w-full rounded-md border px-2 py-1.5 text-sm"
+                    value={nextMatch}
+                    onChange={(e) => setNextMatch(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] text-gray-500">Competición / Torneo</label>
+                  <input
+                    className="w-full rounded-md border px-2 py-1.5 text-sm"
+                    value={nextComp}
+                    onChange={(e) => setNextComp(e.target.value)}
+                    placeholder="Liga Profesional, Copa, etc."
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <button
+                    type="submit"
+                    disabled={savingBasics}
+                    className={`px-3 py-1.5 rounded-xl text-xs ${
+                      savingBasics
+                        ? "bg-gray-200 text-gray-500"
+                        : "bg-black text-white hover:opacity-90"
+                    }`}
+                  >
+                    {savingBasics ? "Guardando…" : "Guardar cambios"}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         )}
 
