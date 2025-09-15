@@ -6,103 +6,163 @@ export const dynamic = "force-dynamic";
 const prisma = new PrismaClient();
 
 type RecentRow = {
-  date?: string;
+  date?: string;         // ISO o texto
   opponent?: string;
   comp?: string;
-  homeAway?: string; // H/A/N
+  homeAway?: string;     // H/A/N
   gf?: number;
   ga?: number;
-  possession?: number; // opcional por fila
+  possession?: number;   // opcional si viene en CSV
 };
 
-function toNumber(v: any): number | undefined {
-  if (v === null || v === undefined) return undefined;
-  const s = String(v).replace(",", ".").replace("%", "").trim();
-  if (s === "") return undefined;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : undefined;
+type RivalStats = {
+  totals?: {
+    gf?: number;
+    ga?: number;
+    possession?: number;
+  };
+  recent?: RecentRow[];
+};
+
+// Helpers seguros para JSON desconocido
+function asObj<T = Record<string, any>>(x: unknown): T {
+  return typeof x === "object" && x !== null ? (x as T) : ({} as T);
+}
+function asArr<T = any>(x: unknown): T[] {
+  return Array.isArray(x) ? (x as T[]) : [];
+}
+function toNum(n: any): number | undefined {
+  const v = Number(n);
+  return Number.isFinite(v) ? v : undefined;
+}
+function normKeyMap(row: Record<string, any>) {
+  const map: Record<string, string> = {};
+  for (const k of Object.keys(row)) map[k.toLowerCase()] = k;
+  return (wanted: string) => map[wanted.toLowerCase()];
 }
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
     const form = await req.formData();
     const file = form.get("file");
-    if (!file || typeof file === "string") {
-      return new NextResponse("file requerido (multipart/form-data, key=file)", { status: 400 });
+    if (!file || !(file instanceof File)) {
+      return new NextResponse("archivo CSV requerido (file)", { status: 400 });
     }
-    const text = await (file as File).text();
 
+    const text = await file.text();
+
+    // Carga dinámica de PapaParse (ya declaramos el .d.ts)
     const Papa = (await import("papaparse")).default;
-    const parsed = Papa.parse(text, { header: true, skipEmptyLines: true });
+    const parsed = Papa.parse<Record<string, any>>(text, {
+      header: true,
+      skipEmptyLines: true,
+    });
     if (parsed.errors?.length) {
-      return NextResponse.json({ errors: parsed.errors.slice(0, 3) }, { status: 400 });
+      return NextResponse.json(
+        { errors: parsed.errors.slice(0, 3) },
+        { status: 400 }
+      );
     }
 
-    // Intentamos columnas típicas
-    const rows: RecentRow[] = [];
-    const data = parsed.data as any[];
+    // Normalizamos filas
+    const rowsIn = Array.isArray(parsed.data) ? parsed.data : [];
+    const recent: RecentRow[] = [];
 
-    for (const r of data) {
-      const row: RecentRow = {
-        date: (r.date || r.Date || r.fecha || r.Fecha || "").trim?.() || undefined,
-        opponent: (r.opponent || r.Opponent || r.rival || r.Rival || "").trim?.() || undefined,
-        comp: (r.comp || r.Competition || r.competition || r.Competencia || "").trim?.() || undefined,
-        homeAway: (r.homeAway || r.HomeAway || r.loc || r.Loc || r.localia || r.Localia || "").trim?.() || undefined,
-        gf: toNumber(r.gf ?? r.GF ?? r.goalsFor ?? r.GoalsFor ?? r["GF"]),
-        ga: toNumber(r.ga ?? r.GA ?? r.goalsAgainst ?? r.GoalsAgainst ?? r["GA"]),
-        possession: toNumber(r.possession ?? r.Possession ?? r["Possession %"] ?? r["%Possession"]),
+    for (const raw of rowsIn) {
+      if (!raw || typeof raw !== "object") continue;
+      const key = normKeyMap(raw);
+
+      const dateKey = key("date") || key("fecha");
+      const oppKey = key("opponent") || key("rival") || key("opponent_name");
+      const compKey = key("comp") || key("competition") || key("torneo");
+      const locKey = key("homeaway") || key("loc") || key("home_away");
+      const gfKey = key("gf") || key("goalsfor") || key("goles_favor");
+      const gaKey = key("ga") || key("goalsagainst") || key("goles_contra");
+      const posKey =
+        key("possession") || key("poss") || key("posesion") || key("pos");
+
+      const r: RecentRow = {
+        date: dateKey ? String(raw[dateKey] ?? "").trim() || undefined : undefined,
+        opponent: oppKey ? String(raw[oppKey] ?? "").trim() || undefined : undefined,
+        comp: compKey ? String(raw[compKey] ?? "").trim() || undefined : undefined,
+        homeAway: locKey ? String(raw[locKey] ?? "").trim().toUpperCase() || undefined : undefined,
+        gf: toNum(raw[gfKey as any]),
+        ga: toNum(raw[gaKey as any]),
+        possession: toNum(raw[posKey as any]),
       };
-      if (row.date || row.opponent || row.gf !== undefined || row.ga !== undefined) {
-        rows.push(row);
+
+      // al menos algún dato relevante
+      if (
+        r.date ||
+        r.opponent ||
+        typeof r.gf === "number" ||
+        typeof r.ga === "number"
+      ) {
+        // Sanear H/A/N
+        if (r.homeAway && !["H", "A", "N"].includes(r.homeAway)) {
+          r.homeAway = undefined;
+        }
+        recent.push(r);
       }
     }
 
-    // Totales (si no vienen explícitos): sumamos GF/GA; posesión = promedio de filas con dato
-    const gfSum = rows.reduce((acc, r) => acc + (r.gf ?? 0), 0);
-    const gaSum = rows.reduce((acc, r) => acc + (r.ga ?? 0), 0);
-    const possVals = rows.map(r => r.possession).filter((v): v is number => typeof v === "number");
-    const possession = possVals.length ? Math.round((possVals.reduce((a, b) => a + b, 0) / possVals.length) * 10) / 10 : undefined;
+    // Totales a partir del CSV (si hay datos)
+    const gfSum = recent.reduce(
+      (acc, x) => (typeof x.gf === "number" ? acc + x.gf : acc),
+      0
+    );
+    const gaSum = recent.reduce(
+      (acc, x) => (typeof x.ga === "number" ? acc + x.ga : acc),
+      0
+    );
+    const possVals = recent
+      .map((x) => x.possession)
+      .filter((v): v is number => typeof v === "number");
+    const possAvg =
+      possVals.length > 0
+        ? Math.round(
+            (possVals.reduce((a, b) => a + b, 0) / possVals.length) * 10
+          ) / 10
+        : undefined;
 
-    // Mapear a estructura guardada
-    const recent = rows.map(r => ({
-      date: r.date,
-      opponent: r.opponent,
-      comp: r.comp,
-      homeAway: r.homeAway?.toUpperCase?.(),
-      gf: r.gf,
-      ga: r.ga,
-    }));
-
-    // Merge sobre planStats
+    // Traemos el estado actual para mergear sin romper otras llaves
     const current = await prisma.rival.findUnique({
       where: { id },
       select: { planStats: true },
     });
     if (!current) return new NextResponse("No encontrado", { status: 404 });
 
-    const mergedStats = {
-      ...(current.planStats || {}),
+    const saved = asObj<any>(current.planStats);
+    const savedTotals = asObj<any>(saved.totals);
+
+    // Construimos el objeto final, evitando spreads sobre tipos no-objeto
+    const merged: RivalStats = {
+      ...asObj(saved),
       totals: {
-        ...(current.planStats as any)?.totals,
-        gf: gfSum || (current.planStats as any)?.totals?.gf,
-        ga: gaSum || (current.planStats as any)?.totals?.ga,
-        possession: possession ?? (current.planStats as any)?.totals?.possession,
+        ...asObj(savedTotals),
+        // si hay datos nuevos, los usamos; si no, mantenemos lo existente
+        ...(Number.isFinite(gfSum) ? { gf: gfSum } : {}),
+        ...(Number.isFinite(gaSum) ? { ga: gaSum } : {}),
+        ...(typeof possAvg === "number" ? { possession: possAvg } : {}),
       },
-      recent, // reemplazo directo: CSV suele representar el set más confiable
+      // sobreescribimos "recent" con lo del CSV (decisión del flujo de importación)
+      recent,
     };
 
     const row = await prisma.rival.update({
       where: { id },
-      data: { planStats: mergedStats as any },
+      data: { planStats: merged as any },
       select: { planStats: true },
     });
 
     return NextResponse.json({
-      data: row.planStats,
-      summary: { rows: recent.length, gfSum, gaSum, possession },
+      data: asObj<RivalStats>(row.planStats),
     });
   } catch (e: any) {
     return new NextResponse(e?.message || "Error", { status: 500 });
