@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { createRequire } from "node:module";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const prisma = new PrismaClient();
+const require = createRequire(import.meta.url);
 
 /* ==================== Utils ==================== */
 const asObj = <T extends Record<string, any> = Record<string, any>>(x: unknown): T =>
@@ -79,35 +81,17 @@ function extractFromPDFText(text: string) {
   return res;
 }
 
-/* =========== PDF text extraction with PDF.js (SSR, sin worker) =========== */
-async function extractTextWithPdfJs(u8: Uint8Array): Promise<string> {
-  // Importar el entrypoint ESM directo (NO CJS para evitar 'canvas')
-  const pdfjs: any = await import("pdfjs-dist/build/pdf.mjs");
-
-  // En SSR deshabilitamos completamente el worker
-  if (pdfjs.GlobalWorkerOptions) {
-    // string vacío + disableWorker evita el "fake worker"
-    pdfjs.GlobalWorkerOptions.workerSrc = "";
+/* =========== Carga robusta de pdf-parse (CommonJS) =========== */
+function loadPdfParse(): (input: Uint8Array | ArrayBuffer | Buffer) => Promise<{ text: string }> {
+  // pdf-parse es CJS; lo cargamos con require para SSR en Vercel
+  // y evitamos cualquier dependencia a canvas/worker.
+  // @ts-ignore – lo tipamos con nuestro d.ts
+  const mod = require("pdf-parse");
+  const fn = (mod?.default ?? mod) as any;
+  if (typeof fn !== "function") {
+    throw new Error("pdf-parse no se pudo cargar correctamente");
   }
-
-  const loadingTask = pdfjs.getDocument({
-    data: u8,
-    disableWorker: true,
-    isEvalSupported: false,
-    useWorkerFetch: false,
-    stopAtErrors: true
-  });
-
-  const pdf = await loadingTask.promise;
-
-  let out = "";
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const tc = await page.getTextContent();
-    const txt = (tc.items || []).map((it: any) => it?.str ?? "").join(" ");
-    out += txt + "\n";
-  }
-  return out;
+  return fn;
 }
 
 /* ==================== Handler ==================== */
@@ -131,7 +115,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return new NextResponse("El archivo no parece ser un PDF válido", { status: 400 });
     }
 
-    const text = await extractTextWithPdfJs(u8);
+    const pdfParse = loadPdfParse();
+    const parsed = await pdfParse(u8);
+    const text = String(parsed?.text || "");
     if (!text.trim()) {
       return new NextResponse("No se pudo extraer texto del PDF", { status: 422 });
     }
