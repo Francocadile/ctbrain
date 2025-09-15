@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 
 type Tab = "resumen" | "plan" | "videos" | "stats" | "notas";
 
-// === Tipos que devuelve nuestra API ===
+/** === Tipos que devuelve nuestra API === */
 type RivalBasics = {
   id: string;
   name: string;
@@ -37,19 +37,23 @@ type RivalPlan = {
 type RivalVideo = { title?: string | null; url: string };
 
 type RecentRow = {
-  date?: string;
+  date?: string;         // ISO (YYYY-MM-DD o full ISO)
   opponent?: string;
   comp?: string;
-  homeAway?: string; // H/A/N
+  homeAway?: string;     // H/A/N
   gf?: number;
   ga?: number;
 };
+
 type RivalStats = {
-  totals?: { gf?: number; ga?: number; possession?: number };
+  totals?: {
+    gf?: number;
+    ga?: number;
+    possession?: number; // %
+  };
   recent?: RecentRow[];
 };
 
-// Notas
 type NoteItem = { text: string; done?: boolean };
 type RivalNotes = { observations?: string; checklist?: NoteItem[] };
 
@@ -63,13 +67,21 @@ export default function RivalFichaPage() {
   const [loading, setLoading] = useState(true);
   const [rival, setRival] = useState<RivalBasics | null>(null);
 
-  // ——— permisos (placeholder) ———
+  // En el futuro esto saldrá del auth/rol real
   const isCT = true;
 
-  // ——— PLAN ———
+  // ---------- RESUMEN (edición básica) ----------
+  const [editingBasics, setEditingBasics] = useState(false);
+  const [savingBasics, setSavingBasics] = useState(false);
+  const [coach, setCoach] = useState("");
+  const [baseSystem, setBaseSystem] = useState("");
+  const [nextMatch, setNextMatch] = useState<string>("");   // datetime-local
+  const [nextComp, setNextComp] = useState("");
+
+  // ---------- PLAN ----------
   const [planLoading, setPlanLoading] = useState(true);
   const [savingPlan, setSavingPlan] = useState(false);
-  const [plan, setPlan] = useState<RivalPlan>(() => ({
+  const [plan, setPlan] = useState<RivalPlan>({
     charlaUrl: "",
     report: {
       system: "",
@@ -78,24 +90,16 @@ export default function RivalFichaPage() {
       keyPlayers: [],
       setPieces: { for: [], against: [] },
     },
-  }));
+  });
 
-  // ——— RESUMEN (edición rápida) ———
-  const [editingBasics, setEditingBasics] = useState(false);
-  const [savingBasics, setSavingBasics] = useState(false);
-  const [coach, setCoach] = useState("");
-  const [baseSystem, setBaseSystem] = useState("");
-  const [nextMatch, setNextMatch] = useState<string>("");
-  const [nextComp, setNextComp] = useState("");
-
-  // ——— VIDEOS ———
+  // ---------- VIDEOS ----------
   const [videos, setVideos] = useState<RivalVideo[]>([]);
   const [loadingVideos, setLoadingVideos] = useState(true);
   const [savingVideos, setSavingVideos] = useState(false);
   const [newVidTitle, setNewVidTitle] = useState("");
   const [newVidUrl, setNewVidUrl] = useState("");
 
-  // ——— STATS (placeholder) ———
+  // ---------- STATS ----------
   const [stats, setStats] = useState<RivalStats>({
     totals: { gf: undefined, ga: undefined, possession: undefined },
     recent: [],
@@ -103,16 +107,13 @@ export default function RivalFichaPage() {
   const [loadingStats, setLoadingStats] = useState(true);
   const [savingStats, setSavingStats] = useState(false);
 
-  // ——— NOTAS ———
-  const [notes, setNotes] = useState<RivalNotes>({
-    observations: "",
-    checklist: [],
-  });
+  // ---------- NOTAS ----------
+  const [notes, setNotes] = useState<RivalNotes>({ observations: "", checklist: [] });
   const [loadingNotes, setLoadingNotes] = useState(true);
   const [savingNotes, setSavingNotes] = useState(false);
   const [newItem, setNewItem] = useState("");
 
-  // Helpers
+  // ---------- Helpers UI ----------
   function setURLTab(next: Tab) {
     setTab(next);
     const url = new URL(window.location.href);
@@ -121,10 +122,7 @@ export default function RivalFichaPage() {
   }
 
   function linesToArray(s: string): string[] {
-    return s
-      .split("\n")
-      .map((x) => x.trim())
-      .filter(Boolean);
+    return s.split("\n").map((x) => x.trim()).filter(Boolean);
   }
   function arrayToLines(a?: string[]): string {
     return (a || []).join("\n");
@@ -134,18 +132,21 @@ export default function RivalFichaPage() {
   function isoToLocalInput(iso?: string | null) {
     if (!iso) return "";
     const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
     const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-      d.getHours()
-    )}:${pad(d.getMinutes())}`;
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
   function localInputToIso(localVal?: string) {
     if (!localVal) return null;
+    // Si viene solo fecha (YYYY-MM-DD), construimos al mediodía para evitar TZ raras
+    if (/^\d{4}-\d{2}-\d{2}$/.test(localVal)) {
+      return new Date(`${localVal}T12:00:00`).toISOString();
+    }
     const d = new Date(localVal);
     return isNaN(d.getTime()) ? null : d.toISOString();
   }
 
-  // LOADERS
+  // ---------- LOADERS ----------
   async function loadBasics() {
     const res = await fetch(`/api/ct/rivales/${id}`, { cache: "no-store" });
     if (!res.ok) throw new Error("rival not found");
@@ -159,23 +160,28 @@ export default function RivalFichaPage() {
   }
 
   async function loadPlan() {
-    const res = await fetch(`/api/ct/rivales/${id}/plan`, { cache: "no-store" });
-    if (!res.ok) return;
-    const json = await res.json();
-    const data = (json?.data || {}) as RivalPlan;
-    setPlan({
-      charlaUrl: data.charlaUrl ?? "",
-      report: {
-        system: data.report?.system ?? "",
-        strengths: data.report?.strengths ?? [],
-        weaknesses: data.report?.weaknesses ?? [],
-        keyPlayers: data.report?.keyPlayers ?? [],
-        setPieces: {
-          for: data.report?.setPieces?.for ?? [],
-          against: data.report?.setPieces?.against ?? [],
+    setPlanLoading(true);
+    try {
+      const res = await fetch(`/api/ct/rivales/${id}/plan`, { cache: "no-store" });
+      if (!res.ok) return; // si aún no existe, dejamos defaults
+      const json = await res.json();
+      const data = (json?.data || {}) as RivalPlan;
+      setPlan({
+        charlaUrl: data.charlaUrl ?? "",
+        report: {
+          system: data.report?.system ?? "",
+          strengths: data.report?.strengths ?? [],
+          weaknesses: data.report?.weaknesses ?? [],
+          keyPlayers: data.report?.keyPlayers ?? [],
+          setPieces: {
+            for: data.report?.setPieces?.for ?? [],
+            against: data.report?.setPieces?.against ?? [],
+          },
         },
-      },
-    });
+      });
+    } finally {
+      setPlanLoading(false);
+    }
   }
 
   async function loadVideos() {
@@ -196,11 +202,7 @@ export default function RivalFichaPage() {
       const json = await res.json().catch(() => ({}));
       const data = (json?.data || {}) as RivalStats;
       setStats({
-        totals: {
-          gf: data.totals?.gf,
-          ga: data.totals?.ga,
-          possession: data.totals?.possession,
-        },
+        totals: { gf: data.totals?.gf, ga: data.totals?.ga, possession: data.totals?.possession },
         recent: Array.isArray(data.recent) ? data.recent : [],
       });
     } finally {
@@ -226,7 +228,6 @@ export default function RivalFichaPage() {
   async function loadAll() {
     if (!id) return;
     setLoading(true);
-    setPlanLoading(true);
     try {
       await Promise.all([loadBasics(), loadPlan(), loadVideos(), loadStats(), loadNotes()]);
     } catch (e) {
@@ -234,7 +235,6 @@ export default function RivalFichaPage() {
       setRival(null);
     } finally {
       setLoading(false);
-      setPlanLoading(false);
     }
   }
 
@@ -243,11 +243,12 @@ export default function RivalFichaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // LABEL FECHA
+  // ---------- LABELS ----------
   function nextMatchLabel(r?: RivalBasics | null) {
     if (!r?.nextMatchDate) return "—";
     try {
       const d = new Date(r.nextMatchDate);
+      if (isNaN(d.getTime())) return "—";
       const fmt = d.toLocaleString(undefined, {
         weekday: "short",
         day: "2-digit",
@@ -261,7 +262,36 @@ export default function RivalFichaPage() {
     }
   }
 
-  // SAVE – PLAN
+  // ---------- SAVERS ----------
+  async function saveBasics(e: React.FormEvent) {
+    e.preventDefault();
+    if (!rival) return;
+    setSavingBasics(true);
+    try {
+      const payload = {
+        name: rival.name,
+        logoUrl: rival.logoUrl ?? null,
+        coach: coach.trim() || null,
+        baseSystem: baseSystem.trim() || null,
+        nextMatchDate: localInputToIso(nextMatch),
+        nextMatchCompetition: nextComp.trim() || null,
+      };
+      const res = await fetch(`/api/ct/rivales/${rival.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error("No se pudo guardar los datos");
+      const json = await res.json();
+      setRival(json?.data as RivalBasics);
+      setEditingBasics(false);
+    } catch (err: any) {
+      alert(err?.message || "Error al guardar");
+    } finally {
+      setSavingBasics(false);
+    }
+  }
+
   async function savePlan(e: React.FormEvent) {
     e.preventDefault();
     setSavingPlan(true);
@@ -293,37 +323,7 @@ export default function RivalFichaPage() {
     }
   }
 
-  // SAVE – RESUMEN
-  async function saveBasics(e: React.FormEvent) {
-    e.preventDefault();
-    if (!rival) return;
-    setSavingBasics(true);
-    try {
-      const payload = {
-        name: rival.name,
-        logoUrl: rival.logoUrl ?? null,
-        coach: coach.trim() || null,
-        baseSystem: baseSystem.trim() || null,
-        nextMatchDate: localInputToIso(nextMatch),
-        nextMatchCompetition: nextComp.trim() || null,
-      };
-      const res = await fetch(`/api/ct/rivales/${rival.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error("No se pudo guardar los datos");
-      const json = await res.json();
-      setRival(json?.data as RivalBasics);
-      setEditingBasics(false);
-    } catch (err: any) {
-      alert(err?.message || "Error al guardar");
-    } finally {
-      setSavingBasics(false);
-    }
-  }
-
-  // VIDEOS – helpers
+  // Videos
   function addVideoLocal() {
     const url = newVidUrl.trim();
     if (!url) return;
@@ -351,7 +351,7 @@ export default function RivalFichaPage() {
     }
   }
 
-  // STATS – placeholders (guardado completo lo hacemos en el siguiente paso)
+  // Stats
   function addRecentRow() {
     setStats((s) => ({ ...s, recent: [{}, ...(s.recent || [])] }));
   }
@@ -370,11 +370,18 @@ export default function RivalFichaPage() {
     try {
       const payload: RivalStats = {
         totals: {
-          gf: stats.totals?.gf ?? undefined,
-          ga: stats.totals?.ga ?? undefined,
-          possession: stats.totals?.possession ?? undefined,
+          gf: sNum(stats.totals?.gf),
+          ga: sNum(stats.totals?.ga),
+          possession: sNum(stats.totals?.possession),
         },
-        recent: stats.recent || [],
+        recent: (stats.recent || []).map((r) => ({
+          date: r.date,
+          opponent: r.opponent?.trim() || undefined,
+          comp: r.comp?.trim() || undefined,
+          homeAway: r.homeAway || undefined,
+          gf: sNum(r.gf),
+          ga: sNum(r.ga),
+        })),
       };
       const res = await fetch(`/api/ct/rivales/${id}/stats`, {
         method: "PUT",
@@ -389,8 +396,12 @@ export default function RivalFichaPage() {
       setSavingStats(false);
     }
   }
+  function sNum(n: any): number | undefined {
+    const v = Number(n);
+    return Number.isFinite(v) ? v : undefined;
+    }
 
-  // NOTAS
+  // Notas
   function toggleItem(i: number) {
     setNotes((n) => {
       const arr = [...(n.checklist || [])];
@@ -406,18 +417,12 @@ export default function RivalFichaPage() {
     });
   }
   function removeItem(i: number) {
-    setNotes((n) => ({
-      ...n,
-      checklist: (n.checklist || []).filter((_, idx) => idx !== i),
-    }));
+    setNotes((n) => ({ ...n, checklist: (n.checklist || []).filter((_, idx) => idx !== i) }));
   }
   function addItem() {
     const t = newItem.trim();
     if (!t) return;
-    setNotes((n) => ({
-      ...n,
-      checklist: [{ text: t, done: false }, ...(n.checklist || [])],
-    }));
+    setNotes((n) => ({ ...n, checklist: [{ text: t, done: false }, ...(n.checklist || [])] }));
     setNewItem("");
   }
   async function saveNotes() {
@@ -425,10 +430,7 @@ export default function RivalFichaPage() {
     try {
       const payload: RivalNotes = {
         observations: (notes.observations || "").trim(),
-        checklist: (notes.checklist || []).map((it) => ({
-          text: it.text.trim(),
-          done: !!it.done,
-        })),
+        checklist: (notes.checklist || []).map((it) => ({ text: it.text.trim(), done: !!it.done })),
       };
       const res = await fetch(`/api/ct/rivales/${id}/notas`, {
         method: "PUT",
@@ -444,30 +446,23 @@ export default function RivalFichaPage() {
     }
   }
 
-  if (loading) {
-    return <div className="p-4 text-gray-500">Cargando…</div>;
-  }
-
-  if (!rival) {
+  // ---------- RENDER ----------
+  if (loading) return <div className="p-4 text-gray-500">Cargando…</div>;
+  if (!rival)
     return (
       <div className="p-4 space-y-3">
         <div className="text-red-500">Rival no encontrado</div>
-        <Link href="/ct/rivales" className="text-sm underline">
-          ← Volver a Rivales
-        </Link>
+        <Link href="/ct/rivales" className="text-sm underline">← Volver a Rivales</Link>
       </div>
     );
-  }
 
-  const nextMatchLabelText = nextMatchLabel(rival);
+  const nm = nextMatchLabel(rival);
 
   return (
     <div className="p-4 space-y-4">
       {/* Breadcrumb */}
       <div className="text-sm text-gray-600">
-        <Link href="/ct/rivales" className="underline">
-          Rivales
-        </Link>
+        <Link href="/ct/rivales" className="underline">Rivales</Link>
         <span className="mx-1">/</span>
         <span className="font-medium">{rival.name}</span>
       </div>
@@ -476,11 +471,7 @@ export default function RivalFichaPage() {
       <header className="flex items-center gap-4 border-b pb-3">
         {rival.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={rival.logoUrl}
-            alt={rival.name}
-            className="h-16 w-16 rounded border object-contain bg-white"
-          />
+          <img src={rival.logoUrl} alt={rival.name} className="h-16 w-16 rounded border object-contain bg-white" />
         ) : (
           <div className="h-16 w-16 rounded border bg-gray-100" />
         )}
@@ -489,13 +480,10 @@ export default function RivalFichaPage() {
           <p className="text-sm text-gray-600">
             DT: <b>{rival.coach || "—"}</b> • Sistema base: {rival.baseSystem || "—"}
           </p>
-          <p className="text-sm text-gray-600">Próximo partido: {nextMatchLabelText}</p>
+          <p className="text-sm text-gray-600">Próximo partido: {nm}</p>
         </div>
         {isCT && tab === "resumen" && (
-          <button
-            onClick={() => setEditingBasics((v) => !v)}
-            className="text-xs px-3 py-1.5 rounded-xl border hover:bg-gray-50"
-          >
+          <button onClick={() => setEditingBasics((v) => !v)} className="text-xs px-3 py-1.5 rounded-xl border hover:bg-gray-50">
             {editingBasics ? "Cancelar" : "Editar"}
           </button>
         )}
@@ -514,9 +502,7 @@ export default function RivalFichaPage() {
             key={t.key}
             onClick={() => setURLTab(t.key as Tab)}
             className={`px-3 py-2 text-sm font-medium border-b-2 ${
-              tab === t.key
-                ? "border-black text-black"
-                : "border-transparent text-gray-500 hover:text-black"
+              tab === t.key ? "border-black text-black" : "border-transparent text-gray-500 hover:text-black"
             }`}
           >
             {t.label}
@@ -528,40 +514,42 @@ export default function RivalFichaPage() {
       <section className="rounded-xl border bg-white p-4">
         {/* RESUMEN */}
         {tab === "resumen" && (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {!editingBasics ? (
-              <>
+              <div className="space-y-2">
                 <h2 className="text-lg font-semibold">Resumen</h2>
                 <ul className="text-sm text-gray-700 list-disc pl-4">
                   <li>DT: {rival.coach || "—"}</li>
                   <li>Sistema base: {rival.baseSystem || "—"}</li>
-                  <li>Próximo partido: {nextMatchLabelText}</li>
+                  <li>Próximo partido: {nm}</li>
                 </ul>
                 <p className="text-xs text-gray-500 mt-2">
-                  * Estos campos se pueden editar acá o desde el listado.
+                  * Podés editar estos campos con el botón “Editar”.
                 </p>
-              </>
+              </div>
             ) : (
-              <form onSubmit={saveBasics} className="space-y-3">
-                <h2 className="text-lg font-semibold">Editar datos</h2>
+              <form onSubmit={saveBasics} className="space-y-4">
+                <h2 className="text-lg font-semibold">Editar datos básicos</h2>
                 <div className="grid md:grid-cols-2 gap-3">
-                  <div>
+                  <div className="space-y-1">
                     <label className="text-[11px] text-gray-500">DT</label>
                     <input
                       className="w-full rounded-md border px-2 py-1.5 text-sm"
+                      placeholder="Apellido, Nombre"
                       value={coach}
                       onChange={(e) => setCoach(e.target.value)}
                     />
                   </div>
-                  <div>
+                  <div className="space-y-1">
                     <label className="text-[11px] text-gray-500">Sistema base</label>
                     <input
                       className="w-full rounded-md border px-2 py-1.5 text-sm"
+                      placeholder='Ej: "4-3-3"'
                       value={baseSystem}
                       onChange={(e) => setBaseSystem(e.target.value)}
                     />
                   </div>
-                  <div>
+                  <div className="space-y-1">
                     <label className="text-[11px] text-gray-500">Próximo partido – fecha/hora</label>
                     <input
                       type="datetime-local"
@@ -570,16 +558,17 @@ export default function RivalFichaPage() {
                       onChange={(e) => setNextMatch(e.target.value)}
                     />
                   </div>
-                  <div>
+                  <div className="space-y-1">
                     <label className="text-[11px] text-gray-500">Competición</label>
                     <input
                       className="w-full rounded-md border px-2 py-1.5 text-sm"
+                      placeholder="Liga, Copa…"
                       value={nextComp}
                       onChange={(e) => setNextComp(e.target.value)}
                     />
                   </div>
                 </div>
-                <div className="pt-1">
+                <div className="pt-2 flex gap-2">
                   <button
                     type="submit"
                     disabled={savingBasics}
@@ -588,6 +577,9 @@ export default function RivalFichaPage() {
                     }`}
                   >
                     {savingBasics ? "Guardando…" : "Guardar"}
+                  </button>
+                  <button type="button" onClick={() => setEditingBasics(false)} className="px-3 py-1.5 rounded-xl text-xs border">
+                    Cancelar
                   </button>
                 </div>
               </form>
@@ -607,6 +599,7 @@ export default function RivalFichaPage() {
               )}
             </div>
 
+            {/* Charla oficial (solo CT) */}
             {isCT && (
               <form onSubmit={savePlan} className="space-y-4">
                 <div className="rounded-lg border bg-gray-50 p-3">
@@ -643,6 +636,7 @@ export default function RivalFichaPage() {
                   </div>
                 </div>
 
+                {/* Informe visual */}
                 <div className="rounded-lg border p-3">
                   <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">
                     Informe visual (visible para jugadores)
@@ -741,7 +735,7 @@ export default function RivalFichaPage() {
                           setPlan((p) => ({
                             ...p,
                             report: {
-                              ...p,
+                              ...p.report,
                               setPieces: {
                                 for: linesToArray(e.target.value),
                                 against: p.report.setPieces?.against || [],
@@ -765,7 +759,7 @@ export default function RivalFichaPage() {
                           setPlan((p) => ({
                             ...p,
                             report: {
-                              ...p,
+                              ...p.report,
                               setPieces: {
                                 for: p.report.setPieces?.for || [],
                                 against: linesToArray(e.target.value),
@@ -782,32 +776,15 @@ export default function RivalFichaPage() {
                       type="submit"
                       disabled={savingPlan}
                       className={`px-3 py-1.5 rounded-xl text-xs ${
-                        savingPlan
-                          ? "bg-gray-200 text-gray-500"
-                          : "bg-black text-white hover:opacity-90"
+                        savingPlan ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
                       }`}
                     >
                       {savingPlan ? "Guardando…" : "Guardar plan"}
                     </button>
-                    {planLoading && (
-                      <span className="ml-3 text-xs text-gray-500">Cargando plan…</span>
-                    )}
+                    {planLoading && <span className="ml-3 text-xs text-gray-500">Cargando plan…</span>}
                   </div>
                 </div>
               </form>
-            )}
-
-            {!isCT && (
-              <div className="space-y-3">
-                <div className="grid md:grid-cols-2 gap-3">
-                  <InfoBlock title="Sistema" content={plan.report.system || "—"} />
-                  <ListBlock title="Jugadores clave" items={plan.report.keyPlayers} />
-                  <ListBlock title="Fortalezas" items={plan.report.strengths} />
-                  <ListBlock title="Debilidades" items={plan.report.weaknesses} />
-                  <ListBlock title="Balón parado (a favor)" items={plan.report.setPieces?.for} />
-                  <ListBlock title="Balón parado (en contra)" items={plan.report.setPieces?.against} />
-                </div>
-              </div>
             )}
           </div>
         )}
@@ -815,105 +792,201 @@ export default function RivalFichaPage() {
         {/* VIDEOS */}
         {tab === "videos" && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Videos</h2>
-              <div className="flex gap-2">
+            <h2 className="text-lg font-semibold">Videos</h2>
+
+            <div className="rounded-lg border p-3 bg-gray-50">
+              <div className="grid md:grid-cols-3 gap-2">
                 <input
-                  className="rounded-md border px-2 py-1 text-sm w-56"
+                  className="rounded-md border px-2 py-1 text-sm"
                   placeholder="Título (opcional)"
                   value={newVidTitle}
                   onChange={(e) => setNewVidTitle(e.target.value)}
                 />
                 <input
-                  className="rounded-md border px-2 py-1 text-sm w-[420px] max-w-full"
-                  placeholder="URL del video (YouTube, Drive…)"
+                  className="rounded-md border px-2 py-1 text-sm md:col-span-2"
+                  placeholder="URL (YouTube, Drive, etc.)"
                   value={newVidUrl}
                   onChange={(e) => setNewVidUrl(e.target.value)}
-                  onKeyDown={(e) => (e.key === "Enter" ? (e.preventDefault(), addVideoLocal()) : null)}
+                  onKeyDown={(e) => e.key === "Enter" ? (e.preventDefault(), addVideoLocal()) : null}
                 />
+              </div>
+              <div className="pt-2">
+                <button onClick={addVideoLocal} className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50">+ Agregar</button>
                 <button
-                  onClick={addVideoLocal}
-                  className="text-xs px-3 py-1.5 rounded-md border hover:bg-gray-50"
+                  onClick={saveVideos}
+                  disabled={savingVideos}
+                  className={`ml-2 text-xs px-3 py-1.5 rounded-xl ${
+                    savingVideos ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
+                  }`}
                 >
-                  + Agregar
+                  {savingVideos ? "Guardando…" : "Guardar lista"}
                 </button>
+                {loadingVideos && <span className="ml-3 text-xs text-gray-500">Cargando…</span>}
               </div>
             </div>
 
-            {loadingVideos ? (
-              <div className="text-sm text-gray-500">Cargando…</div>
-            ) : (
-              <ul className="space-y-2">
-                {videos.length === 0 && (
-                  <li className="text-sm text-gray-500">Sin videos cargados.</li>
-                )}
-                {videos.map((v, i) => (
-                  <li key={i} className="flex items-center gap-2 rounded-lg border p-2">
-                    <span className="text-xs px-2 py-0.5 rounded bg-gray-100">{i + 1}</span>
-                    <input
-                      className="flex-1 rounded-md border px-2 py-1 text-sm"
-                      placeholder="Título"
-                      value={v.title || ""}
-                      onChange={(e) =>
-                        setVideos((arr) => {
-                          const next = [...arr];
-                          next[i] = { ...next[i], title: e.target.value };
-                          return next;
-                        })
-                      }
-                    />
-                    <input
-                      className="flex-[2] rounded-md border px-2 py-1 text-sm"
-                      placeholder="URL"
-                      value={v.url}
-                      onChange={(e) =>
-                        setVideos((arr) => {
-                          const next = [...arr];
-                          next[i] = { ...next[i], url: e.target.value };
-                          return next;
-                        })
-                      }
-                    />
-                    <a
-                      className="text-xs underline px-2"
-                      href={v.url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Abrir
-                    </a>
-                    <button
-                      onClick={() => removeVideoLocal(i)}
-                      className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50"
-                    >
-                      Borrar
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <div className="pt-1">
-              <button
-                onClick={saveVideos}
-                disabled={savingVideos}
-                className={`px-3 py-1.5 rounded-xl text-xs ${
-                  savingVideos
-                    ? "bg-gray-200 text-gray-500"
-                    : "bg-black text-white hover:opacity-90"
-                }`}
-              >
-                {savingVideos ? "Guardando…" : "Guardar videos"}
-              </button>
-            </div>
+            <ul className="space-y-2">
+              {videos.length === 0 && <li className="text-sm text-gray-500">Sin videos.</li>}
+              {videos.map((v, i) => (
+                <li key={i} className="flex items-center gap-2">
+                  <a href={v.url} target="_blank" rel="noreferrer" className="flex-1 text-sm underline break-all">
+                    {v.title || v.url}
+                  </a>
+                  <button onClick={() => removeVideoLocal(i)} className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50">Borrar</button>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
-        {/* STATS (lo completamos en el siguiente paso) */}
+        {/* STATS */}
         {tab === "stats" && (
-          <div>
-            <h2 className="text-lg font-semibold mb-2">Estadísticas</h2>
-            <p className="text-sm text-gray-600">Últimos partidos, GF/GC, posesión, etc. (Próximo paso)</p>
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold">Estadísticas</h2>
+
+            <div className="rounded-lg border p-3 bg-gray-50">
+              <div className="grid md:grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] text-gray-500">Goles a favor (GF)</label>
+                  <input
+                    type="number"
+                    className="w-full rounded-md border px-2 py-1.5 text-sm"
+                    value={stats.totals?.gf ?? ""}
+                    onChange={(e) =>
+                      setStats((s) => ({ ...s, totals: { ...(s.totals || {}), gf: e.target.value === "" ? undefined : Number(e.target.value) } }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-gray-500">Goles en contra (GA)</label>
+                  <input
+                    type="number"
+                    className="w-full rounded-md border px-2 py-1.5 text-sm"
+                    value={stats.totals?.ga ?? ""}
+                    onChange={(e) =>
+                      setStats((s) => ({ ...s, totals: { ...(s.totals || {}), ga: e.target.value === "" ? undefined : Number(e.target.value) } }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-gray-500">Posesión (%)</label>
+                  <input
+                    type="number"
+                    className="w-full rounded-md border px-2 py-1.5 text-sm"
+                    value={stats.totals?.possession ?? ""}
+                    onChange={(e) =>
+                      setStats((s) => ({
+                        ...s,
+                        totals: { ...(s.totals || {}), possession: e.target.value === "" ? undefined : Number(e.target.value) },
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+              <div className="pt-2">
+                <button onClick={addRecentRow} className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50">+ Agregar partido reciente</button>
+                <button
+                  onClick={saveStats}
+                  disabled={savingStats}
+                  className={`ml-2 text-xs px-3 py-1.5 rounded-xl ${
+                    savingStats ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
+                  }`}
+                >
+                  {savingStats ? "Guardando…" : "Guardar estadísticas"}
+                </button>
+                {loadingStats && <span className="ml-3 text-xs text-gray-500">Cargando…</span>}
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 pr-2">Fecha</th>
+                    <th className="text-left py-2 pr-2">Rival</th>
+                    <th className="text-left py-2 pr-2">Comp</th>
+                    <th className="text-left py-2 pr-2">H/A/N</th>
+                    <th className="text-left py-2 pr-2">GF</th>
+                    <th className="text-left py-2 pr-2">GA</th>
+                    <th className="text-left py-2 pr-2">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(stats.recent || []).length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="py-3 text-gray-500">Sin partidos cargados.</td>
+                    </tr>
+                  )}
+                  {(stats.recent || []).map((row, i) => (
+                    <tr key={i} className="border-b">
+                      <td className="py-1 pr-2">
+                        <input
+                          type="date"
+                          className="rounded-md border px-2 py-1 text-sm"
+                          value={row.date ? row.date.slice(0, 10) : ""}
+                          onChange={(e) => updateRecentRow(i, { date: e.target.value || undefined })}
+                        />
+                      </td>
+                      <td className="py-1 pr-2">
+                        <input
+                          className="rounded-md border px-2 py-1 text-sm"
+                          value={row.opponent || ""}
+                          onChange={(e) => updateRecentRow(i, { opponent: e.target.value })}
+                        />
+                      </td>
+                      <td className="py-1 pr-2">
+                        <input
+                          className="rounded-md border px-2 py-1 text-sm"
+                          value={row.comp || ""}
+                          onChange={(e) => updateRecentRow(i, { comp: e.target.value })}
+                        />
+                      </td>
+                      <td className="py-1 pr-2">
+                        <select
+                          className="rounded-md border px-2 py-1 text-sm"
+                          value={row.homeAway || ""}
+                          onChange={(e) => updateRecentRow(i, { homeAway: e.target.value || undefined })}
+                        >
+                          <option value="">—</option>
+                          <option value="H">H</option>
+                          <option value="A">A</option>
+                          <option value="N">N</option>
+                        </select>
+                      </td>
+                      <td className="py-1 pr-2">
+                        <input
+                          type="number"
+                          className="rounded-md border px-2 py-1 text-sm w-20"
+                          value={row.gf ?? ""}
+                          onChange={(e) =>
+                            updateRecentRow(i, {
+                              gf: e.target.value === "" ? undefined : Number(e.target.value),
+                            })
+                          }
+                        />
+                      </td>
+                      <td className="py-1 pr-2">
+                        <input
+                          type="number"
+                          className="rounded-md border px-2 py-1 text-sm w-20"
+                          value={row.ga ?? ""}
+                          onChange={(e) =>
+                            updateRecentRow(i, {
+                              ga: e.target.value === "" ? undefined : Number(e.target.value),
+                            })
+                          }
+                        />
+                      </td>
+                      <td className="py-1 pr-2">
+                        <button onClick={() => removeRecentRow(i)} className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50">
+                          Borrar
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -928,9 +1001,7 @@ export default function RivalFichaPage() {
                 className="w-full rounded-md border px-2 py-1.5 text-sm h-28 mt-1 bg-white"
                 placeholder="Ideas, alertas, instrucciones internas…"
                 value={notes.observations || ""}
-                onChange={(e) =>
-                  setNotes((n) => ({ ...n, observations: e.target.value }))
-                }
+                onChange={(e) => setNotes((n) => ({ ...n, observations: e.target.value }))}
               />
             </div>
 
@@ -943,16 +1014,9 @@ export default function RivalFichaPage() {
                     placeholder="Nuevo ítem…"
                     value={newItem}
                     onChange={(e) => setNewItem(e.target.value)}
-                    onKeyDown={(e) =>
-                      e.key === "Enter" ? (e.preventDefault(), addItem()) : null
-                    }
+                    onKeyDown={(e) => e.key === "Enter" ? (e.preventDefault(), addItem()) : null}
                   />
-                  <button
-                    onClick={addItem}
-                    className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50"
-                  >
-                    + Agregar
-                  </button>
+                  <button onClick={addItem} className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50">+ Agregar</button>
                 </div>
               </div>
 
@@ -962,24 +1026,13 @@ export default function RivalFichaPage() {
                 )}
                 {(notes.checklist || []).map((it, i) => (
                   <li key={i} className="flex items-center gap-2">
+                    <input type="checkbox" checked={!!it.done} onChange={() => toggleItem(i)} />
                     <input
-                      type="checkbox"
-                      checked={!!it.done}
-                      onChange={() => toggleItem(i)}
-                    />
-                    <input
-                      className={`flex-1 rounded-md border px-2 py-1 text-sm ${
-                        it.done ? "line-through text-gray-500" : ""
-                      }`}
+                      className={`flex-1 rounded-md border px-2 py-1 text-sm ${it.done ? "line-through text-gray-500" : ""}`}
                       value={it.text}
                       onChange={(e) => updateItem(i, e.target.value)}
                     />
-                    <button
-                      onClick={() => removeItem(i)}
-                      className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50"
-                    >
-                      Borrar
-                    </button>
+                    <button onClick={() => removeItem(i)} className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50">Borrar</button>
                   </li>
                 ))}
               </ul>
@@ -989,52 +1042,17 @@ export default function RivalFichaPage() {
                   onClick={saveNotes}
                   disabled={savingNotes}
                   className={`px-3 py-1.5 rounded-xl text-xs ${
-                    savingNotes
-                      ? "bg-gray-200 text-gray-500"
-                      : "bg-black text-white hover:opacity-90"
+                    savingNotes ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
                   }`}
                 >
                   {savingNotes ? "Guardando…" : "Guardar notas"}
                 </button>
-                {loadingNotes && (
-                  <span className="ml-3 text-xs text-gray-500">Cargando…</span>
-                )}
+                {loadingNotes && <span className="ml-3 text-xs text-gray-500">Cargando…</span>}
               </div>
             </div>
           </div>
         )}
       </section>
-    </div>
-  );
-}
-
-// ——— Componentes pequeños para vista jugador ———
-function InfoBlock({ title, content }: { title: string; content?: string | null }) {
-  return (
-    <div className="rounded-lg border p-3">
-      <div className="text-[12px] font-semibold uppercase tracking-wide mb-1">
-        {title}
-      </div>
-      <div className="text-sm text-gray-800">{content || "—"}</div>
-    </div>
-  );
-}
-
-function ListBlock({ title, items }: { title: string; items?: string[] }) {
-  return (
-    <div className="rounded-lg border p-3">
-      <div className="text-[12px] font-semibold uppercase tracking-wide mb-1">
-        {title}
-      </div>
-      {items && items.length ? (
-        <ul className="list-disc pl-4 text-sm text-gray-800 space-y-0.5">
-          {items.map((it, i) => (
-            <li key={i}>{it}</li>
-          ))}
-        </ul>
-      ) : (
-        <div className="text-sm text-gray-500">—</div>
-      )}
     </div>
   );
 }
