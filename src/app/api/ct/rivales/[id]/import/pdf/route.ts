@@ -7,18 +7,22 @@ export const maxDuration = 60;
 
 const prisma = new PrismaClient();
 
-// ---------- utils ----------
+/* ==================== Utils ==================== */
 const asObj = <T extends Record<string, any> = Record<string, any>>(x: unknown): T =>
   typeof x === "object" && x !== null ? (x as T) : ({} as T);
+
 const asStrArray = (x: unknown): string[] =>
   Array.isArray(x) ? x.map((s) => String(s)).filter(Boolean) : [];
+
 const cleanLines = (s?: string | null) =>
   (s || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+
 const uniq = (arr: string[]) => {
   const set = new Set<string>(); const out: string[] = [];
   for (const v of arr) { const k = v.toLowerCase(); if (!set.has(k)) { set.add(k); out.push(v); } }
   return out;
 };
+
 function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): string[] {
   const lines = cleanLines(text); const out: string[] = []; let on = false;
   for (const ln of lines) {
@@ -29,49 +33,69 @@ function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): strin
   }
   return uniq(out);
 }
+
 function extractFromPDFText(text: string) {
   const res: any = {};
   const coach = text.match(/(?:Coach|Entrenador|DT|Director(?:\s+Técnico)?)\s*[:\-]\s*([^\n]+)/i)?.[1];
   if (coach) res.coach = coach.trim();
-  const sys = text.match(/(?:Formación|Formacion|Sistema|Base System|Formation)[^\n]*[:\-]\s*([0-9](?:\s*[–\-]\s*[0-9])+)/i)?.[1]
-           || text.match(/\b([0-9]\s*[–\-]\s*[0-9](?:\s*[–\-]\s*[0-9]){1,2})\b/)?.[1];
+
+  const sys =
+    text.match(/(?:Formación|Formacion|Sistema|Base System|Formation)[^\n]*[:\-]\s*([0-9](?:\s*[–\-]\s*[0-9])+)/i)?.[1] ||
+    text.match(/\b([0-9]\s*[–\-]\s*[0-9](?:\s*[–\-]\s*[0-9]){1,2})\b/)?.[1];
   if (sys) res.system = sys.replace(/\s*–\s*/g, "-").replace(/\s+/g, "");
 
-  const keyPlayers = takeBulletsAround(text, /(Jugadores?\s+clave|Key\s+Players?)\b/i, [/(Fortalezas|Debilidades|Strengths|Weaknesses|Balón|Set\s*pieces?)/i]);
-  const strengths  = takeBulletsAround(text, /(Fortalezas|Strengths)\b/i,        [/(Debilidades|Weaknesses|Balón|Set\s*pieces?|Key\s+Players?)/i]);
-  const weaknesses = takeBulletsAround(text, /(Debilidades|Weaknesses)\b/i,      [/(Fortalezas|Strengths|Balón|Set\s*pieces?|Key\s+Players?)/i]);
-  const setFor     = takeBulletsAround(text, /(Bal[oó]n\s+parado.*a\s+favor|Set\s*pieces?\s*\(for\))/i,
-                                       [/(en\s+contra|against|Fortalezas|Debilidades|Strengths|Weaknesses|Key\s+Players?)/i]);
-  const setAgainst = takeBulletsAround(text, /(Bal[oó]n\s+parado.*en\s+contra|Set\s*pieces?\s*\(against\))/i,
-                                       [/(a\s+favor|for|Fortalezas|Debilidades|Strengths|Weaknesses|Key\s+Players?)/i]);
+  const keyPlayers = takeBulletsAround(
+    text,
+    /(Jugadores?\s+clave|Key\s+Players?)\b/i,
+    [/(Fortalezas|Debilidades|Strengths|Weaknesses|Balón|Set\s*pieces?)/i]
+  );
+  const strengths = takeBulletsAround(
+    text,
+    /(Fortalezas|Strengths)\b/i,
+    [/(Debilidades|Weaknesses|Balón|Set\s*pieces?|Key\s+Players?)/i]
+  );
+  const weaknesses = takeBulletsAround(
+    text,
+    /(Debilidades|Weaknesses)\b/i,
+    [/(Fortalezas|Strengths|Balón|Set\s*pieces?|Key\s+Players?)/i]
+  );
+  const setFor = takeBulletsAround(
+    text,
+    /(Bal[oó]n\s+parado.*a\s+favor|Set\s*pieces?\s*\(for\))/i,
+    [/(en\s+contra|against|Fortalezas|Debilidades|Strengths|Weaknesses|Key\s+Players?)/i]
+  );
+  const setAgainst = takeBulletsAround(
+    text,
+    /(Bal[oó]n\s+parado.*en\s+contra|Set\s*pieces?\s*\(against\))/i,
+    [/(a\s+favor|for|Fortalezas|Debilidades|Strengths|Weaknesses|Key\s+Players?)/i]
+  );
 
   if (keyPlayers.length) res.keyPlayers = keyPlayers;
   if (strengths.length)  res.strengths  = strengths;
   if (weaknesses.length) res.weaknesses = weaknesses;
   if (setFor.length)     res.setFor     = setFor;
   if (setAgainst.length) res.setAgainst = setAgainst;
+
   return res;
 }
 
-// ---------- extracción con PDF.js (forzando bundle del worker) ----------
+/* =========== PDF text extraction with PDF.js (SSR) =========== */
 async function extractTextWithPdfJs(u8: Uint8Array): Promise<string> {
-  // Importamos la build legacy (server-friendly)
-  const pdfjs: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  // Carga ESM de PDF.js
+  const pdfjs: any = await import("pdfjs-dist/build/pdf.mjs");
 
-  // Importamos también el worker para que Next lo incluya en el bundle,
-  // y seteamos la ruta absoluta a ese módulo.
-  await import("pdfjs-dist/legacy/build/pdf.worker.mjs"); // fuerza el bundle
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-    "pdfjs-dist/legacy/build/pdf.worker.mjs",
-    import.meta.url
-  ).toString();
+  // En SSR evitamos worker real y también el "fake worker"
+  // Forzamos disableWorker y limpiamos workerSrc.
+  if (pdfjs.GlobalWorkerOptions) {
+    pdfjs.GlobalWorkerOptions.workerSrc = ""; // no usar worker
+  }
 
-  // Seguimos deshabilitando el uso de Web Worker real (SSR)
   const loadingTask = pdfjs.getDocument({
     data: u8,
     disableWorker: true,
     isEvalSupported: false,
     useWorkerFetch: false,
+    stopAtErrors: true
   });
 
   const pdf = await loadingTask.promise;
@@ -86,7 +110,7 @@ async function extractTextWithPdfJs(u8: Uint8Array): Promise<string> {
   return out;
 }
 
-// ---------- handler ----------
+/* ==================== Handler ==================== */
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
     const id = String(params?.id || "");
@@ -101,27 +125,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const ab = await file.arrayBuffer();
     const u8 = new Uint8Array(ab);
 
+    // Validación rápida de header PDF
     const header = new TextDecoder().decode(u8.slice(0, 5));
     if (header !== "%PDF-") {
       return new NextResponse("El archivo no parece ser un PDF válido", { status: 400 });
     }
 
-    // === Extraer texto
-    let text = "";
-    try {
-      text = await extractTextWithPdfJs(u8);
-    } catch (err: any) {
-      // Mensaje más claro si falla el worker
-      const msg = String(err?.message || "");
-      if (/fake worker/i.test(msg) || /pdf\.worker/i.test(msg)) {
-        return new NextResponse(
-          "No pude inicializar el motor PDF en el servidor. Reintentá con otro PDF o avísame para ajustar la build.",
-          { status: 500 }
-        );
-      }
-      throw err;
-    }
-
+    const text = await extractTextWithPdfJs(u8);
     if (!text.trim()) {
       return new NextResponse("No se pudo extraer texto del PDF", { status: 422 });
     }
@@ -134,13 +144,13 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       keyPlayers: ext.keyPlayers || undefined,
       setPieces: {
         ...(ext.setFor ? { for: ext.setFor } : {}),
-        ...(ext.setAgainst ? { against: ext.setAgainst } : {}),
-      },
+        ...(ext.setAgainst ? { against: ext.setAgainst } : {})
+      }
     };
 
     const current = await prisma.rival.findUnique({
       where: { id },
-      select: { coach: true, baseSystem: true, planReport: true },
+      select: { coach: true, baseSystem: true, planReport: true }
     });
     if (!current) return new NextResponse("No encontrado", { status: 404 });
 
@@ -151,14 +161,22 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const mergedSetPieces = {
       ...asObj(savedSP),
       ...asObj(patchSP),
-      ...(patchSP.for     ? { for: asStrArray(patchSP.for) }         : savedSP.for     ? { for: asStrArray(savedSP.for) }         : {}),
-      ...(patchSP.against ? { against: asStrArray(patchSP.against) } : savedSP.against ? { against: asStrArray(savedSP.against) } : {}),
+      ...(patchSP.for
+        ? { for: asStrArray(patchSP.for) }
+        : savedSP.for
+        ? { for: asStrArray(savedSP.for) }
+        : {}),
+      ...(patchSP.against
+        ? { against: asStrArray(patchSP.against) }
+        : savedSP.against
+        ? { against: asStrArray(savedSP.against) }
+        : {})
     };
 
     const mergedReport = {
       ...asObj(savedReport),
       ...asObj(reportPatch),
-      setPieces: mergedSetPieces,
+      setPieces: mergedSetPieces
     };
 
     const dataPatch: any = { planReport: mergedReport };
@@ -168,12 +186,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const row = await prisma.rival.update({
       where: { id },
       data: dataPatch,
-      select: { coach: true, baseSystem: true, planReport: true },
+      select: { coach: true, baseSystem: true, planReport: true }
     });
 
     return NextResponse.json({
-      data: { coach: row.coach, baseSystem: row.baseSystem, planReport: asObj(row.planReport) },
-      message: "PDF procesado y datos fusionados.",
+      data: {
+        coach: row.coach,
+        baseSystem: row.baseSystem,
+        planReport: asObj(row.planReport)
+      },
+      message: "PDF procesado y datos fusionados."
     });
   } catch (e: any) {
     const msg = String(e?.message || e || "Error");
