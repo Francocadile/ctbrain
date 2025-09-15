@@ -1,3 +1,4 @@
+// src/app/api/ct/rivales/[id]/import/pdf/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 
@@ -7,7 +8,7 @@ export const maxDuration = 60;
 
 const prisma = new PrismaClient();
 
-// -------- utils de parseo de texto --------
+// ---------- utils ----------
 const asObj = <T extends Record<string, any> = Record<string, any>>(x: unknown): T =>
   typeof x === "object" && x !== null ? (x as T) : ({} as T);
 const asStrArray = (x: unknown): string[] =>
@@ -53,20 +54,18 @@ function extractFromPDFText(text: string) {
   return res;
 }
 
-// -------- extracción con PDF.js (legacy, sin worker) --------
+// ---------- extracción con PDF.js (legacy, sin worker) ----------
 async function extractTextWithPdfJs(u8: Uint8Array): Promise<string> {
-  // Importamos la build "legacy" que no intenta importar el worker.
+  // Usamos la build legacy para evitar carga del worker en SSR
   const pdfjs: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
-  // Forzamos worker deshabilitado por si acaso
-  if (pdfjs.GlobalWorkerOptions) {
-    pdfjs.GlobalWorkerOptions.workerSrc = undefined;
-  }
+  // NO seteamos workerSrc (algunas versiones validan tipo y fallan)
+  // pdfjs.GlobalWorkerOptions.workerSrc = undefined;  <-- removido
 
   const loadingTask = pdfjs.getDocument({
     data: u8,
-    disableWorker: true,     // clave
-    isEvalSupported: false,  // seguro para SSR
+    disableWorker: true,
+    isEvalSupported: false,
     useWorkerFetch: false,
   });
   const pdf = await loadingTask.promise;
@@ -81,7 +80,7 @@ async function extractTextWithPdfJs(u8: Uint8Array): Promise<string> {
   return out;
 }
 
-// -------- handler --------
+// ---------- handler ----------
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
     const id = String(params?.id || "");
@@ -96,7 +95,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const ab = await file.arrayBuffer();
     const u8 = new Uint8Array(ab);
 
-    // Chequeo rápido de encabezado
     const header = new TextDecoder().decode(u8.slice(0, 5));
     if (header !== "%PDF-") {
       return new NextResponse("El archivo no parece ser un PDF válido", { status: 400 });
