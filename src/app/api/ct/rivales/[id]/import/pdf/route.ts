@@ -7,22 +7,18 @@ export const maxDuration = 60;
 
 const prisma = new PrismaClient();
 
-// ===== Utilidades =====
+// -------- utils de parseo de texto --------
 const asObj = <T extends Record<string, any> = Record<string, any>>(x: unknown): T =>
   typeof x === "object" && x !== null ? (x as T) : ({} as T);
-
 const asStrArray = (x: unknown): string[] =>
   Array.isArray(x) ? x.map((s) => String(s)).filter(Boolean) : [];
-
 const cleanLines = (s?: string | null) =>
   (s || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
-
 const uniq = (arr: string[]) => {
   const set = new Set<string>(); const out: string[] = [];
   for (const v of arr) { const k = v.toLowerCase(); if (!set.has(k)) { set.add(k); out.push(v); } }
   return out;
 };
-
 function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): string[] {
   const lines = cleanLines(text); const out: string[] = []; let on = false;
   for (const ln of lines) {
@@ -33,16 +29,12 @@ function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): strin
   }
   return uniq(out);
 }
-
 function extractFromPDFText(text: string) {
   const res: any = {};
-
   const coach = text.match(/(?:Coach|Entrenador|DT|Director(?:\s+Técnico)?)\s*[:\-]\s*([^\n]+)/i)?.[1];
   if (coach) res.coach = coach.trim();
-
-  const sys =
-    text.match(/(?:Formación|Formacion|Sistema|Base System|Formation)[^\n]*[:\-]\s*([0-9](?:\s*[–\-]\s*[0-9])+)/i)?.[1] ||
-    text.match(/\b([0-9]\s*[–\-]\s*[0-9](?:\s*[–\-]\s*[0-9]){1,2})\b/)?.[1];
+  const sys = text.match(/(?:Formación|Formacion|Sistema|Base System|Formation)[^\n]*[:\-]\s*([0-9](?:\s*[–\-]\s*[0-9])+)/i)?.[1]
+           || text.match(/\b([0-9]\s*[–\-]\s*[0-9](?:\s*[–\-]\s*[0-9]){1,2})\b/)?.[1];
   if (sys) res.system = sys.replace(/\s*–\s*/g, "-").replace(/\s+/g, "");
 
   const keyPlayers = takeBulletsAround(text, /(Jugadores?\s+clave|Key\s+Players?)\b/i, [/(Fortalezas|Debilidades|Strengths|Weaknesses|Balón|Set\s*pieces?)/i]);
@@ -58,31 +50,38 @@ function extractFromPDFText(text: string) {
   if (weaknesses.length) res.weaknesses = weaknesses;
   if (setFor.length)     res.setFor     = setFor;
   if (setAgainst.length) res.setAgainst = setAgainst;
-
   return res;
 }
 
-// ===== PDF.js (sin tocar disco ni worker) =====
+// -------- extracción con PDF.js (legacy, sin worker) --------
 async function extractTextWithPdfJs(u8: Uint8Array): Promise<string> {
-  // Cargamos la build ESM de PDF.js
-  const pdfjs: any = await import("pdfjs-dist/build/pdf.mjs");
+  // Importamos la build "legacy" que no intenta importar el worker.
+  const pdfjs: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
-  // En server deshabilitamos el worker
-  const loadingTask = pdfjs.getDocument({ data: u8, disableWorker: true });
+  // Forzamos worker deshabilitado por si acaso
+  if (pdfjs.GlobalWorkerOptions) {
+    pdfjs.GlobalWorkerOptions.workerSrc = undefined;
+  }
+
+  const loadingTask = pdfjs.getDocument({
+    data: u8,
+    disableWorker: true,     // clave
+    isEvalSupported: false,  // seguro para SSR
+    useWorkerFetch: false,
+  });
   const pdf = await loadingTask.promise;
 
-  let allText = "";
-  for (let p = 1; p <= pdf.numPages; p++) {
-    const page = await pdf.getPage(p);
-    const content = await page.getTextContent();
-    const line = (content.items || [])
-      .map((it: any) => (typeof it?.str === "string" ? it.str : ""))
-      .join(" ");
-    allText += line + "\n";
+  let out = "";
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const tc = await page.getTextContent();
+    const txt = (tc.items || []).map((it: any) => it?.str ?? "").join(" ");
+    out += txt + "\n";
   }
-  return allText;
+  return out;
 }
 
+// -------- handler --------
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
     const id = String(params?.id || "");
@@ -97,19 +96,17 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const ab = await file.arrayBuffer();
     const u8 = new Uint8Array(ab);
 
-    // Chequeo rápido de cabecera
+    // Chequeo rápido de encabezado
     const header = new TextDecoder().decode(u8.slice(0, 5));
     if (header !== "%PDF-") {
       return new NextResponse("El archivo no parece ser un PDF válido", { status: 400 });
     }
 
-    // Extraer texto con PDF.js
     const text = await extractTextWithPdfJs(u8);
     if (!text.trim()) {
       return new NextResponse("No se pudo extraer texto del PDF", { status: 422 });
     }
 
-    // Heurísticas según Wyscout
     const ext = extractFromPDFText(text);
     const reportPatch = {
       system: ext.system || undefined,
@@ -122,7 +119,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       },
     };
 
-    // Estado actual
     const current = await prisma.rival.findUnique({
       where: { id },
       select: { coach: true, baseSystem: true, planReport: true },
@@ -158,9 +154,10 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     return NextResponse.json({
       data: { coach: row.coach, baseSystem: row.baseSystem, planReport: asObj(row.planReport) },
-      message: "PDF procesado y datos fusionados."
+      message: "PDF procesado y datos fusionados.",
     });
   } catch (e: any) {
-    return new NextResponse(String(e?.message || e || "Error"), { status: 500 });
+    const msg = String(e?.message || e || "Error");
+    return new NextResponse(msg, { status: 500 });
   }
 }
