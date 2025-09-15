@@ -1,27 +1,26 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { createRequire } from "node:module";
 
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs";      // <- importante para Vercel (pdf-parse requiere Node APIs)
+export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const prisma = new PrismaClient();
+const require = createRequire(import.meta.url);
 
-// Utils seguros
-function asObj<T extends Record<string, any> = Record<string, any>>(x: unknown): T {
-  return typeof x === "object" && x !== null ? (x as T) : ({} as T);
-}
-function asStrArray(x: unknown): string[] {
-  return Array.isArray(x) ? x.map((s) => String(s)).filter(Boolean) : [];
-}
-function cleanLines(s?: string | null): string[] {
-  return (s || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
-}
-function uniq(arr: string[]): string[] {
+// Utilidades
+const asObj = <T extends Record<string, any> = Record<string, any>>(x: unknown): T =>
+  typeof x === "object" && x !== null ? (x as T) : ({} as T);
+const asStrArray = (x: unknown): string[] =>
+  Array.isArray(x) ? x.map((s) => String(s)).filter(Boolean) : [];
+const cleanLines = (s?: string | null) =>
+  (s || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+const uniq = (arr: string[]) => {
   const set = new Set<string>(); const out: string[] = [];
   for (const v of arr) { const k = v.toLowerCase(); if (!set.has(k)) { set.add(k); out.push(v); } }
   return out;
-}
+};
 function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): string[] {
   const lines = cleanLines(text); const out: string[] = []; let on = false;
   for (const ln of lines) {
@@ -56,14 +55,14 @@ function extractFromPDFText(text: string) {
   return res;
 }
 
-// Carga segura de pdf-parse (algunos bundles no exponen default igual)
-async function loadPdfParse(): Promise<(b: Buffer) => Promise<{ text: string }>> {
-  const mod: any = await import("pdf-parse");
+// Carga robusta de pdf-parse (CommonJS)
+function loadPdfParse(): (input: Uint8Array) => Promise<{ text: string }> {
+  const mod: any = require("pdf-parse");        // CJS
   const fn = mod?.default ?? mod;
   if (typeof fn !== "function") {
     throw new Error("pdf-parse no se pudo cargar correctamente");
   }
-  return fn as (b: Buffer) => Promise<{ text: string }>;
+  return fn as (input: Uint8Array) => Promise<{ text: string }>;
 }
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
@@ -78,13 +77,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
 
     const ab = await file.arrayBuffer();
-    const buf = Buffer.from(ab);
-    if (!buf.length) {
-      return new NextResponse("El archivo está vacío o no se pudo leer", { status: 400 });
+    const u8 = new Uint8Array(ab);
+
+    // Validación rápida de header PDF
+    const header = new TextDecoder().decode(u8.slice(0, 5));
+    if (header !== "%PDF-") {
+      return new NextResponse("El archivo no parece ser un PDF válido", { status: 400 });
     }
 
-    const pdfParse = await loadPdfParse();
-    const parsed = await pdfParse(buf);
+    const pdfParse = loadPdfParse();
+    const parsed = await pdfParse(u8);
     const text = String(parsed?.text || "");
     if (!text.trim()) {
       return new NextResponse("No se pudo extraer texto del PDF", { status: 422 });
@@ -140,11 +142,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       message: "PDF procesado y datos fusionados.",
     });
   } catch (e: any) {
-    // Si pdf-parse intenta acceder a un path “de ejemplo”, mostramos un mensaje claro
     const msg = String(e?.message || e || "Error");
-    const friendly = /ENOENT.*test\/data\/05-versions-space\.pdf/.test(msg)
-      ? "El PDF no llegó correctamente al servidor. Volvé a seleccionar el archivo e intentar de nuevo."
-      : msg;
-    return new NextResponse(friendly, { status: 500 });
+    return new NextResponse(msg, { status: 500 });
   }
 }
