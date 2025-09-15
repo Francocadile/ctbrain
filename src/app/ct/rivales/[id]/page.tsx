@@ -3,9 +3,9 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 
-type Tab = "resumen" | "plan" | "videos" | "stats" | "notas";
+type Tab = "resumen" | "plan" | "videos" | "stats" | "notas" | "visibilidad";
 
 // ==== Tipos compartidos con la API ====
 type RivalBasics = {
@@ -64,6 +64,28 @@ type Visibility = {
 
   showNotesForPlayers: boolean;
 };
+
+function defaultVisibility(): Visibility {
+  return {
+    showSystem: true,
+    showKeyPlayers: true,
+    showStrengths: true,
+    showWeaknesses: true,
+    showSetPiecesFor: true,
+    showSetPiecesAgainst: true,
+
+    showCharlaUrl: false,
+
+    showVideos: true,
+
+    showStatsTotalsGF: true,
+    showStatsTotalsGA: true,
+    showStatsTotalsPossession: true,
+    showStatsRecent: true,
+
+    showNotesForPlayers: false,
+  };
+}
 
 // ==== Página ====
 export default function RivalFichaPage() {
@@ -129,6 +151,11 @@ export default function RivalFichaPage() {
   const [playerStats, setPlayerStats] = useState<RivalStats | null>(null);
   const [playerNotes, setPlayerNotes] = useState<RivalNotes | null>(null);
   const [playerVis, setPlayerVis] = useState<Visibility | null>(null);
+
+  // Visibilidad (UI de toggles)
+  const [vis, setVis] = useState<Visibility>(defaultVisibility());
+  const [loadingVis, setLoadingVis] = useState(true);
+  const [savingVis, setSavingVis] = useState(false);
 
   // ===== Helpers =====
   function linesToArray(s: string): string[] {
@@ -226,6 +253,17 @@ export default function RivalFichaPage() {
       setLoadingNotes(false);
     }
   }
+  async function loadVisibility() {
+    setLoadingVis(true);
+    try {
+      const res = await fetch(`/api/ct/rivales/${id}/visibility`, { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      const data = (json?.data || defaultVisibility()) as Visibility;
+      setVis({ ...defaultVisibility(), ...data });
+    } finally {
+      setLoadingVis(false);
+    }
+  }
   async function loadPlayerSafe() {
     setPlayerDataLoading(true);
     try {
@@ -248,7 +286,7 @@ export default function RivalFichaPage() {
     setLoading(true);
     setPlanLoading(true);
     try {
-      await Promise.all([loadBasics(), loadPlan(), loadVideos(), loadStats(), loadNotes()]);
+      await Promise.all([loadBasics(), loadPlan(), loadVideos(), loadStats(), loadNotes(), loadVisibility()]);
     } catch (e) {
       console.error(e);
       setRival(null);
@@ -289,6 +327,7 @@ export default function RivalFichaPage() {
       });
       if (!res.ok) throw new Error("No se pudo guardar el plan");
       await loadPlan();
+      if (playerPreview) await loadPlayerSafe();
     } catch (err: any) {
       alert(err?.message || "Error al guardar");
     } finally {
@@ -318,6 +357,7 @@ export default function RivalFichaPage() {
       const json = await res.json();
       setRival(json?.data as RivalBasics);
       setEditingBasics(false);
+      if (playerPreview) await loadPlayerSafe();
     } catch (err: any) {
       alert(err?.message || "Error al guardar");
     } finally {
@@ -346,6 +386,7 @@ export default function RivalFichaPage() {
       });
       if (!res.ok) throw new Error("No se pudo guardar videos");
       await loadVideos();
+      if (playerPreview) await loadPlayerSafe();
     } catch (err: any) {
       alert(err?.message || "Error al guardar videos");
     } finally {
@@ -381,6 +422,7 @@ export default function RivalFichaPage() {
       });
       if (!res.ok) throw new Error("No se pudo guardar estadísticas");
       await loadStats();
+      if (playerPreview) await loadPlayerSafe();
     } catch (err: any) {
       alert(err?.message || "Error al guardar estadísticas");
     } finally {
@@ -426,11 +468,42 @@ export default function RivalFichaPage() {
       });
       if (!res.ok) throw new Error("No se pudo guardar notas");
       await loadNotes();
+      if (playerPreview) await loadPlayerSafe();
     } catch (err: any) {
       alert(err?.message || "Error al guardar notas");
     } finally {
       setSavingNotes(false);
     }
+  }
+
+  // Visibilidad (guardar/patch + reset)
+  function setVisKey<K extends keyof Visibility>(k: K, v: boolean) {
+    setVis((prev) => ({ ...prev, [k]: v }));
+  }
+  async function saveVisPatch(patch: Partial<Visibility>) {
+    setSavingVis(true);
+    try {
+      await fetch(`/api/ct/rivales/${id}/visibility`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      await loadVisibility();
+      if (playerPreview) await loadPlayerSafe();
+    } catch (e: any) {
+      alert(e?.message || "Error al guardar visibilidad");
+    } finally {
+      setSavingVis(false);
+    }
+  }
+  async function saveVisAll() {
+    // enviamos TODAS las claves actuales (para forzar estado exacto)
+    await saveVisPatch({ ...vis });
+  }
+  async function resetVisToDefaults() {
+    const defs = defaultVisibility();
+    setVis(defs);
+    await saveVisPatch(defs);
   }
 
   // ===== Render =====
@@ -443,20 +516,20 @@ export default function RivalFichaPage() {
       </div>
     );
 
-  const nm = nextMatchLabel(playerPreview ? playerBasics ?? rival : rival);
-  const isCTView = !playerPreview; // si está la previsualización, actuamos como "jugador"
+  const basicsForHeader = playerPreview ? (playerBasics ?? rival) : rival;
+  const nm = nextMatchLabel(basicsForHeader);
+  const isCTView = !playerPreview;
 
   return (
     <div className="p-4 space-y-4">
-      {/* Breadcrumb */}
+      {/* Breadcrumb + Vista jugador */}
       <div className="text-sm text-gray-600 flex items-center justify-between">
         <div>
           <Link href="/ct/rivales" className="underline">Rivales</Link>
           <span className="mx-1">/</span>
-          <span className="font-medium">{(playerPreview ? playerBasics?.name : rival.name) || rival.name}</span>
+          <span className="font-medium">{basicsForHeader.name}</span>
         </div>
 
-        {/* Switch de previsualización */}
         <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
           <span className="text-gray-600">Vista jugador</span>
           <input
@@ -475,20 +548,20 @@ export default function RivalFichaPage() {
 
       {/* Header */}
       <header className="flex items-center gap-4 border-b pb-3">
-        {(playerPreview ? playerBasics?.logoUrl : rival.logoUrl) ? (
+        {basicsForHeader.logoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={(playerPreview ? playerBasics?.logoUrl : rival.logoUrl) || ""}
-            alt={(playerPreview ? playerBasics?.name : rival.name) || rival.name}
+            src={basicsForHeader.logoUrl}
+            alt={basicsForHeader.name}
             className="h-16 w-16 rounded border object-contain bg-white"
           />
         ) : (
           <div className="h-16 w-16 rounded border bg-gray-100" />
         )}
         <div className="flex-1">
-          <h1 className="text-xl font-bold">{(playerPreview ? playerBasics?.name : rival.name) || rival.name}</h1>
+          <h1 className="text-xl font-bold">{basicsForHeader.name}</h1>
           <p className="text-sm text-gray-600">
-            DT: <b>{(playerPreview ? playerBasics?.coach : rival.coach) || "—"}</b> • Sistema base: {(playerPreview ? playerBasics?.baseSystem : rival.baseSystem) || "—"}
+            DT: <b>{basicsForHeader.coach || "—"}</b> • Sistema base: {basicsForHeader.baseSystem || "—"}
           </p>
           <p className="text-sm text-gray-600">Próximo partido: {nm}</p>
         </div>
@@ -507,6 +580,7 @@ export default function RivalFichaPage() {
           { key: "videos", label: "Videos" },
           { key: "stats", label: "Estadísticas" },
           { key: "notas", label: "Notas internas" },
+          { key: "visibilidad", label: "Visibilidad" },
         ].map((t) => (
           <button
             key={t.key}
@@ -529,8 +603,8 @@ export default function RivalFichaPage() {
               <div className="space-y-2">
                 <h2 className="text-lg font-semibold">Resumen</h2>
                 <ul className="text-sm text-gray-700 list-disc pl-4">
-                  <li>DT: {(playerPreview ? playerBasics?.coach : rival.coach) || "—"}</li>
-                  <li>Sistema base: {(playerPreview ? playerBasics?.baseSystem : rival.baseSystem) || "—"}</li>
+                  <li>DT: {basicsForHeader.coach || "—"}</li>
+                  <li>Sistema base: {basicsForHeader.baseSystem || "—"}</li>
                   <li>Próximo partido: {nm}</li>
                 </ul>
               </div>
@@ -581,13 +655,12 @@ export default function RivalFichaPage() {
               )}
             </div>
 
-            {/* Previsualización jugador */}
             {playerPreview ? (
               playerDataLoading ? (
                 <div className="text-gray-500 text-sm">Cargando…</div>
               ) : (
                 <div className="space-y-3">
-                  {/* Charla (sólo si está habilitada) */}
+                  {/* Charla si está habilitada */}
                   {playerVis?.showCharlaUrl && playerPlan?.charlaUrl ? (
                     <div className="rounded-lg border bg-gray-50 p-3">
                       <div className="text-[12px] font-semibold uppercase tracking-wide mb-1">Charla oficial</div>
@@ -595,7 +668,6 @@ export default function RivalFichaPage() {
                     </div>
                   ) : null}
 
-                  {/* Informe visual */}
                   <div className="grid md:grid-cols-2 gap-3">
                     {playerVis?.showSystem && (
                       <InfoBlock title="Sistema" content={playerPlan?.report.system || "—"} />
@@ -1048,6 +1120,89 @@ export default function RivalFichaPage() {
             )}
           </div>
         )}
+
+        {/* VISIBILIDAD */}
+        {tab === "visibilidad" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Visibilidad (qué ven los jugadores)</h2>
+              <div className="flex gap-2">
+                <button
+                  onClick={resetVisToDefaults}
+                  disabled={savingVis}
+                  className="text-xs px-3 py-1.5 rounded-xl border hover:bg-gray-50"
+                  title="Restaurar valores predeterminados"
+                >
+                  Restaurar
+                </button>
+                <button
+                  onClick={saveVisAll}
+                  disabled={savingVis}
+                  className={`text-xs px-3 py-1.5 rounded-xl ${savingVis ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
+                >
+                  {savingVis ? "Guardando…" : "Guardar cambios"}
+                </button>
+              </div>
+            </div>
+
+            {loadingVis ? (
+              <div className="text-sm text-gray-500">Cargando…</div>
+            ) : (
+              <>
+                {/* Plan */}
+                <div className="rounded-lg border p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Plan de partido</div>
+                  <Toggle label="Sistema" checked={vis.showSystem} onChange={(v) => setVisKey("showSystem", v)} />
+                  <Toggle label="Jugadores clave" checked={vis.showKeyPlayers} onChange={(v) => setVisKey("showKeyPlayers", v)} />
+                  <Toggle label="Fortalezas" checked={vis.showStrengths} onChange={(v) => setVisKey("showStrengths", v)} />
+                  <Toggle label="Debilidades" checked={vis.showWeaknesses} onChange={(v) => setVisKey("showWeaknesses", v)} />
+                  <Toggle label="Balón parado – A favor" checked={vis.showSetPiecesFor} onChange={(v) => setVisKey("showSetPiecesFor", v)} />
+                  <Toggle label="Balón parado – En contra" checked={vis.showSetPiecesAgainst} onChange={(v) => setVisKey("showSetPiecesAgainst", v)} />
+                </div>
+
+                {/* Charla */}
+                <div className="rounded-lg border p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Charla oficial</div>
+                  <Toggle label="Mostrar enlace de charla a jugadores" checked={vis.showCharlaUrl} onChange={(v) => setVisKey("showCharlaUrl", v)} />
+                </div>
+
+                {/* Videos */}
+                <div className="rounded-lg border p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Videos</div>
+                  <Toggle label="Mostrar lista de videos" checked={vis.showVideos} onChange={(v) => setVisKey("showVideos", v)} />
+                </div>
+
+                {/* Stats */}
+                <div className="rounded-lg border p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Estadísticas</div>
+                  <div className="grid md:grid-cols-2 gap-2">
+                    <Toggle label="GF (goles a favor)" checked={vis.showStatsTotalsGF} onChange={(v) => setVisKey("showStatsTotalsGF", v)} />
+                    <Toggle label="GC (goles en contra)" checked={vis.showStatsTotalsGA} onChange={(v) => setVisKey("showStatsTotalsGA", v)} />
+                    <Toggle label="% de posesión" checked={vis.showStatsTotalsPossession} onChange={(v) => setVisKey("showStatsTotalsPossession", v)} />
+                    <Toggle label="Últimos partidos" checked={vis.showStatsRecent} onChange={(v) => setVisKey("showStatsRecent", v)} />
+                  </div>
+                </div>
+
+                {/* Notas */}
+                <div className="rounded-lg border p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Notas internas</div>
+                  <Toggle label="Permitir ver notas a jugadores" checked={vis.showNotesForPlayers} onChange={(v) => setVisKey("showNotesForPlayers", v)} />
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    onClick={saveVisAll}
+                    disabled={savingVis}
+                    className={`px-3 py-1.5 rounded-xl text-xs ${savingVis ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
+                  >
+                    {savingVis ? "Guardando…" : "Guardar cambios"}
+                  </button>
+                  <span className="ml-3 text-xs text-gray-500">Tip: activá “Vista jugador” arriba para previsualizar.</span>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </section>
     </div>
   );
@@ -1086,5 +1241,14 @@ function StatBox({ label, value, hidden }: { label: string; value?: number; hidd
       <div className="text-[11px] text-gray-500">{label}</div>
       <div className="text-lg font-semibold">{show ? value : "—"}</div>
     </div>
+  );
+}
+
+function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="flex items-center justify-between gap-3 py-1.5">
+      <span className="text-sm text-gray-800">{label}</span>
+      <input type="checkbox" className="h-4 w-4" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+    </label>
   );
 }
