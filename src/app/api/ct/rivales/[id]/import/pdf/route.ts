@@ -5,210 +5,200 @@ import { PrismaClient } from "@prisma/client";
 export const dynamic = "force-dynamic";
 const prisma = new PrismaClient();
 
-// Import dinàmico para evitar bundle innecesario en edge
-async function parsePdf(buffer: Buffer): Promise<string> {
-  const pdfParse = (await import("pdf-parse")).default as any;
-  const data = await pdfParse(buffer);
-  const text: string = data?.text || "";
-  return text;
+// ===== Helpers de tipos seguros =====
+function asObj<T extends Record<string, any> = Record<string, any>>(x: unknown): T {
+  return typeof x === "object" && x !== null ? (x as T) : ({} as T);
 }
-
-function pickFirst(lines: string[], re: RegExp): string | null {
-  for (const l of lines) {
-    const m = re.exec(l);
-    if (m && m[1]) return m[1].trim();
-  }
-  return null;
+function asStrArray(x: unknown): string[] {
+  if (Array.isArray(x)) return x.map((s) => String(s)).filter(Boolean);
+  return [];
 }
-
-function extractBlock(text: string, headers: RegExp[], stopAt: RegExp, maxLines = 12): string[] {
-  const lines = text.split(/\r?\n/).map(l => l.trim());
-  let start = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (headers.some(h => h.test(lines[i]))) { start = i + 1; break; }
-  }
-  if (start < 0) return [];
+function cleanLines(s?: string | null): string[] {
+  return (s || "")
+    .split(/\r?\n/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+function uniq(arr: string[]): string[] {
+  const seen = new Set<string>();
   const out: string[] = [];
-  for (let i = start; i < lines.length && out.length < maxLines; i++) {
-    const ln = lines[i];
-    if (!ln || stopAt.test(ln)) break;
-    out.push(ln.replace(/^[-•●]\s*/, "").trim());
-  }
-  return out.filter(Boolean);
-}
-
-function numNear(text: string, labels: RegExp[]): number | undefined {
-  const lines = text.split(/\r?\n/);
-  for (const l of lines) {
-    if (labels.some(r => r.test(l))) {
-      // capturar primer número (entero o %)
-      const m = l.match(/(-?\d+([.,]\d+)?)/);
-      if (m) {
-        const raw = m[1].replace(",", ".");
-        const v = Number(raw);
-        if (Number.isFinite(v)) return v;
-      }
+  for (const v of arr) {
+    const k = v.toLowerCase();
+    if (!seen.has(k)) {
+      seen.add(k);
+      out.push(v);
     }
   }
-  return undefined;
+  return out;
+}
+function takeBulletsAround(text: string, headerRegex: RegExp, stopRegexes: RegExp[]): string[] {
+  const lines = cleanLines(text);
+  const out: string[] = [];
+  let on = false;
+  for (const ln of lines) {
+    if (headerRegex.test(ln)) { on = true; continue; }
+    if (on && stopRegexes.some((rx) => rx.test(ln))) break;
+    if (!on) continue;
+    // bullets típicos: -, •, ·, *
+    const m = ln.match(/^[\-\*•·]\s*(.+)$/);
+    if (m) out.push(m[1].trim());
+  }
+  return uniq(out);
 }
 
-function sanitizeList(list: string[], limit = 10): string[] {
-  return (list || [])
-    .map(s => String(s).trim())
-    .filter(Boolean)
-    .slice(0, limit);
+// Heurísticas muy simples para extraer algunos campos Wyscout
+function extractFromPDFText(text: string) {
+  const out: {
+    coach?: string;
+    system?: string;
+    keyPlayers?: string[];
+    strengths?: string[];
+    weaknesses?: string[];
+    setFor?: string[];
+    setAgainst?: string[];
+  } = {};
+
+  // Coach / DT
+  const coachMatch =
+    text.match(/(?:Coach|Entrenador|DT)\s*[:\-]\s*([^\n]+)$/im) ||
+    text.match(/Director(?:\s+Técnico)?\s*[:\-]\s*([^\n]+)$/im);
+  if (coachMatch) out.coach = coachMatch[1].trim();
+
+  // Sistema / Formación (4-3-3, 4–2–3–1, etc.)
+  const sysMatch =
+    text.match(/(?:Formación|Formacion|Sistema|Base System|Formation)[^\n]*[:\-]\s*([0-9](?:\s*[–\-]\s*[0-9])+)/i) ||
+    text.match(/\b([0-9]\s*[–\-]\s*[0-9](?:\s*[–\-]\s*[0-9]){1,2})\b/);
+  if (sysMatch) out.system = sysMatch[1].replace(/\s*–\s*/g, "-").replace(/\s+/g, "");
+
+  // Jugadores clave
+  // Buscamos sección y tomamos bullets hasta el próximo encabezado
+  const keyPlayers = takeBulletsAround(
+    text,
+    /(Jugadores?\s+clave|Key\s+Players?)\b/i,
+    [/(Fortalezas|Debilidades|Strengths|Weaknesses|Balón|Set\s+pieces?)/i]
+  );
+  if (keyPlayers.length) out.keyPlayers = keyPlayers;
+
+  // Fortalezas
+  const strengths = takeBulletsAround(
+    text,
+    /(Fortalezas|Strengths)\b/i,
+    [/(Debilidades|Weaknesses|Balón|Set\s+pieces?|Jugadores?\s+clave|Key\s+Players?)/i]
+  );
+  if (strengths.length) out.strengths = strengths;
+
+  // Debilidades
+  const weaknesses = takeBulletsAround(
+    text,
+    /(Debilidades|Weaknesses)\b/i,
+    [/(Fortalezas|Strengths|Balón|Set\s+pieces?|Jugadores?\s+clave|Key\s+Players?)/i]
+  );
+  if (weaknesses.length) out.weaknesses = weaknesses;
+
+  // Balón parado – a favor / en contra
+  const setFor = takeBulletsAround(
+    text,
+    /(Bal[oó]n\s+parado.*a\s+favor|Set\s*pieces?\s*\(for\))/i,
+    [/(en\s+contra|against|Fortalezas|Debilidades|Strengths|Weaknesses|Jugadores?\s+clave|Key\s+Players?)/i]
+  );
+  if (setFor.length) out.setFor = setFor;
+
+  const setAgainst = takeBulletsAround(
+    text,
+    /(Bal[oó]n\s+parado.*en\s+contra|Set\s*pieces?\s*\(against\))/i,
+    [/(a\s+favor|for|Fortalezas|Debilidades|Strengths|Weaknesses|Jugadores?\s+clave|Key\s+Players?)/i]
+  );
+  if (setAgainst.length) out.setAgainst = setAgainst;
+
+  return out;
 }
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
     const form = await req.formData();
     const file = form.get("file");
-    if (!file || typeof file === "string") {
-      return new NextResponse("file requerido (multipart/form-data, key=file)", { status: 400 });
+    if (!file || !(file instanceof File)) {
+      return new NextResponse("archivo PDF requerido (file)", { status: 400 });
     }
-    const arrayBuf = await (file as File).arrayBuffer();
-    const buffer = Buffer.from(arrayBuf);
 
-    // 1) Texto del PDF
-    const text = await parsePdf(buffer);
-    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    // Leemos el PDF
+    const ab = await (file as File).arrayBuffer();
+    const buf = Buffer.from(ab);
 
-    // 2) Heurísticas simples
-    const coach =
-      pickFirst(lines, /(Head\s*coach|Coach|Entrenador|DT)\s*[:\-]\s*(.+)/i) ||
-      null;
+    // Carga dinámica + parse
+    const pdfParse = (await import("pdf-parse")).default as unknown as (b: Buffer) => Promise<{ text: string }>;
+    const parsed = await pdfParse(buf);
+    const text = String(parsed?.text || "");
 
-    const baseSystem =
-      pickFirst(lines, /(Formation|Sistema|Base|System)\s*[:\-]\s*([0-9\-]{3,})/i) ||
-      pickFirst(lines, /^\s*([0-9]-[0-9]-[0-9](?:-[0-9])?)\s*$/i) ||
-      null;
-
-    const keyPlayers = sanitizeList(
-      extractBlock(
-        text,
-        [/Key\s*players?/i, /Jugadores\s*clave/i],
-        /(Strengths?|Weaknesses?|Fortalezas|Debilidades|Set\s*pieces|Bal[oó]n\s*parado)/i
-      ),
-      8
-    );
-
-    const strengths = sanitizeList(
-      extractBlock(
-        text,
-        [/Strengths?/i, /Fortalezas/i],
-        /(Weaknesses?|Debilidades|Key\s*players?|Jugadores\s*clave|Set\s*pieces|Bal[oó]n\s*parado)/i
-      ),
-      10
-    );
-
-    const weaknesses = sanitizeList(
-      extractBlock(
-        text,
-        [/Weaknesses?/i, /Debilidades/i],
-        /(Strengths?|Fortalezas|Key\s*players?|Jugadores\s*clave|Set\s*pieces|Bal[oó]n\s*parado)/i
-      ),
-      10
-    );
-
-    const setFor = sanitizeList(
-      extractBlock(
-        text,
-        [/Set\s*pieces.*(for|a favor)/i, /Bal[oó]n\s*parado.*(a\s*favor)/i],
-        /(against|en\s*contra|Weaknesses?|Debilidades|Strengths?|Fortalezas|Key\s*players?|Jugadores\s*clave)/i
-      ),
-      10
-    );
-
-    const setAgainst = sanitizeList(
-      extractBlock(
-        text,
-        [/Set\s*pieces.*(against|en contra)/i, /Bal[oó]n\s*parado.*(en\s*contra)/i],
-        /(for|a\s*favor|Weaknesses?|Debilidades|Strengths?|Fortalezas|Key\s*players?|Jugadores\s*clave)/i
-      ),
-      10
-    );
-
-    // 3) Totales básicos
-    const gf = numNear(text, [/Goals\s*for\b/i, /\bGF\b/i, /Goles\s*a\s*favor/i]);
-    const ga = numNear(text, [/Goals\s*against\b/i, /\bGA\b/i, /Goles\s*en\s*contra/i]);
-    const possession = numNear(text, [/Possession\b/i, /Posesi[oó]n/i]);
-
-    // 4) Construir patches
-    const reportPatch: any = {
-      system: baseSystem,
-      strengths,
-      weaknesses,
-      keyPlayers,
-      setPieces: { for: setFor, against: setAgainst },
-    };
-
-    const statsPatch: any = {
-      totals: {
-        gf,
-        ga,
-        possession,
+    // Heurísticas de extracción
+    const ext = extractFromPDFText(text);
+    const reportPatch = {
+      system: ext.system || undefined,
+      strengths: ext.strengths || undefined,
+      weaknesses: ext.weaknesses || undefined,
+      keyPlayers: ext.keyPlayers || undefined,
+      setPieces: {
+        ...(ext.setFor ? { for: ext.setFor } : {}),
+        ...(ext.setAgainst ? { against: ext.setAgainst } : {}),
       },
     };
 
-    // 5) Persistir (merge suave sobre JSON existentes)
+    // Traemos lo actual para mergear de forma segura (sin spreads sobre no-objetos)
     const current = await prisma.rival.findUnique({
       where: { id },
-      select: {
-        coach: true,
-        baseSystem: true,
-        planReport: true,
-        planStats: true,
-      },
+      select: { coach: true, baseSystem: true, planReport: true },
     });
     if (!current) return new NextResponse("No encontrado", { status: 404 });
 
+    const savedReport = asObj<any>(current.planReport);
+    const savedSP = asObj<any>(savedReport.setPieces);
+    const patchSP = asObj<any>(reportPatch.setPieces);
+
+    const mergedSetPieces = asObj<any>({
+      ...asObj(savedSP),
+      ...asObj(patchSP),
+    });
+
+    if (patchSP.for) mergedSetPieces.for = asStrArray(patchSP.for);
+    else if (savedSP.for) mergedSetPieces.for = asStrArray(savedSP.for);
+
+    if (patchSP.against) mergedSetPieces.against = asStrArray(patchSP.against);
+    else if (savedSP.against) mergedSetPieces.against = asStrArray(savedSP.against);
+
     const mergedReport = {
-      ...(current.planReport || {}),
-      ...reportPatch,
-      setPieces: {
-        ...(current.planReport as any)?.setPieces,
-        ...(reportPatch.setPieces || {}),
-      },
+      ...asObj(savedReport),
+      ...asObj(reportPatch),
+      setPieces: mergedSetPieces,
     };
 
-    const mergedStats = {
-      ...(current.planStats || {}),
-      totals: {
-        ...(current.planStats as any)?.totals,
-        ...(statsPatch.totals || {}),
-      },
-    };
+    // Armamos patch de actualización evitando setear undefined
+    const dataPatch: any = { planReport: mergedReport };
+    if (ext.coach) dataPatch.coach = ext.coach;
+    if (ext.system) dataPatch.baseSystem = ext.system;
 
     const row = await prisma.rival.update({
       where: { id },
-      data: {
-        coach: coach ?? current.coach,
-        baseSystem: baseSystem ?? current.baseSystem,
-        planReport: mergedReport as any,
-        planStats: mergedStats as any,
-      },
+      data: dataPatch,
       select: {
         coach: true,
         baseSystem: true,
         planReport: true,
-        planStats: true,
       },
     });
 
     return NextResponse.json({
       data: {
-        applied: {
-          coach: row.coach,
-          baseSystem: row.baseSystem,
-          report: row.planReport,
-          stats: row.planStats,
-        },
-        rawHints: { coach, baseSystem, strengths, weaknesses, keyPlayers, setFor, setAgainst, gf, ga, possession },
+        coach: row.coach,
+        baseSystem: row.baseSystem,
+        planReport: asObj(row.planReport),
       },
+      message: "PDF procesado y datos fusionados.",
     });
   } catch (e: any) {
     return new NextResponse(e?.message || "Error", { status: 500 });
