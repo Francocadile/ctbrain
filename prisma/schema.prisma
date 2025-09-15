@@ -137,7 +137,8 @@ model Rival {
   planReport            Json?     @default("{}")
   planVideos            Json?     @default("[]")
   planStats             Json?     @default("{}")
-  planNotes             Json?     @default("{}")  // << NUEVO
+  planNotes             Json?     @default("{}")
+  planVisibility        Json?     @default("{}") // << NUEVO: switches de visibilidad
   // -------------------------------------
 
   createdAt DateTime @default(now())
