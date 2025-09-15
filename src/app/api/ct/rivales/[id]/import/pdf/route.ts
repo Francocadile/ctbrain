@@ -1,4 +1,3 @@
-// src/app/api/ct/rivales/[id]/import/pdf/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 
@@ -54,20 +53,27 @@ function extractFromPDFText(text: string) {
   return res;
 }
 
-// ---------- extracción con PDF.js (legacy, sin worker) ----------
+// ---------- extracción con PDF.js (forzando bundle del worker) ----------
 async function extractTextWithPdfJs(u8: Uint8Array): Promise<string> {
-  // Usamos la build legacy para evitar carga del worker en SSR
+  // Importamos la build legacy (server-friendly)
   const pdfjs: any = await import("pdfjs-dist/legacy/build/pdf.mjs");
 
-  // NO seteamos workerSrc (algunas versiones validan tipo y fallan)
-  // pdfjs.GlobalWorkerOptions.workerSrc = undefined;  <-- removido
+  // Importamos también el worker para que Next lo incluya en el bundle,
+  // y seteamos la ruta absoluta a ese módulo.
+  await import("pdfjs-dist/legacy/build/pdf.worker.mjs"); // fuerza el bundle
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+    "pdfjs-dist/legacy/build/pdf.worker.mjs",
+    import.meta.url
+  ).toString();
 
+  // Seguimos deshabilitando el uso de Web Worker real (SSR)
   const loadingTask = pdfjs.getDocument({
     data: u8,
     disableWorker: true,
     isEvalSupported: false,
     useWorkerFetch: false,
   });
+
   const pdf = await loadingTask.promise;
 
   let out = "";
@@ -100,7 +106,22 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return new NextResponse("El archivo no parece ser un PDF válido", { status: 400 });
     }
 
-    const text = await extractTextWithPdfJs(u8);
+    // === Extraer texto
+    let text = "";
+    try {
+      text = await extractTextWithPdfJs(u8);
+    } catch (err: any) {
+      // Mensaje más claro si falla el worker
+      const msg = String(err?.message || "");
+      if (/fake worker/i.test(msg) || /pdf\.worker/i.test(msg)) {
+        return new NextResponse(
+          "No pude inicializar el motor PDF en el servidor. Reintentá con otro PDF o avísame para ajustar la build.",
+          { status: 500 }
+        );
+      }
+      throw err;
+    }
+
     if (!text.trim()) {
       return new NextResponse("No se pudo extraer texto del PDF", { status: 422 });
     }
