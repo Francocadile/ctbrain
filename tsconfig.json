@@ -17,6 +17,13 @@
     "paths": { "@/*": ["src/*"] },
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["next-env.d.ts", "src/**/*", "next.config.js", "postcss.config.js", "tailwind.config.js"],
+  "include": [
+    "next-env.d.ts",
+    "src/**/*",
+    "types/**/*.d.ts",
+    "next.config.js",
+    "postcss.config.js",
+    "tailwind.config.js"
+  ],
   "exclude": ["node_modules"]
 }
