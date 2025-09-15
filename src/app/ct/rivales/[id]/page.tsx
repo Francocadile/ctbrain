@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-type Tab = "resumen" | "plan" | "videos" | "stats" | "notas" | "visibilidad";
+type Tab = "resumen" | "plan" | "videos" | "stats" | "notas" | "visibilidad" | "importar";
 
 // ==== Tipos compartidos con la API ====
 type RivalBasics = {
@@ -143,7 +143,12 @@ export default function RivalFichaPage() {
   const [savingNotes, setSavingNotes] = useState(false);
   const [newItem, setNewItem] = useState("");
 
-  // Player-safe data (cuando está activada la previsualización)
+  // Visibilidad (UI de toggles)
+  const [vis, setVis] = useState<Visibility>(defaultVisibility());
+  const [loadingVis, setLoadingVis] = useState(true);
+  const [savingVis, setSavingVis] = useState(false);
+
+  // Vista jugador (player-safe)
   const [playerDataLoading, setPlayerDataLoading] = useState(false);
   const [playerBasics, setPlayerBasics] = useState<RivalBasics | null>(null);
   const [playerPlan, setPlayerPlan] = useState<RivalPlan | null>(null);
@@ -152,10 +157,11 @@ export default function RivalFichaPage() {
   const [playerNotes, setPlayerNotes] = useState<RivalNotes | null>(null);
   const [playerVis, setPlayerVis] = useState<Visibility | null>(null);
 
-  // Visibilidad (UI de toggles)
-  const [vis, setVis] = useState<Visibility>(defaultVisibility());
-  const [loadingVis, setLoadingVis] = useState(true);
-  const [savingVis, setSavingVis] = useState(false);
+  // ===== IMPORTAR (PDF/CSV) =====
+  const [importing, setImporting] = useState(false);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
 
   // ===== Helpers =====
   function linesToArray(s: string): string[] {
@@ -506,6 +512,43 @@ export default function RivalFichaPage() {
     await saveVisPatch(defs);
   }
 
+  // ===== Importar: handlers =====
+  async function importPDF() {
+    if (!pdfFile) { setImportMsg("Seleccioná un PDF primero."); return; }
+    setImporting(true); setImportMsg(null);
+    try {
+      const fd = new FormData();
+      fd.set("file", pdfFile);
+      const res = await fetch(`/api/ct/rivales/${id}/import/pdf`, { method: "POST", body: fd });
+      if (!res.ok) throw new Error(await res.text());
+      await Promise.all([loadBasics(), loadPlan(), loadStats()]);
+      setImportMsg("PDF importado. Se actualizaron datos del plan y estadísticas (si se pudieron extraer).");
+      if (playerPreview) await loadPlayerSafe();
+    } catch (e: any) {
+      setImportMsg(e?.message || "Error importando PDF");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function importCSV() {
+    if (!csvFile) { setImportMsg("Seleccioná un CSV primero."); return; }
+    setImporting(true); setImportMsg(null);
+    try {
+      const fd = new FormData();
+      fd.set("file", csvFile);
+      const res = await fetch(`/api/ct/rivales/${id}/import/csv`, { method: "POST", body: fd });
+      if (!res.ok) throw new Error(await res.text());
+      await loadStats();
+      setImportMsg("CSV importado. Se actualizaron últimos partidos y totales.");
+      if (playerPreview) await loadPlayerSafe();
+    } catch (e: any) {
+      setImportMsg(e?.message || "Error importando CSV");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   // ===== Render =====
   if (loading) return <div className="p-4 text-gray-500">Cargando…</div>;
   if (!rival)
@@ -581,12 +624,13 @@ export default function RivalFichaPage() {
           { key: "stats", label: "Estadísticas" },
           { key: "notas", label: "Notas internas" },
           { key: "visibilidad", label: "Visibilidad" },
+          { key: "importar", label: "Importar" },
         ].map((t) => (
           <button
             key={t.key}
             onClick={() => setURLTab(t.key as Tab)}
             className={`px-3 py-2 text-sm font-medium border-b-2 ${
-              tab === t.key ? "border-black text-black" : "border-transparent text-gray-500 hover:text-black"
+              tab === (t.key as Tab) ? "border-black text-black" : "border-transparent text-gray-500 hover:text-black"
             }`}
           >
             {t.label}
@@ -607,6 +651,9 @@ export default function RivalFichaPage() {
                   <li>Sistema base: {basicsForHeader.baseSystem || "—"}</li>
                   <li>Próximo partido: {nm}</li>
                 </ul>
+                <p className="text-xs text-gray-500 mt-2">
+                  * Estos campos se pueden editar desde el listado de rivales (o más adelante desde esta ficha).
+                </p>
               </div>
             ) : (
               <form onSubmit={saveBasics} className="space-y-4">
@@ -841,7 +888,7 @@ export default function RivalFichaPage() {
                     value={newVidTitle}
                     onChange={(e) => setNewVidTitle(e.target.value)}
                   />
-                  <input
+                <input
                     className="rounded-md border px-2 py-1 text-sm flex-1"
                     placeholder="URL del video"
                     value={newVidUrl}
@@ -1201,6 +1248,68 @@ export default function RivalFichaPage() {
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* ===== IMPORTAR ===== */}
+        {tab === "importar" && (
+          <div className="space-y-6">
+            <h2 className="text-lg font-semibold">Importar datos (Wyscout PDF / CSV)</h2>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* PDF */}
+              <div className="rounded-lg border p-3">
+                <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">PDF de informe de equipo</div>
+                <p className="text-sm text-gray-600 mb-2">
+                  Subí el PDF de Wyscout (informe de equipo). Intentaremos extraer DT, sistema base, jugadores clave, fortalezas/debilidades y algunos totales.
+                </p>
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
+                />
+                <div className="pt-2">
+                  <button
+                    onClick={importPDF}
+                    disabled={importing || !pdfFile}
+                    className={`px-3 py-1.5 rounded-xl text-xs ${importing || !pdfFile ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
+                  >
+                    {importing ? "Procesando…" : "Importar PDF"}
+                  </button>
+                </div>
+              </div>
+
+              {/* CSV */}
+              <div className="rounded-lg border p-3">
+                <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">CSV de resultados/estadística</div>
+                <p className="text-sm text-gray-600 mb-2">
+                  Subí un CSV con columnas típicas (date, opponent, comp, homeAway, gf, ga, possession).  
+                  Se actualizarán “Últimos partidos” y los totales (GF/GA/Posesión).
+                </p>
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
+                />
+                <div className="pt-2">
+                  <button
+                    onClick={importCSV}
+                    disabled={importing || !csvFile}
+                    className={`px-3 py-1.5 rounded-xl text-xs ${importing || !csvFile ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
+                  >
+                    {importing ? "Procesando…" : "Importar CSV"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {importMsg && (
+              <div className="text-sm px-3 py-2 rounded-md border bg-gray-50">{importMsg}</div>
+            )}
+
+            <div className="text-xs text-gray-500">
+              Nota: El parseo es heurístico. Si algún dato no sale perfecto, podés corregirlo a mano en las pestañas “Plan” y “Estadísticas”.
+            </div>
           </div>
         )}
       </section>
