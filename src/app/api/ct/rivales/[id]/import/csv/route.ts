@@ -28,9 +28,6 @@ type RivalStats = {
 function asObj<T = Record<string, any>>(x: unknown): T {
   return typeof x === "object" && x !== null ? (x as T) : ({} as T);
 }
-function asArr<T = any>(x: unknown): T[] {
-  return Array.isArray(x) ? (x as T[]) : [];
-}
 function toNum(n: any): number | undefined {
   const v = Number(n);
   return Number.isFinite(v) ? v : undefined;
@@ -57,12 +54,16 @@ export async function POST(
 
     const text = await file.text();
 
-    // Carga dinámica de PapaParse (ya declaramos el .d.ts)
+    // Carga dinámica de PapaParse (sin genéricos)
     const Papa = (await import("papaparse")).default;
-    const parsed = Papa.parse<Record<string, any>>(text, {
+    const parsed = Papa.parse(text, {
       header: true,
       skipEmptyLines: true,
-    });
+    }) as unknown as {
+      data: Record<string, any>[];
+      errors?: any[];
+    };
+
     if (parsed.errors?.length) {
       return NextResponse.json(
         { errors: parsed.errors.slice(0, 3) },
@@ -97,14 +98,12 @@ export async function POST(
         possession: toNum(raw[posKey as any]),
       };
 
-      // al menos algún dato relevante
       if (
         r.date ||
         r.opponent ||
         typeof r.gf === "number" ||
         typeof r.ga === "number"
       ) {
-        // Sanear H/A/N
         if (r.homeAway && !["H", "A", "N"].includes(r.homeAway)) {
           r.homeAway = undefined;
         }
@@ -141,17 +140,14 @@ export async function POST(
     const saved = asObj<any>(current.planStats);
     const savedTotals = asObj<any>(saved.totals);
 
-    // Construimos el objeto final, evitando spreads sobre tipos no-objeto
     const merged: RivalStats = {
       ...asObj(saved),
       totals: {
         ...asObj(savedTotals),
-        // si hay datos nuevos, los usamos; si no, mantenemos lo existente
         ...(Number.isFinite(gfSum) ? { gf: gfSum } : {}),
         ...(Number.isFinite(gaSum) ? { ga: gaSum } : {}),
         ...(typeof possAvg === "number" ? { possession: possAvg } : {}),
       },
-      // sobreescribimos "recent" con lo del CSV (decisión del flujo de importación)
       recent,
     };
 
