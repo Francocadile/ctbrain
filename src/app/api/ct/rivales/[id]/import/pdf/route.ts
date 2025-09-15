@@ -81,11 +81,10 @@ function extractFromPDFText(text: string) {
 
 /* =========== PDF text extraction with PDF.js (SSR) =========== */
 async function extractTextWithPdfJs(u8: Uint8Array): Promise<string> {
-  // Carga ESM de PDF.js
-  const pdfjs: any = await import("pdfjs-dist/build/pdf.mjs");
+  // Importar el entrypoint principal (sin subrutas).
+  const pdfjs: any = await import("pdfjs-dist");
 
-  // En SSR evitamos worker real y también el "fake worker"
-  // Forzamos disableWorker y limpiamos workerSrc.
+  // En SSR evitamos worker real y también el "fake worker":
   if (pdfjs.GlobalWorkerOptions) {
     pdfjs.GlobalWorkerOptions.workerSrc = ""; // no usar worker
   }
