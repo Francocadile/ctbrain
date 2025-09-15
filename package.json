@@ -2,7 +2,9 @@
   "name": "ctbrain",
   "version": "0.1.0",
   "private": true,
-  "engines": { "node": "22.x" },
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -32,6 +34,7 @@
   },
   "devDependencies": {
     "prisma": "5.19.1",
-    "tsx": "4.19.2"
+    "tsx": "4.19.2",
+    "@types/papaparse": "5.3.14"
   }
 }
