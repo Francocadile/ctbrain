@@ -79,14 +79,15 @@ function extractFromPDFText(text: string) {
   return res;
 }
 
-/* =========== PDF text extraction with PDF.js (SSR) =========== */
+/* =========== PDF text extraction with PDF.js (SSR, sin worker) =========== */
 async function extractTextWithPdfJs(u8: Uint8Array): Promise<string> {
-  // Importar el entrypoint principal (sin subrutas).
-  const pdfjs: any = await import("pdfjs-dist");
+  // Importar el entrypoint ESM directo (NO CJS para evitar 'canvas')
+  const pdfjs: any = await import("pdfjs-dist/build/pdf.mjs");
 
-  // En SSR evitamos worker real y también el "fake worker":
+  // En SSR deshabilitamos completamente el worker
   if (pdfjs.GlobalWorkerOptions) {
-    pdfjs.GlobalWorkerOptions.workerSrc = ""; // no usar worker
+    // string vacío + disableWorker evita el "fake worker"
+    pdfjs.GlobalWorkerOptions.workerSrc = "";
   }
 
   const loadingTask = pdfjs.getDocument({
