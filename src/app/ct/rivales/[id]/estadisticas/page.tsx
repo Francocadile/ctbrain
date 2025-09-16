@@ -3,10 +3,16 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-export default async function Estadisticas({ params }: { params: { id: string } }) {
+export default async function Estadisticas({
+  params,
+}: {
+  params: { id: string };
+}) {
   const rival = await prisma.rival.findUnique({
     where: { id: params.id },
-    select: { nombre: true, planReport: true },
+    // ⚠️ No seleccionamos 'nombre' porque no existe en tu modelo.
+    // Si el modelo tiene 'name', podés agregarlo luego sin problema.
+    select: { planReport: true },
   });
 
   const pr = (rival?.planReport ?? {}) as any;
@@ -15,9 +21,9 @@ export default async function Estadisticas({ params }: { params: { id: string } 
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold">Estadísticas — {rival?.nombre}</h2>
+      <h2 className="text-xl font-semibold">Estadísticas del rival</h2>
 
-      {/* KPIs equipo */}
+      {/* KPIs de equipo (nuestro / rival) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {[
           ["Goles", team.goals],
@@ -30,7 +36,8 @@ export default async function Estadisticas({ params }: { params: { id: string } 
           <div key={i} className="rounded-lg border p-3">
             <div className="text-sm text-gray-500">{label}</div>
             <div className="text-lg">
-              {val?.ours ?? "—"} <span className="text-gray-400">/</span> {val?.opp ?? "—"}
+              {val?.ours ?? "—"} <span className="text-gray-400">/</span>{" "}
+              {val?.opp ?? "—"}
             </div>
           </div>
         ))}
@@ -61,17 +68,43 @@ export default async function Estadisticas({ params }: { params: { id: string } 
                 <td className="p-2 text-gray-500">{p.shirt ?? ""}</td>
                 <td className="p-2">{p.name}</td>
                 <td className="p-2 text-center">{p.minutes ?? "—"}</td>
-                <td className="p-2 text-center">{p.goals ?? "—"} / {p.xg ?? "—"}</td>
-                <td className="p-2 text-center">{p.assists ?? "—"} / {p.xa ?? "—"}</td>
-                <td className="p-2 text-center">{p.shots ?? "—"} / {p.shotsOnTarget ?? "—"}</td>
-                <td className="p-2 text-center">{p.passes ?? "—"} / {p.passesAccurate ?? "—"}</td>
-                <td className="p-2 text-center">{p.crosses ?? "—"} / {p.crossesAccurate ?? "—"}</td>
-                <td className="p-2 text-center">{p.dribbles ?? "—"} / {p.dribblesWon ?? "—"}</td>
-                <td className="p-2 text-center">{p.duels ?? "—"} / {p.duelsWon ?? "—"}</td>
+                <td className="p-2 text-center">
+                  {p.goals ?? "—"} / {p.xg ?? "—"}
+                </td>
+                <td className="p-2 text-center">
+                  {p.assists ?? "—"} / {p.xa ?? "—"}
+                </td>
+                <td className="p-2 text-center">
+                  {p.shots ?? "—"} / {p.shotsOnTarget ?? "—"}
+                </td>
+                <td className="p-2 text-center">
+                  {p.passes ?? "—"} / {p.passesAccurate ?? "—"}
+                </td>
+                <td className="p-2 text-center">
+                  {p.crosses ?? "—"} / {p.crossesAccurate ?? "—"}
+                </td>
+                <td className="p-2 text-center">
+                  {p.dribbles ?? "—"} / {p.dribblesWon ?? "—"}
+                </td>
+                <td className="p-2 text-center">
+                  {p.duels ?? "—"} / {p.duelsWon ?? "—"}
+                </td>
                 <td className="p-2 text-center">{p.touchesInBox ?? "—"}</td>
-                <td className="p-2 text-center">{p.yellow ?? "—"} / {p.red ?? "—"}</td>
+                <td className="p-2 text-center">
+                  {p.yellow ?? "—"} / {p.red ?? "—"}
+                </td>
               </tr>
             ))}
+            {!players.length && (
+              <tr>
+                <td
+                  className="p-3 text-center text-gray-500"
+                  colSpan={12}
+                >
+                  Aún no hay estadísticas de jugadores importadas desde el PDF.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
