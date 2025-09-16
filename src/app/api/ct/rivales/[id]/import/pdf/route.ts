@@ -1,3 +1,5 @@
+import "@/lib/patch-fs-avoid-tests"; // ⬅️ Importar primero para neutralizar lecturas locales residuales
+
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { createRequire } from "node:module";
@@ -85,7 +87,7 @@ function extractFromPDFText(text: string) {
   if (gf !== undefined) res.totals.gf = gf;
   if (ga !== undefined) res.totals.ga = ga;
 
-  const poss = percent(/\bPosesi[oó]n[:\s]+([0-9]+(?:[.,][0-9]+)?)%/i) ?? percent(/\bPossession[:\s]+([0-9]+(?:[.,][0-9]+)?)%/i);
+  const poss = percent(/\bPosesi[oó]n[:\s]+([0-9]+(?:[.,][0-9]+)?)%/i) ?? percent(/\bPossession[:\s]+([0-9]+(?:[.,][0-9]+)?)%/i));
   if (poss !== undefined) res.totals.possession = poss;
 
   const shots = findNum(/\b(Tiros|Shots)\b[^\n]*[:\s]+([0-9]+)/i) ?? findNum(/\b(Total Shots)\b[^\n]*[:\s]+([0-9]+)/i);
@@ -202,9 +204,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       message: "PDF procesado: se actualizaron plan y estadísticas."
     });
   } catch (e: any) {
-    // Log completo en server y respuesta con origen resumido para ubicar el archivo culpable
     console.error("[PDF IMPORT ERROR]", e);
-    const stack = String(e?.stack || "").split("\n").slice(0, 5).join("\n");
+    const stack = String(e?.stack || "").split("\n").slice(0, 6).join("\n");
     const msg = String(e?.message || e || "Error");
     return NextResponse.json({ error: msg, origin: stack }, { status: 500 });
   }
