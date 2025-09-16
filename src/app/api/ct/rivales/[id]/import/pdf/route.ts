@@ -97,8 +97,6 @@ function extractCoachAndSystem(text: string) {
 }
 
 function extractTeamKPIs(text: string) {
-  // Buscamos líneas con KPI y un "A/B" (nuestro / rival)
-  // Cubrimos español e inglés más comunes en Wyscout
   const map: Array<{ key: string; rx: RegExp }> = [
     { key: "goals",             rx: /\b(Goles|Goals)\b.*?(-?\d+[.,]?\d*\s*[\/\-–]\s*-?\d+[.,]?\d*)/i },
     { key: "xg",                rx: /\b(xG)\b.*?(-?\d+[.,]?\d*\s*[\/\-–]\s*-?\d+[.,]?\d*)/i },
@@ -130,8 +128,6 @@ function extractTeamKPIs(text: string) {
 }
 
 function extractPlayerTable(text: string) {
-  // Heurística básica: líneas que empiezan con dorsal + nombre + minutos
-  // y luego varios números. Sirve para muchos PDFs de Wyscout.
   const lines = cleanLines(text);
   const players: any[] = [];
   const rowRx = /^\s*(\d{1,2})\s+([A-ZÁÉÍÓÚÑÜ][^\d]+?)\s+(\d{1,3})\b(.*)$/i;
@@ -145,7 +141,6 @@ function extractPlayerTable(text: string) {
     const minutes = n(m[3]);
     const tail = m[4];
 
-    // Buscamos patrones comunes en el resto de la fila
     const g = tail.match(/\bG[:\s]\s*(-?\d+)/i)?.[1] ?? tail.match(/\b(\d+)\s+g(?:oles?)?\b/i)?.[1];
     const xg = tail.match(/\bxG[:\s]\s*(-?\d+[.,]?\d*)/i)?.[1];
     const a = tail.match(/\bA[:\s]\s*(-?\d+)/i)?.[1] ?? tail.match(/\b(\d+)\s+asist/i)?.[1];
@@ -188,12 +183,11 @@ function extractPlayerTable(text: string) {
     });
   }
 
-  // Filtramos filas donde al menos tengamos nombre y minutos o alguna métrica
   return players.filter(p => p.name && (p.minutes != null || p.goals != null || p.xg != null));
 }
 
 /* =========== Carga robusta de pdf-parse (CommonJS) =========== */
-function loadPdfParse(): (input: Uint8Array | ArrayBuffer | Buffer) => Promise<{ text: string }> {
+function loadPdfParse(): (input: Buffer | Uint8Array | ArrayBuffer) => Promise<{ text: string }> {
   // @ts-ignore – tipado por nuestro .d.ts local
   const mod = require("pdf-parse");
   const fn = (mod?.default ?? mod) as any;
@@ -211,33 +205,64 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     const form = await req.formData();
     const file = form.get("file");
+
     if (!(file instanceof File)) {
-      return new NextResponse("archivo PDF requerido (file)", { status: 400 });
+      return new NextResponse("Debe enviar 'file' como archivo (multipart/form-data).", { status: 400 });
     }
 
+    // Reglas básicas
+    const size = file.size ?? 0;
+    const type = file.type ?? "";
+    if (size <= 0) {
+      return new NextResponse("El archivo llegó vacío. Volvé a seleccionarlo y reintenta.", { status: 400 });
+    }
+    if (!type.includes("pdf")) {
+      return new NextResponse("El archivo no parece ser un PDF.", { status: 400 });
+    }
+    if (size > 25 * 1024 * 1024) {
+      return new NextResponse("El PDF supera el límite de 25MB.", { status: 413 });
+    }
+
+    // Leemos bytes
     const ab = await file.arrayBuffer();
     const u8 = new Uint8Array(ab);
+    if (!u8 || u8.length < 5) {
+      return new NextResponse("El PDF no llegó correctamente al servidor. Seleccionalo nuevamente.", { status: 400 });
+    }
 
-    // Validación rápida de header PDF
+    // Header mágico
     const header = new TextDecoder().decode(u8.slice(0, 5));
     if (header !== "%PDF-") {
-      return new NextResponse("El archivo no parece ser un PDF válido", { status: 400 });
+      return new NextResponse("El archivo no parece ser un PDF válido.", { status: 400 });
     }
 
     const pdfParse = loadPdfParse();
-    const parsed = await pdfParse(u8);
-    const text = String(parsed?.text || "");
-    if (!text.trim()) {
-      return new NextResponse("No se pudo extraer texto del PDF", { status: 422 });
+
+    // **Usamos Buffer, y capturamos el ENOENT del fallback interno**
+    let parsed;
+    try {
+      parsed = await pdfParse(Buffer.from(u8));
+    } catch (err: any) {
+      const msg = String(err?.message || err || "");
+      if (msg.includes("05-versions-space.pdf") || msg.includes("ENOENT")) {
+        return new NextResponse(
+          "No se pudo leer el PDF (buffer vacío). Volvé a seleccionar el archivo y asegurate de que el POST sea multipart/form-data.",
+          { status: 400 }
+        );
+      }
+      throw err;
     }
 
-    // 1) Datos descriptivos
+    const text = String(parsed?.text || "");
+    if (!text.trim()) {
+      return new NextResponse("No se pudo extraer texto del PDF.", { status: 422 });
+    }
+
+    // 1) Descriptivo
     const meta = extractCoachAndSystem(text);
-
-    // 2) KPIs de equipo (nuestro/rival)
+    // 2) KPIs equipo
     const teamStats = extractTeamKPIs(text);
-
-    // 3) Tabla por jugador
+    // 3) Tabla jugadores
     const playerStats = extractPlayerTable(text);
 
     const reportPatch = {
@@ -259,7 +284,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     });
     if (!current) return new NextResponse("No encontrado", { status: 404 });
 
-    // Merge no destructivo
     const savedReport = asObj<any>(current.planReport);
     const savedSP = asObj<any>(savedReport.setPieces);
     const patchSP = asObj<any>(reportPatch.setPieces);
@@ -300,11 +324,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     });
 
     return NextResponse.json({
-      data: {
-        coach: row.coach,
-        baseSystem: row.baseSystem,
-        planReport: asObj(row.planReport),
-      },
+      data: { coach: row.coach, baseSystem: row.baseSystem, planReport: asObj(row.planReport) },
       message: "PDF procesado: KPIs y jugadores importados.",
     });
   } catch (e: any) {
