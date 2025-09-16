@@ -87,11 +87,16 @@ function extractFromPDFText(text: string) {
   if (gf !== undefined) res.totals.gf = gf;
   if (ga !== undefined) res.totals.ga = ga;
 
-  const poss = percent(/\bPosesi[oó]n[:\s]+([0-9]+(?:[.,][0-9]+)?)%/i) ?? percent(/\bPossession[:\s]+([0-9]+(?:[.,][0-9]+)?)%/i));
+  // ⬇️ CORREGIDO: paréntesis balanceados y regex con 1 sola captura numérica
+  const poss =
+    percent(/\bPosesi[oó]n[:\s]+([0-9]+(?:[.,][0-9]+)?)%/i) ??
+    percent(/\bPossession[:\s]+([0-9]+(?:[.,][0-9]+)?)%/i);
   if (poss !== undefined) res.totals.possession = poss;
 
-  const shots = findNum(/\b(Tiros|Shots)\b[^\n]*[:\s]+([0-9]+)/i) ?? findNum(/\b(Total Shots)\b[^\n]*[:\s]+([0-9]+)/i);
-  const sot   = findNum(/\b(Tiros a puerta|Shots on Target)\b[^\n]*[:\s]+([0-9]+)/i);
+  // ⬇️ CORREGIDO: etiquetas como no-captura para que m[1] sea el número
+  const shots = findNum(/(?:Tiros|Shots)\b[^\n]*[:\s]+([0-9]+)/i) ??
+                findNum(/(?:Total Shots)\b[^\n]*[:\s]+([0-9]+)/i);
+  const sot   = findNum(/(?:Tiros a puerta|Shots on Target)\b[^\n]*[:\s]+([0-9]+)/i);
   if (shots !== undefined) res.totals.shots = shots;
   if (sot   !== undefined) res.totals.shotsOnTarget = sot;
 
