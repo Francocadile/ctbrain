@@ -36,7 +36,7 @@ function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): strin
   return uniq(out);
 }
 
-/* ========== Extracción semántica (coach, sistema, bullets) ========== */
+/* ====== Campos semánticos: DT, sistema, bullets ====== */
 function extractFromPDFText(text: string) {
   const res: any = {};
   const coach = text.match(/(?:Coach|Entrenador|DT|Director(?:\s+Técnico)?)\s*[:\-]\s*([^\n]+)/i)?.[1];
@@ -48,28 +48,23 @@ function extractFromPDFText(text: string) {
   if (sys) res.system = sys.replace(/\s*–\s*/g, "-").replace(/\s+/g, "");
 
   const keyPlayers = takeBulletsAround(
-    text,
-    /(Jugadores?\s+clave|Key\s+Players?)\b/i,
+    text, /(Jugadores?\s+clave|Key\s+Players?)\b/i,
     [/(Fortalezas|Debilidades|Strengths|Weaknesses|Balón|Set\s*pieces?)/i]
   );
   const strengths = takeBulletsAround(
-    text,
-    /(Fortalezas|Strengths)\b/i,
+    text, /(Fortalezas|Strengths)\b/i,
     [/(Debilidades|Weaknesses|Balón|Set\s*pieces?|Key\s+Players?)/i]
   );
   const weaknesses = takeBulletsAround(
-    text,
-    /(Debilidades|Weaknesses)\b/i,
+    text, /(Debilidades|Weaknesses)\b/i,
     [/(Fortalezas|Strengths|Balón|Set\s*pieces?|Key\s+Players?)/i]
   );
   const setFor = takeBulletsAround(
-    text,
-    /(Bal[oó]n\s+parado.*a\s+favor|Set\s*pieces?\s*\(for\))/i,
+    text, /(Bal[oó]n\s+parado.*a\s+favor|Set\s*pieces?\s*\(for\))/i,
     [/(en\s+contra|against|Fortalezas|Debilidades|Strengths|Weaknesses|Key\s+Players?)/i]
   );
   const setAgainst = takeBulletsAround(
-    text,
-    /(Bal[oó]n\s+parado.*en\s+contra|Set\s*pieces?\s*\(against\))/i,
+    text, /(Bal[oó]n\s+parado.*en\s+contra|Set\s*pieces?\s*\(against\))/i,
     [/(a\s+favor|for|Fortalezas|Debilidades|Strengths|Weaknesses|Key\s+Players?)/i]
   );
 
@@ -82,18 +77,15 @@ function extractFromPDFText(text: string) {
   return res;
 }
 
-/* ========== Extracción de métricas numéricas (Wyscout) ========== */
-/** Intenta leer pares nuestro/opp de KPIs típicos del informe */
+/* ====== Métricas numéricas típicas Wyscout ====== */
 function extractNumericTeamKPIs(text: string) {
-  // normalizamos decimales con punto
-  const norm = text.replace(/,(\d)/g, ".$1");
+  const norm = text.replace(/,(\d)/g, ".$1"); // decimales con punto
 
   function pickPair(labelRxs: RegExp[], valueRx: RegExp) {
     const hasLabel = labelRxs.some(rx => rx.test(norm));
     if (!hasLabel) return null;
     const m = norm.match(valueRx);
     if (!m) return null;
-    // admitimos formatos: "12 - 8", "12/8", "12 vs 8"
     const raw = (m[1] || "").trim();
     const parts = raw.split(/\s*(?:-|\/|vs|:)\s*/i).map(s => s.trim()).filter(Boolean);
     if (parts.length < 2) return null;
@@ -103,47 +95,34 @@ function extractNumericTeamKPIs(text: string) {
   }
 
   const out: Record<string, any> = {};
+  out.shots          = pickPair([/shots?/i, /tiros/i], /(Shots?|Tiros)[^\n]*?([0-9\.\s\-\/:]+)\s*(?:vs|-\s*\d+)/i) || undefined;
+  out.shotsOnTarget  = pickPair([/on\s*target/i, /a\s*puerta/i], /(On\s*target|A\s*puerta)[^\n]*?([0-9\.\s\-\/:]+)\s*(?:vs|-\s*\d+)/i) || undefined;
+  out.xg             = pickPair([/\bxg\b/i], /\bxg\b[^\n]*?([0-9\.\s\-\/:]+)\s*(?:vs|-\s*\d+)/i) || undefined;
 
-  // Shots / Shots on target
-  out.shots          = pickPair([/shots?/i, /tiros/i], /(?:Shots?|Tiros)[^\n]*?([0-9\.\s\-\/:]+)[^\n]*?(?:vs|-\s*\d+)/i) || undefined;
-  out.shotsOnTarget  = pickPair([/on\s*target/i, /a\s*puerta/i], /(On\s*target|A\s*puerta)[^\n]*?([0-9\.\s\-\/:]+)[^\n]*?(?:vs|-\s*\d+)/i) || undefined;
-
-  // xG / xGA
-  out.xg             = pickPair([/\bxg\b/i], /\bxg\b[^\n]*?([0-9\.\s\-\/:]+)[^\n]*?(?:vs|-\s*\d+)/i) || undefined;
-
-  // Possession %
-  const poss = pickPair([/possession/i, /posesi[oó]n/i], /(Possession|Posesi[oó]n)[^\n]*?([0-9\.\s\-\/:%]+)[^\n]*?(?:vs|-\s*\d+)/i);
+  const poss = pickPair([/possession/i, /posesi[oó]n/i], /(Possession|Posesi[oó]n)[^\n]*?([0-9\.\s\-\/:%]+)\s*(?:vs|-\s*\d+)/i);
   if (poss) out.possession = poss;
 
-  // Passes accuracy %
-  const passAcc = pickPair([/pass(?:es)?\s*accuracy/i, /%?\s*pases\s*(?:precisos|acertados)/i], /(Pass(?:es)?\s*accuracy|%?\s*Pases\s*(?:precisos|acertados))[^\n]*?([0-9\.\s\-\/:%]+)[^\n]*?(?:vs|-\s*\d+)/i);
+  const passAcc = pickPair([/pass(?:es)?\s*accuracy/i, /pases\s*(?:precisos|acertados)/i], /(Pass(?:es)?\s*accuracy|Pases\s*(?:precisos|acertados))[^\n]*?([0-9\.\s\-\/:%]+)\s*(?:vs|-\s*\d+)/i);
   if (passAcc) out.passesAccuracy = passAcc;
 
-  // Crosses accuracy %
-  const crossAcc = pickPair([/cross(?:es)?\s*accuracy/i, /%?\s*centros/i], /(Cross(?:es)?\s*accuracy|Centros)[^\n]*?([0-9\.\s\-\/:%]+)[^\n]*?(?:vs|-\s*\d+)/i);
+  const crossAcc = pickPair([/cross(?:es)?\s*accuracy/i, /centros/i], /(Cross(?:es)?\s*accuracy|Centros)[^\n]*?([0-9\.\s\-\/:%]+)\s*(?:vs|-\s*\d+)/i);
   if (crossAcc) out.crossesAccuracy = crossAcc;
 
-  // Duels won
-  const duelsWon = pickPair([/duels?\s*won/i, /duelos\s*gan/i], /(Duels?\s*won|Duelos\s*gan)[^\n]*?([0-9\.\s\-\/:%]+)[^\n]*?(?:vs|-\s*\d+)/i);
+  const duelsWon = pickPair([/duels?\s*won/i, /duelos\s*gan/i], /(Duels?\s*won|Duelos\s*gan)[^\n]*?([0-9\.\s\-\/:%]+)\s*(?:vs|-\s*\d+)/i);
   if (duelsWon) out.duelsWon = duelsWon;
 
-  // Dribbles won
-  const dribWon = pickPair([/dribbles?\s*won/i, /regates?\s*gan/i], /(Dribbles?\s*won|Regates?\s*gan)[^\n]*?([0-9\.\s\-\/:%]+)[^\n]*?(?:vs|-\s*\d+)/i);
+  const dribWon = pickPair([/dribbles?\s*won/i, /regates?\s*gan/i], /(Dribbles?\s*won|Regates?\s*gan)[^\n]*?([0-9\.\s\-\/:%]+)\s*(?:vs|-\s*\d+)/i);
   if (dribWon) out.dribblesWon = dribWon;
 
   return out;
 }
 
-/* =========== Carga robusta de pdf-parse (CommonJS) =========== */
+/* ====== Carga CJS de pdf-parse (sin rutas locales) ====== */
 function loadPdfParse(): (input: Uint8Array | ArrayBuffer | Buffer) => Promise<{ text: string }> {
-  // IMPORTANTE: nunca leer archivos del disco aquí
-  // pdf-parse es CJS; lo cargamos con require para SSR en Vercel.
-  // @ts-ignore – tipamos con nuestro d.ts
+  // @ts-ignore
   const mod = require("pdf-parse");
   const fn = (mod?.default ?? mod) as any;
-  if (typeof fn !== "function") {
-    throw new Error("pdf-parse no se pudo cargar correctamente");
-  }
+  if (typeof fn !== "function") throw new Error("pdf-parse no se pudo cargar correctamente");
   return fn;
 }
 
@@ -156,18 +135,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const form = await req.formData();
     const file = form.get("file");
 
-    // >>> NUNCA usamos rutas locales ni archivos de prueba <<<
+    // <-- Solo aceptamos upload real, nunca usamos rutas locales -->
     if (!(file instanceof File)) {
-      return new NextResponse(
-        "archivo PDF requerido (campo 'file' en multipart/form-data)",
-        { status: 400 }
-      );
+      return new NextResponse("archivo PDF requerido (campo 'file')", { status: 400 });
     }
 
     const ab = await file.arrayBuffer();
     const u8 = new Uint8Array(ab);
 
-    // Validación rápida de header PDF
+    // Header PDF
     const header = new TextDecoder().decode(u8.slice(0, 5));
     if (header !== "%PDF-") {
       return new NextResponse("El archivo no parece ser un PDF válido", { status: 400 });
@@ -176,14 +152,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const pdfParse = loadPdfParse();
     const parsed = await pdfParse(u8);
     const text = String(parsed?.text || "");
-    if (!text.trim()) {
-      return new NextResponse("No se pudo extraer texto del PDF", { status: 422 });
-    }
+    if (!text.trim()) return new NextResponse("No se pudo extraer texto del PDF", { status: 422 });
 
-    // Campos semánticos
     const basic = extractFromPDFText(text);
-
-    // KPIs de equipo
     const teamKPIs = extractNumericTeamKPIs(text);
 
     const reportPatch = {
@@ -211,23 +182,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const mergedSetPieces = {
       ...asObj(savedSP),
       ...asObj(patchSP),
-      ...(patchSP.for
-        ? { for: asStrArray(patchSP.for) }
-        : savedSP.for
-        ? { for: asStrArray(savedSP.for) }
-        : {}),
-      ...(patchSP.against
-        ? { against: asStrArray(patchSP.against) }
-        : savedSP.against
-        ? { against: asStrArray(savedSP.against) }
-        : {}),
+      ...(patchSP.for ? { for: asStrArray(patchSP.for) } : savedSP.for ? { for: asStrArray(savedSP.for) } : {}),
+      ...(patchSP.against ? { against: asStrArray(patchSP.against) } : savedSP.against ? { against: asStrArray(savedSP.against) } : {}),
     };
 
-    const mergedReport = {
-      ...asObj(savedReport),
-      ...asObj(reportPatch),
-      setPieces: mergedSetPieces,
-    };
+    const mergedReport = { ...asObj(savedReport), ...asObj(reportPatch), setPieces: mergedSetPieces };
 
     const dataPatch: any = { planReport: mergedReport };
     if (basic.coach)  dataPatch.coach = basic.coach;
@@ -241,15 +200,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     return NextResponse.json({
       message: "PDF procesado y datos fusionados.",
-      data: {
-        coach: row.coach,
-        baseSystem: row.baseSystem,
-        planReport: asObj(row.planReport),
-      },
+      data: { coach: row.coach, baseSystem: row.baseSystem, planReport: asObj(row.planReport) },
     });
   } catch (e: any) {
-    // devolvemos solo el mensaje limpio
-    const msg = String(e?.message || e || "Error");
-    return new NextResponse(msg, { status: 500 });
+    return new NextResponse(String(e?.message || e || "Error"), { status: 500 });
   }
 }
