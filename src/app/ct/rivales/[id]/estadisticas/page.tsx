@@ -2,116 +2,100 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-export default async function Estadisticas({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default async function EstadisticasPage({ params }: { params: { id: string } }) {
   const rival = await prisma.rival.findUnique({
     where: { id: params.id },
-    select: { planReport: true },
+    select: { nombre: true, planReport: true, baseSystem: true, coach: true }
   });
 
   const pr = (rival?.planReport ?? {}) as any;
-  const team = pr.teamStats ?? {};
-  const players: any[] = pr.playerStats ?? [];
+  const t = (pr.teamStats ?? {}) as any;
+  const players = (pr.playerStats ?? []) as any[];
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-xl font-semibold">Estadísticas del rival</h2>
+    <div className="p-6 space-y-6">
+      <h1 className="text-2xl font-semibold">Estadísticas — {rival?.nombre ?? "Rival"}</h1>
+      <div className="text-sm text-gray-600">
+        <div><b>DT:</b> {rival?.coach ?? "—"}</div>
+        <div><b>Sistema base:</b> {rival?.baseSystem ?? "—"}</div>
+      </div>
 
-      {/* KPIs de equipo (nuestro / rival) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {[
-          ["Goles", team.goals],
-          ["xG", team.xg],
-          ["Posesión (%)", team.possessionPct],
-          ["Precisión de pases (%)", team.passAccuracyPct],
-          ["Tiros", team.shots],
-          ["Tiros a puerta", team.shotsOnTarget],
-          ["Centros", team.crosses],
-          ["Precisión de centros (%)", team.crossAccuracyPct],
-          ["Duelos ganados (%)", team.duelsWonPct],
-          ["Regates exitosos (%)", team.dribblesWonPct],
-          ["PPDA", team.ppda],
-          ["Intensidad de juego", team.gameIntensity],
-          ["Toques en área", team.touchesInBox],
-          ["Faltas", team.fouls],
-          ["TA", team.yellowCards],
-          ["TR", team.redCards],
-        ].map(([label, val], i) => (
-          <div key={i} className="rounded-lg border p-3">
-            <div className="text-sm text-gray-500">{label}</div>
-            <div className="text-lg">
-              {val?.ours ?? "—"} <span className="text-gray-400">/</span>{" "}
-              {val?.opp ?? "—"}
+      <section>
+        <h2 className="text-xl font-medium mb-2">KPIs del equipo</h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {Object.entries(t).map(([k, v]: any) => (
+            <div key={k} className="border rounded p-3">
+              <div className="text-xs uppercase text-gray-500">{k}</div>
+              <div className="text-lg">
+                {v?.ours ?? "—"} / {v?.opp ?? "—"}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+          {Object.keys(t).length === 0 && <div>No hay KPIs importados.</div>}
+        </div>
+      </section>
 
-      {/* Tabla por jugador */}
-      <div className="overflow-x-auto">
-        <table className="min-w-[1080px] w-full border text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="p-2 text-left">#</th>
-              <th className="p-2 text-left">Jugador</th>
-              <th className="p-2">Min</th>
-              <th className="p-2">G/xG</th>
-              <th className="p-2">A/xA</th>
-              <th className="p-2">T/OT</th>
-              <th className="p-2">P/Prec%</th>
-              <th className="p-2">Cent/Prec%</th>
-              <th className="p-2">Reg/OK</th>
-              <th className="p-2">Duel/OK</th>
-              <th className="p-2">Toques área</th>
-              <th className="p-2">TA/TR</th>
-            </tr>
-          </thead>
-          <tbody>
-            {players.map((p, idx) => (
-              <tr key={idx} className="border-t">
-                <td className="p-2 text-gray-500">{p.shirt ?? ""}</td>
-                <td className="p-2">{p.name}</td>
-                <td className="p-2 text-center">{p.minutes ?? "—"}</td>
-                <td className="p-2 text-center">
-                  {p.goals ?? "—"} / {p.xg ?? "—"}
-                </td>
-                <td className="p-2 text-center">
-                  {p.assists ?? "—"} / {p.xa ?? "—"}
-                </td>
-                <td className="p-2 text-center">
-                  {p.shots ?? "—"} / {p.shotsOnTarget ?? "—"}
-                </td>
-                <td className="p-2 text-center">
-                  {p.passes ?? "—"} / {p.passesAccurate ?? "—"}
-                </td>
-                <td className="p-2 text-center">
-                  {p.crosses ?? "—"} / {p.crossesAccurate ?? "—"}
-                </td>
-                <td className="p-2 text-center">
-                  {p.dribbles ?? "—"} / {p.dribblesWon ?? "—"}
-                </td>
-                <td className="p-2 text-center">
-                  {p.duels ?? "—"} / {p.duelsWon ?? "—"}
-                </td>
-                <td className="p-2 text-center">{p.touchesInBox ?? "—"}</td>
-                <td className="p-2 text-center">
-                  {p.yellow ?? "—"} / {p.red ?? "—"}
-                </td>
-              </tr>
-            ))}
-            {!players.length && (
-              <tr>
-                <td className="p-3 text-center text-gray-500" colSpan={12}>
-                  Aún no hay estadísticas de jugadores importadas desde el PDF.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <section>
+        <h2 className="text-xl font-medium mb-2">Jugadores</h2>
+        {players.length === 0 ? (
+          <div>No hay estadísticas de jugadores importadas.</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-[900px] w-full text-sm border">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="p-2 border">#</th>
+                  <th className="p-2 border text-left">Jugador</th>
+                  <th className="p-2 border">Min</th>
+                  <th className="p-2 border">G</th>
+                  <th className="p-2 border">xG</th>
+                  <th className="p-2 border">A</th>
+                  <th className="p-2 border">xA</th>
+                  <th className="p-2 border">Tiros</th>
+                  <th className="p-2 border">A puerta</th>
+                  <th className="p-2 border">Pases</th>
+                  <th className="p-2 border">% Pases</th>
+                  <th className="p-2 border">Centros</th>
+                  <th className="p-2 border">% Centros</th>
+                  <th className="p-2 border">Regates</th>
+                  <th className="p-2 border">Reg. gan.</th>
+                  <th className="p-2 border">Duelos</th>
+                  <th className="p-2 border">Duelos gan.</th>
+                  <th className="p-2 border">Toques área</th>
+                  <th className="p-2 border">TA</th>
+                  <th className="p-2 border">TR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {players.map((p, i) => (
+                  <tr key={i}>
+                    <td className="p-2 border text-center">{p.shirt ?? "—"}</td>
+                    <td className="p-2 border">{p.name}</td>
+                    <td className="p-2 border text-center">{p.minutes ?? "—"}</td>
+                    <td className="p-2 border text-center">{p.goals ?? "—"}</td>
+                    <td className="p-2 border text-center">{p.xg ?? "—"}</td>
+                    <td className="p-2 border text-center">{p.assists ?? "—"}</td>
+                    <td className="p-2 border text-center">{p.xa ?? "—"}</td>
+                    <td className="p-2 border text-center">{p.shots ?? "—"}</td>
+                    <td className="p-2 border text-center">{p.shotsOnTarget ?? "—"}</td>
+                    <td className="p-2 border text-center">{p.passes ?? "—"}</td>
+                    <td className="p-2 border text-center">{p.passesAccurate ?? "—"}</td>
+                    <td className="p-2 border text-center">{p.crosses ?? "—"}</td>
+                    <td className="p-2 border text-center">{p.crossesAccurate ?? "—"}</td>
+                    <td className="p-2 border text-center">{p.dribbles ?? "—"}</td>
+                    <td className="p-2 border text-center">{p.dribblesWon ?? "—"}</td>
+                    <td className="p-2 border text-center">{p.duels ?? "—"}</td>
+                    <td className="p-2 border text-center">{p.duelsWon ?? "—"}</td>
+                    <td className="p-2 border text-center">{p.touchesInBox ?? "—"}</td>
+                    <td className="p-2 border text-center">{p.yellow ?? "—"}</td>
+                    <td className="p-2 border text-center">{p.red ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
