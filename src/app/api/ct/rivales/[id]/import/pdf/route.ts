@@ -1,5 +1,3 @@
-import "@/lib/patch-fs-avoid-tests"; // ⬅️ Importar primero para neutralizar lecturas locales residuales
-
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { createRequire } from "node:module";
@@ -39,21 +37,24 @@ function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): strin
   return uniq(out);
 }
 
-/* Extracción de texto estructurado + heurísticas numéricas */
+/* ---------------- Extracción de texto y métricas (robusto) ---------------- */
 function extractFromPDFText(text: string) {
   const res: any = {};
 
-  const coach = text.match(/(?:Coach|Entrenador|DT|Director(?:\s+Técnico)?)\s*[:\-]\s*([^\n]+)/i)?.[1];
+  // Coach / DT
+  const coach = text.match(/(?:Coach|Entrenador|DT|Director(?:\s+T[eé]cnico)?)\s*[:\-]\s*([^\n]+)/i)?.[1];
   if (coach) res.coach = coach.trim();
 
+  // Sistema base
   const sys =
-    text.match(/(?:Formación|Formacion|Sistema|Base System|Formation)[^\n]*[:\-]\s*([0-9](?:\s*[–\-]\s*[0-9])+)/i)?.[1] ||
+    text.match(/(?:Formaci[oó]n|Sistema|Base System|Formation)[^\n]*[:\-]\s*([0-9](?:\s*[–\-]\s*[0-9])+)/i)?.[1] ||
     text.match(/\b([0-9]\s*[–\-]\s*[0-9](?:\s*[–\-]\s*[0-9]){1,2})\b/)?.[1];
   if (sys) res.system = sys.replace(/\s*–\s*/g, "-").replace(/\s+/g, "");
 
-  const keyPlayers = takeBulletsAround(text, /(Jugadores?\s+clave|Key\s+Players?)\b/i, [/(Fortalezas|Debilidades|Strengths|Weaknesses|Balón|Set\s*pieces?)/i]);
-  const strengths  = takeBulletsAround(text, /(Fortalezas|Strengths)\b/i,        [/(Debilidades|Weaknesses|Balón|Set\s*pieces?|Key\s+Players?)/i]);
-  const weaknesses = takeBulletsAround(text, /(Debilidades|Weaknesses)\b/i,      [/(Fortalezas|Strengths|Balón|Set\s*pieces?|Key\s+Players?)/i]);
+  // Listados clave
+  const keyPlayers = takeBulletsAround(text, /(Jugadores?\s+clave|Key\s+Players?)\b/i, [/(Fortalezas|Debilidades|Strengths|Weaknesses|Bal[oó]n|Set\s*pieces?)/i]);
+  const strengths  = takeBulletsAround(text, /(Fortalezas|Strengths)\b/i,        [/(Debilidades|Weaknesses|Bal[oó]n|Set\s*pieces?|Key\s+Players?)/i]);
+  const weaknesses = takeBulletsAround(text, /(Debilidades|Weaknesses)\b/i,      [/(Fortalezas|Strengths|Bal[oó]n|Set\s*pieces?|Key\s+Players?)/i]);
   const setFor     = takeBulletsAround(text, /(Bal[oó]n\s+parado.*a\s+favor|Set\s*pieces?\s*\(for\))/i,
                                        [/(en\s+contra|against|Fortalezas|Debilidades|Strengths|Weaknesses|Key\s+Players?)/i]);
   const setAgainst = takeBulletsAround(text, /(Bal[oó]n\s+parado.*en\s+contra|Set\s*pieces?\s*\(against\))/i,
@@ -65,43 +66,89 @@ function extractFromPDFText(text: string) {
   if (setFor.length)     res.setFor     = setFor;
   if (setAgainst.length) res.setAgainst = setAgainst;
 
-  const findNum = (rx: RegExp) => {
+  /* ---------------- Métricas numéricas (muchas variantes) ---------------- */
+  const totals: Record<string, number> = {};
+
+  // Helpers
+  const numFrom = (rx: RegExp) => {
     const m = text.match(rx);
     if (!m) return undefined;
-    const val = m[1]?.replace(/,/g, ".").trim();
+    const val = (m[1] ?? "").toString().replace(",", ".").replace(/[^\d.]/g, "");
     const n = Number(val);
     return Number.isFinite(n) ? n : undefined;
   };
-
-  const percent = (rx: RegExp) => {
+  const pctFrom = (rx: RegExp) => {
     const m = text.match(rx);
     if (!m) return undefined;
-    const v = m[1].replace(",", ".").replace("%", "");
+    const v = (m[1] ?? "").toString().replace(",", ".").replace("%", "");
     const n = Number(v);
     return Number.isFinite(n) ? n : undefined;
   };
 
-  res.totals = res.totals || {};
-  const gf = findNum(/\bGF[:\s]+([0-9]+)\b/i) ?? findNum(/\bGoals For[:\s]+([0-9]+)\b/i);
-  const ga = findNum(/\bGA[:\s]+([0-9]+)\b/i) ?? findNum(/\bGoals Against[:\s]+([0-9]+)\b/i);
-  if (gf !== undefined) res.totals.gf = gf;
-  if (ga !== undefined) res.totals.ga = ga;
+  // ------- GF / GA -------
+  // Formatos: "GF: 12", "GA 8", "Goles a favor 12", "Goles en contra: 8", "GF/GA 12/8"
+  const gfDirect =
+    numFrom(/\bGF\s*[:=]?\s*([0-9]+)\b/i) ??
+    numFrom(/\bGoles?\s+a\s+favor\s*[:=]?\s*([0-9]+)\b/i) ??
+    numFrom(/\bGoals?\s+For\s*[:=]?\s*([0-9]+)\b/i);
+  if (gfDirect !== undefined) totals.gf = gfDirect;
 
-  // ⬇️ CORREGIDO: paréntesis balanceados y regex con 1 sola captura numérica
-  const poss =
-    percent(/\bPosesi[oó]n[:\s]+([0-9]+(?:[.,][0-9]+)?)%/i) ??
-    percent(/\bPossession[:\s]+([0-9]+(?:[.,][0-9]+)?)%/i);
-  if (poss !== undefined) res.totals.possession = poss;
+  const gaDirect =
+    numFrom(/\bGA\s*[:=]?\s*([0-9]+)\b/i) ??
+    numFrom(/\bGoles?\s+en\s+contra\s*[:=]?\s*([0-9]+)\b/i) ??
+    numFrom(/\bGoals?\s+Against\s*[:=]?\s*([0-9]+)\b/i);
+  if (gaDirect !== undefined) totals.ga = gaDirect;
 
-  // ⬇️ CORREGIDO: etiquetas como no-captura para que m[1] sea el número
-  const shots = findNum(/(?:Tiros|Shots)\b[^\n]*[:\s]+([0-9]+)/i) ??
-                findNum(/(?:Total Shots)\b[^\n]*[:\s]+([0-9]+)/i);
-  const sot   = findNum(/(?:Tiros a puerta|Shots on Target)\b[^\n]*[:\s]+([0-9]+)/i);
-  if (shots !== undefined) res.totals.shots = shots;
-  if (sot   !== undefined) res.totals.shotsOnTarget = sot;
+  // Combinado "GF/GA 12/8" o "GF - GA 12/8"
+  const gfga = text.match(/\bGF\s*\/\s*GA\b[^\d]*([0-9]+)\s*\/\s*([0-9]+)/i) ||
+               text.match(/\bGF\s*[-–]\s*GA\b[^\d]*([0-9]+)\s*\/\s*([0-9]+)/i);
+  if (gfga && (totals.gf === undefined || totals.ga === undefined)) {
+    const gf = Number(gfga[1]); const ga = Number(gfga[2]);
+    if (Number.isFinite(gf) && totals.gf === undefined) totals.gf = gf;
+    if (Number.isFinite(ga) && totals.ga === undefined) totals.ga = ga;
+  }
 
-  const xg = findNum(/\bxG[:\s]+([0-9]+(?:[.,][0-9]+)?)\b/i);
-  if (xg !== undefined) res.totals.xg = xg;
+  // ------- Posesión -------
+  // "Posesión 56%", "Posesión del balón: 55.2%", "Possession 54.1%"
+  const possession =
+    pctFrom(/\bPosesi[oó]n(?:\s+del\s+bal[oó]n)?\s*[:=]?\s*([0-9]+(?:[.,][0-9]+)?)\s*%?/i) ??
+    pctFrom(/\bPossession(?:\s*%?)?\s*[:=]?\s*([0-9]+(?:[.,][0-9]+)?)\s*%?/i);
+  if (possession !== undefined) totals.possession = possession;
+
+  // ------- Tiros totales -------
+  // "Tiros 12", "Remates 13", "Shots 11", "Total shots: 10"
+  const shots =
+    numFrom(/\bTiros?\b[^\n:]*[:\s]\s*([0-9]+)\b/i) ??
+    numFrom(/\bRemates?\b[^\n:]*[:\s]\s*([0-9]+)\b/i) ??
+    numFrom(/\bTotal\s+Shots?\b[^\n:]*[:\s]\s*([0-9]+)\b/i) ??
+    numFrom(/\bShots?\b[^\n:]*[:\s]\s*([0-9]+)\b/i);
+  if (shots !== undefined) totals.shots = shots;
+
+  // ------- Tiros a puerta / On target -------
+  const shotsOnTarget =
+    numFrom(/\bTiros?\s+a\s+(?:puerta|port[eé]ria)\b[^\n:]*[:\s]\s*([0-9]+)\b/i) ??
+    numFrom(/\bRemates?\s+a\s+(?:puerta|port[eé]ria)\b[^\n:]*[:\s]\s*([0-9]+)\b/i) ??
+    numFrom(/\bShots?\s+on\s+Target\b[^\n:]*[:\s]\s*([0-9]+)\b/i) ??
+    numFrom(/\bOn\s+Target\b[^\n:]*[:\s]\s*([0-9]+)\b/i);
+  if (shotsOnTarget !== undefined) totals.shotsOnTarget = shotsOnTarget;
+
+  // ------- xG / Expected Goals -------
+  const xg =
+    numFrom(/\bxG\b[^\d]*([0-9]+(?:[.,][0-9]+)?)/i) ??
+    numFrom(/\bExpected\s+Goals?\b[^\d]*([0-9]+(?:[.,][0-9]+)?)/i);
+  if (xg !== undefined) totals.xg = xg;
+
+  if (Object.keys(totals).length) res.totals = totals;
+
+  // Log para ver rápidamente qué se detectó (Vercel Logs)
+  try {
+    console.log("[PDF EXTRACT]", {
+      coach: res.coach ?? null,
+      system: res.system ?? null,
+      totals: res.totals ?? null,
+      sample: text.slice(0, 300).replace(/\s+/g, " "),
+    });
+  } catch {}
 
   return res;
 }
@@ -139,6 +186,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const ab = await fileEntry.arrayBuffer();
     const u8 = new Uint8Array(ab);
 
+    // Validación mínima de header PDF
     const header = new TextDecoder().decode(u8.slice(0, 5));
     if (header !== "%PDF-") {
       return NextResponse.json({ error: "El archivo no parece ser un PDF válido" }, { status: 400 });
@@ -153,6 +201,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     const ext = extractFromPDFText(text);
 
+    // Construcción del patch
     const reportPatch = {
       system: ext.system || undefined,
       strengths: ext.strengths || undefined,
@@ -165,6 +214,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       }
     };
 
+    // Leer lo actual
     const current = await prisma.rival.findUnique({
       where: { id },
       select: { coach: true, baseSystem: true, planReport: true }
@@ -210,7 +260,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     });
   } catch (e: any) {
     console.error("[PDF IMPORT ERROR]", e);
-    const stack = String(e?.stack || "").split("\n").slice(0, 6).join("\n");
+    const stack = String(e?.stack || "").split("\n").slice(0, 5).join("\n");
     const msg = String(e?.message || e || "Error");
     return NextResponse.json({ error: msg, origin: stack }, { status: 500 });
   }
