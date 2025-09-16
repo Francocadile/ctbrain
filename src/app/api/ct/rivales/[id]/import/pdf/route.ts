@@ -37,21 +37,18 @@ function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): strin
   return uniq(out);
 }
 
-/* Extracción de texto estructurado */
+/* Extracción de texto estructurado + heurísticas numéricas */
 function extractFromPDFText(text: string) {
   const res: any = {};
 
-  // Coach / DT
   const coach = text.match(/(?:Coach|Entrenador|DT|Director(?:\s+Técnico)?)\s*[:\-]\s*([^\n]+)/i)?.[1];
   if (coach) res.coach = coach.trim();
 
-  // Sistema base
   const sys =
     text.match(/(?:Formación|Formacion|Sistema|Base System|Formation)[^\n]*[:\-]\s*([0-9](?:\s*[–\-]\s*[0-9])+)/i)?.[1] ||
     text.match(/\b([0-9]\s*[–\-]\s*[0-9](?:\s*[–\-]\s*[0-9]){1,2})\b/)?.[1];
   if (sys) res.system = sys.replace(/\s*–\s*/g, "-").replace(/\s+/g, "");
 
-  // Listados
   const keyPlayers = takeBulletsAround(text, /(Jugadores?\s+clave|Key\s+Players?)\b/i, [/(Fortalezas|Debilidades|Strengths|Weaknesses|Balón|Set\s*pieces?)/i]);
   const strengths  = takeBulletsAround(text, /(Fortalezas|Strengths)\b/i,        [/(Debilidades|Weaknesses|Balón|Set\s*pieces?|Key\s+Players?)/i]);
   const weaknesses = takeBulletsAround(text, /(Debilidades|Weaknesses)\b/i,      [/(Fortalezas|Strengths|Balón|Set\s*pieces?|Key\s+Players?)/i]);
@@ -66,7 +63,6 @@ function extractFromPDFText(text: string) {
   if (setFor.length)     res.setFor     = setFor;
   if (setAgainst.length) res.setAgainst = setAgainst;
 
-  /* --------- Métricas numéricas básicas (heurísticas) --------- */
   const findNum = (rx: RegExp) => {
     const m = text.match(rx);
     if (!m) return undefined;
@@ -83,40 +79,41 @@ function extractFromPDFText(text: string) {
     return Number.isFinite(n) ? n : undefined;
   };
 
-  // goles a favor / en contra
   res.totals = res.totals || {};
   const gf = findNum(/\bGF[:\s]+([0-9]+)\b/i) ?? findNum(/\bGoals For[:\s]+([0-9]+)\b/i);
   const ga = findNum(/\bGA[:\s]+([0-9]+)\b/i) ?? findNum(/\bGoals Against[:\s]+([0-9]+)\b/i);
   if (gf !== undefined) res.totals.gf = gf;
   if (ga !== undefined) res.totals.ga = ga;
 
-  // posesión
   const poss = percent(/\bPosesi[oó]n[:\s]+([0-9]+(?:[.,][0-9]+)?)%/i) ?? percent(/\bPossession[:\s]+([0-9]+(?:[.,][0-9]+)?)%/i);
   if (poss !== undefined) res.totals.possession = poss;
 
-  // tiros / tiros al arco
   const shots = findNum(/\b(Tiros|Shots)\b[^\n]*[:\s]+([0-9]+)/i) ?? findNum(/\b(Total Shots)\b[^\n]*[:\s]+([0-9]+)/i);
   const sot   = findNum(/\b(Tiros a puerta|Shots on Target)\b[^\n]*[:\s]+([0-9]+)/i);
   if (shots !== undefined) res.totals.shots = shots;
   if (sot   !== undefined) res.totals.shotsOnTarget = sot;
 
-  // xG (si existiera)
   const xg = findNum(/\bxG[:\s]+([0-9]+(?:[.,][0-9]+)?)\b/i);
   if (xg !== undefined) res.totals.xg = xg;
 
   return res;
 }
 
-/* --------- Carga robusta de pdf-parse (CJS) --------- */
+/* --------- pdf-parse seguro (CJS) --------- */
 function loadPdfParse(): (input: Uint8Array | ArrayBuffer | Buffer) => Promise<{ text: string }> {
-  // IMPORTANTÍSIMO: no usar rutas de disco ni fs.* ; solo buffer del upload
-  // @ts-ignore tipado provisto por types/pdf-parse.d.ts
+  // ¡Nunca pasar string! Si pasás string, pdf-parse intenta abrir archivo y aparece el ENOENT.
+  // @ts-ignore – tipos provistos en /types/pdf-parse.d.ts
   const mod = require("pdf-parse");
   const fn = (mod?.default ?? mod) as any;
   if (typeof fn !== "function") {
     throw new Error("pdf-parse no se pudo cargar correctamente");
   }
-  return fn;
+  return async (input: Uint8Array | ArrayBuffer | Buffer) => {
+    if (typeof (input as any) === "string") {
+      throw new Error("Bug interno: pdf-parse recibió una string (ruta). Debe recibir Buffer/Uint8Array.");
+    }
+    return fn(input);
+  };
 }
 
 /* ------------------------- Handler ------------------------- */
@@ -126,7 +123,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     if (!id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
 
     const form = await req.formData();
-    // Aceptamos 'file' o 'pdf' como nombre de campo
     const fileEntry = (form.get("file") ?? form.get("pdf")) as unknown;
 
     if (!(fileEntry instanceof File)) {
@@ -136,7 +132,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const ab = await fileEntry.arrayBuffer();
     const u8 = new Uint8Array(ab);
 
-    // Validación mínima
     const header = new TextDecoder().decode(u8.slice(0, 5));
     if (header !== "%PDF-") {
       return NextResponse.json({ error: "El archivo no parece ser un PDF válido" }, { status: 400 });
@@ -151,7 +146,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     const ext = extractFromPDFText(text);
 
-    /* ------- Construcción del patch en el mismo shape que usás ------- */
     const reportPatch = {
       system: ext.system || undefined,
       strengths: ext.strengths || undefined,
@@ -164,7 +158,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       }
     };
 
-    // Leemos lo que hay hoy
     const current = await prisma.rival.findUnique({
       where: { id },
       select: { coach: true, baseSystem: true, planReport: true }
@@ -178,16 +171,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const mergedSetPieces = {
       ...asObj(savedSP),
       ...asObj(patchSP),
-      ...(patchSP.for
-        ? { for: asStrArray(patchSP.for) }
-        : savedSP.for
-        ? { for: asStrArray(savedSP.for) }
-        : {}),
-      ...(patchSP.against
-        ? { against: asStrArray(patchSP.against) }
-        : savedSP.against
-        ? { against: asStrArray(savedSP.against) }
-        : {})
+      ...(patchSP.for ? { for: asStrArray(patchSP.for) } : savedSP.for ? { for: asStrArray(savedSP.for) } : {}),
+      ...(patchSP.against ? { against: asStrArray(patchSP.against) } : savedSP.against ? { against: asStrArray(savedSP.against) } : {})
     };
 
     const mergedTotals = {
@@ -213,16 +198,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     });
 
     return NextResponse.json({
-      data: {
-        coach: row.coach,
-        baseSystem: row.baseSystem,
-        planReport: asObj(row.planReport)
-      },
+      data: { coach: row.coach, baseSystem: row.baseSystem, planReport: asObj(row.planReport) },
       message: "PDF procesado: se actualizaron plan y estadísticas."
     });
   } catch (e: any) {
+    // Log completo en server y respuesta con origen resumido para ubicar el archivo culpable
+    console.error("[PDF IMPORT ERROR]", e);
+    const stack = String(e?.stack || "").split("\n").slice(0, 5).join("\n");
     const msg = String(e?.message || e || "Error");
-    // Importante: no devolvemos throw “tal cual” rutas locales para evitar confusiones
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ error: msg, origin: stack }, { status: 500 });
   }
 }
