@@ -1,4 +1,4 @@
-declare module "pdf-parse/lib/pdf-parse.js" {
+declare module 'pdf-parse' {
   export interface PDFInfo {
     PDFFormatVersion?: string;
     IsAcroFormPresent?: boolean;
@@ -28,6 +28,5 @@ declare module "pdf-parse/lib/pdf-parse.js" {
 
   export type PDFSource = Buffer | Uint8Array | ArrayBuffer;
 
-  const pdfParse: (dataBuffer: PDFSource, options?: any) => Promise<PDFData>;
-  export default pdfParse;
+  export default function pdf(dataBuffer: PDFSource, options?: any): Promise<PDFData>;
 }
