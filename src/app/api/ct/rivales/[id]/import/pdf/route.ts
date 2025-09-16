@@ -20,32 +20,24 @@ const cleanLines = (s?: string | null) =>
   (s || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
 
 const uniq = (arr: string[]) => {
-  const set = new Set<string>();
-  const out: string[] = [];
-  for (const v of arr) {
-    const k = v.toLowerCase();
-    if (!set.has(k)) { set.add(k); out.push(v); }
-  }
+  const set = new Set<string>(); const out: string[] = [];
+  for (const v of arr) { const k = v.toLowerCase(); if (!set.has(k)) { set.add(k); out.push(v); } }
   return out;
 };
 
 function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): string[] {
-  const lines = cleanLines(text);
-  const out: string[] = [];
-  let on = false;
+  const lines = cleanLines(text); const out: string[] = []; let on = false;
   for (const ln of lines) {
     if (header.test(ln)) { on = true; continue; }
     if (on && stops.some(rx => rx.test(ln))) break;
     if (!on) continue;
-    const m = ln.match(/^[\-\*•·]\s*(.+)$/);
-    if (m) out.push(m[1].trim());
+    const m = ln.match(/^[\-\*•·]\s*(.+)$/); if (m) out.push(m[1].trim());
   }
   return uniq(out);
 }
 
 function extractFromPDFText(text: string) {
   const res: any = {};
-
   const coach = text.match(/(?:Coach|Entrenador|DT|Director(?:\s+Técnico)?)\s*[:\-]\s*([^\n]+)/i)?.[1];
   if (coach) res.coach = coach.trim();
 
@@ -55,28 +47,23 @@ function extractFromPDFText(text: string) {
   if (sys) res.system = sys.replace(/\s*–\s*/g, "-").replace(/\s+/g, "");
 
   const keyPlayers = takeBulletsAround(
-    text,
-    /(Jugadores?\s+clave|Key\s+Players?)\b/i,
+    text, /(Jugadores?\s+clave|Key\s+Players?)\b/i,
     [/(Fortalezas|Debilidades|Strengths|Weaknesses|Balón|Set\s*pieces?)/i]
   );
   const strengths = takeBulletsAround(
-    text,
-    /(Fortalezas|Strengths)\b/i,
+    text, /(Fortalezas|Strengths)\b/i,
     [/(Debilidades|Weaknesses|Balón|Set\s*pieces?|Key\s+Players?)/i]
   );
   const weaknesses = takeBulletsAround(
-    text,
-    /(Debilidades|Weaknesses)\b/i,
+    text, /(Debilidades|Weaknesses)\b/i,
     [/(Fortalezas|Strengths|Balón|Set\s*pieces?|Key\s+Players?)/i]
   );
   const setFor = takeBulletsAround(
-    text,
-    /(Bal[oó]n\s+parado.*a\s+favor|Set\s*pieces?\s*\(for\))/i,
+    text, /(Bal[oó]n\s+parado.*a\s+favor|Set\s*pieces?\s*\(for\))/i,
     [/(en\s+contra|against|Fortalezas|Debilidades|Strengths|Weaknesses|Key\s+Players?)/i]
   );
   const setAgainst = takeBulletsAround(
-    text,
-    /(Bal[oó]n\s+parado.*en\s+contra|Set\s*pieces?\s*\(against\))/i,
+    text, /(Bal[oó]n\s+parado.*en\s+contra|Set\s*pieces?\s*\(against\))/i,
     [/(a\s+favor|for|Fortalezas|Debilidades|Strengths|Weaknesses|Key\s+Players?)/i]
   );
 
@@ -89,11 +76,12 @@ function extractFromPDFText(text: string) {
   return res;
 }
 
-/* =========== Carga robusta de pdf-parse (CommonJS) =========== */
-function loadPdfParse(): (input: Uint8Array | ArrayBuffer | Buffer) => Promise<{ text: string }> {
-  // pdf-parse es CJS; lo cargamos con require para SSR en Vercel.
-  // @ts-ignore – está tipado en types/pdf-parse.d.ts
-  const mod = require("pdf-parse");
+/* ===== Carga pdf-parse estable (CommonJS forzado) ===== */
+function loadPdfParse(): (input: Buffer | Uint8Array | ArrayBuffer) => Promise<{ text: string }> {
+  // Forzamos a cargar el módulo de función directamente (evita que el bundler
+  // resuelva a scripts de ejemplo que intentan abrir ./test/data/*.pdf)
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const mod = require("pdf-parse/lib/pdf-parse.js");
   const fn = (mod?.default ?? mod) as any;
   if (typeof fn !== "function") {
     throw new Error("pdf-parse no se pudo cargar correctamente");
@@ -108,7 +96,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
     const form = await req.formData();
-    // el input del form debe llamarse name="file"
     const file = form.get("file");
     if (!(file instanceof File)) {
       return new NextResponse("archivo PDF requerido (file)", { status: 400 });
@@ -117,21 +104,21 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const ab = await file.arrayBuffer();
     const u8 = new Uint8Array(ab);
 
-    // Firma PDF
+    // Validación rápida de header PDF
     const header = new TextDecoder().decode(u8.slice(0, 5));
     if (header !== "%PDF-") {
       return new NextResponse("El archivo no parece ser un PDF válido", { status: 400 });
     }
 
     const pdfParse = loadPdfParse();
-    const parsed = await pdfParse(u8);
+    // >>> Usa Buffer para evitar ambigüedades internas
+    const parsed = await pdfParse(Buffer.from(u8));
     const text = String(parsed?.text || "");
     if (!text.trim()) {
       return new NextResponse("No se pudo extraer texto del PDF", { status: 422 });
     }
 
     const ext = extractFromPDFText(text);
-
     const reportPatch = {
       system: ext.system || undefined,
       strengths: ext.strengths || undefined,
@@ -193,6 +180,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       message: "PDF procesado y datos fusionados."
     });
   } catch (e: any) {
+    // Devolvemos el mensaje crudo para que lo veas en la UI
     const msg = String(e?.message || e || "Error");
     return new NextResponse(msg, { status: 500 });
   }
