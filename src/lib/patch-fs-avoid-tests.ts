@@ -1,7 +1,7 @@
 // src/lib/patch-fs-avoid-tests.ts
-// Parche defensivo: si ALGÚN módulo residual intenta leer
-// "./test/data/05-versions-space.pdf" en runtime (Vercel no tiene ese archivo),
-// lo interceptamos y devolvemos un PDF mínimo sintético para evitar ENOENT.
+// Parche defensivo: si algún módulo intenta leer el archivo de pruebas
+// "./test/data/05-versions-space.pdf" en producción, devolvemos un PDF mínimo
+// sintético para evitar ENOENT.
 
 import * as fs from "node:fs";
 
@@ -20,10 +20,7 @@ function fakePdfBuffer(): Buffer {
 }
 
 // @ts-ignore – sobrescribimos para interceptar
-(fs as any).readFileSync = function patchedReadFileSync(
-  p: any,
-  options?: any
-): any {
+(fs as any).readFileSync = function patchedReadFileSync(p: any, options?: any): any {
   try {
     if (matchesTestPdf(p)) {
       return fakePdfBuffer();
