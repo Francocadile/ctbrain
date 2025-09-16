@@ -3,9 +3,14 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 export default async function EstadisticasPage({ params }: { params: { id: string } }) {
+  // NO pedimos 'nombre' porque no existe en tu schema actual
   const rival = await prisma.rival.findUnique({
     where: { id: params.id },
-    select: { nombre: true, planReport: true, baseSystem: true, coach: true }
+    select: {
+      coach: true,
+      baseSystem: true,
+      planReport: true,
+    },
   });
 
   const pr = (rival?.planReport ?? {}) as any;
@@ -14,7 +19,8 @@ export default async function EstadisticasPage({ params }: { params: { id: strin
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-semibold">Estadísticas — {rival?.nombre ?? "Rival"}</h1>
+      <h1 className="text-2xl font-semibold">Estadísticas — Rival</h1>
+
       <div className="text-sm text-gray-600">
         <div><b>DT:</b> {rival?.coach ?? "—"}</div>
         <div><b>Sistema base:</b> {rival?.baseSystem ?? "—"}</div>
@@ -67,10 +73,10 @@ export default async function EstadisticasPage({ params }: { params: { id: strin
                 </tr>
               </thead>
               <tbody>
-                {players.map((p, i) => (
+                {players.map((p: any, i: number) => (
                   <tr key={i}>
                     <td className="p-2 border text-center">{p.shirt ?? "—"}</td>
-                    <td className="p-2 border">{p.name}</td>
+                    <td className="p-2 border">{p.name ?? "—"}</td>
                     <td className="p-2 border text-center">{p.minutes ?? "—"}</td>
                     <td className="p-2 border text-center">{p.goals ?? "—"}</td>
                     <td className="p-2 border text-center">{p.xg ?? "—"}</td>
