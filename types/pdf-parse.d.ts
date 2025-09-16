@@ -12,7 +12,10 @@ declare module 'pdf-parse' {
     Pages?: number;
   }
 
-  export interface PDFMetadata { _metadata?: any; metadata?: any; }
+  export interface PDFMetadata {
+    _metadata?: any;
+    metadata?: any;
+  }
 
   export interface PDFData {
     numpages: number;
@@ -25,6 +28,5 @@ declare module 'pdf-parse' {
 
   export type PDFSource = Buffer | Uint8Array | ArrayBuffer;
 
-  const pdf: (dataBuffer: PDFSource, options?: any) => Promise<PDFData>;
-  export default pdf;
+  export default function pdf(dataBuffer: PDFSource, options?: any): Promise<PDFData>;
 }
