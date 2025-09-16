@@ -12,10 +12,7 @@ declare module 'pdf-parse' {
     Pages?: number;
   }
 
-  export interface PDFMetadata {
-    _metadata?: any;
-    metadata?: any;
-  }
+  export interface PDFMetadata { _metadata?: any; metadata?: any; }
 
   export interface PDFData {
     numpages: number;
