@@ -20,24 +20,32 @@ const cleanLines = (s?: string | null) =>
   (s || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
 
 const uniq = (arr: string[]) => {
-  const set = new Set<string>(); const out: string[] = [];
-  for (const v of arr) { const k = v.toLowerCase(); if (!set.has(k)) { set.add(k); out.push(v); } }
+  const set = new Set<string>();
+  const out: string[] = [];
+  for (const v of arr) {
+    const k = v.toLowerCase();
+    if (!set.has(k)) { set.add(k); out.push(v); }
+  }
   return out;
 };
 
 function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): string[] {
-  const lines = cleanLines(text); const out: string[] = []; let on = false;
+  const lines = cleanLines(text);
+  const out: string[] = [];
+  let on = false;
   for (const ln of lines) {
     if (header.test(ln)) { on = true; continue; }
     if (on && stops.some(rx => rx.test(ln))) break;
     if (!on) continue;
-    const m = ln.match(/^[\-\*•·]\s*(.+)$/); if (m) out.push(m[1].trim());
+    const m = ln.match(/^[\-\*•·]\s*(.+)$/);
+    if (m) out.push(m[1].trim());
   }
   return uniq(out);
 }
 
 function extractFromPDFText(text: string) {
   const res: any = {};
+
   const coach = text.match(/(?:Coach|Entrenador|DT|Director(?:\s+Técnico)?)\s*[:\-]\s*([^\n]+)/i)?.[1];
   if (coach) res.coach = coach.trim();
 
@@ -83,9 +91,8 @@ function extractFromPDFText(text: string) {
 
 /* =========== Carga robusta de pdf-parse (CommonJS) =========== */
 function loadPdfParse(): (input: Uint8Array | ArrayBuffer | Buffer) => Promise<{ text: string }> {
-  // pdf-parse es CJS; lo cargamos con require para SSR en Vercel
-  // y evitamos cualquier dependencia a canvas/worker.
-  // @ts-ignore – lo tipamos con nuestro d.ts
+  // pdf-parse es CJS; lo cargamos con require para SSR en Vercel.
+  // @ts-ignore – está tipado en types/pdf-parse.d.ts
   const mod = require("pdf-parse");
   const fn = (mod?.default ?? mod) as any;
   if (typeof fn !== "function") {
@@ -101,6 +108,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
     const form = await req.formData();
+    // el input del form debe llamarse name="file"
     const file = form.get("file");
     if (!(file instanceof File)) {
       return new NextResponse("archivo PDF requerido (file)", { status: 400 });
@@ -109,7 +117,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const ab = await file.arrayBuffer();
     const u8 = new Uint8Array(ab);
 
-    // Validación rápida de header PDF
+    // Firma PDF
     const header = new TextDecoder().decode(u8.slice(0, 5));
     if (header !== "%PDF-") {
       return new NextResponse("El archivo no parece ser un PDF válido", { status: 400 });
@@ -123,6 +131,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
 
     const ext = extractFromPDFText(text);
+
     const reportPatch = {
       system: ext.system || undefined,
       strengths: ext.strengths || undefined,
