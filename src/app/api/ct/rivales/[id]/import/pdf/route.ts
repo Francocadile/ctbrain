@@ -1,4 +1,3 @@
-// src/app/api/ct/rivales/[id]/import/pdf/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { createRequire } from "node:module";
@@ -10,33 +9,39 @@ export const maxDuration = 60;
 const prisma = new PrismaClient();
 const require = createRequire(import.meta.url);
 
-/* =============== Utils generales =============== */
+/* ==================== Utils ==================== */
 const asObj = <T extends Record<string, any> = Record<string, any>>(x: unknown): T =>
   typeof x === "object" && x !== null ? (x as T) : ({} as T);
+
 const asStrArray = (x: unknown): string[] =>
   Array.isArray(x) ? x.map((s) => String(s)).filter(Boolean) : [];
-const clean = (s?: string | null) =>
-  (s || "").replace(/\u00A0/g, " ").replace(/[ \t]+/g, " ").trim();
-const lines = (s?: string | null) =>
-  clean(s).split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
-const toNum = (s: string | number | undefined | null) => {
-  if (s === undefined || s === null) return undefined;
-  const n = typeof s === "number" ? s : Number(String(s).replace(",", "."));
-  return Number.isFinite(n) ? n : undefined;
-};
-const pairNums = (txt: string): { ours?: number; opp?: number } => {
-  const m = txt.match(/(-?\d+(?:[.,]\d+)?)[^\d\-]+(-?\d+(?:[.,]\d+)?)/);
-  return { ours: m ? toNum(m[1]) : undefined, opp: m ? toNum(m[2]) : undefined };
-};
+
+const cleanLines = (s?: string | null) =>
+  (s || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
 
 const uniq = (arr: string[]) => {
   const set = new Set<string>(); const out: string[] = [];
   for (const v of arr) { const k = v.toLowerCase(); if (!set.has(k)) { set.add(k); out.push(v); } }
   return out;
 };
+
+const n = (raw: any): number | undefined => {
+  if (raw == null) return undefined;
+  const s = String(raw).replace(/[%\s]/g, "").replace(/\./g, "").replace(/,/g, ".");
+  const v = Number(s);
+  return Number.isFinite(v) ? v : undefined;
+};
+
+const pair = (s?: string | null): { ours?: number; opp?: number } => {
+  if (!s) return {};
+  const m = s.match(/(-?\d+[.,]?\d*)\s*[\/\-–]\s*(-?\d+[.,]?\d*)/);
+  if (!m) return {};
+  return { ours: n(m[1]), opp: n(m[2]) };
+};
+
 function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): string[] {
-  const ls = lines(text); const out: string[] = []; let on = false;
-  for (const ln of ls) {
+  const lines = cleanLines(text); const out: string[] = []; let on = false;
+  for (const ln of lines) {
     if (header.test(ln)) { on = true; continue; }
     if (on && stops.some(rx => rx.test(ln))) break;
     if (!on) continue;
@@ -45,7 +50,7 @@ function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): strin
   return uniq(out);
 }
 
-/* =============== Parse específico Wyscout =============== */
+/* ==================== Heurísticas de extracción ==================== */
 function extractCoachAndSystem(text: string) {
   const res: any = {};
   const coach = text.match(/(?:Coach|Entrenador|DT|Director(?:\s+Técnico)?)\s*[:\-]\s*([^\n]+)/i)?.[1];
@@ -56,7 +61,6 @@ function extractCoachAndSystem(text: string) {
     text.match(/\b([0-9]\s*[–\-]\s*[0-9](?:\s*[–\-]\s*[0-9]){1,2})\b/)?.[1];
   if (sys) res.system = sys.replace(/\s*–\s*/g, "-").replace(/\s+/g, "");
 
-  // Bullets (si existen)
   const keyPlayers = takeBulletsAround(
     text,
     /(Jugadores?\s+clave|Key\s+Players?)\b/i,
@@ -83,118 +87,114 @@ function extractCoachAndSystem(text: string) {
     [/(a\s+favor|for|Fortalezas|Debilidades|Strengths|Weaknesses|Key\s+Players?)/i]
   );
 
-  return { coach: res.coach, system: res.system, keyPlayers, strengths, weaknesses, setFor, setAgainst };
+  if (keyPlayers.length) res.keyPlayers = keyPlayers;
+  if (strengths.length)  res.strengths  = strengths;
+  if (weaknesses.length) res.weaknesses = weaknesses;
+  if (setFor.length)     res.setFor     = setFor;
+  if (setAgainst.length) res.setAgainst = setAgainst;
+
+  return res;
 }
 
-function extractTeamKPIsBlock(text: string) {
-  // En la sección de “FORMACIONES UCV” (la con los dos números por métrica)
-  // buscamos las etiquetas clave y leemos el par “nuestro vs rival”.
-  const getBlock = (label: RegExp) => {
-    // Tomamos ~2 líneas siguientes al match y dejamos solo números
-    const ls = lines(text);
-    const i = ls.findIndex(l => label.test(l));
-    if (i === -1) return undefined;
-    const sample = [ls[i + 1] || "", ls[i + 2] || ""].join(" ");
-    return pairNums(sample);
-  };
+function extractTeamKPIs(text: string) {
+  // Buscamos líneas con KPI y un "A/B" (nuestro / rival)
+  // Cubrimos español e inglés más comunes en Wyscout
+  const map: Array<{ key: string; rx: RegExp }> = [
+    { key: "goals",             rx: /\b(Goles|Goals)\b.*?(-?\d+[.,]?\d*\s*[\/\-–]\s*-?\d+[.,]?\d*)/i },
+    { key: "xg",                rx: /\b(xG)\b.*?(-?\d+[.,]?\d*\s*[\/\-–]\s*-?\d+[.,]?\d*)/i },
+    { key: "possessionPct",     rx: /\b(Posesi[óo]n|Possession)\b.*?(-?\d+[.,]?\d*\s*%\s*[\/\-–]\s*-?\d+[.,]?\d*\s*%)/i },
+    { key: "passAccuracyPct",   rx: /\b(Precisi[oó]n\s*de\s*pases|Pass\s*accuracy)\b.*?(-?\d+[.,]?\d*\s*%\s*[\/\-–]\s*-?\d+[.,]?\d*\s*%)/i },
+    { key: "shots",             rx: /\b(Tiros|Shots)\b.*?(-?\d+[.,]?\d*\s*[\/\-–]\s*-?\d+[.,]?\d*)/i },
+    { key: "shotsOnTarget",     rx: /\b(a\s*puerta|On\s*target)\b.*?(-?\d+[.,]?\d*\s*[\/\-–]\s*-?\d+[.,]?\d*)/i },
+    { key: "crosses",           rx: /\b(Centros|Crosses)\b.*?(-?\d+[.,]?\d*\s*[\/\-–]\s*-?\d+[.,]?\d*)/i },
+    { key: "crossAccuracyPct",  rx: /\b(Precisi[oó]n\s*de\s*centros|Cross\s*accuracy)\b.*?(-?\d+[.,]?\d*\s*%\s*[\/\-–]\s*-?\d+[.,]?\d*\s*%)/i },
+    { key: "duelsWonPct",       rx: /\b(Duelos\s*ganados|Duels\s*won)\b.*?(-?\d+[.,]?\d*\s*%\s*[\/\-–]\s*-?\d+[.,]?\d*\s*%)/i },
+    { key: "dribblesWonPct",    rx: /\b(Regates\s*exitosos|Dribbles\s*won)\b.*?(-?\d+[.,]?\d*\s*%\s*[\/\-–]\s*-?\d+[.,]?\d*\s*%)/i },
+    { key: "ppda",              rx: /\b(PPDA)\b.*?(-?\d+[.,]?\d*\s*[\/\-–]\s*-?\d+[.,]?\d*)/i },
+    { key: "gameIntensity",     rx: /\b(Intensidad\s*de\s*juego|Game\s*intensity)\b.*?(-?\d+[.,]?\d*\s*[\/\-–]\s*-?\d+[.,]?\d*)/i },
+    { key: "touchesInBox",      rx: /\b(Toques\s*en\s*[ée]rea|Touches\s*in\s*box)\b.*?(-?\d+[.,]?\d*\s*[\/\-–]\s*-?\d+[.,]?\d*)/i },
+    { key: "fouls",             rx: /\b(Faltas|Fouls)\b.*?(-?\d+[.,]?\d*\s*[\/\-–]\s*-?\d+[.,]?\d*)/i },
+    { key: "yellowCards",       rx: /\b(Tarjetas\s*amarillas|Yellow\s*cards)\b.*?(-?\d+[.,]?\d*\s*[\/\-–]\s*-?\d+[.,]?\d*)/i },
+    { key: "redCards",          rx: /\b(Tarjetas\s*rojas|Red\s*cards)\b.*?(-?\d+[.,]?\d*\s*[\/\-–]\s*-?\d+[.,]?\d*)/i },
+  ];
 
-  const goals      = getBlock(/\bGOLES\b/i);
-  const xg         = getBlock(/\bXG\b/i);
-  const poss       = getBlock(/POSESI[ÓO]N DEL BAL[ÓO]N/i);
-  const passAcc    = getBlock(/PRECISI[ÓO]N PASES/i);
-  const intensity  = getBlock(/INTENSIDAD DE JUEGO/i);
-  const ppda       = getBlock(/\bPPDA\b/i);
-
-  return {
-    goals,              // { ours, opp }
-    xg,                 // { ours, opp }
-    possessionPct: poss,
-    passAccuracyPct: passAcc,
-    gameIntensity: intensity,
-    ppda
-  };
+  const team: any = {};
+  for (const { key, rx } of map) {
+    const m = text.match(rx);
+    if (m?.[2]) {
+      const p = pair(m[2]);
+      if (p.ours != null || p.opp != null) team[key] = p;
+    }
+  }
+  return team;
 }
 
-type PlayerRow = {
-  shirt?: number;
-  name: string;
-  minutes?: number;
-  goals?: number;
-  xg?: number;
-  assists?: number;
-  xa?: number;
-  shots?: number;
-  shotsOnTarget?: number;
-  passes?: number;
-  passesAccurate?: number;
-  crosses?: number;
-  crossesAccurate?: number;
-  dribbles?: number;
-  dribblesWon?: number;
-  duels?: number;
-  duelsWon?: number;
-  touchesInBox?: number;
-  yellow?: number;
-  red?: number;
-};
+function extractPlayerTable(text: string) {
+  // Heurística básica: líneas que empiezan con dorsal + nombre + minutos
+  // y luego varios números. Sirve para muchos PDFs de Wyscout.
+  const lines = cleanLines(text);
+  const players: any[] = [];
+  const rowRx = /^\s*(\d{1,2})\s+([A-ZÁÉÍÓÚÑÜ][^\d]+?)\s+(\d{1,3})\b(.*)$/i;
 
-// Parser de la tabla “Jugador / Minutos / Goles / xG / Asistencias / xA / Tiros / a la portería / Pases / precisos …”
-function extractPlayerStats(text: string): PlayerRow[] {
-  const ls = lines(text);
-
-  // Buscamos el header que incluye muchas de estas palabras
-  const startIdx = ls.findIndex(l =>
-    /Jugador\s+Minutos\s+jugados\s+Goles\s*\/\s*xG/i.test(l)
-  );
-  if (startIdx === -1) return [];
-
-  const out: PlayerRow[] = [];
-  // Las filas suelen venir en el bloque siguiente, hasta que cambie de sección
-  for (let i = startIdx + 1; i < ls.length; i++) {
-    const ln = ls[i];
-
-    // Cortamos cuando cambia la sección (palabras grandes en mayúsculas típicas)
-    if (/INFORME DEL EQUIPO|FORMACIONES|PARTIDOS|FASE DEFENSIVA|ATAQUE|FINALIZACI[ÓO]N|GLOSARIO/i.test(ln)) break;
-
-    // Filas tipo:
-    // "8 J. Zapata 463 4 / 3.00 2 / 1.03 15 / 8 94 / 64 17 / 8 11 / 6 100 / 45 58 / 11 20 / 17 23 1 / 0"
-    // Toleramos nombres con espacios/acentos y varios huecos.
-    const m = ln.match(
-      /^\s*(\d+)\s+([A-ZÁÉÍÓÚÑ][^0-9]+?)\s+(\d+)\s+(\d+)\s*\/\s*([\d.,]+)\s+(\d+)\s*\/\s*([\d.,]+)\s+(\d+)\s*\/\s*(\d+)\s+(\d+)\s*\/\s*(\d+)\s+(\d+)\s*\/\s*(\d+)\s+(\d+)\s*\/\s*(\d+)\s+(\d+)\s*\/\s*(\d+)\s+(\d+)\s+(\d+)\s*\/\s*(\d+)/
-    );
+  for (const ln of lines) {
+    const m = ln.match(rowRx);
     if (!m) continue;
 
-    out.push({
-      shirt: toNum(m[1]),
-      name: clean(m[2]),
-      minutes: toNum(m[3]),
-      goals: toNum(m[4]),
-      xg: toNum(m[5]),
-      assists: toNum(m[6]),
-      xa: toNum(m[7]),
-      shots: toNum(m[8]),
-      shotsOnTarget: toNum(m[9]),
-      passes: toNum(m[10]),
-      passesAccurate: toNum(m[11]),
-      crosses: toNum(m[12]),
-      crossesAccurate: toNum(m[13]),
-      dribbles: toNum(m[14]),
-      dribblesWon: toNum(m[15]),
-      duels: toNum(m[16]),
-      duelsWon: toNum(m[17]),
-      touchesInBox: toNum(m[18]),
-      // El último par suele ser "tarjetas amarillas / rojas"
-      yellow: toNum(m[19]),
-      red: toNum(m[20]),
+    const shirt = m[1];
+    const name = m[2].replace(/\s{2,}/g, " ").trim();
+    const minutes = n(m[3]);
+    const tail = m[4];
+
+    // Buscamos patrones comunes en el resto de la fila
+    const g = tail.match(/\bG[:\s]\s*(-?\d+)/i)?.[1] ?? tail.match(/\b(\d+)\s+g(?:oles?)?\b/i)?.[1];
+    const xg = tail.match(/\bxG[:\s]\s*(-?\d+[.,]?\d*)/i)?.[1];
+    const a = tail.match(/\bA[:\s]\s*(-?\d+)/i)?.[1] ?? tail.match(/\b(\d+)\s+asist/i)?.[1];
+    const xa = tail.match(/\bxA[:\s]\s*(-?\d+[.,]?\d*)/i)?.[1];
+    const shots = tail.match(/\bTiros?[:\s]\s*(\d+)/i)?.[1] ?? tail.match(/\bShots?[:\s]\s*(\d+)/i)?.[1];
+    const sot = tail.match(/\b(A\s*puerta|On\s*target)[:\s]\s*(\d+)/i)?.[2];
+    const passes = tail.match(/\bPases?[:\s]\s*(\d+)/i)?.[1];
+    const passesAcc = tail.match(/\bPrec(?:\.|isi[oó]n)?[:\s]\s*(\d+[.,]?\d*)\s*%/i)?.[1];
+    const crosses = tail.match(/\bCentros?[:\s]\s*(\d+)/i)?.[1] ?? tail.match(/\bCrosses?[:\s]\s*(\d+)/i)?.[1];
+    const crossesAcc = tail.match(/\bPrec(?:\.|isi[oó]n)?\s*Centros?[:\s]\s*(\d+[.,]?\d*)\s*%/i)?.[1];
+    const dribbles = tail.match(/\bRegates?[:\s]\s*(\d+)/i)?.[1] ?? tail.match(/\bDribbles?[:\s]\s*(\d+)/i)?.[1];
+    const dribblesWon = tail.match(/\b(Regates?|Dribbles?)\s*(?:exitosos|won)[:\s]\s*(\d+)/i)?.[2];
+    const duels = tail.match(/\bDuelos?[:\s]\s*(\d+)/i)?.[1] ?? tail.match(/\bDuels?[:\s]\s*(\d+)/i)?.[1];
+    const duelsWon = tail.match(/\b(Duelos?|Duels?)\s*(?:ganados|won)[:\s]\s*(\d+)/i)?.[2];
+    const touchesInBox = tail.match(/\bToques\s*en\s*[ée]rea[:\s]\s*(\d+)/i)?.[1];
+    const yellow = tail.match(/\bTA[:\s]\s*(\d+)/i)?.[1] ?? tail.match(/\bYellow[:\s]\s*(\d+)/i)?.[1];
+    const red = tail.match(/\bTR[:\s]\s*(\d+)/i)?.[1] ?? tail.match(/\bRed[:\s]\s*(\d+)/i)?.[1];
+
+    players.push({
+      shirt: n(shirt),
+      name,
+      minutes,
+      goals: n(g),
+      xg: n(xg),
+      assists: n(a),
+      xa: n(xa),
+      shots: n(shots),
+      shotsOnTarget: n(sot),
+      passes: n(passes),
+      passesAccurate: n(passesAcc),
+      crosses: n(crosses),
+      crossesAccurate: n(crossesAcc),
+      dribbles: n(dribbles),
+      dribblesWon: n(dribblesWon),
+      duels: n(duels),
+      duelsWon: n(duelsWon),
+      touchesInBox: n(touchesInBox),
+      yellow: n(yellow),
+      red: n(red),
     });
   }
 
-  return out;
+  // Filtramos filas donde al menos tengamos nombre y minutos o alguna métrica
+  return players.filter(p => p.name && (p.minutes != null || p.goals != null || p.xg != null));
 }
 
 /* =========== Carga robusta de pdf-parse (CommonJS) =========== */
 function loadPdfParse(): (input: Uint8Array | ArrayBuffer | Buffer) => Promise<{ text: string }> {
-  // @ts-ignore – la d.ts local tipa el default
+  // @ts-ignore – tipado por nuestro .d.ts local
   const mod = require("pdf-parse");
   const fn = (mod?.default ?? mod) as any;
   if (typeof fn !== "function") {
@@ -218,7 +218,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const ab = await file.arrayBuffer();
     const u8 = new Uint8Array(ab);
 
-    // Valida header PDF
+    // Validación rápida de header PDF
     const header = new TextDecoder().decode(u8.slice(0, 5));
     if (header !== "%PDF-") {
       return new NextResponse("El archivo no parece ser un PDF válido", { status: 400 });
@@ -231,9 +231,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return new NextResponse("No se pudo extraer texto del PDF", { status: 422 });
     }
 
-    // ---- Campos “cualitativos” ya existentes
+    // 1) Datos descriptivos
     const meta = extractCoachAndSystem(text);
-    const reportPatch: any = {
+
+    // 2) KPIs de equipo (nuestro/rival)
+    const teamStats = extractTeamKPIs(text);
+
+    // 3) Tabla por jugador
+    const playerStats = extractPlayerTable(text);
+
+    const reportPatch = {
       system: meta.system || undefined,
       strengths: meta.strengths || undefined,
       weaknesses: meta.weaknesses || undefined,
@@ -242,31 +249,44 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         ...(meta.setFor ? { for: meta.setFor } : {}),
         ...(meta.setAgainst ? { against: meta.setAgainst } : {}),
       },
+      teamStats: Object.keys(teamStats).length ? teamStats : undefined,
+      playerStats: playerStats.length ? playerStats : undefined,
     };
 
-    // ---- NUEVO: KPIs de equipo + tabla por jugador
-    const teamStats = extractTeamKPIsBlock(text);
-    const playerStats = extractPlayerStats(text);
-
-    if (teamStats) reportPatch.teamStats = teamStats;
-    if (playerStats.length) reportPatch.playerStats = playerStats;
-
-    // ---- Merge suave en planReport
     const current = await prisma.rival.findUnique({
       where: { id },
       select: { coach: true, baseSystem: true, planReport: true },
     });
     if (!current) return new NextResponse("No encontrado", { status: 404 });
 
+    // Merge no destructivo
     const savedReport = asObj<any>(current.planReport);
+    const savedSP = asObj<any>(savedReport.setPieces);
+    const patchSP = asObj<any>(reportPatch.setPieces);
+
+    const mergedSetPieces = {
+      ...asObj(savedSP),
+      ...asObj(patchSP),
+      ...(patchSP.for
+        ? { for: asStrArray(patchSP.for) }
+        : savedSP.for
+        ? { for: asStrArray(savedSP.for) }
+        : {}),
+      ...(patchSP.against
+        ? { against: asStrArray(patchSP.against) }
+        : savedSP.against
+        ? { against: asStrArray(savedSP.against) }
+        : {}),
+    };
 
     const mergedReport = {
-      ...savedReport,
-      ...reportPatch,
-      setPieces: {
-        ...asObj(savedReport.setPieces),
-        ...asObj(reportPatch.setPieces),
-      },
+      ...asObj(savedReport),
+      ...asObj(reportPatch),
+      setPieces: mergedSetPieces,
+      teamStats: { ...asObj(savedReport.teamStats), ...asObj(reportPatch.teamStats) },
+      playerStats: reportPatch.playerStats?.length
+        ? reportPatch.playerStats
+        : savedReport.playerStats,
     };
 
     const dataPatch: any = { planReport: mergedReport };
@@ -280,8 +300,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     });
 
     return NextResponse.json({
-      data: { coach: row.coach, baseSystem: row.baseSystem, planReport: asObj(row.planReport) },
-      message: "PDF procesado. Se actualizaron Plan y Estadísticas (si se pudieron extraer).",
+      data: {
+        coach: row.coach,
+        baseSystem: row.baseSystem,
+        planReport: asObj(row.planReport),
+      },
+      message: "PDF procesado: KPIs y jugadores importados.",
     });
   } catch (e: any) {
     const msg = String(e?.message || e || "Error");
