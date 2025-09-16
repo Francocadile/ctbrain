@@ -1,4 +1,3 @@
-// src/app/ct/rivales/[id]/estadisticas/page.tsx
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -10,8 +9,6 @@ export default async function Estadisticas({
 }) {
   const rival = await prisma.rival.findUnique({
     where: { id: params.id },
-    // ⚠️ No seleccionamos 'nombre' porque no existe en tu modelo.
-    // Si el modelo tiene 'name', podés agregarlo luego sin problema.
     select: { planReport: true },
   });
 
@@ -24,14 +21,24 @@ export default async function Estadisticas({
       <h2 className="text-xl font-semibold">Estadísticas del rival</h2>
 
       {/* KPIs de equipo (nuestro / rival) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {[
           ["Goles", team.goals],
           ["xG", team.xg],
           ["Posesión (%)", team.possessionPct],
           ["Precisión de pases (%)", team.passAccuracyPct],
-          ["Intensidad de juego", team.gameIntensity],
+          ["Tiros", team.shots],
+          ["Tiros a puerta", team.shotsOnTarget],
+          ["Centros", team.crosses],
+          ["Precisión de centros (%)", team.crossAccuracyPct],
+          ["Duelos ganados (%)", team.duelsWonPct],
+          ["Regates exitosos (%)", team.dribblesWonPct],
           ["PPDA", team.ppda],
+          ["Intensidad de juego", team.gameIntensity],
+          ["Toques en área", team.touchesInBox],
+          ["Faltas", team.fouls],
+          ["TA", team.yellowCards],
+          ["TR", team.redCards],
         ].map(([label, val], i) => (
           <div key={i} className="rounded-lg border p-3">
             <div className="text-sm text-gray-500">{label}</div>
@@ -45,7 +52,7 @@ export default async function Estadisticas({
 
       {/* Tabla por jugador */}
       <div className="overflow-x-auto">
-        <table className="min-w-[960px] w-full border text-sm">
+        <table className="min-w-[1080px] w-full border text-sm">
           <thead className="bg-gray-50">
             <tr>
               <th className="p-2 text-left">#</th>
@@ -54,8 +61,8 @@ export default async function Estadisticas({
               <th className="p-2">G/xG</th>
               <th className="p-2">A/xA</th>
               <th className="p-2">T/OT</th>
-              <th className="p-2">P/Prec</th>
-              <th className="p-2">Cent/Prec</th>
+              <th className="p-2">P/Prec%</th>
+              <th className="p-2">Cent/Prec%</th>
               <th className="p-2">Reg/OK</th>
               <th className="p-2">Duel/OK</th>
               <th className="p-2">Toques área</th>
@@ -97,10 +104,7 @@ export default async function Estadisticas({
             ))}
             {!players.length && (
               <tr>
-                <td
-                  className="p-3 text-center text-gray-500"
-                  colSpan={12}
-                >
+                <td className="p-3 text-center text-gray-500" colSpan={12}>
                   Aún no hay estadísticas de jugadores importadas desde el PDF.
                 </td>
               </tr>
