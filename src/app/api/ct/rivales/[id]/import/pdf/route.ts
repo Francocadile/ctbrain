@@ -25,7 +25,7 @@ const uniq = (arr: string[]) => {
   return out;
 };
 
-const n = (raw: any): number | undefined => {
+const toNum = (raw: any): number | undefined => {
   if (raw == null) return undefined;
   const s = String(raw).replace(/[%\s]/g, "").replace(/\./g, "").replace(/,/g, ".");
   const v = Number(s);
@@ -36,7 +36,7 @@ const pair = (s?: string | null): { ours?: number; opp?: number } => {
   if (!s) return {};
   const m = s.match(/(-?\d+[.,]?\d*)\s*[\/\-–]\s*(-?\d+[.,]?\d*)/);
   if (!m) return {};
-  return { ours: n(m[1]), opp: n(m[2]) };
+  return { ours: toNum(m[1]), opp: toNum(m[2]) };
 };
 
 function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): string[] {
@@ -50,7 +50,7 @@ function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): strin
   return uniq(out);
 }
 
-/* ==================== Heurísticas de extracción ==================== */
+/* ==================== Heurísticas ==================== */
 function extractCoachAndSystem(text: string) {
   const res: any = {};
   const coach = text.match(/(?:Coach|Entrenador|DT|Director(?:\s+Técnico)?)\s*[:\-]\s*([^\n]+)/i)?.[1];
@@ -138,7 +138,7 @@ function extractPlayerTable(text: string) {
 
     const shirt = m[1];
     const name = m[2].replace(/\s{2,}/g, " ").trim();
-    const minutes = n(m[3]);
+    const minutes = toNum(m[3]);
     const tail = m[4];
 
     const g = tail.match(/\bG[:\s]\s*(-?\d+)/i)?.[1] ?? tail.match(/\b(\d+)\s+g(?:oles?)?\b/i)?.[1];
@@ -160,35 +160,35 @@ function extractPlayerTable(text: string) {
     const red = tail.match(/\bTR[:\s]\s*(\d+)/i)?.[1] ?? tail.match(/\bRed[:\s]\s*(\d+)/i)?.[1];
 
     players.push({
-      shirt: n(shirt),
+      shirt: toNum(shirt),
       name,
       minutes,
-      goals: n(g),
-      xg: n(xg),
-      assists: n(a),
-      xa: n(xa),
-      shots: n(shots),
-      shotsOnTarget: n(sot),
-      passes: n(passes),
-      passesAccurate: n(passesAcc),
-      crosses: n(crosses),
-      crossesAccurate: n(crossesAcc),
-      dribbles: n(dribbles),
-      dribblesWon: n(dribblesWon),
-      duels: n(duels),
-      duelsWon: n(duelsWon),
-      touchesInBox: n(touchesInBox),
-      yellow: n(yellow),
-      red: n(red),
+      goals: toNum(g),
+      xg: toNum(xg),
+      assists: toNum(a),
+      xa: toNum(xa),
+      shots: toNum(shots),
+      shotsOnTarget: toNum(sot),
+      passes: toNum(passes),
+      passesAccurate: toNum(passesAcc),
+      crosses: toNum(crosses),
+      crossesAccurate: toNum(crossesAcc),
+      dribbles: toNum(dribbles),
+      dribblesWon: toNum(dribblesWon),
+      duels: toNum(duels),
+      duelsWon: toNum(duelsWon),
+      touchesInBox: toNum(touchesInBox),
+      yellow: toNum(yellow),
+      red: toNum(red),
     });
   }
 
   return players.filter(p => p.name && (p.minutes != null || p.goals != null || p.xg != null));
 }
 
-/* =========== Carga robusta de pdf-parse (CommonJS) =========== */
+/* =========== pdf-parse (CJS) =========== */
 function loadPdfParse(): (input: Buffer | Uint8Array | ArrayBuffer) => Promise<{ text: string }> {
-  // @ts-ignore – tipado por nuestro .d.ts local
+  // @ts-ignore – lo tipamos con nuestro .d.ts
   const mod = require("pdf-parse");
   const fn = (mod?.default ?? mod) as any;
   if (typeof fn !== "function") {
@@ -210,27 +210,24 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return new NextResponse("Debe enviar 'file' como archivo (multipart/form-data).", { status: 400 });
     }
 
-    // Reglas básicas
     const size = file.size ?? 0;
     const type = file.type ?? "";
     if (size <= 0) {
       return new NextResponse("El archivo llegó vacío. Volvé a seleccionarlo y reintenta.", { status: 400 });
     }
-    if (!type.includes("pdf")) {
+    if (!/pdf/i.test(type)) {
       return new NextResponse("El archivo no parece ser un PDF.", { status: 400 });
     }
     if (size > 25 * 1024 * 1024) {
       return new NextResponse("El PDF supera el límite de 25MB.", { status: 413 });
     }
 
-    // Leemos bytes
     const ab = await file.arrayBuffer();
     const u8 = new Uint8Array(ab);
     if (!u8 || u8.length < 5) {
       return new NextResponse("El PDF no llegó correctamente al servidor. Seleccionalo nuevamente.", { status: 400 });
     }
 
-    // Header mágico
     const header = new TextDecoder().decode(u8.slice(0, 5));
     if (header !== "%PDF-") {
       return new NextResponse("El archivo no parece ser un PDF válido.", { status: 400 });
@@ -238,15 +235,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     const pdfParse = loadPdfParse();
 
-    // **Usamos Buffer, y capturamos el ENOENT del fallback interno**
     let parsed;
     try {
+      // Usamos Buffer explícito — pdf-parse prefiere Buffer
       parsed = await pdfParse(Buffer.from(u8));
     } catch (err: any) {
       const msg = String(err?.message || err || "");
+      // Atrapa el fallback interno de pdf-parse
       if (msg.includes("05-versions-space.pdf") || msg.includes("ENOENT")) {
         return new NextResponse(
-          "No se pudo leer el PDF (buffer vacío). Volvé a seleccionar el archivo y asegurate de que el POST sea multipart/form-data.",
+          "No se pudo leer el PDF (buffer vacío o request inválido). Volvé a seleccionar el archivo y asegurate de enviarlo como multipart/form-data.",
           { status: 400 }
         );
       }
