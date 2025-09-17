@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { createRequire } from "node:module";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const prisma = new PrismaClient();
+const require = createRequire(import.meta.url);
 
-/* ==================== Utils ==================== */
+/* ------------------------- Utils seguras ------------------------- */
 const asObj = <T extends Record<string, any> = Record<string, any>>(x: unknown): T =>
   typeof x === "object" && x !== null ? (x as T) : ({} as T);
 
@@ -23,6 +25,7 @@ const uniq = (arr: string[]) => {
   return out;
 };
 
+/* Bullets por secciones */
 function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): string[] {
   const lines = cleanLines(text); const out: string[] = []; let on = false;
   for (const ln of lines) {
@@ -34,34 +37,7 @@ function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): strin
   return uniq(out);
 }
 
-/* ==================== PDF text extract (pdfjs-dist) ==================== */
-async function extractTextWithPdfJs(u8: Uint8Array): Promise<string> {
-  const mod: any = await import("pdfjs-dist/legacy/build/pdf.js");
-  const pdfjs = (mod?.default ?? mod);
-
-  // forzar sin worker en SSR
-  if (pdfjs.GlobalWorkerOptions) {
-    // Evita que intente cargar './pdf.worker.js'
-    pdfjs.GlobalWorkerOptions.workerSrc = null;
-    // Algunas versiones hacen "fake worker" si esto no es null; pasamos siempre disableWorker
-  }
-
-  const loadingTask = pdfjs.getDocument({ data: u8, disableWorker: true });
-  const doc = await loadingTask.promise;
-
-  let all = "";
-  for (let i = 1; i <= doc.numPages; i++) {
-    const page = await doc.getPage(i);
-    const content = await page.getTextContent();
-    const text = content.items.map((it: any) => (typeof it.str === "string" ? it.str : "")).join(" ");
-    all += text + "\n";
-  }
-
-  try { await doc?.destroy?.(); } catch {}
-  return all;
-}
-
-/* ==================== Parse heurístico ==================== */
+/* Extracción de texto estructurado + heurísticas numéricas */
 function extractFromPDFText(text: string) {
   const res: any = {};
 
@@ -89,18 +65,14 @@ function extractFromPDFText(text: string) {
 
   const totals: Record<string, number> = {};
   const numFrom = (rx: RegExp) => {
-    const m = text.match(rx);
-    if (!m) return undefined;
-    const val = (m[1] ?? "").toString().replace(",", ".").replace(/[^\d.]/g, "");
-    const n = Number(val);
-    return Number.isFinite(n) ? n : undefined;
+    const m = text.match(rx); if (!m) return;
+    const v = (m[1] ?? "").toString().replace(",", ".").replace(/[^\d.]/g, "");
+    const n = Number(v); return Number.isFinite(n) ? n : undefined;
   };
   const pctFrom = (rx: RegExp) => {
-    const m = text.match(rx);
-    if (!m) return undefined;
+    const m = text.match(rx); if (!m) return;
     const v = (m[1] ?? "").toString().replace(",", ".").replace("%", "");
-    const n = Number(v);
-    return Number.isFinite(n) ? n : undefined;
+    const n = Number(v); return Number.isFinite(n) ? n : undefined;
   };
 
   const gf = numFrom(/\b(GF|Goals? For|Goles? a favor)\b[^\d:]*[:=\s]\s*([0-9]+)\b/i) ?? numFrom(/\bGF[:=\s]+([0-9]+)\b/i);
@@ -126,7 +98,17 @@ function extractFromPDFText(text: string) {
   return res;
 }
 
-/* ==================== Handler ==================== */
+/* --------- pdf-parse seguro (CJS) --------- */
+function loadPdfParse(): (input: Uint8Array | ArrayBuffer | Buffer) => Promise<{ text: string }> {
+  // ¡Nunca pasar string! (si le pasás string, intenta abrir ruta y aparece ENOENT)
+  // @ts-ignore – tipos provistos en /types/pdf-parse.d.ts
+  const mod = require("pdf-parse");
+  const fn = (mod?.default ?? mod) as any;
+  if (typeof fn !== "function") throw new Error("pdf-parse no se pudo cargar correctamente");
+  return (input: Uint8Array | ArrayBuffer | Buffer) => fn(input);
+}
+
+/* ------------------------- Handler ------------------------- */
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
     const id = String(params?.id || "");
@@ -147,7 +129,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return NextResponse.json({ error: "El archivo no parece ser un PDF válido" }, { status: 400 });
     }
 
-    const text = await extractTextWithPdfJs(u8);
+    const pdfParse = loadPdfParse();
+    const parsed = await pdfParse(u8);
+    const text = String(parsed?.text || "");
     if (!text.trim()) {
       return NextResponse.json({ error: "No se pudo extraer texto del PDF" }, { status: 422 });
     }
