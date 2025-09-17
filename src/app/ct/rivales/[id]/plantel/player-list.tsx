@@ -14,27 +14,17 @@ type Player = {
   passes_total?: number;
   passes_completed?: number;
   pass_accuracy_pct?: number;
-  key_passes?: number;
-  progressive_passes?: number;
-  dribbles_attempted?: number;
-  dribbles_success_pct?: number;
-  duels_won?: number;
-  duels_total?: number;
-  aerials_won?: number;
-  aerials_total?: number;
+  tackles?: number;
   interceptions?: number;
-  recoveries?: number;
-  touches_in_box?: number;
-  fouls_committed?: number;
-  fouls_suffered?: number;
+  clearances?: number;
+  aerials_won?: number;
+  fouls?: number;
   yellow_cards?: number;
   red_cards?: number;
-  fk_direct_shots?: number;
-  fk_on_target?: number;
-  corners_taken?: number;
-  // video
+  rating?: number;
   videoUrl?: string;
   videoTitle?: string;
+  [k: string]: any;
 };
 
 export default function PlayerList({
@@ -45,15 +35,16 @@ export default function PlayerList({
   initialPlayers: Player[];
 }) {
   const [players, setPlayers] = useState<Player[]>(() => initialPlayers || []);
-  const [saving, setSaving] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
+  const [saving, setSaving] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const f = filter.trim().toLowerCase();
     if (!f) return players;
-    return players.filter(p =>
-      (p.player_name || "").toLowerCase().includes(f) ||
-      (p.position || "").toLowerCase().includes(f)
+    return players.filter((p) =>
+      String(p.player_name || "")
+        .toLowerCase()
+        .includes(f)
     );
   }, [filter, players]);
 
@@ -62,7 +53,7 @@ export default function PlayerList({
     if (!name || !videoUrl) return;
     setSaving(name);
     try {
-      const res = await fetch(`/api/ct/rivales/${rivalId}/players/video`, {
+      const res = await fetch(`/api/ct/rivales/${rivalId}/player/video`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ player_name: name, videoUrl, videoTitle }),
@@ -72,8 +63,11 @@ export default function PlayerList({
         throw new Error(j?.error || `Error ${res.status}`);
       }
       // Optimistic update
-      setPlayers(prev => {
-        const idx = prev.findIndex(x => (x.player_name || "").toLowerCase() === name.toLowerCase());
+      setPlayers((prev) => {
+        const idx = prev.findIndex(
+          (x) =>
+            (x.player_name || "").toLowerCase() === name.toLowerCase()
+        );
         const next = [...prev];
         const merged = { ...(prev[idx] || {}), videoUrl, videoTitle };
         if (idx >= 0) next[idx] = merged;
@@ -89,34 +83,24 @@ export default function PlayerList({
 
   return (
     <div className="space-y-4">
-      {/* barra de búsqueda */}
       <div className="flex items-center gap-3">
         <input
+          className="border rounded px-2 py-1 text-sm"
+          placeholder="Buscar jugador…"
           value={filter}
-          onChange={e => setFilter(e.target.value)}
-          placeholder="Buscar jugador o posición..."
-          className="border rounded-md px-3 py-2 w-full"
+          onChange={(e) => setFilter(e.target.value)}
         />
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full border border-gray-200 text-sm">
+      <div className="overflow-x-auto rounded-lg border">
+        <table className="min-w-full text-sm">
           <thead className="bg-gray-50">
-            <tr>
+            <tr className="text-left">
+              <Th>#</Th>
               <Th>Jugador</Th>
-              <Th>Pos</Th>
-              <Th>Min</Th>
-              <Th>G</Th>
-              <Th>xG</Th>
-              <Th>Asis</Th>
-              <Th>Tiros</Th>
-              <Th>TPuerta</Th>
-              <Th>Prec. Pase %</Th>
-              <Th>Duelos (G/T)</Th>
-              <Th>Aéreos (G/T)</Th>
-              <Th>Interc.</Th>
-              <Th>Recup.</Th>
+              <Th>Posición</Th>
               <Th>Video</Th>
+              <Th className="w-[520px]">Cargar video</Th>
             </tr>
           </thead>
           <tbody>
@@ -142,74 +126,89 @@ export default function PlayerList({
   );
 }
 
-function Th({ children }: { children: React.ReactNode }) {
-  return <th className="px-3 py-2 border-b text-left whitespace-nowrap">{children}</th>;
+function Th({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <th
+      className={`px-3 py-2 border-b text-left whitespace-nowrap ${className}`}
+    >
+      {children}
+    </th>
+  );
 }
 
-function Td({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <td className={`px-3 py-2 border-b align-top ${className}`}>{children}</td>;
-}
-
-function num(n?: number) {
-  return typeof n === "number" && Number.isFinite(n) ? n : "-";
+function Td({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return <td className={`px-3 py-2 align-top ${className}`}>{children}</td>;
 }
 
 function Row({
   p,
-  saving,
   onSave,
+  saving,
 }: {
   p: Player;
-  saving: boolean;
   onSave: (url: string, title: string) => void;
+  saving: boolean;
 }) {
   const [url, setUrl] = useState(p.videoUrl || "");
   const [title, setTitle] = useState(p.videoTitle || "");
 
   return (
-    <tr className="hover:bg-gray-50">
-      <Td className="font-medium whitespace-nowrap">{p.player_name || "-"}</Td>
-      <Td>{p.position || "-"}</Td>
-      <Td>{num(p.minutes)}</Td>
-      <Td>{num(p.goals)}</Td>
-      <Td>{num(p.xg)}</Td>
-      <Td>{num(p.assists)}</Td>
-      <Td>{num(p.shots_total)}</Td>
-      <Td>{num(p.shots_on_target)}</Td>
-      <Td>{num(p.pass_accuracy_pct)}</Td>
-      <Td>{`${num(p.duels_won)}/${num(p.duels_total)}`}</Td>
-      <Td>{`${num(p.aerials_won)}/${num(p.aerials_total)}`}</Td>
-      <Td>{num(p.interceptions)}</Td>
-      <Td>{num(p.recoveries)}</Td>
-      <Td className="min-w-[280px]">
-        <div className="flex flex-col gap-2">
-          {p.videoUrl ? (
-            <a href={p.videoUrl} target="_blank" className="text-blue-600 underline truncate">
-              {p.videoTitle || "Ver video"}
-            </a>
-          ) : (
-            <span className="text-gray-400">Sin video</span>
-          )}
-
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Título (opcional)"
-            className="border rounded px-2 py-1"
-          />
-          <div className="flex gap-2">
+    <tr className="border-t">
+      <Td className="whitespace-nowrap">{p["number"] ?? ""}</Td>
+      <Td className="whitespace-nowrap font-medium">
+        {p.player_name || "—"}
+      </Td>
+      <Td className="whitespace-nowrap">{p.position || ""}</Td>
+      <Td>
+        {p.videoUrl ? (
+          <a
+            href={p.videoUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-blue-600 hover:underline"
+          >
+            Ver video
+          </a>
+        ) : (
+          <span className="text-gray-400">Sin video</span>
+        )}
+      </Td>
+      <Td>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
             <input
+              className="rounded-md border px-2 py-1 text-sm w-64"
+              placeholder="Título (opcional)"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+            <input
+              className="rounded-md border px-2 py-1 text-sm flex-1"
+              placeholder="URL del video"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="URL del video (Drive/YouTube/Wyscout)"
-              className="border rounded px-2 py-1 flex-1"
+              onKeyDown={(e) =>
+                e.key === "Enter" ? (e.preventDefault(), onSave(url, title)) : null
+              }
             />
             <button
               onClick={() => onSave(url, title)}
               disabled={saving || !url}
               className="px-3 py-1 rounded bg-black text-white disabled:opacity-50"
             >
-              {saving ? "Guardando..." : "Guardar"}
+              {saving ? "Agregando…" : "+ Agregar"}
             </button>
           </div>
         </div>
