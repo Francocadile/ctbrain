@@ -1,18 +1,14 @@
-const path = require("path");
+const webpack = require("webpack");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false,
   webpack: (config) => {
-    // Bloquear cualquier import accidental a los ejemplos o tests de PDF.js
-    const empty = path.resolve(__dirname, "src/lib/empty.js");
-    config.resolve.alias = {
-      ...(config.resolve.alias || {}),
-      "pdfjs-dist/examples": empty,
-      "pdfjs-dist/test": empty,
-      "pdfjs-dist/examples/node/getinfo.js": empty,
-      "pdfjs-dist/examples/node/getinfo.mjs": empty,
-    };
+    // Bloquear que entren ejemplos/tests de pdfjs-dist al bundle del endpoint
+    config.plugins.push(
+      new webpack.IgnorePlugin({ resourceRegExp: /pdfjs-dist[\\/]examples/ }),
+      new webpack.IgnorePlugin({ resourceRegExp: /pdfjs-dist[\\/]test/ })
+    );
 
     return config;
   },
