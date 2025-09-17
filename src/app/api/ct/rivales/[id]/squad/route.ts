@@ -1,75 +1,91 @@
-// src/app/api/ct/rivales/[id]/squad/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
+// Reusar Prisma en dev/hot-reload
 const prisma = (globalThis as any).__prisma__ ?? new PrismaClient();
 if (process.env.NODE_ENV !== "production") {
   (globalThis as any).__prisma__ = prisma;
 }
 
-export type SquadPlayer = {
-  number?: number | null;
-  name: string;
-  pos?: string | null;
-  videoTitle?: string | null;
-  videoUrl?: string | null;
+// ---- Tipos de cada jugador que guardamos en JSON ----
+type SquadItem = {
+  number?: number | null;        // dorsal (opcional)
+  name: string;                  // nombre (requerido)
+  position?: string | null;      // ej: DL, MC
+  videoTitle?: string | null;    // título opcional
+  videoUrl?: string | null;      // url opcional
 };
 
-function sanitizeSquad(input: any): SquadPlayer[] {
-  const arr = Array.isArray(input) ? input : [];
-  const out: SquadPlayer[] = [];
-  for (const raw of arr) {
-    const name = String(raw?.name ?? "").trim();
-    if (!name) continue;
+// Limpieza/normalización para asegurar que el JSON sea seguro
+function normalizeSquad(input: any): SquadItem[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .map((raw) => {
+      const name = String(raw?.name || "").trim();
+      if (!name) return null;
 
-    let number: number | null = null;
-    const n = raw?.number;
-    if (typeof n === "number" && Number.isFinite(n)) number = n;
-    else if (typeof n === "string" && n.trim() !== "" && !Number.isNaN(Number(n))) number = Number(n);
+      const n = raw?.number;
+      const number =
+        n === undefined || n === null || n === ""
+          ? null
+          : Number.isFinite(Number(n))
+          ? Number(n)
+          : null;
 
-    const pos = (raw?.pos ?? "").toString().trim() || null;
-    const videoTitle = (raw?.videoTitle ?? "").toString().trim() || null;
-    const videoUrl = (raw?.videoUrl ?? "").toString().trim() || null;
+      const position = raw?.position ? String(raw.position).trim() : null;
+      const videoTitle = raw?.videoTitle ? String(raw.videoTitle).trim() : null;
+      const videoUrl = raw?.videoUrl ? String(raw.videoUrl).trim() : null;
 
-    out.push({ number, name, pos, videoTitle, videoUrl });
-  }
-  return out.slice(0, 80);
+      return { number, name, position, videoTitle, videoUrl } as SquadItem;
+    })
+    .filter(Boolean) as SquadItem[];
 }
 
-// GET /api/ct/rivales/:id/squad
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+// GET /api/ct/rivales/:id/squad  -> devuelve el plantel
+export async function GET(
+  _req: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
-    const rival = await prisma.rival.findUnique({ where: { id }, select: { squad: true } });
-    if (!rival) return new NextResponse("No encontrado", { status: 404 });
+    const row = await prisma.rival.findUnique({
+      where: { id },
+      select: { squad: true },
+    });
+    if (!row) return new NextResponse("No encontrado", { status: 404 });
 
-    const data = Array.isArray(rival.squad) ? rival.squad : [];
+    // Aseguramos array
+    const data = Array.isArray(row.squad) ? (row.squad as any[]) : [];
     return NextResponse.json({ data });
   } catch (e: any) {
     return new NextResponse(e?.message || "Error", { status: 500 });
   }
 }
 
-// PUT /api/ct/rivales/:id/squad
-export async function PUT(req: Request, { params }: { params: { id: string } }) {
+// PUT /api/ct/rivales/:id/squad  -> guarda el plantel completo
+export async function PUT(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
     const body = await req.json().catch(() => ({}));
-    const cleaned = sanitizeSquad(body?.squad);
+    const normalized = normalizeSquad(body?.squad);
 
-    const updated = await prisma.rival.update({
+    // Guardamos como JSON en la columna Rival.squad
+    const row = await prisma.rival.update({
       where: { id },
-      data: { squad: cleaned as any },
+      data: { squad: normalized as any },
       select: { squad: true },
     });
 
-    const data = Array.isArray(updated.squad) ? updated.squad : [];
+    const data = Array.isArray(row.squad) ? (row.squad as any[]) : [];
     return NextResponse.json({ data });
   } catch (e: any) {
     return new NextResponse(e?.message || "Error", { status: 500 });
