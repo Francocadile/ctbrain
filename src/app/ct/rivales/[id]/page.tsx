@@ -304,7 +304,7 @@ export default function RivalFichaPage() {
 
   useEffect(() => {
     loadAll();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   useEffect(() => {
@@ -629,9 +629,9 @@ export default function RivalFichaPage() {
           Resumen
         </button>
 
-        {/* Plantel (ruta /plantel) */}
+        {/* Plantel (ruta absoluta con id) */}
         <Link
-          href="plantel"
+          href={`/ct/rivales/${id}/plantel`}
           className="px-3 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-black"
         >
           Plantel
