@@ -45,6 +45,7 @@ type RivalStats = {
 type NoteItem = { text: string; done?: boolean };
 type RivalNotes = { observations?: string; checklist?: NoteItem[] };
 
+// --- arriba, donde está type Visibility ---
 type Visibility = {
   showSystem: boolean;
   showKeyPlayers: boolean;
@@ -52,17 +53,16 @@ type Visibility = {
   showWeaknesses: boolean;
   showSetPiecesFor: boolean;
   showSetPiecesAgainst: boolean;
-
   showCharlaUrl: boolean;
-
   showVideos: boolean;
-
   showStatsTotalsGF: boolean;
   showStatsTotalsGA: boolean;
   showStatsTotalsPossession: boolean;
   showStatsRecent: boolean;
-
   showNotesForPlayers: boolean;
+
+  // NUEVO
+  showSquad: boolean;
 };
 
 function defaultVisibility(): Visibility {
@@ -73,17 +73,16 @@ function defaultVisibility(): Visibility {
     showWeaknesses: true,
     showSetPiecesFor: true,
     showSetPiecesAgainst: true,
-
     showCharlaUrl: false,
-
     showVideos: true,
-
     showStatsTotalsGF: true,
     showStatsTotalsGA: true,
     showStatsTotalsPossession: true,
     showStatsRecent: true,
-
     showNotesForPlayers: false,
+
+    // NUEVO
+    showSquad: true,
   };
 }
 
