@@ -7,20 +7,81 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role { ADMIN CT MEDICO JUGADOR DIRECTIVO }
-enum SessionType { GENERAL FUERZA TACTICA AEROBICO RECUPERACION }
+// ===== Enums base =====
+enum Role {
+  ADMIN
+  CT
+  MEDICO
+  JUGADOR
+  DIRECTIVO
+}
 
-/* ======= Clínico: enums ======= */
-enum ClinicalStatus { BAJA REINTEGRO LIMITADA ALTA }
-enum LeaveStage { PARTIDO ENTRENAMIENTO EXTRADEPORTIVO }
-enum LeaveKind { LESION ENFERMEDAD }
-enum Laterality { IZQ DER BILATERAL NA }
-enum Severity { LEVE MODERADA SEVERA }
-enum Mechanism { SOBRECARGA IMPACTO TORSION ESTIRAMIENTO RECIDIVA OTRO }
-enum SystemAffected { RESPIRATORIO GASTROINTESTINAL OTORRINO DERMATOLOGICO GENERAL OTRO }
-enum IllAptitude { SOLO_GIMNASIO AEROBICO_SUAVE CHARLAS_TACTICO NINGUNO }
+enum SessionType {
+  GENERAL
+  FUERZA
+  TACTICA
+  AEROBICO
+  RECUPERACION
+}
 
-/* ======= Modelos ======= */
+// ===== Enums clínicos =====
+enum ClinicalStatus {
+  BAJA
+  REINTEGRO
+  LIMITADA
+  ALTA
+}
+
+enum LeaveStage {
+  PARTIDO
+  ENTRENAMIENTO
+  EXTRADEPORTIVO
+}
+
+enum LeaveKind {
+  LESION
+  ENFERMEDAD
+}
+
+enum Laterality {
+  IZQ
+  DER
+  BILATERAL
+  NA
+}
+
+enum Severity {
+  LEVE
+  MODERADA
+  SEVERA
+}
+
+enum Mechanism {
+  SOBRECARGA
+  IMPACTO
+  TORSION
+  ESTIRAMIENTO
+  RECIDIVA
+  OTRO
+}
+
+enum SystemAffected {
+  RESPIRATORIO
+  GASTROINTESTINAL
+  OTORRINO
+  DERMATOLOGICO
+  GENERAL
+  OTRO
+}
+
+enum IllAptitude {
+  SOLO_GIMNASIO
+  AEROBICO_SUAVE
+  CHARLAS_TACTICO
+  NINGUNO
+}
+
+// ===== Modelos =====
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -65,7 +126,7 @@ model Rival {
   nextMatchDate         DateTime?
   nextMatchCompetition  String?
 
-  // Bloque de plan
+  // Plan de partido
   planCharlaUrl   String?
   planReport      Json?   @default("{}")
   planVideos      Json?   @default("[]")
@@ -73,7 +134,7 @@ model Rival {
   planNotes       Json?   @default("{}")
   planVisibility  Json?   @default("{}")
 
-  // *** NUEVO: donde guardamos el plantel ***
+  // Plantel (NUEVO)
   planSquad       Json?   @default("[]")
 
   createdAt DateTime @default(now())
@@ -132,6 +193,7 @@ model RPEEntry {
   load      Int?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
   @@unique([userId, date])
   @@index([date])
   @@index([userId, date])
@@ -152,6 +214,7 @@ model WellnessEntry {
   total           Int?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
   @@unique([userId, date])
   @@index([date])
   @@index([userId, date])
@@ -164,16 +227,20 @@ model PlannerPrefs {
   places    Json     @default("[]")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-/* ======= Clínico: modelo ======= */
+// ===== Clínico =====
 model ClinicalEntry {
   id        String   @id @default(cuid())
+
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   date      DateTime
   status    ClinicalStatus
+
   leaveStage LeaveStage?
   leaveKind  LeaveKind?
 
