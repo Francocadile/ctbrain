@@ -22,7 +22,7 @@
     "next": "14.2.5",
     "next-auth": "4.24.8",
     "papaparse": "5.4.1",
-    "pdf-parse": "1.1.1",
+    "pdfjs-dist": "3.11.174",
     "postcss": "8.4.41",
     "react": "18.3.1",
     "react-dom": "18.3.1",
@@ -33,6 +33,7 @@
   "devDependencies": {
     "prisma": "5.19.1",
     "tsx": "4.19.2",
-    "@types/papaparse": "5.3.14"
+    "@types/papaparse": "5.3.14",
+    "eslint": "8.57.0"
   }
 }
