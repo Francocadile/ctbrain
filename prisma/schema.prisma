@@ -138,7 +138,10 @@ model Rival {
   planVideos            Json?     @default("[]")
   planStats             Json?     @default("{}")
   planNotes             Json?     @default("{}")
-  planVisibility        Json?     @default("{}") // << NUEVO
+  planVisibility        Json?     @default("{}")
+
+  // Plantel (jugadores del rival)
+  squad                 Json?     @default("[]")
   // -------------------------------------
 
   createdAt DateTime @default(now())
