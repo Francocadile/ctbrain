@@ -2,19 +2,26 @@
 "use client";
 
 import Link from "next/link";
-import { useSelectedLayoutSegments } from "next/navigation";
+import { usePathname } from "next/navigation";
 import clsx from "clsx";
 
-type Tab = { slug: string; label: string };
+type Tab = { slug?: string; label: string };
+
 export default function Tabs({
   baseHref,
-  tabs,
+  tabs
 }: {
   baseHref: string;
   tabs: Tab[];
 }) {
-  const segments = useSelectedLayoutSegments(); // p.ej. ["ct","rivales",":id","videos"]
-  const current = segments.at(-1) ?? "";        // última parte de la ruta
+  const pathname = usePathname();
+  // current = último segmento del path (p.ej. /ct/rivales/123/videos -> "videos")
+  const current = (() => {
+    if (!pathname) return "";
+    const parts = pathname.split("/").filter(Boolean);
+    // parts esperable: ["ct","rivales",":id", "<tab?>"]
+    return parts[3] ?? "";
+  })();
 
   return (
     <nav className="border-b">
