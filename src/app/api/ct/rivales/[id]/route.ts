@@ -85,3 +85,4 @@ export async function DELETE(
   } catch (e: any) {
     return new NextResponse(e?.message || "Error", { status: 500 });
   }
+}
