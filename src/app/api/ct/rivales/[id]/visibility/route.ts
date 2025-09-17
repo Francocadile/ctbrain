@@ -3,7 +3,12 @@ import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
-const prisma = new PrismaClient();
+
+// Evitar múltiples clientes en dev/hot-reload
+const prisma = (globalThis as any).__prisma_vis__ ?? new PrismaClient();
+if (process.env.NODE_ENV !== "production") {
+  (globalThis as any).__prisma_vis__ = prisma;
+}
 
 // Claves de visibilidad que soportamos
 export type VisibilitySettings = {
@@ -14,6 +19,9 @@ export type VisibilitySettings = {
   showWeaknesses?: boolean;
   showSetPiecesFor?: boolean;
   showSetPiecesAgainst?: boolean;
+
+  // Plantel (NUEVO)
+  showSquad?: boolean;
 
   // Charla oficial (normalmente solo CT)
   showCharlaUrl?: boolean;
@@ -31,7 +39,7 @@ export type VisibilitySettings = {
   showNotesForPlayers?: boolean;
 };
 
-// Defaults sensatos (jugadores ven el informe visual, videos y stats; NO ven charla/nota interna)
+// Defaults sensatos (jugadores ven plan, plantel, videos y stats; NO ven charla/nota interna)
 function defaultVisibility(): Required<VisibilitySettings> {
   return {
     showSystem: true,
@@ -40,6 +48,8 @@ function defaultVisibility(): Required<VisibilitySettings> {
     showWeaknesses: true,
     showSetPiecesFor: true,
     showSetPiecesAgainst: true,
+
+    showSquad: true, // NUEVO
 
     showCharlaUrl: false,
 
@@ -66,14 +76,21 @@ function pickBooleans(input: any): VisibilitySettings {
 }
 
 // Merge con defaults (defaults <- saved <- patch)
-function mergeVisibility(saved: any, patch?: VisibilitySettings): Required<VisibilitySettings> {
+function mergeVisibility(
+  saved: any,
+  patch?: VisibilitySettings
+): Required<VisibilitySettings> {
   const defs = defaultVisibility();
   const safeSaved = typeof saved === "object" && saved ? saved : {};
   const cleanPatch = pickBooleans(patch || {});
   return { ...defs, ...safeSaved, ...cleanPatch };
 }
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+// GET /api/ct/rivales/:id/visibility
+export async function GET(
+  _req: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
@@ -91,12 +108,17 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   }
 }
 
-export async function PUT(req: Request, { params }: { params: { id: string } }) {
+// PUT /api/ct/rivales/:id/visibility  (PATCH con merge)
+export async function PUT(
+  req: Request,
+  { params }: { params: { id: string } }
+) {
   try {
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
     const body = await req.json().catch(() => ({}));
+
     // Traemos lo actual para hacer merge tipo PATCH
     const current = await prisma.rival.findUnique({
       where: { id },
