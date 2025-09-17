@@ -7,6 +7,7 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const prisma = new PrismaClient();
+// require válido para ESM (Node 18/20/22 en Vercel)
 const require = createRequire(import.meta.url);
 
 /* ------------------------- Utils seguras ------------------------- */
@@ -97,7 +98,8 @@ function extractFromPDFText(text: string) {
 
   // Tiros y tiros a puerta
   const shots = numFrom(/\b(Tiros?|Remates?|Total\s+Shots?)\b[^\d:]*[:=\s]\s*([0-9]+)\b/i);
-  const shotsOnTarget = numFrom(/\b(Tiros?|Remates?)\s+a\s+(puerta|port[eé]ria)|Shots?\s+on\s+Target\b[^\d:]*[:=\s]\s*([0-9]+)\b/i);
+  const shotsOnTarget = numFrom(/\b(?:Tiros?|Remates?)\s+a\s+(?:puerta|port[eé]ria)\b[^\d:]*[:=\s]\s*([0-9]+)\b/i)
+                     ?? numFrom(/\bShots?\s+on\s+Target\b[^\d:]*[:=\s]\s*([0-9]+)\b/i);
   if (shots !== undefined) totals.shots = shots;
   if (shotsOnTarget !== undefined) totals.shotsOnTarget = shotsOnTarget;
 
@@ -109,12 +111,10 @@ function extractFromPDFText(text: string) {
   return res;
 }
 
-/* --------- pdf-parse seguro, cargado en runtime (evita bundle de ejemplos) --------- */
+/* --------- pdf-parse seguro (CJS) usando createRequire --------- */
 function loadPdfParse(): (input: Uint8Array | ArrayBuffer | Buffer) => Promise<{ text: string }> {
-  // Carga dinámica: evita que el bundler analice dependencias internas y meta ejemplos/test.
-  const dynamicRequire: NodeRequire = (0, eval)("require");
-  // @ts-ignore – tipos provistos en /types/pdf-parse.d.ts
-  const mod = dynamicRequire("pdf-parse");
+  // @ts-ignore – definidos en /types/pdf-parse.d.ts
+  const mod = require("pdf-parse");
   const fn = (mod?.default ?? mod) as any;
   if (typeof fn !== "function") throw new Error("pdf-parse no se pudo cargar correctamente");
   return async (input: Uint8Array | ArrayBuffer | Buffer) => {
