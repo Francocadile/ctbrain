@@ -1,16 +1,14 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
-import { createRequire } from "node:module";
 
+/** Next runtime */
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const prisma = new PrismaClient();
-// require válido para ESM (Node 18/20/22 en Vercel)
-const require = createRequire(import.meta.url);
 
-/* ------------------------- Utils seguras ------------------------- */
+/* ==================== Utils ==================== */
 const asObj = <T extends Record<string, any> = Record<string, any>>(x: unknown): T =>
   typeof x === "object" && x !== null ? (x as T) : ({} as T);
 
@@ -26,7 +24,6 @@ const uniq = (arr: string[]) => {
   return out;
 };
 
-/* Bullets por secciones */
 function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): string[] {
   const lines = cleanLines(text); const out: string[] = []; let on = false;
   for (const ln of lines) {
@@ -38,21 +35,44 @@ function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): strin
   return uniq(out);
 }
 
-/* ---------------- Extracción de texto y métricas (robusto) ---------------- */
+/* ==================== PDF text extract (pdfjs-dist) ==================== */
+async function extractTextWithPdfJs(u8: Uint8Array): Promise<string> {
+  // Import dinámico para SSR
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const pdfjs: any = await import("pdfjs-dist/legacy/build/pdf.js");
+
+  // sin worker en SSR
+  if (pdfjs.GlobalWorkerOptions) {
+    pdfjs.GlobalWorkerOptions.workerSrc = null;
+  }
+
+  const loadingTask = pdfjs.getDocument({ data: u8, disableWorker: true });
+  const doc = await loadingTask.promise;
+  let all = "";
+
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    const text = content.items.map((it: any) => (typeof it.str === "string" ? it.str : "")).join(" ");
+    all += text + "\n";
+  }
+
+  try { await doc?.destroy?.(); } catch {}
+  return all;
+}
+
+/* ==================== Parse heurístico ==================== */
 function extractFromPDFText(text: string) {
   const res: any = {};
 
-  // Coach / DT
   const coach = text.match(/(?:Coach|Entrenador|DT|Director(?:\s+T[eé]cnico)?)\s*[:\-]\s*([^\n]+)/i)?.[1];
   if (coach) res.coach = coach.trim();
 
-  // Sistema base
   const sys =
     text.match(/(?:Formaci[oó]n|Sistema|Base System|Formation)[^\n]*[:\-]\s*([0-9](?:\s*[–\-]\s*[0-9])+)/i)?.[1] ||
     text.match(/\b([0-9]\s*[–\-]\s*[0-9](?:\s*[–\-]\s*[0-9]){1,2})\b/)?.[1];
   if (sys) res.system = sys.replace(/\s*–\s*/g, "-").replace(/\s+/g, "");
 
-  // Listados clave
   const keyPlayers = takeBulletsAround(text, /(Jugadores?\s+clave|Key\s+Players?)\b/i, [/(Fortalezas|Debilidades|Strengths|Weaknesses|Bal[oó]n|Set\s*pieces?)/i]);
   const strengths  = takeBulletsAround(text, /(Fortalezas|Strengths)\b/i,        [/(Debilidades|Weaknesses|Bal[oó]n|Set\s*pieces?|Key\s+Players?)/i]);
   const weaknesses = takeBulletsAround(text, /(Debilidades|Weaknesses)\b/i,      [/(Fortalezas|Strengths|Bal[oó]n|Set\s*pieces?|Key\s+Players?)/i]);
@@ -67,7 +87,6 @@ function extractFromPDFText(text: string) {
   if (setFor.length)     res.setFor     = setFor;
   if (setAgainst.length) res.setAgainst = setAgainst;
 
-  /* ---------------- Métricas numéricas (variantes comunes) ---------------- */
   const totals: Record<string, number> = {};
   const numFrom = (rx: RegExp) => {
     const m = text.match(rx);
@@ -84,19 +103,19 @@ function extractFromPDFText(text: string) {
     return Number.isFinite(n) ? n : undefined;
   };
 
-  // GF / GA
+  // GF/GA
   const gf = numFrom(/\b(GF|Goals? For|Goles? a favor)\b[^\d:]*[:=\s]\s*([0-9]+)\b/i) ?? numFrom(/\bGF[:=\s]+([0-9]+)\b/i);
   const ga = numFrom(/\b(GA|Goals? Against|Goles? en contra)\b[^\d:]*[:=\s]\s*([0-9]+)\b/i) ?? numFrom(/\bGA[:=\s]+([0-9]+)\b/i);
   if (gf !== undefined) totals.gf = gf;
   if (ga !== undefined) totals.ga = ga;
 
-  // Posesión
+  // posesión
   const possession =
     pctFrom(/\bPosesi[oó]n(?:\s+del\s+bal[oó]n)?\b[^\d:]*[:=\s]\s*([0-9]+(?:[.,][0-9]+)?)\s*%?/i) ??
     pctFrom(/\bPossession\b[^\d:]*[:=\s]\s*([0-9]+(?:[.,][0-9]+)?)\s*%?/i);
   if (possession !== undefined) totals.possession = possession;
 
-  // Tiros y tiros a puerta
+  // tiros / tiros a puerta
   const shots = numFrom(/\b(Tiros?|Remates?|Total\s+Shots?)\b[^\d:]*[:=\s]\s*([0-9]+)\b/i);
   const shotsOnTarget = numFrom(/\b(?:Tiros?|Remates?)\s+a\s+(?:puerta|port[eé]ria)\b[^\d:]*[:=\s]\s*([0-9]+)\b/i)
                      ?? numFrom(/\bShots?\s+on\s+Target\b[^\d:]*[:=\s]\s*([0-9]+)\b/i);
@@ -108,22 +127,11 @@ function extractFromPDFText(text: string) {
   if (xg !== undefined) totals.xg = xg;
 
   if (Object.keys(totals).length) res.totals = totals;
+
   return res;
 }
 
-/* --------- pdf-parse seguro (CJS) usando createRequire --------- */
-function loadPdfParse(): (input: Uint8Array | ArrayBuffer | Buffer) => Promise<{ text: string }> {
-  // @ts-ignore – definidos en /types/pdf-parse.d.ts
-  const mod = require("pdf-parse");
-  const fn = (mod?.default ?? mod) as any;
-  if (typeof fn !== "function") throw new Error("pdf-parse no se pudo cargar correctamente");
-  return async (input: Uint8Array | ArrayBuffer | Buffer) => {
-    if (typeof (input as any) === "string") throw new Error("Entrada inválida: se recibió una ruta en vez de un buffer");
-    return fn(input);
-  };
-}
-
-/* ------------------------- Handler ------------------------- */
+/* ==================== Handler ==================== */
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
     const id = String(params?.id || "");
@@ -139,22 +147,21 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const ab = await fileEntry.arrayBuffer();
     const u8 = new Uint8Array(ab);
 
-    // Validación mínima de header PDF
+    // validar header
     const header = new TextDecoder().decode(u8.slice(0, 5));
     if (header !== "%PDF-") {
       return NextResponse.json({ error: "El archivo no parece ser un PDF válido" }, { status: 400 });
     }
 
-    const pdfParse = loadPdfParse();
-    const parsed = await pdfParse(u8);
-    const text = String(parsed?.text || "");
+    // EXTRAER TEXTO (sin fs, sin rutas locales)
+    const text = await extractTextWithPdfJs(u8);
     if (!text.trim()) {
       return NextResponse.json({ error: "No se pudo extraer texto del PDF" }, { status: 422 });
     }
 
+    // Parsear y fusionar
     const ext = extractFromPDFText(text);
 
-    // Patch a guardar
     const reportPatch = {
       system: ext.system || undefined,
       strengths: ext.strengths || undefined,
@@ -167,7 +174,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       }
     };
 
-    // Fusionar con lo existente
     const current = await prisma.rival.findUnique({
       where: { id },
       select: { coach: true, baseSystem: true, planReport: true }
@@ -191,7 +197,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       ...asObj(savedReport),
       ...asObj(reportPatch),
       setPieces: mergedSetPieces,
-      totals: Object.keys(mergedTotals).length ? mergedTotals : undefined,
+      totals: Object.keys(mergedTotals).length ? mergedTotals : undefined
     };
 
     const dataPatch: any = { planReport: mergedReport };
@@ -209,6 +215,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       message: "PDF procesado: se actualizaron plan y estadísticas."
     });
   } catch (e: any) {
+    console.error("[PDF IMPORT ERROR]", e);
     const stack = String(e?.stack || "").split("\n").slice(0, 5).join("\n");
     const msg = String(e?.message || e || "Error");
     return NextResponse.json({ error: msg, origin: stack }, { status: 500 });
