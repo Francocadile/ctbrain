@@ -7,114 +7,48 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// =========================
-// Enums base existentes
-// =========================
-enum Role {
-  ADMIN
-  CT
-  MEDICO
-  JUGADOR
-  DIRECTIVO
-}
+enum Role { ADMIN CT MEDICO JUGADOR DIRECTIVO }
+enum SessionType { GENERAL FUERZA TACTICA AEROBICO RECUPERACION }
 
-enum SessionType {
-  GENERAL
-  FUERZA
-  TACTICA
-  AEROBICO
-  RECUPERACION
-}
+/* ======= Clínico: enums ======= */
+enum ClinicalStatus { BAJA REINTEGRO LIMITADA ALTA }
+enum LeaveStage { PARTIDO ENTRENAMIENTO EXTRADEPORTIVO }
+enum LeaveKind { LESION ENFERMEDAD }
+enum Laterality { IZQ DER BILATERAL NA }
+enum Severity { LEVE MODERADA SEVERA }
+enum Mechanism { SOBRECARGA IMPACTO TORSION ESTIRAMIENTO RECIDIVA OTRO }
+enum SystemAffected { RESPIRATORIO GASTROINTESTINAL OTORRINO DERMATOLOGICO GENERAL OTRO }
+enum IllAptitude { SOLO_GIMNASIO AEROBICO_SUAVE CHARLAS_TACTICO NINGUNO }
 
-// =========================
-enum ClinicalStatus {
-  BAJA
-  REINTEGRO
-  LIMITADA
-  ALTA
-}
-
-enum LeaveStage {
-  PARTIDO
-  ENTRENAMIENTO
-  EXTRADEPORTIVO
-}
-
-enum LeaveKind {
-  LESION
-  ENFERMEDAD
-}
-
-enum Laterality {
-  IZQ
-  DER
-  BILATERAL
-  NA
-}
-
-enum Severity {
-  LEVE
-  MODERADA
-  SEVERA
-}
-
-enum Mechanism {
-  SOBRECARGA
-  IMPACTO
-  TORSION
-  ESTIRAMIENTO
-  RECIDIVA
-  OTRO
-}
-
-enum SystemAffected {
-  RESPIRATORIO
-  GASTROINTESTINAL
-  OTORRINO
-  DERMATOLOGICO
-  GENERAL
-  OTRO
-}
-
-enum IllAptitude {
-  SOLO_GIMNASIO
-  AEROBICO_SUAVE
-  CHARLAS_TACTICO
-  NINGUNO
-}
-
-// =========================
-// Modelos
-// =========================
+/* ======= Modelos ======= */
 model User {
-  id        String    @id @default(cuid())
-  email     String    @unique
+  id        String   @id @default(cuid())
+  email     String   @unique
   name      String?
   password  String?
-  role      Role      @default(JUGADOR)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  role      Role     @default(JUGADOR)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   sessions        Session[]      @relation("UserSessions")
   rpeEntries      RPEEntry[]
   wellnessEntries WellnessEntry[]
   plannerPrefs    PlannerPrefs?
   exercises       Exercise[]
-
   clinicalEntries ClinicalEntry[]
 }
 
 model Session {
-  id          String       @id @default(cuid())
+  id          String      @id @default(cuid())
   title       String
   description String?
   date        DateTime
-  type        SessionType  @default(GENERAL)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  type        SessionType @default(GENERAL)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
   createdBy   String
-  user        User         @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
+  user        User        @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
 
   @@index([date])
   @@index([type])
@@ -126,13 +60,12 @@ model Rival {
   name     String  @unique
   logoUrl  String?
 
-  // ---------- Datos opcionales ----------
   coach                 String?
   baseSystem            String?
   nextMatchDate         DateTime?
   nextMatchCompetition  String?
 
-  // Plan de partido (guardado en Rival)
+  // Bloque de plan
   planCharlaUrl   String?
   planReport      Json?   @default("{}")
   planVideos      Json?   @default("[]")
@@ -140,10 +73,8 @@ model Rival {
   planNotes       Json?   @default("{}")
   planVisibility  Json?   @default("{}")
 
-  // *** Plantel (array de jugadores) ***
-  // Estructura: [{number?: number, name: string, position?: string, videoTitle?: string, videoUrl?: string}]
-  squad           Json?   @default("[]")
-  // -------------------------------------
+  // *** NUEVO: donde guardamos el plantel ***
+  planSquad       Json?   @default("[]")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -169,7 +100,6 @@ model ExerciseKind {
 
 model Exercise {
   id          String        @id @default(cuid())
-
   userId      String
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -182,7 +112,6 @@ model Exercise {
   duration    String?
   description String?
   imageUrl    String?
-
   tags        String[]      @default([])
 
   createdAt   DateTime      @default(now())
@@ -197,15 +126,12 @@ model RPEEntry {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   date      DateTime
   rpe       Int
   duration  Int?
   load      Int?
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
   @@unique([userId, date])
   @@index([date])
   @@index([userId, date])
@@ -215,9 +141,7 @@ model WellnessEntry {
   id              String   @id @default(cuid())
   userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   date            DateTime
-
   sleepQuality    Int
   sleepHours      Float?
   fatigue         Int
@@ -225,12 +149,9 @@ model WellnessEntry {
   stress          Int
   mood            Int
   comment         String?
-
   total           Int?
-
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
-
   @@unique([userId, date])
   @@index([date])
   @@index([userId, date])
@@ -243,34 +164,25 @@ model PlannerPrefs {
   places    Json     @default("[]")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-// =========================
-// Parte clínico (NUEVO)
-// =========================
+/* ======= Clínico: modelo ======= */
 model ClinicalEntry {
   id        String   @id @default(cuid())
-
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   date      DateTime
   status    ClinicalStatus
-
-  // Si estado = BAJA
   leaveStage LeaveStage?
   leaveKind  LeaveKind?
 
-  // Si leaveKind = LESION
   diagnosis  String?
   bodyPart   String?
   laterality Laterality?
   mechanism  Mechanism?
   severity   Severity?
 
-  // Si leaveKind = ENFERMEDAD
   illSystem        SystemAffected?
   illSymptoms      String?
   illContagious    Boolean?
@@ -278,24 +190,20 @@ model ClinicalEntry {
   illAptitude      IllAptitude?
   feverMax         Float?
 
-  // Cronología
   startDate            DateTime?
   daysPlanned          Int?
   expectedReturn       DateTime?
   expectedReturnManual Boolean? @default(false)
 
-  // Restricciones (REINTEGRO / LIMITADA)
   capMinutes          Int?
   noSprint            Boolean  @default(false)
   noChangeOfDirection Boolean  @default(false)
   gymOnly             Boolean  @default(false)
   noContact           Boolean  @default(false)
 
-  // Documentación
   notes        String?
   medSignature String?
 
-  // Plan / Protocolo semanal
   protocolObjectives String?
   protocolTasks      String?
   protocolControls   String?
