@@ -33,7 +33,6 @@
   "devDependencies": {
     "prisma": "5.19.1",
     "tsx": "4.19.2",
-    "@types/papaparse": "5.3.14",
-    "eslint": "8.57.0"
+    "@types/papaparse": "5.3.14"
   }
 }
