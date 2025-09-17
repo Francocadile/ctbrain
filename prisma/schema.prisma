@@ -7,9 +7,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/* =========================
-   Enums base existentes
-   ========================= */
+// =========================
+// Enums base existentes
+// =========================
 enum Role {
   ADMIN
   CT
@@ -26,7 +26,7 @@ enum SessionType {
   RECUPERACION
 }
 
-/* ========================= */
+// =========================
 enum ClinicalStatus {
   BAJA
   REINTEGRO
@@ -83,9 +83,9 @@ enum IllAptitude {
   NINGUNO
 }
 
-/* =========================
-   Modelos
-   ========================= */
+// =========================
+// Modelos
+// =========================
 model User {
   id        String    @id @default(cuid())
   email     String    @unique
@@ -140,10 +140,10 @@ model Rival {
   planNotes       Json?   @default("{}")
   planVisibility  Json?   @default("{}")
 
-  // *** NUEVO: Plantel (array de jugadores) ***
+  // *** Plantel (array de jugadores) ***
   // Estructura: [{number?: number, name: string, position?: string, videoTitle?: string, videoUrl?: string}]
   squad           Json?   @default("[]")
-  // -------------------------------------------
+  // -------------------------------------
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -247,9 +247,9 @@ model PlannerPrefs {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-/* =========================
-   Parte clínico (NUEVO)
-   ========================= */
+// =========================
+// Parte clínico (NUEVO)
+// =========================
 model ClinicalEntry {
   id        String   @id @default(cuid())
 
