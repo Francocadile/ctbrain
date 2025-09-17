@@ -4,12 +4,11 @@ const webpack = require("webpack");
 const nextConfig = {
   reactStrictMode: false,
   webpack: (config) => {
-    // Bloquear que entren ejemplos/tests de pdfjs-dist al bundle del endpoint
+    // Por si algún paquete intenta arrastrar assets/ejemplos de pdfjs-dist:
     config.plugins.push(
       new webpack.IgnorePlugin({ resourceRegExp: /pdfjs-dist[\\/]examples/ }),
       new webpack.IgnorePlugin({ resourceRegExp: /pdfjs-dist[\\/]test/ })
     );
-
     return config;
   },
 };
