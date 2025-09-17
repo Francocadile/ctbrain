@@ -68,7 +68,6 @@ function extractFromPDFText(text: string) {
 
   /* ---------------- Métricas numéricas (variantes comunes) ---------------- */
   const totals: Record<string, number> = {};
-
   const numFrom = (rx: RegExp) => {
     const m = text.match(rx);
     if (!m) return undefined;
@@ -84,61 +83,42 @@ function extractFromPDFText(text: string) {
     return Number.isFinite(n) ? n : undefined;
   };
 
-  // GF / GA / GF-GA
-  const gf =
-    numFrom(/\bGF\s*[:=]?\s*([0-9]+)\b/i) ??
-    numFrom(/\bGoles?\s+a\s+favor\s*[:=]?\s*([0-9]+)\b/i) ??
-    numFrom(/\bGoals?\s+For\s*[:=]?\s*([0-9]+)\b/i);
-  const ga =
-    numFrom(/\bGA\s*[:=]?\s*([0-9]+)\b/i) ??
-    numFrom(/\bGoles?\s+en\s+contra\s*[:=]?\s*([0-9]+)\b/i) ??
-    numFrom(/\bGoals?\s+Against\s*[:=]?\s*([0-9]+)\b/i);
-
+  // GF / GA
+  const gf = numFrom(/\b(GF|Goals? For|Goles? a favor)\b[^\d:]*[:=\s]\s*([0-9]+)\b/i) ?? numFrom(/\bGF[:=\s]+([0-9]+)\b/i);
+  const ga = numFrom(/\b(GA|Goals? Against|Goles? en contra)\b[^\d:]*[:=\s]\s*([0-9]+)\b/i) ?? numFrom(/\bGA[:=\s]+([0-9]+)\b/i);
   if (gf !== undefined) totals.gf = gf;
   if (ga !== undefined) totals.ga = ga;
 
   // Posesión
   const possession =
-    pctFrom(/\bPosesi[oó]n(?:\s+del\s+bal[oó]n)?\s*[:=]?\s*([0-9]+(?:[.,][0-9]+)?)\s*%?/i) ??
-    pctFrom(/\bPossession(?:\s*%?)?\s*[:=]?\s*([0-9]+(?:[.,][0-9]+)?)\s*%?/i);
+    pctFrom(/\bPosesi[oó]n(?:\s+del\s+bal[oó]n)?\b[^\d:]*[:=\s]\s*([0-9]+(?:[.,][0-9]+)?)\s*%?/i) ??
+    pctFrom(/\bPossession\b[^\d:]*[:=\s]\s*([0-9]+(?:[.,][0-9]+)?)\s*%?/i);
   if (possession !== undefined) totals.possession = possession;
 
-  // Tiros
-  const shots =
-    numFrom(/\bTiros?\b[^\n:]*[:\s]\s*([0-9]+)\b/i) ??
-    numFrom(/\bRemates?\b[^\n:]*[:\s]\s*([0-9]+)\b/i) ??
-    numFrom(/\bTotal\s+Shots?\b[^\n:]*[:\s]\s*([0-9]+)\b/i) ??
-    numFrom(/\bShots?\b[^\n:]*[:\s]\s*([0-9]+)\b/i);
+  // Tiros y tiros a puerta
+  const shots = numFrom(/\b(Tiros?|Remates?|Total\s+Shots?)\b[^\d:]*[:=\s]\s*([0-9]+)\b/i);
+  const shotsOnTarget = numFrom(/\b(Tiros?|Remates?)\s+a\s+(puerta|port[eé]ria)|Shots?\s+on\s+Target\b[^\d:]*[:=\s]\s*([0-9]+)\b/i);
   if (shots !== undefined) totals.shots = shots;
-
-  // Tiros a puerta
-  const shotsOnTarget =
-    numFrom(/\bTiros?\s+a\s+(?:puerta|port[eé]ria)\b[^\n:]*[:\s]\s*([0-9]+)\b/i) ??
-    numFrom(/\bRemates?\s+a\s+(?:puerta|port[eé]ria)\b[^\n:]*[:\s]\s*([0-9]+)\b/i) ??
-    numFrom(/\bShots?\s+on\s+Target\b[^\n:]*[:\s]\s*([0-9]+)\b/i) ??
-    numFrom(/\bOn\s+Target\b[^\n:]*[:\s]\s*([0-9]+)\b/i);
   if (shotsOnTarget !== undefined) totals.shotsOnTarget = shotsOnTarget;
 
   // xG
-  const xg =
-    numFrom(/\bxG\b[^\d]*([0-9]+(?:[.,][0-9]+)?)/i) ??
-    numFrom(/\bExpected\s+Goals?\b[^\d]*([0-9]+(?:[.,][0-9]+)?)/i);
+  const xg = numFrom(/\b(xG|Expected\s+Goals?)\b[^\d:]*[:=\s]\s*([0-9]+(?:[.,][0-9]+)?)\b/i);
   if (xg !== undefined) totals.xg = xg;
 
   if (Object.keys(totals).length) res.totals = totals;
   return res;
 }
 
-/* --------- pdf-parse seguro (CJS) --------- */
+/* --------- pdf-parse seguro, cargado en runtime (evita bundle de ejemplos) --------- */
 function loadPdfParse(): (input: Uint8Array | ArrayBuffer | Buffer) => Promise<{ text: string }> {
-  // @ts-ignore – tipos en /types/pdf-parse.d.ts
-  const mod = require("pdf-parse");
+  // Carga dinámica: evita que el bundler analice dependencias internas y meta ejemplos/test.
+  const dynamicRequire: NodeRequire = (0, eval)("require");
+  // @ts-ignore – tipos provistos en /types/pdf-parse.d.ts
+  const mod = dynamicRequire("pdf-parse");
   const fn = (mod?.default ?? mod) as any;
   if (typeof fn !== "function") throw new Error("pdf-parse no se pudo cargar correctamente");
   return async (input: Uint8Array | ArrayBuffer | Buffer) => {
-    if (typeof (input as any) === "string") {
-      throw new Error("Bug interno: pdf-parse recibió una string (ruta). Debe recibir Buffer/Uint8Array.");
-    }
+    if (typeof (input as any) === "string") throw new Error("Entrada inválida: se recibió una ruta en vez de un buffer");
     return fn(input);
   };
 }
@@ -174,7 +154,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     const ext = extractFromPDFText(text);
 
-    // Patch
+    // Patch a guardar
     const reportPatch = {
       system: ext.system || undefined,
       strengths: ext.strengths || undefined,
