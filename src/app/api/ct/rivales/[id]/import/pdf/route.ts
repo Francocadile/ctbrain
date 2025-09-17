@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 
-/** Next runtime */
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -37,19 +36,20 @@ function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): strin
 
 /* ==================== PDF text extract (pdfjs-dist) ==================== */
 async function extractTextWithPdfJs(u8: Uint8Array): Promise<string> {
-  // Import dinámico para SSR
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const pdfjs: any = await import("pdfjs-dist/legacy/build/pdf.js");
+  const mod: any = await import("pdfjs-dist/legacy/build/pdf.js");
+  const pdfjs = (mod?.default ?? mod);
 
-  // sin worker en SSR
+  // forzar sin worker en SSR
   if (pdfjs.GlobalWorkerOptions) {
+    // Evita que intente cargar './pdf.worker.js'
     pdfjs.GlobalWorkerOptions.workerSrc = null;
+    // Algunas versiones hacen "fake worker" si esto no es null; pasamos siempre disableWorker
   }
 
   const loadingTask = pdfjs.getDocument({ data: u8, disableWorker: true });
   const doc = await loadingTask.promise;
-  let all = "";
 
+  let all = "";
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
     const content = await page.getTextContent();
@@ -103,31 +103,26 @@ function extractFromPDFText(text: string) {
     return Number.isFinite(n) ? n : undefined;
   };
 
-  // GF/GA
   const gf = numFrom(/\b(GF|Goals? For|Goles? a favor)\b[^\d:]*[:=\s]\s*([0-9]+)\b/i) ?? numFrom(/\bGF[:=\s]+([0-9]+)\b/i);
   const ga = numFrom(/\b(GA|Goals? Against|Goles? en contra)\b[^\d:]*[:=\s]\s*([0-9]+)\b/i) ?? numFrom(/\bGA[:=\s]+([0-9]+)\b/i);
   if (gf !== undefined) totals.gf = gf;
   if (ga !== undefined) totals.ga = ga;
 
-  // posesión
   const possession =
     pctFrom(/\bPosesi[oó]n(?:\s+del\s+bal[oó]n)?\b[^\d:]*[:=\s]\s*([0-9]+(?:[.,][0-9]+)?)\s*%?/i) ??
     pctFrom(/\bPossession\b[^\d:]*[:=\s]\s*([0-9]+(?:[.,][0-9]+)?)\s*%?/i);
   if (possession !== undefined) totals.possession = possession;
 
-  // tiros / tiros a puerta
   const shots = numFrom(/\b(Tiros?|Remates?|Total\s+Shots?)\b[^\d:]*[:=\s]\s*([0-9]+)\b/i);
   const shotsOnTarget = numFrom(/\b(?:Tiros?|Remates?)\s+a\s+(?:puerta|port[eé]ria)\b[^\d:]*[:=\s]\s*([0-9]+)\b/i)
                      ?? numFrom(/\bShots?\s+on\s+Target\b[^\d:]*[:=\s]\s*([0-9]+)\b/i);
   if (shots !== undefined) totals.shots = shots;
   if (shotsOnTarget !== undefined) totals.shotsOnTarget = shotsOnTarget;
 
-  // xG
   const xg = numFrom(/\b(xG|Expected\s+Goals?)\b[^\d:]*[:=\s]\s*([0-9]+(?:[.,][0-9]+)?)\b/i);
   if (xg !== undefined) totals.xg = xg;
 
   if (Object.keys(totals).length) res.totals = totals;
-
   return res;
 }
 
@@ -147,19 +142,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const ab = await fileEntry.arrayBuffer();
     const u8 = new Uint8Array(ab);
 
-    // validar header
     const header = new TextDecoder().decode(u8.slice(0, 5));
     if (header !== "%PDF-") {
       return NextResponse.json({ error: "El archivo no parece ser un PDF válido" }, { status: 400 });
     }
 
-    // EXTRAER TEXTO (sin fs, sin rutas locales)
     const text = await extractTextWithPdfJs(u8);
     if (!text.trim()) {
       return NextResponse.json({ error: "No se pudo extraer texto del PDF" }, { status: 422 });
     }
 
-    // Parsear y fusionar
     const ext = extractFromPDFText(text);
 
     const reportPatch = {
