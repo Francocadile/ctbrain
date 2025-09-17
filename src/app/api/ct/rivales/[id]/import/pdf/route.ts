@@ -32,7 +32,8 @@ function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): strin
     if (header.test(ln)) { on = true; continue; }
     if (on && stops.some(rx => rx.test(ln))) break;
     if (!on) continue;
-    const m = ln.match(/^[\-\*•·]\s*(.+)$/); if (m) out.push(m[1].trim());
+    const m = ln.match(/^[\-\*•·]\s*(.+)$/);
+    if (m) out.push(m[1].trim());
   }
   return uniq(out);
 }
@@ -41,17 +42,17 @@ function takeBulletsAround(text: string, header: RegExp, stops: RegExp[]): strin
 function extractFromPDFText(text: string) {
   const res: any = {};
 
-  const coach = text.match(/(?:Coach|Entrenador|DT|Director(?:\s+T[eé]cnico)?)\s*[:\-]\s*([^\n]+)/i)?.[1];
+  const coach = text.match(/(?:Coach|Entrenador|DT|Director(?:\s+Técnico)?)\s*[:\-]\s*([^\n]+)/i)?.[1];
   if (coach) res.coach = coach.trim();
 
   const sys =
-    text.match(/(?:Formaci[oó]n|Sistema|Base System|Formation)[^\n]*[:\-]\s*([0-9](?:\s*[–\-]\s*[0-9])+)/i)?.[1] ||
+    text.match(/(?:Formación|Formacion|Sistema|Base System|Formation)[^\n]*[:\-]\s*([0-9](?:\s*[–\-]\s*[0-9])+)/i)?.[1] ||
     text.match(/\b([0-9]\s*[–\-]\s*[0-9](?:\s*[–\-]\s*[0-9]){1,2})\b/)?.[1];
   if (sys) res.system = sys.replace(/\s*–\s*/g, "-").replace(/\s+/g, "");
 
-  const keyPlayers = takeBulletsAround(text, /(Jugadores?\s+clave|Key\s+Players?)\b/i, [/(Fortalezas|Debilidades|Strengths|Weaknesses|Bal[oó]n|Set\s*pieces?)/i]);
-  const strengths  = takeBulletsAround(text, /(Fortalezas|Strengths)\b/i,        [/(Debilidades|Weaknesses|Bal[oó]n|Set\s*pieces?|Key\s+Players?)/i]);
-  const weaknesses = takeBulletsAround(text, /(Debilidades|Weaknesses)\b/i,      [/(Fortalezas|Strengths|Bal[oó]n|Set\s*pieces?|Key\s+Players?)/i]);
+  const keyPlayers = takeBulletsAround(text, /(Jugadores?\s+clave|Key\s+Players?)\b/i, [/(Fortalezas|Debilidades|Strengths|Weaknesses|Balón|Set\s*pieces?)/i]);
+  const strengths  = takeBulletsAround(text, /(Fortalezas|Strengths)\b/i,        [/(Debilidades|Weaknesses|Balón|Set\s*pieces?|Key\s+Players?)/i]);
+  const weaknesses = takeBulletsAround(text, /(Debilidades|Weaknesses)\b/i,      [/(Fortalezas|Strengths|Balón|Set\s*pieces?|Key\s+Players?)/i]);
   const setFor     = takeBulletsAround(text, /(Bal[oó]n\s+parado.*a\s+favor|Set\s*pieces?\s*\(for\))/i,
                                        [/(en\s+contra|against|Fortalezas|Debilidades|Strengths|Weaknesses|Key\s+Players?)/i]);
   const setAgainst = takeBulletsAround(text, /(Bal[oó]n\s+parado.*en\s+contra|Set\s*pieces?\s*\(against\))/i,
@@ -63,49 +64,59 @@ function extractFromPDFText(text: string) {
   if (setFor.length)     res.setFor     = setFor;
   if (setAgainst.length) res.setAgainst = setAgainst;
 
-  const totals: Record<string, number> = {};
-  const numFrom = (rx: RegExp) => {
-    const m = text.match(rx); if (!m) return;
-    const v = (m[1] ?? "").toString().replace(",", ".").replace(/[^\d.]/g, "");
-    const n = Number(v); return Number.isFinite(n) ? n : undefined;
-  };
-  const pctFrom = (rx: RegExp) => {
-    const m = text.match(rx); if (!m) return;
-    const v = (m[1] ?? "").toString().replace(",", ".").replace("%", "");
-    const n = Number(v); return Number.isFinite(n) ? n : undefined;
+  const findNum = (rx: RegExp) => {
+    const m = text.match(rx);
+    if (!m) return undefined;
+    const val = m[1]?.replace(/,/g, ".").trim();
+    const n = Number(val);
+    return Number.isFinite(n) ? n : undefined;
   };
 
-  const gf = numFrom(/\b(GF|Goals? For|Goles? a favor)\b[^\d:]*[:=\s]\s*([0-9]+)\b/i) ?? numFrom(/\bGF[:=\s]+([0-9]+)\b/i);
-  const ga = numFrom(/\b(GA|Goals? Against|Goles? en contra)\b[^\d:]*[:=\s]\s*([0-9]+)\b/i) ?? numFrom(/\bGA[:=\s]+([0-9]+)\b/i);
-  if (gf !== undefined) totals.gf = gf;
-  if (ga !== undefined) totals.ga = ga;
+  const percent = (rx: RegExp) => {
+    const m = text.match(rx);
+    if (!m) return undefined;
+    const v = m[1].replace(",", ".").replace("%", "");
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
 
-  const possession =
-    pctFrom(/\bPosesi[oó]n(?:\s+del\s+bal[oó]n)?\b[^\d:]*[:=\s]\s*([0-9]+(?:[.,][0-9]+)?)\s*%?/i) ??
-    pctFrom(/\bPossession\b[^\d:]*[:=\s]\s*([0-9]+(?:[.,][0-9]+)?)\s*%?/i);
-  if (possession !== undefined) totals.possession = possession;
+  res.totals = res.totals || {};
+  const gf = findNum(/\bGF[:\s]+([0-9]+)\b/i) ?? findNum(/\bGoals For[:\s]+([0-9]+)\b/i);
+  const ga = findNum(/\bGA[:\s]+([0-9]+)\b/i) ?? findNum(/\bGoals Against[:\s]+([0-9]+)\b/i);
+  if (gf !== undefined) res.totals.gf = gf;
+  if (ga !== undefined) res.totals.ga = ga;
 
-  const shots = numFrom(/\b(Tiros?|Remates?|Total\s+Shots?)\b[^\d:]*[:=\s]\s*([0-9]+)\b/i);
-  const shotsOnTarget = numFrom(/\b(?:Tiros?|Remates?)\s+a\s+(?:puerta|port[eé]ria)\b[^\d:]*[:=\s]\s*([0-9]+)\b/i)
-                     ?? numFrom(/\bShots?\s+on\s+Target\b[^\d:]*[:=\s]\s*([0-9]+)\b/i);
-  if (shots !== undefined) totals.shots = shots;
-  if (shotsOnTarget !== undefined) totals.shotsOnTarget = shotsOnTarget;
+  const poss = percent(/\bPosesi[oó]n[:\s]+([0-9]+(?:[.,][0-9]+)?)%/i) ?? percent(/\bPossession[:\s]+([0-9]+(?:[.,][0-9]+)?)%/i);
+  if (poss !== undefined) res.totals.possession = poss;
 
-  const xg = numFrom(/\b(xG|Expected\s+Goals?)\b[^\d:]*[:=\s]\s*([0-9]+(?:[.,][0-9]+)?)\b/i);
-  if (xg !== undefined) totals.xg = xg;
+  const shots = findNum(/\b(Tiros|Shots)\b[^\n]*[:\s]+([0-9]+)/i) ?? findNum(/\b(Total Shots)\b[^\n]*[:\s]+([0-9]+)/i);
+  const sot   = findNum(/\b(Tiros a puerta|Shots on Target)\b[^\n]*[:\s]+([0-9]+)/i);
+  if (shots !== undefined) res.totals.shots = shots;
+  if (sot   !== undefined) res.totals.shotsOnTarget = sot;
 
-  if (Object.keys(totals).length) res.totals = totals;
+  const xg = findNum(/\bxG[:\s]+([0-9]+(?:[.,][0-9]+)?)\b/i);
+  if (xg !== undefined) res.totals.xg = xg;
+
   return res;
 }
 
-/* --------- pdf-parse seguro (CJS) --------- */
+/* --------- pdf-parse seguro (usa entrada interna SIN harness) --------- */
 function loadPdfParse(): (input: Uint8Array | ArrayBuffer | Buffer) => Promise<{ text: string }> {
-  // ¡Nunca pasar string! (si le pasás string, intenta abrir ruta y aparece ENOENT)
-  // @ts-ignore – tipos provistos en /types/pdf-parse.d.ts
-  const mod = require("pdf-parse");
+  // ⚠️ Punto CLAVE: usamos el archivo interno que exporta la función pura,
+  // sin el bloque "if (require.main === module) { ... }" que lee ./test/data/05-versions-space.pdf
+  // y que Webpack evalúa en server.
+  // @ts-ignore – paquetes CJS
+  const mod = require("pdf-parse/lib/pdf-parse.js");
   const fn = (mod?.default ?? mod) as any;
-  if (typeof fn !== "function") throw new Error("pdf-parse no se pudo cargar correctamente");
-  return (input: Uint8Array | ArrayBuffer | Buffer) => fn(input);
+  if (typeof fn !== "function") {
+    throw new Error("pdf-parse no se pudo cargar correctamente");
+  }
+  return async (input: Uint8Array | ArrayBuffer | Buffer) => {
+    if (typeof (input as any) === "string") {
+      throw new Error("Bug interno: pdf-parse recibió una string (ruta). Debe recibir Buffer/Uint8Array.");
+    }
+    return fn(input);
+  };
 }
 
 /* ------------------------- Handler ------------------------- */
@@ -167,13 +178,16 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       ...(patchSP.against ? { against: asStrArray(patchSP.against) } : savedSP.against ? { against: asStrArray(savedSP.against) } : {})
     };
 
-    const mergedTotals = { ...asObj(savedReport.totals), ...asObj(reportPatch.totals) };
+    const mergedTotals = {
+      ...asObj(savedReport.totals),
+      ...asObj(reportPatch.totals),
+    };
 
     const mergedReport = {
       ...asObj(savedReport),
       ...asObj(reportPatch),
       setPieces: mergedSetPieces,
-      totals: Object.keys(mergedTotals).length ? mergedTotals : undefined
+      totals: Object.keys(mergedTotals).length ? mergedTotals : undefined,
     };
 
     const dataPatch: any = { planReport: mergedReport };
@@ -192,7 +206,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     });
   } catch (e: any) {
     console.error("[PDF IMPORT ERROR]", e);
-    const stack = String(e?.stack || "").split("\n").slice(0, 5).join("\n");
+    const stack = String(e?.stack || "").split("\n").slice(0, 6).join("\n");
     const msg = String(e?.message || e || "Error");
     return NextResponse.json({ error: msg, origin: stack }, { status: 500 });
   }
