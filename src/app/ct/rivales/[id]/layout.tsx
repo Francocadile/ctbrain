@@ -1,68 +1,48 @@
 // src/app/ct/rivales/[id]/layout.tsx
+import { PrismaClient } from "@prisma/client";
 import Link from "next/link";
-import { ReactNode } from "react";
-import { headers } from "next/headers";
+import Tabs from "./tabs";
 
-function isActive(pathname: string, href: string) {
-  if (href.endsWith("/")) href = href.slice(0, -1);
-  if (pathname.endsWith("/")) pathname = pathname.slice(0, -1);
-  // activo si coincide exacto o si pathname empieza por href y el resto es vacío
-  return pathname === href;
-}
+export const dynamic = "force-dynamic";
 
-export default function RivalLayout({
-  children,
-  params,
-}: {
-  children: ReactNode;
+const prisma = new PrismaClient();
+
+type Props = {
+  children: React.ReactNode;
   params: { id: string };
-}) {
-  const id = params.id;
-  const hdrs = headers();
-  const currentPath = hdrs.get("x-invoke-path") // Next la setea en runtime
-    || hdrs.get("referer") // fallback
-    || `/ct/rivales/${id}`;
+};
 
-  const base = `/ct/rivales/${id}`;
+export default async function RivalLayout({ children, params }: Props) {
+  const rival = await prisma.rival.findUnique({
+    where: { id: params.id },
+    select: { id: true, name: true, coach: true, baseSystem: true },
+  });
 
-  const tabs = [
-    { href: `${base}`, label: "Resumen" },
-    { href: `${base}/plan`, label: "Plan de partido" },
-    { href: `${base}/videos`, label: "Videos" },
-    { href: `${base}/estadisticas`, label: "Estadísticas" },
-    { href: `${base}/notas`, label: "Notas internas" },
-    { href: `${base}/visibilidad`, label: "Visibilidad" },
-    { href: `${base}/importar`, label: "Importar" },
-    { href: `${base}/plantel`, label: "Plantel" }, // ⬅️ NUEVA PESTAÑA
-  ];
-
+  // Contenedor principal (igual que el resto de las vistas)
   return (
-    <div className="w-full">
-      {/* Barra de pestañas */}
-      <nav className="border-b mb-6">
-        <div className="flex gap-6 px-6">
-          {tabs.map((t) => {
-            const active = isActive(currentPath, t.href);
-            return (
-              <Link
-                key={t.href}
-                href={t.href}
-                className={
-                  "py-3 border-b-2 -mb-px transition-colors " +
-                  (active
-                    ? "border-black text-black font-medium"
-                    : "border-transparent text-gray-500 hover:text-black")
-                }
-              >
-                {t.label}
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
+    <div className="mx-auto max-w-6xl px-4">
+      {/* Encabezado “clásico” con nombre/escudo ya lo tenés en cada página.
+          No agregamos ninguna barra adicional arriba. */}
 
-      {/* Contenido de cada subpágina */}
-      <div>{children}</div>
+      {/* ÚNICA barra de pestañas (debajo del encabezado) */}
+      <div className="mt-4">
+        <Tabs
+          baseHref={`/ct/rivales/${params.id}`}
+          tabs={[
+            { slug: "", label: "Resumen" },
+            { slug: "plan", label: "Plan de partido" },
+            { slug: "videos", label: "Videos" },
+            { slug: "estadisticas", label: "Estadísticas" },
+            { slug: "notas", label: "Notas internas" },
+            { slug: "visibilidad", label: "Visibilidad" },
+            { slug: "importar", label: "Importar" },
+            { slug: "plantel", label: "Plantel" }, // ← NUEVO, en la misma barra
+          ]}
+        />
+      </div>
+
+      {/* Contenido de cada pestaña */}
+      <div className="mt-6">{children}</div>
     </div>
   );
 }
