@@ -66,10 +66,9 @@ function extractFromPDFText(text: string) {
   if (setFor.length)     res.setFor     = setFor;
   if (setAgainst.length) res.setAgainst = setAgainst;
 
-  /* ---------------- Métricas numéricas (muchas variantes) ---------------- */
+  /* ---------------- Métricas numéricas (variantes comunes) ---------------- */
   const totals: Record<string, number> = {};
 
-  // Helpers
   const numFrom = (rx: RegExp) => {
     const m = text.match(rx);
     if (!m) return undefined;
@@ -85,38 +84,26 @@ function extractFromPDFText(text: string) {
     return Number.isFinite(n) ? n : undefined;
   };
 
-  // ------- GF / GA -------
-  // Formatos: "GF: 12", "GA 8", "Goles a favor 12", "Goles en contra: 8", "GF/GA 12/8"
-  const gfDirect =
+  // GF / GA / GF-GA
+  const gf =
     numFrom(/\bGF\s*[:=]?\s*([0-9]+)\b/i) ??
     numFrom(/\bGoles?\s+a\s+favor\s*[:=]?\s*([0-9]+)\b/i) ??
     numFrom(/\bGoals?\s+For\s*[:=]?\s*([0-9]+)\b/i);
-  if (gfDirect !== undefined) totals.gf = gfDirect;
-
-  const gaDirect =
+  const ga =
     numFrom(/\bGA\s*[:=]?\s*([0-9]+)\b/i) ??
     numFrom(/\bGoles?\s+en\s+contra\s*[:=]?\s*([0-9]+)\b/i) ??
     numFrom(/\bGoals?\s+Against\s*[:=]?\s*([0-9]+)\b/i);
-  if (gaDirect !== undefined) totals.ga = gaDirect;
 
-  // Combinado "GF/GA 12/8" o "GF - GA 12/8"
-  const gfga = text.match(/\bGF\s*\/\s*GA\b[^\d]*([0-9]+)\s*\/\s*([0-9]+)/i) ||
-               text.match(/\bGF\s*[-–]\s*GA\b[^\d]*([0-9]+)\s*\/\s*([0-9]+)/i);
-  if (gfga && (totals.gf === undefined || totals.ga === undefined)) {
-    const gf = Number(gfga[1]); const ga = Number(gfga[2]);
-    if (Number.isFinite(gf) && totals.gf === undefined) totals.gf = gf;
-    if (Number.isFinite(ga) && totals.ga === undefined) totals.ga = ga;
-  }
+  if (gf !== undefined) totals.gf = gf;
+  if (ga !== undefined) totals.ga = ga;
 
-  // ------- Posesión -------
-  // "Posesión 56%", "Posesión del balón: 55.2%", "Possession 54.1%"
+  // Posesión
   const possession =
     pctFrom(/\bPosesi[oó]n(?:\s+del\s+bal[oó]n)?\s*[:=]?\s*([0-9]+(?:[.,][0-9]+)?)\s*%?/i) ??
     pctFrom(/\bPossession(?:\s*%?)?\s*[:=]?\s*([0-9]+(?:[.,][0-9]+)?)\s*%?/i);
   if (possession !== undefined) totals.possession = possession;
 
-  // ------- Tiros totales -------
-  // "Tiros 12", "Remates 13", "Shots 11", "Total shots: 10"
+  // Tiros
   const shots =
     numFrom(/\bTiros?\b[^\n:]*[:\s]\s*([0-9]+)\b/i) ??
     numFrom(/\bRemates?\b[^\n:]*[:\s]\s*([0-9]+)\b/i) ??
@@ -124,7 +111,7 @@ function extractFromPDFText(text: string) {
     numFrom(/\bShots?\b[^\n:]*[:\s]\s*([0-9]+)\b/i);
   if (shots !== undefined) totals.shots = shots;
 
-  // ------- Tiros a puerta / On target -------
+  // Tiros a puerta
   const shotsOnTarget =
     numFrom(/\bTiros?\s+a\s+(?:puerta|port[eé]ria)\b[^\n:]*[:\s]\s*([0-9]+)\b/i) ??
     numFrom(/\bRemates?\s+a\s+(?:puerta|port[eé]ria)\b[^\n:]*[:\s]\s*([0-9]+)\b/i) ??
@@ -132,36 +119,22 @@ function extractFromPDFText(text: string) {
     numFrom(/\bOn\s+Target\b[^\n:]*[:\s]\s*([0-9]+)\b/i);
   if (shotsOnTarget !== undefined) totals.shotsOnTarget = shotsOnTarget;
 
-  // ------- xG / Expected Goals -------
+  // xG
   const xg =
     numFrom(/\bxG\b[^\d]*([0-9]+(?:[.,][0-9]+)?)/i) ??
     numFrom(/\bExpected\s+Goals?\b[^\d]*([0-9]+(?:[.,][0-9]+)?)/i);
   if (xg !== undefined) totals.xg = xg;
 
   if (Object.keys(totals).length) res.totals = totals;
-
-  // Log para ver rápidamente qué se detectó (Vercel Logs)
-  try {
-    console.log("[PDF EXTRACT]", {
-      coach: res.coach ?? null,
-      system: res.system ?? null,
-      totals: res.totals ?? null,
-      sample: text.slice(0, 300).replace(/\s+/g, " "),
-    });
-  } catch {}
-
   return res;
 }
 
 /* --------- pdf-parse seguro (CJS) --------- */
 function loadPdfParse(): (input: Uint8Array | ArrayBuffer | Buffer) => Promise<{ text: string }> {
-  // ¡Nunca pasar string! Si pasás string, pdf-parse intenta abrir archivo y aparece el ENOENT.
-  // @ts-ignore – tipos provistos en /types/pdf-parse.d.ts
+  // @ts-ignore – tipos en /types/pdf-parse.d.ts
   const mod = require("pdf-parse");
   const fn = (mod?.default ?? mod) as any;
-  if (typeof fn !== "function") {
-    throw new Error("pdf-parse no se pudo cargar correctamente");
-  }
+  if (typeof fn !== "function") throw new Error("pdf-parse no se pudo cargar correctamente");
   return async (input: Uint8Array | ArrayBuffer | Buffer) => {
     if (typeof (input as any) === "string") {
       throw new Error("Bug interno: pdf-parse recibió una string (ruta). Debe recibir Buffer/Uint8Array.");
@@ -201,7 +174,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     const ext = extractFromPDFText(text);
 
-    // Construcción del patch
+    // Patch
     const reportPatch = {
       system: ext.system || undefined,
       strengths: ext.strengths || undefined,
@@ -214,7 +187,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       }
     };
 
-    // Leer lo actual
+    // Fusionar con lo existente
     const current = await prisma.rival.findUnique({
       where: { id },
       select: { coach: true, baseSystem: true, planReport: true }
@@ -232,10 +205,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       ...(patchSP.against ? { against: asStrArray(patchSP.against) } : savedSP.against ? { against: asStrArray(savedSP.against) } : {})
     };
 
-    const mergedTotals = {
-      ...asObj(savedReport.totals),
-      ...asObj(reportPatch.totals),
-    };
+    const mergedTotals = { ...asObj(savedReport.totals), ...asObj(reportPatch.totals) };
 
     const mergedReport = {
       ...asObj(savedReport),
@@ -259,7 +229,6 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       message: "PDF procesado: se actualizaron plan y estadísticas."
     });
   } catch (e: any) {
-    console.error("[PDF IMPORT ERROR]", e);
     const stack = String(e?.stack || "").split("\n").slice(0, 5).join("\n");
     const msg = String(e?.message || e || "Error");
     return NextResponse.json({ error: msg, origin: stack }, { status: 500 });
