@@ -4,13 +4,13 @@ import { PrismaClient } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-// Evitar múltiples clientes en dev/hot-reload
-const prisma = (globalThis as any).__prisma_vis__ ?? new PrismaClient();
+// Cliente único en dev
+const prisma = (globalThis as any).__prisma__ ?? new PrismaClient();
 if (process.env.NODE_ENV !== "production") {
-  (globalThis as any).__prisma_vis__ = prisma;
+  (globalThis as any).__prisma__ = prisma;
 }
 
-// Claves de visibilidad que soportamos
+// Claves de visibilidad soportadas
 export type VisibilitySettings = {
   // Plan (informe visual)
   showSystem?: boolean;
@@ -20,10 +20,10 @@ export type VisibilitySettings = {
   showSetPiecesFor?: boolean;
   showSetPiecesAgainst?: boolean;
 
-  // Plantel (NUEVO)
+  // *** NUEVO: Plantel ***
   showSquad?: boolean;
 
-  // Charla oficial (normalmente solo CT)
+  // Charla oficial
   showCharlaUrl?: boolean;
 
   // Videos
@@ -35,11 +35,11 @@ export type VisibilitySettings = {
   showStatsTotalsPossession?: boolean;
   showStatsRecent?: boolean;
 
-  // Notas internas (normalmente ocultas a jugadores)
+  // Notas internas
   showNotesForPlayers?: boolean;
 };
 
-// Defaults sensatos (jugadores ven plan, plantel, videos y stats; NO ven charla/nota interna)
+// Defaults sensatos
 function defaultVisibility(): Required<VisibilitySettings> {
   return {
     showSystem: true,
@@ -49,7 +49,7 @@ function defaultVisibility(): Required<VisibilitySettings> {
     showSetPiecesFor: true,
     showSetPiecesAgainst: true,
 
-    showSquad: true, // NUEVO
+    showSquad: true, // <- por defecto mostramos el plantel
 
     showCharlaUrl: false,
 
@@ -76,21 +76,15 @@ function pickBooleans(input: any): VisibilitySettings {
 }
 
 // Merge con defaults (defaults <- saved <- patch)
-function mergeVisibility(
-  saved: any,
-  patch?: VisibilitySettings
-): Required<VisibilitySettings> {
+function mergeVisibility(saved: any, patch?: VisibilitySettings): Required<VisibilitySettings> {
   const defs = defaultVisibility();
   const safeSaved = typeof saved === "object" && saved ? saved : {};
   const cleanPatch = pickBooleans(patch || {});
   return { ...defs, ...safeSaved, ...cleanPatch };
 }
 
-// GET /api/ct/rivales/:id/visibility
-export async function GET(
-  _req: Request,
-  { params }: { params: { id: string } }
-) {
+// GET
+export async function GET(_req: Request, { params }: { params: { id: string } }) {
   try {
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
@@ -108,18 +102,13 @@ export async function GET(
   }
 }
 
-// PUT /api/ct/rivales/:id/visibility  (PATCH con merge)
-export async function PUT(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+// PUT (PATCH semantics)
+export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
     const body = await req.json().catch(() => ({}));
-
-    // Traemos lo actual para hacer merge tipo PATCH
     const current = await prisma.rival.findUnique({
       where: { id },
       select: { planVisibility: true },
