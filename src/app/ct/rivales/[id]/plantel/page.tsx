@@ -1,4 +1,3 @@
-// src/app/ct/rivales/[id]/plantel/page.tsx
 "use client";
 
 import Link from "next/link";
@@ -18,11 +17,11 @@ type PlayerVideo = {
 };
 
 type SquadPlayer = {
-  id?: string;                // opcional (si el backend lo devuelve)
-  number?: number | null;     // dorsal
+  id?: string;
+  number?: number | null;
   name: string;
   position?: string | null;
-  video?: PlayerVideo | null; // 1 video por jugador (simple)
+  video?: PlayerVideo | null;
 };
 
 export default function PlantelPage() {
@@ -40,14 +39,20 @@ export default function PlantelPage() {
   // búsqueda
   const [q, setQ] = useState("");
 
-  // formulario de alta manual
+  // alta manual
   const [newNumber, setNewNumber] = useState<string>("");
   const [newName, setNewName] = useState<string>("");
   const [newPos, setNewPos] = useState<string>("");
   const [newVidTitle, setNewVidTitle] = useState<string>("");
   const [newVidUrl, setNewVidUrl] = useState<string>("");
 
-  // carga
+  // helpers
+  function numOrNull(n: any): number | null {
+    const v = Number(n);
+    return Number.isFinite(v) ? v : null;
+  }
+
+  // cargar basics
   useEffect(() => {
     (async () => {
       try {
@@ -63,26 +68,26 @@ export default function PlantelPage() {
     })();
   }, [id]);
 
+  // cargar plantel
   useEffect(() => {
     (async () => {
       try {
         setLoading(true);
-        const res = await fetch(`/api/ct/rivales/${id}/plantel`, { cache: "no-store" });
+        const res = await fetch(`/api/ct/rivales/${id}/squad`, { cache: "no-store" });
         if (!res.ok) {
           setPlayers([]);
           return;
         }
         const json = await res.json().catch(() => ({} as any));
-        // Acepta {data: [...] } o {data: {players:[...]}}
         const arr: SquadPlayer[] = Array.isArray(json?.data)
           ? json.data
           : Array.isArray(json?.data?.players)
           ? json.data.players
           : [];
         setPlayers(
-          arr.map((p) => ({
+          (arr || []).map((p) => ({
             id: p.id,
-            number: numOrNull(p.number),
+            number: numOrNull((p as any).number),
             name: p.name ?? "",
             position: p.position ?? null,
             video: p.video ?? null,
@@ -93,11 +98,6 @@ export default function PlantelPage() {
       }
     })();
   }, [id]);
-
-  function numOrNull(n: any): number | null {
-    const v = Number(n);
-    return Number.isFinite(v) ? v : null;
-  }
 
   // alta manual
   function addManualPlayer() {
@@ -114,7 +114,6 @@ export default function PlantelPage() {
     };
     setPlayers((ps) => [player, ...ps]);
 
-    // limpiar form
     setNewNumber("");
     setNewName("");
     setNewPos("");
@@ -138,19 +137,19 @@ export default function PlantelPage() {
       const arr = [...ps];
       const current = arr[i].video ?? {};
       arr[i] = { ...arr[i], video: { ...current, ...patch } };
-      // si queda vacío, lo ponemos null
       const v = arr[i].video!;
       if (!v.title && !v.url) arr[i].video = null;
       return arr;
     });
   }
 
+  // guardar todo
   async function saveAll() {
     setSaving(true);
     try {
-      // normalizamos payload
       const payload = {
-        players: players.map((p) => ({
+        // ahora enviamos "squad" (la API también acepta "players")
+        squad: players.map((p) => ({
           id: p.id ?? undefined,
           number: p.number ?? null,
           name: p.name.trim(),
@@ -164,14 +163,15 @@ export default function PlantelPage() {
         })),
       };
 
-      const res = await fetch(`/api/ct/rivales/${id}/plantel`, {
+      const res = await fetch(`/api/ct/rivales/${id}/squad`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(await res.text());
-      // recargar para sincronizar ids/orden
-      const ref = await fetch(`/api/ct/rivales/${id}/plantel`, { cache: "no-store" });
+
+      // recargar para sincronizar
+      const ref = await fetch(`/api/ct/rivales/${id}/squad`, { cache: "no-store" });
       if (ref.ok) {
         const j = await ref.json().catch(() => ({} as any));
         const arr: SquadPlayer[] = Array.isArray(j?.data)
@@ -179,8 +179,17 @@ export default function PlantelPage() {
           : Array.isArray(j?.data?.players)
           ? j.data.players
           : [];
-        setPlayers(arr);
+        setPlayers(
+          (arr || []).map((p) => ({
+            id: p.id,
+            number: numOrNull((p as any).number),
+            name: p.name ?? "",
+            position: p.position ?? null,
+            video: p.video ?? null,
+          }))
+        );
       }
+
       alert("Plantel guardado");
     } catch (e: any) {
       alert(e?.message || "No se pudo guardar el plantel");
@@ -204,9 +213,7 @@ export default function PlantelPage() {
     <div className="p-4 space-y-4">
       {/* breadcrumb */}
       <div className="text-sm text-gray-600">
-        <Link href="/ct/rivales" className="underline">
-          Rivales
-        </Link>
+        <Link href="/ct/rivales" className="underline">Rivales</Link>
         <span className="mx-1">/</span>
         <span className="font-medium">Plantel</span>
       </div>
@@ -225,64 +232,33 @@ export default function PlantelPage() {
 
       {/* alta manual */}
       <div className="rounded-xl border p-3 bg-gray-50">
-        <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">
-          Alta manual de jugador (opcional)
-        </div>
+        <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Alta manual de jugador (opcional)</div>
         <div className="grid lg:grid-cols-5 md:grid-cols-4 gap-2">
           <div>
             <label className="text-[11px] text-gray-500">#</label>
-            <input
-              className="w-full rounded-md border px-2 py-1.5 text-sm"
-              inputMode="numeric"
-              value={newNumber}
-              onChange={(e) => setNewNumber(e.target.value)}
-              placeholder="Dorsal"
-            />
+            <input className="w-full rounded-md border px-2 py-1.5 text-sm" inputMode="numeric" value={newNumber} onChange={(e) => setNewNumber(e.target.value)} placeholder="Dorsal" />
           </div>
           <div className="md:col-span-2">
             <label className="text-[11px] text-gray-500">Jugador *</label>
-            <input
-              className="w-full rounded-md border px-2 py-1.5 text-sm"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Nombre y apellido"
-            />
+            <input className="w-full rounded-md border px-2 py-1.5 text-sm" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Nombre y apellido" />
           </div>
           <div>
             <label className="text-[11px] text-gray-500">Posición</label>
-            <input
-              className="w-full rounded-md border px-2 py-1.5 text-sm"
-              value={newPos}
-              onChange={(e) => setNewPos(e.target.value)}
-              placeholder="Ej: DL"
-            />
+            <input className="w-full rounded-md border px-2 py-1.5 text-sm" value={newPos} onChange={(e) => setNewPos(e.target.value)} placeholder="Ej: DL" />
           </div>
           <div className="lg:col-span-5 md:col-span-4 grid md:grid-cols-3 gap-2">
             <div>
               <label className="text-[11px] text-gray-500">Título de video (opcional)</label>
-              <input
-                className="w-full rounded-md border px-2 py-1.5 text-sm"
-                value={newVidTitle}
-                onChange={(e) => setNewVidTitle(e.target.value)}
-                placeholder="Highlights vs…"
-              />
+              <input className="w-full rounded-md border px-2 py-1.5 text-sm" value={newVidTitle} onChange={(e) => setNewVidTitle(e.target.value)} placeholder="Highlights vs…" />
             </div>
             <div className="md:col-span-2">
               <label className="text-[11px] text-gray-500">URL del video</label>
-              <input
-                className="w-full rounded-md border px-2 py-1.5 text-sm"
-                value={newVidUrl}
-                onChange={(e) => setNewVidUrl(e.target.value)}
-                placeholder="https://…"
-                onKeyDown={(e) => (e.key === "Enter" ? (e.preventDefault(), addManualPlayer()) : null)}
-              />
+              <input className="w-full rounded-md border px-2 py-1.5 text-sm" value={newVidUrl} onChange={(e) => setNewVidUrl(e.target.value)} placeholder="https://…" onKeyDown={(e) => (e.key === "Enter" ? (e.preventDefault(), addManualPlayer()) : null)} />
             </div>
           </div>
         </div>
         <div className="pt-2">
-          <button onClick={addManualPlayer} className="text-xs px-3 py-1.5 rounded-xl border hover:bg-white">
-            + Agregar al plantel
-          </button>
+          <button onClick={addManualPlayer} className="text-xs px-3 py-1.5 rounded-xl border hover:bg-white">+ Agregar al plantel</button>
           <span className="ml-3 text-xs text-gray-500">
             También podés cargar por CSV desde <Link href={`/ct/rivales/${id}?tab=importar`} className="underline">Importar</Link>.
           </span>
@@ -291,19 +267,8 @@ export default function PlantelPage() {
 
       {/* búsqueda + guardar */}
       <div className="flex items-center justify-between gap-2">
-        <input
-          className="rounded-md border px-2 py-1.5 text-sm w-64"
-          placeholder="Buscar jugador…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <button
-          onClick={saveAll}
-          disabled={saving}
-          className={`px-3 py-1.5 rounded-xl text-xs ${
-            saving ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
-          }`}
-        >
+        <input className="rounded-md border px-2 py-1.5 text-sm w-64" placeholder="Buscar jugador…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <button onClick={saveAll} disabled={saving} className={`px-3 py-1.5 rounded-xl text-xs ${saving ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}>
           {saving ? "Guardando…" : "Guardar plantel"}
         </button>
       </div>
@@ -323,80 +288,41 @@ export default function PlantelPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr>
-                <td colSpan={6} className="p-3 text-gray-500">
-                  Cargando…
-                </td>
-              </tr>
+              <tr><td colSpan={6} className="p-3 text-gray-500">Cargando…</td></tr>
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={6} className="p-3 text-gray-500">
                   Sin jugadores. Podés agregarlos manualmente arriba o cargar el CSV en{" "}
-                  <Link href={`/ct/rivales/${id}?tab=importar`} className="underline">
-                    Importar → CSV
-                  </Link>.
+                  <Link href={`/ct/rivales/${id}?tab=importar`} className="underline">Importar → CSV</Link>.
                 </td>
               </tr>
             ) : (
               filtered.map((p, i) => (
                 <tr key={i} className="border-t align-top">
                   <td className="p-2">
-                    <input
-                      className="w-16 rounded-md border px-2 py-1"
-                      inputMode="numeric"
-                      value={p.number ?? ""}
-                      onChange={(e) =>
-                        patchPlayer(i, { number: e.target.value === "" ? null : numOrNull(e.target.value) })
-                      }
-                    />
+                    <input className="w-16 rounded-md border px-2 py-1" inputMode="numeric" value={p.number ?? ""} onChange={(e) => patchPlayer(i, { number: e.target.value === "" ? null : numOrNull(e.target.value) })} />
                   </td>
                   <td className="p-2">
-                    <input
-                      className="w-full rounded-md border px-2 py-1"
-                      value={p.name}
-                      onChange={(e) => patchPlayer(i, { name: e.target.value })}
-                    />
+                    <input className="w-full rounded-md border px-2 py-1" value={p.name} onChange={(e) => patchPlayer(i, { name: e.target.value })} />
                   </td>
                   <td className="p-2">
-                    <input
-                      className="w-full rounded-md border px-2 py-1"
-                      value={p.position ?? ""}
-                      onChange={(e) => patchPlayer(i, { position: e.target.value })}
-                      placeholder="Ej: MC"
-                    />
+                    <input className="w-full rounded-md border px-2 py-1" value={p.position ?? ""} onChange={(e) => patchPlayer(i, { position: e.target.value })} placeholder="Ej: MC" />
                   </td>
                   <td className="p-2">
                     {p.video?.url ? (
                       <a href={p.video.url} className="underline" target="_blank" rel="noreferrer">
                         {p.video.title || p.video.url}
                       </a>
-                    ) : (
-                      <span className="text-gray-500">—</span>
-                    )}
+                    ) : <span className="text-gray-500">—</span>}
                   </td>
                   <td className="p-2">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                      <input
-                        className="rounded-md border px-2 py-1"
-                        placeholder="Título"
-                        value={p.video?.title ?? ""}
-                        onChange={(e) => patchPlayerVideo(i, { title: e.target.value })}
-                      />
-                      <input
-                        className="md:col-span-2 rounded-md border px-2 py-1"
-                        placeholder="URL https://…"
-                        value={p.video?.url ?? ""}
-                        onChange={(e) => patchPlayerVideo(i, { url: e.target.value })}
-                      />
+                      <input className="rounded-md border px-2 py-1" placeholder="Título" value={p.video?.title ?? ""} onChange={(e) => patchPlayerVideo(i, { title: e.target.value })} />
+                      <input className="md:col-span-2 rounded-md border px-2 py-1" placeholder="URL https://…" value={p.video?.url ?? ""} onChange={(e) => patchPlayerVideo(i, { url: e.target.value })} />
                     </div>
                   </td>
                   <td className="p-2">
-                    <button
-                      onClick={() => removePlayer(i)}
-                      className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50"
-                    >
-                      Borrar
-                    </button>
+                    <button onClick={() => removePlayer(i)} className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50">Borrar</button>
                   </td>
                 </tr>
               ))
@@ -407,9 +333,7 @@ export default function PlantelPage() {
 
       <div className="text-xs text-gray-500">
         Tip: si ya tenés la planilla, cargala por CSV desde{" "}
-        <Link href={`/ct/rivales/${id}?tab=importar`} className="underline">
-          Importar
-        </Link>{" "}
+        <Link href={`/ct/rivales/${id}?tab=importar`} className="underline">Importar</Link>{" "}
         y después ajustá manualmente acá.
       </div>
     </div>
