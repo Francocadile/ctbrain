@@ -1,4 +1,3 @@
-// src/app/api/ct/rivales/[id]/squad/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 
@@ -23,11 +22,8 @@ function toCleanJson<T>(v: T): T {
   return JSON.parse(JSON.stringify(v ?? null));
 }
 
-// GET: devuelve el plantel guardado (array) o []
-export async function GET(
-  _req: Request,
-  { params }: { params: { id: string } }
-) {
+// GET /api/ct/rivales/:id/squad
+export async function GET(_req: Request, { params }: { params: { id: string } }) {
   try {
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
@@ -45,36 +41,35 @@ export async function GET(
   }
 }
 
-// PUT: guarda el plantel (sanitizado)
-export async function PUT(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+// PUT /api/ct/rivales/:id/squad
+export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
     const body = await req.json().catch(() => ({}));
-    const raw = Array.isArray(body?.squad) ? (body.squad as any[]) : [];
 
-    // Normalizamos + quitamos undefined
+    // Aceptamos body.squad o body.players
+    const raw =
+      Array.isArray(body?.squad)   ? (body.squad as any[]) :
+      Array.isArray(body?.players) ? (body.players as any[]) :
+      [];
+
     const prepared: SquadPlayer[] = raw
       .map((p) => ({
         number: p?.number ?? null,
         name: String(p?.name || "").trim(),
         position: p?.position ?? null,
-        video:
-          p?.video?.url
-            ? {
-                title:
-                  p?.video?.title === undefined ? null : (p?.video?.title ?? null),
-                url: String(p?.video?.url),
-              }
-            : null,
+        video: p?.video?.url
+          ? {
+              title: p?.video?.title === undefined ? null : (p?.video?.title ?? null),
+              url: String(p?.video?.url),
+            }
+          : null,
       }))
       .filter((p) => p.name.length > 0);
 
-    const clean = toCleanJson(prepared); // <-- clave: sin undefined
+    const clean = toCleanJson(prepared);
 
     const row = await prisma.rival.update({
       where: { id },
