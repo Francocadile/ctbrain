@@ -4,23 +4,26 @@ import { PrismaClient } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-// Evitar múltiples clientes en dev/hot-reload
+// Reusar Prisma en dev / hot-reload
 const prisma = (globalThis as any).__prisma__ ?? new PrismaClient();
 if (process.env.NODE_ENV !== "production") {
   (globalThis as any).__prisma__ = prisma;
 }
 
-function cleanString(v: any) {
-  if (typeof v !== "string") return "";
-  const s = v.trim();
-  return s === "" ? "" : s;
-}
-function cleanNumber(v: any) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+type SquadVideo = { title?: string | null; url: string };
+type SquadPlayer = {
+  number?: string | number | null;
+  name: string;
+  position?: string | null;
+  video?: SquadVideo | null;
+};
+
+// Elimina undefined / valores no-JSON
+function toCleanJson<T>(v: T): T {
+  return JSON.parse(JSON.stringify(v ?? null));
 }
 
-// GET: devuelve planSquad
+// GET: devuelve el plantel guardado (array) o []
 export async function GET(
   _req: Request,
   { params }: { params: { id: string } }
@@ -42,7 +45,7 @@ export async function GET(
   }
 }
 
-// PUT: guarda planSquad
+// PUT: guarda el plantel (sanitizado)
 export async function PUT(
   req: Request,
   { params }: { params: { id: string } }
@@ -52,23 +55,35 @@ export async function PUT(
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
     const body = await req.json().catch(() => ({}));
-    const items = Array.isArray(body?.squad) ? body.squad : [];
+    const raw = Array.isArray(body?.squad) ? (body.squad as any[]) : [];
 
-    const cleaned = items.map((it: any) => ({
-      number: cleanNumber(it?.number),
-      name: cleanString(it?.name),
-      position: cleanString(it?.position),
-      videoTitle: cleanString(it?.videoTitle),
-      videoUrl: cleanString(it?.videoUrl),
-    }));
+    // Normalizamos + quitamos undefined
+    const prepared: SquadPlayer[] = raw
+      .map((p) => ({
+        number: p?.number ?? null,
+        name: String(p?.name || "").trim(),
+        position: p?.position ?? null,
+        video:
+          p?.video?.url
+            ? {
+                title:
+                  p?.video?.title === undefined ? null : (p?.video?.title ?? null),
+                url: String(p?.video?.url),
+              }
+            : null,
+      }))
+      .filter((p) => p.name.length > 0);
+
+    const clean = toCleanJson(prepared); // <-- clave: sin undefined
 
     const row = await prisma.rival.update({
       where: { id },
-      data: { planSquad: cleaned as any },
+      data: { planSquad: clean as any },
       select: { planSquad: true },
     });
 
-    return NextResponse.json({ data: row.planSquad ?? [] });
+    const data = Array.isArray(row.planSquad) ? row.planSquad : [];
+    return NextResponse.json({ data });
   } catch (e: any) {
     return new NextResponse(e?.message || "Error", { status: 500 });
   }
