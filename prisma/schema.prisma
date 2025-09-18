@@ -121,6 +121,7 @@ model Rival {
   name     String  @unique
   logoUrl  String?
 
+  // Datos opcionales
   coach                 String?
   baseSystem            String?
   nextMatchDate         DateTime?
@@ -134,7 +135,7 @@ model Rival {
   planNotes       Json?   @default("{}")
   planVisibility  Json?   @default("{}")
 
-  // Plantel (NUEVO)
+  // Plantel
   planSquad       Json?   @default("[]")
 
   createdAt DateTime @default(now())
@@ -161,6 +162,7 @@ model ExerciseKind {
 
 model Exercise {
   id          String        @id @default(cuid())
+
   userId      String
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -173,6 +175,7 @@ model Exercise {
   duration    String?
   description String?
   imageUrl    String?
+
   tags        String[]      @default([])
 
   createdAt   DateTime      @default(now())
@@ -187,10 +190,12 @@ model RPEEntry {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   date      DateTime
   rpe       Int
   duration  Int?
   load      Int?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -203,7 +208,9 @@ model WellnessEntry {
   id              String   @id @default(cuid())
   userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   date            DateTime
+
   sleepQuality    Int
   sleepHours      Float?
   fatigue         Int
@@ -211,7 +218,9 @@ model WellnessEntry {
   stress          Int
   mood            Int
   comment         String?
+
   total           Int?
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -241,15 +250,18 @@ model ClinicalEntry {
   date      DateTime
   status    ClinicalStatus
 
+  // Si estado = BAJA
   leaveStage LeaveStage?
   leaveKind  LeaveKind?
 
+  // Si leaveKind = LESION
   diagnosis  String?
   bodyPart   String?
   laterality Laterality?
   mechanism  Mechanism?
   severity   Severity?
 
+  // Si leaveKind = ENFERMEDAD
   illSystem        SystemAffected?
   illSymptoms      String?
   illContagious    Boolean?
@@ -257,20 +269,24 @@ model ClinicalEntry {
   illAptitude      IllAptitude?
   feverMax         Float?
 
+  // Cronología
   startDate            DateTime?
   daysPlanned          Int?
   expectedReturn       DateTime?
   expectedReturnManual Boolean? @default(false)
 
+  // Restricciones (REINTEGRO / LIMITADA)
   capMinutes          Int?
   noSprint            Boolean  @default(false)
   noChangeOfDirection Boolean  @default(false)
   gymOnly             Boolean  @default(false)
   noContact           Boolean  @default(false)
 
+  // Documentación
   notes        String?
   medSignature String?
 
+  // Plan / Protocolo semanal
   protocolObjectives String?
   protocolTasks      String?
   protocolControls   String?
