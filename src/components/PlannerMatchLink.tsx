@@ -7,14 +7,14 @@ import clsx from "clsx";
 type RivalMini = { id: string; name: string; logoUrl?: string | null };
 
 type Props = {
-  /** Si viene el id, enlazamos directo. */
+  /** Si viene el id, enlazamos directo a /ct/rivales/:id */
   rivalId?: string | null;
-  /** Fallback por nombre si no hay id. */
+  /** Si no hay id, intentamos resolver por nombre (search API) */
   rivalName?: string | null;
-  /** Texto del botón/enlace. */
+  /** Texto del botón/enlace */
   label?: string;
   className?: string;
-  /** URL de fallback si no hay id y tampoco se resolvió por nombre. */
+  /** URL de fallback si no hay id y tampoco se resolvió por nombre */
   fallbackHref?: string;
 };
 
@@ -52,14 +52,16 @@ export default function PlannerMatchLink({
       }
       try {
         setLoading(true);
-        const r = await fetch(`/api/ct/rivales/search?q=${encodeURIComponent(cleanName)}&limit=5`, {
-          cache: "no-store",
-        });
+        const r = await fetch(
+          `/api/ct/rivales/search?q=${encodeURIComponent(cleanName)}&limit=5`,
+          { cache: "no-store" }
+        );
         const j = await r.json().catch(() => ({} as any));
         const list: RivalMini[] = Array.isArray(j?.data) ? j.data : [];
-        // exacto case-insensitive o primer resultado
+        // match exacto (case-insensitive) o primer resultado
         const exact =
-          list.find((x) => x.name?.toLowerCase() === cleanName.toLowerCase()) || null;
+          list.find((x) => x.name?.toLowerCase() === cleanName.toLowerCase()) ||
+          null;
         if (!abort) setResolved(exact || list[0] || null);
       } catch {
         if (!abort) setResolved(null);
