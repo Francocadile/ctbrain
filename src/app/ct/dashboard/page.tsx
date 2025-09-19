@@ -1,4 +1,3 @@
-// src/app/ct/dashboard/page.tsx
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -9,7 +8,7 @@ import {
   toYYYYMMDDUTC,
   type SessionDTO,
 } from "@/lib/api/sessions";
-import DashboardMatchChip from "@/components/DashboardMatchChip";
+import PlannerMatchLink from "@/components/PlannerMatchLink";
 
 /* =========================================================
    Tipos / filas
@@ -18,14 +17,13 @@ type TurnKey = "morning" | "afternoon";
 const ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 
 const SESSION_NAME_ROW = "NOMBRE SESIÓN" as const;
-// Orden igual al editor: Nombre, Lugar, Hora, Video
 const META_ROWS = [SESSION_NAME_ROW, "LUGAR", "HORA", "VIDEO"] as const;
 
 /* =========================================================
    Flags día
 ========================================================= */
 type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
-type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string };
+type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string; rivalId?: string };
 
 const DAYFLAG_TAG = "DAYFLAG";
 const dayFlagMarker = (turn: TurnKey) => `[${DAYFLAG_TAG}:${turn}]`;
@@ -34,8 +32,8 @@ const isDayFlag = (s: SessionDTO, turn: TurnKey) =>
 function parseDayFlagTitle(title?: string | null): DayFlag {
   const t = (title || "").trim();
   if (!t) return { kind: "NONE" };
-  const [kind, rival, logoUrl] = t.split("|").map((x) => (x || "").trim());
-  if (kind === "PARTIDO") return { kind: "PARTIDO", rival, logoUrl };
+  const [kind, rival, logoUrl, rivalId] = t.split("|").map((x) => (x || "").trim());
+  if (kind === "PARTIDO") return { kind: "PARTIDO", rival, logoUrl, rivalId };
   if (kind === "LIBRE") return { kind: "LIBRE" };
   return { kind: "NONE" };
 }
@@ -71,7 +69,6 @@ function addDaysUTC(date: Date, days: number) {
 }
 function humanDayUTC(ymd: string) {
   const d = new Date(`${ymd}T00:00:00.000Z`);
-  // "lun, 01/09"
   return d.toLocaleDateString(undefined, {
     weekday: "short",
     day: "2-digit",
@@ -94,12 +91,12 @@ function parseVideoValue(v?: string | null) {
 }
 
 /* =========================================================
-   Layout (ajustado para entrar e imprimir 1 hoja)
+   Layout
 ========================================================= */
-const COL_LABEL_W = 102;    // más chico
-const DAY_MIN_W = 112;      // más chico para 7 columnas sin scroll
-const ROW_H = 62;           // un poco más bajo
-const DAY_HEADER_H = 54;    // header compacto 2 líneas
+const COL_LABEL_W = 102;
+const DAY_MIN_W = 112;
+const ROW_H = 62;
+const DAY_HEADER_H = 54;
 const CELL_GAP = 6;
 
 /* =========================================================
@@ -111,7 +108,6 @@ function DashboardSemanaInner() {
   const initialTurn = (qs.get("turn") === "afternoon" ? "afternoon" : "morning") as TurnKey;
   const [activeTurn, setActiveTurn] = useState<TurnKey>(initialTurn);
 
-  // estado
   const [base, setBase] = useState<Date>(() => getMonday(new Date()));
   const [loadingWeek, setLoadingWeek] = useState(false);
   const [daysMap, setDaysMap] = useState<Record<string, SessionDTO[]>>({});
@@ -181,7 +177,6 @@ function DashboardSemanaInner() {
     return <div className="h-6 text-[11px] px-1 flex items-center truncate">{text}</div>;
   }
 
-  // Badge MD (chico)
   function MicroBadge({ ymd }: { ymd: string }) {
     const v = getMicro(ymd, activeTurn);
     if (!v) return null;
@@ -196,7 +191,6 @@ function DashboardSemanaInner() {
     );
   }
 
-  // Card por día
   function DayCard({ ymd }: { ymd: string }) {
     const flag = getDayFlag(ymd, activeTurn);
     const headerHref = `/ct/sessions/by-day/${ymd}/${activeTurn}`;
@@ -245,7 +239,7 @@ function DashboardSemanaInner() {
 
     return (
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        {/* Header compacto: línea 1 = día / línea 2 = MD + chip */}
+        {/* Header compacto */}
         <div className="px-2 py-1 border-b bg-gray-50" style={{ height: DAY_HEADER_H }}>
           <div className="flex items-center justify-between min-w-0">
             <div className="text-[10px] font-semibold uppercase tracking-wide">
@@ -259,15 +253,19 @@ function DashboardSemanaInner() {
             } gap-2`}
           >
             <MicroBadge ymd={ymd} />
-
-            {/* 👉 Si es PARTIDO => "Plan de partido"; si no, "sesión"; si LIBRE, nada */}
-            {flag.kind === "LIBRE" ? null : (
-              <DashboardMatchChip
-                sessions={sessionsOf(ymd)}
-                turn={activeTurn}
-                className="text-[9px] rounded border px-1.5 py-0.5 hover:bg-gray-100 whitespace-nowrap"
-                fallbackHref={headerHref}
+            {flag.kind === "LIBRE" ? null : flag.kind === "PARTIDO" ? (
+              <PlannerMatchLink
+                rivalId={flag.rivalId}
+                rivalName={flag.rival || ""}
+                label="Plan de partido"
               />
+            ) : (
+              <a
+                href={headerHref}
+                className="text-[9px] rounded border px-1.5 py-0.5 hover:bg-gray-100 whitespace-nowrap"
+              >
+                sesión
+              </a>
             )}
           </div>
         </div>
@@ -280,7 +278,9 @@ function DashboardSemanaInner() {
           )}
           {flag.kind === "LIBRE" && (
             <SinglePanel>
-              <LibrePanel />
+              <div className="text-gray-700 font-semibold tracking-wide text-[14px]">
+                {librePill}
+              </div>
             </SinglePanel>
           )}
           {flag.kind === "NONE" && <NormalBody />}
