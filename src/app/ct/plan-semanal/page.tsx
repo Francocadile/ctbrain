@@ -13,6 +13,7 @@ import {
   type SessionDTO,
 } from "@/lib/api/sessions";
 import PlannerActionsBar from "./PlannerActionsBar";
+import PlannerMatchLink from "@/components/PlannerMatchLink"; // <— BOTÓN “Plan del rival”
 
 export const dynamic = "force-dynamic";
 
@@ -435,7 +436,7 @@ function PlanSemanalInner() {
       return (
         <div className="flex items-center gap-1.5">
           <input className="h-8 w-[45%] rounded-md border px-2 text-xs" placeholder="Título" value={localLabel} onChange={(e) => setLocalLabel(e.target.value)} />
-          <input type="url" className="h-8 w-[55%] rounded-md border px-2 text-xs" placeholder="https://…" value={localUrl} onChange={(e) => setLocalUrl(e.target.value)} />
+          <input type="url" className="h-8 w/[55%] rounded-md border px-2 text-xs" placeholder="https://…" value={localUrl} onChange={(e) => setLocalUrl(e.target.value)} />
           <button type="button" className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50" onClick={() => { stageCell(dayYmd, turn, row, joinVideoValue(localLabel, localUrl)); setIsEditing(false); }} title="Listo">✓</button>
         </div>
       );
@@ -547,7 +548,7 @@ function PlanSemanalInner() {
     );
   }
 
-  // ---- Partido (Rival + Logo) — UI igual a VIDEO
+  // ---- Partido (Rival + Logo) — UI igual a VIDEO + LINK AL PLAN DEL RIVAL
   function PartidoCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const df = getDayFlag(ymd, turn);
     const isMatch = df.kind === "PARTIDO";
@@ -587,6 +588,12 @@ function PlanSemanalInner() {
             <span className="truncate">{localRival || "—"}</span>
           </div>
           <div className="flex items-center gap-1">
+            {/* LINK AL PLAN DEL RIVAL */}
+            <PlannerMatchLink
+              title={localRival || df.rival || ""}
+              label="Plan rival"
+              className="h-6"
+            />
             <button
               type="button"
               className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
@@ -612,7 +619,7 @@ function PlanSemanalInner() {
       );
     }
 
-    // Modo edición — exactamente como VIDEO: dos inputs + ✓ (mismos tamaños)
+    // Modo edición — dos inputs + ✓
     return (
       <div className="flex items-center gap-1.5">
         <input
