@@ -1,64 +1,92 @@
-// src/components/PlannerMatchLink.tsx
-import type { SessionDTO } from "@/lib/api/sessions";
+"use client";
 
-type TurnKey = "morning" | "afternoon";
+import { useEffect, useMemo, useState } from "react";
+import clsx from "clsx";
+
+type RivalMini = { id: string; name: string; logoUrl?: string | null };
 
 type Props = {
-  /** Nombre del rival (preferido). */
+  /** Si viene el id, enlazamos directo. */
+  rivalId?: string | null;
+  /** Fallback por nombre si no hay id. */
   rivalName?: string | null;
-  /** Opcional: sesiones del día para extraer el rival del flag si no llega rivalName. */
-  sessions?: SessionDTO[];
-  turn?: TurnKey;
-
-  /** Estilos y texto */
-  className?: string;
+  /** Texto del botón/enlace. */
   label?: string;
-
-  /** Dónde ir si no se puede resolver rival */
-  fallbackHref?: string;
+  className?: string;
 };
 
-const DAYFLAG_TAG = "DAYFLAG";
-const dayFlagMarker = (turn: TurnKey) => `[${DAYFLAG_TAG}:${turn}]`;
-
-function parseDayFlagTitle(title?: string | null) {
-  const t = (title || "").trim();
-  if (!t) return { kind: "NONE" as const };
-  const [kind, rival, logoUrl] = t.split("|").map((x) => (x || "").trim());
-  if (kind === "PARTIDO") return { kind: "PARTIDO" as const, rival, logoUrl };
-  if (kind === "LIBRE") return { kind: "LIBRE" as const };
-  return { kind: "NONE" as const };
-}
-
-function resolveHref({
+/**
+ * Enlaza al plan del rival:
+ * - Si hay rivalId: /ct/rivales/:id
+ * - Si no hay id pero hay nombre: resuelve via /api/ct/rivales/search y usa el mejor match
+ * - Si no encuentra, cae a /ct/rivales?search=...
+ */
+export default function PlannerMatchLink({
+  rivalId,
   rivalName,
-  sessions,
-  turn = "morning",
-  fallbackHref,
-}: Props): string {
-  // 1) Si viene rival explícito, linkeamos al listado filtrado (con intención de abrir plan)
-  if (rivalName && rivalName.trim()) {
-    return `/ct/rivales?q=${encodeURIComponent(rivalName.trim())}&open=plan`;
-  }
+  label = "Plan de partido",
+  className,
+}: Props) {
+  const [resolved, setResolved] = useState<RivalMini | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  // 2) Intento secundario: deducir del flag del día
-  const s = (sessions || []).find(
-    (x) => typeof x.description === "string" && x.description.startsWith(dayFlagMarker(turn))
-  );
-  const df = parseDayFlagTitle(s?.title);
-  if (df.kind === "PARTIDO" && df.rival) {
-    return `/ct/rivales?q=${encodeURIComponent(df.rival)}&open=plan`;
-  }
+  const cleanName = (rivalName || "").trim();
 
-  // 3) Fallback
-  return fallbackHref || "#";
-}
+  const directHref = useMemo(() => {
+    if (rivalId) return `/ct/rivales/${rivalId}`;
+    return "";
+  }, [rivalId]);
 
-export default function PlannerMatchLink(props: Props) {
-  const href = resolveHref(props);
+  useEffect(() => {
+    let abort = false;
+
+    async function run() {
+      if (directHref || !cleanName) {
+        setResolved(null);
+        return;
+      }
+      try {
+        setLoading(true);
+        const r = await fetch(`/api/ct/rivales/search?q=${encodeURIComponent(cleanName)}&limit=5`, {
+          cache: "no-store",
+        });
+        const j = await r.json().catch(() => ({} as any));
+        const list: RivalMini[] = Array.isArray(j?.data) ? j.data : [];
+        // 1) exacto case-insensitive
+        const exact =
+          list.find((x) => x.name?.toLowerCase() === cleanName.toLowerCase()) || null;
+        if (!abort) setResolved(exact || list[0] || null);
+      } catch {
+        if (!abort) setResolved(null);
+      } finally {
+        if (!abort) setLoading(false);
+      }
+    }
+
+    run();
+    return () => {
+      abort = true;
+    };
+  }, [directHref, cleanName]);
+
+  const href = useMemo(() => {
+    if (directHref) return directHref;
+    if (resolved?.id) return `/ct/rivales/${resolved.id}`;
+    if (cleanName) return `/ct/rivales?search=${encodeURIComponent(cleanName)}`;
+    return `/ct/rivales`;
+  }, [directHref, resolved, cleanName]);
+
   return (
-    <a href={href} className={props.className}>
-      {props.label ?? "Plan de partido"}
+    <a
+      href={href}
+      className={clsx(
+        "inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] hover:bg-gray-100 whitespace-nowrap",
+        className
+      )}
+      title={resolved?.name || cleanName || "Plan de partido"}
+      aria-busy={loading}
+    >
+      {label}
     </a>
   );
 }
