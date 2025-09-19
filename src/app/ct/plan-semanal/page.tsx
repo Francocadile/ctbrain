@@ -1,4 +1,3 @@
-// src/app/ct/plan-semanal/page.tsx
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -13,7 +12,7 @@ import {
   type SessionDTO,
 } from "@/lib/api/sessions";
 import PlannerActionsBar from "./PlannerActionsBar";
-import PlannerMatchLink from "@/components/PlannerMatchLink"; // 👈 NUEVO
+import PlannerMatchLink from "@/components/PlannerMatchLink";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +42,7 @@ const META_ROWS = [SESSION_NAME_ROW, "LUGAR", "HORA", "VIDEO"] as const;
 
 /* ===== Estado del día (tipo) ===== */
 type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
-type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string };
+type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string; rivalId?: string };
 const DAYFLAG_TAG = "DAYFLAG";
 const dayFlagMarker = (turn: TurnKey) => `[${DAYFLAG_TAG}:${turn}]`;
 const isDayFlag = (s: SessionDTO, turn: TurnKey) =>
@@ -51,13 +50,18 @@ const isDayFlag = (s: SessionDTO, turn: TurnKey) =>
 function parseDayFlagTitle(title?: string | null): DayFlag {
   const t = (title || "").trim();
   if (!t) return { kind: "NONE" };
-  const [kind, rival, logoUrl] = t.split("|").map((x) => (x || "").trim());
-  if (kind === "PARTIDO") return { kind: "PARTIDO", rival, logoUrl };
+  const [kind, rival, logoUrl, rivalId] = t.split("|").map((x) => (x || "").trim());
+  if (kind === "PARTIDO") return { kind: "PARTIDO", rival, logoUrl, rivalId };
   if (kind === "LIBRE") return { kind: "LIBRE" };
   return { kind: "NONE" };
 }
 function buildDayFlagTitle(df: DayFlag): string {
-  if (df.kind === "PARTIDO") return `PARTIDO|${df.rival ?? ""}|${df.logoUrl ?? ""}`;
+  if (df.kind === "PARTIDO") {
+    const name = df.rival ?? "";
+    const logo = df.logoUrl ?? "";
+    const rid = df.rivalId ?? "";
+    return `PARTIDO|${name}|${logo}|${rid}`;
+  }
   if (df.kind === "LIBRE") return "LIBRE";
   return "";
 }
@@ -240,6 +244,24 @@ function PlanSemanalInner() {
     const s = findDayFlagSession(dayYmd, turn);
     return parseDayFlagTitle(s?.title ?? "");
   }
+
+  async function resolveRivalIdByName(name: string): Promise<string | undefined> {
+    const q = (name || "").trim();
+    if (!q) return undefined;
+    try {
+      const r = await fetch(`/api/ct/rivales/search?q=${encodeURIComponent(q)}&limit=5`, {
+        cache: "no-store",
+      });
+      const j = await r.json().catch(() => ({} as any));
+      const list: Array<{ id: string; name: string }> = Array.isArray(j?.data) ? j.data : [];
+      const exact =
+        list.find((x) => x.name?.toLowerCase() === q.toLowerCase()) || list[0] || null;
+      return exact?.id || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   async function setDayFlag(dayYmd: string, turn: TurnKey, df: DayFlag) {
     const existing = findDayFlagSession(dayYmd, turn);
     const iso = computeISOForSlot(dayYmd, turn);
@@ -480,7 +502,17 @@ function PlanSemanalInner() {
     return (
       <div className="space-y-1">
         <div className="flex items-center justify-between">
-          <div>{flagBadge}</div>
+          <div className="flex items-center gap-2">
+            {flagBadge}
+            {flag.kind === "PARTIDO" ? (
+              <PlannerMatchLink
+                rivalId={flag.rivalId}
+                rivalName={flag.rival || ""}
+                label="Plan rival"
+                className="h-6"
+              />
+            ) : null}
+          </div>
           {sessionHref ? (
             <a href={sessionHref} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50" title="Abrir el ejercicio completo">
               Ejercicio completo
@@ -523,7 +555,7 @@ function PlanSemanalInner() {
             setKind(k);
             if (k === "NONE") return save({ kind: "NONE" });
             if (k === "LIBRE") return save({ kind: "LIBRE" });
-            if (k === "PARTIDO") return save({ kind: "PARTIDO", rival: "", logoUrl: "" });
+            if (k === "PARTIDO") return save({ kind: "PARTIDO", rival: "", logoUrl: "", rivalId: "" });
           }}
         >
           <option value="NONE">Normal</option>
@@ -548,7 +580,7 @@ function PlanSemanalInner() {
     );
   }
 
-  // ---- Partido (Rival + Logo) — UI igual a VIDEO
+  // ---- Partido (Rival + Logo)
   function PartidoCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const df = getDayFlag(ymd, turn);
     const isMatch = df.kind === "PARTIDO";
@@ -569,10 +601,12 @@ function PlanSemanalInner() {
     }, [weekStart, ymd, turn]); // eslint-disable-line
 
     const commit = async () => {
+      const rivalId = await resolveRivalIdByName(localRival);
       await setDayFlag(ymd, turn, {
         kind: "PARTIDO",
         rival: (localRival || "").trim(),
         logoUrl: (localLogo || "").trim(),
+        rivalId: rivalId || "",
       });
       setIsEditing(false);
     };
@@ -588,11 +622,11 @@ function PlanSemanalInner() {
             <span className="truncate">{localRival || "—"}</span>
           </div>
           <div className="flex items-center gap-1">
-            {/* 👇 Link directo al plan del rival */}
             <PlannerMatchLink
-              rivalName={(localRival || df.rival || "").trim()}
+              rivalId={df.rivalId}
+              rivalName={localRival || df.rival || ""}
               label="Plan rival"
-              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
+              className="h-6"
             />
             <button
               type="button"
@@ -608,7 +642,7 @@ function PlanSemanalInner() {
               onClick={async () => {
                 setLocalRival("");
                 setLocalLogo("");
-                await setDayFlag(ymd, turn, { kind: "PARTIDO", rival: "", logoUrl: "" });
+                await setDayFlag(ymd, turn, { kind: "PARTIDO", rival: "", logoUrl: "", rivalId: "" });
               }}
               title="Borrar"
             >
@@ -619,7 +653,7 @@ function PlanSemanalInner() {
       );
     }
 
-    // Modo edición — exactamente como VIDEO: dos inputs + ✓ (mismos tamaños)
+    // Edición
     return (
       <div className="flex items-center gap-1.5">
         <input
