@@ -1,3 +1,4 @@
+// src/components/PlannerMatchLink.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -13,19 +14,22 @@ type Props = {
   /** Texto del botón/enlace. */
   label?: string;
   className?: string;
+  /** URL de fallback si no hay id y tampoco se resolvió por nombre. */
+  fallbackHref?: string;
 };
 
 /**
  * Enlaza al plan del rival:
  * - Si hay rivalId: /ct/rivales/:id
  * - Si no hay id pero hay nombre: resuelve via /api/ct/rivales/search y usa el mejor match
- * - Si no encuentra, cae a /ct/rivales?search=...
+ * - Si no encuentra, usa fallbackHref si viene; si no, cae a /ct/rivales?search=... o /ct/rivales
  */
 export default function PlannerMatchLink({
   rivalId,
   rivalName,
   label = "Plan de partido",
   className,
+  fallbackHref,
 }: Props) {
   const [resolved, setResolved] = useState<RivalMini | null>(null);
   const [loading, setLoading] = useState(false);
@@ -41,6 +45,7 @@ export default function PlannerMatchLink({
     let abort = false;
 
     async function run() {
+      // Si ya tenemos link directo o no hay nombre, no buscamos
       if (directHref || !cleanName) {
         setResolved(null);
         return;
@@ -52,7 +57,7 @@ export default function PlannerMatchLink({
         });
         const j = await r.json().catch(() => ({} as any));
         const list: RivalMini[] = Array.isArray(j?.data) ? j.data : [];
-        // 1) exacto case-insensitive
+        // exacto case-insensitive o primer resultado
         const exact =
           list.find((x) => x.name?.toLowerCase() === cleanName.toLowerCase()) || null;
         if (!abort) setResolved(exact || list[0] || null);
@@ -72,9 +77,10 @@ export default function PlannerMatchLink({
   const href = useMemo(() => {
     if (directHref) return directHref;
     if (resolved?.id) return `/ct/rivales/${resolved.id}`;
+    if (fallbackHref) return fallbackHref;
     if (cleanName) return `/ct/rivales?search=${encodeURIComponent(cleanName)}`;
     return `/ct/rivales`;
-  }, [directHref, resolved, cleanName]);
+  }, [directHref, resolved, fallbackHref, cleanName]);
 
   return (
     <a
