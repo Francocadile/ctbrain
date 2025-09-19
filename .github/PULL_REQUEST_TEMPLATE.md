@@ -1,12 +1,15 @@
 ## Objetivo
-<!-- ¿Qué resuelve este PR? -->
+<!-- Qué cambia y por qué -->
+
+Closes: #ID_DEL_ISSUE
 
 ## Checklist
-- [ ] Lint y typecheck pasan local.
-- [ ] Incluí pruebas manuales / captura de pantalla si aplica.
-- [ ] Cambios en `.env` documentados en README.
-- [ ] Migraciones (si aplica) y plan de rollback.
+- [ ] Probé guardado **Plan semanal (editor)** y carga en **Dashboard**
+- [ ] Probé **Rivales → Plan de partido** (plan/visibilidad/videos/stats/notas)
+- [ ] Probé **Rivales → Plantel** (alta/edición/guardar)
+- [ ] Probé **RPE día** y **RPE semana** (tablas y export)
+- [ ] Probé **Clínico (CT)** (lista diaria y métricas)
+- [ ] No rompe build en Vercel ni CI
 
-## Seguridad
-- [ ] Revisa permisos/roles afectados.
-- [ ] Entrada de usuario saneada/validada.
+## Evidencia
+<!-- Screenshots / video / link de preview -->
