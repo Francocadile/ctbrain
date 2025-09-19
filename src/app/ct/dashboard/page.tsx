@@ -9,6 +9,7 @@ import {
   toYYYYMMDDUTC,
   type SessionDTO,
 } from "@/lib/api/sessions";
+import DashboardMatchChip from "@/components/DashboardMatchChip";
 
 /* =========================================================
    Tipos / filas
@@ -244,29 +245,31 @@ function DashboardSemanaInner() {
 
     return (
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        {/* Header compacto: línea 1 = día / línea 2 = MD + sesión */}
+        {/* Header compacto: línea 1 = día / línea 2 = MD + chip */}
         <div className="px-2 py-1 border-b bg-gray-50" style={{ height: DAY_HEADER_H }}>
           <div className="flex items-center justify-between min-w-0">
             <div className="text-[10px] font-semibold uppercase tracking-wide">
               {humanDayUTC(ymd)}
             </div>
           </div>
-          
+
           <div
-  className={`mt-1 flex items-center ${
-    flag.kind === "LIBRE" ? "justify-start" : "justify-between"
-  } gap-2`}
->
-  <MicroBadge ymd={ymd} />
-  {flag.kind === "LIBRE" ? null : (
-    <a
-      href={headerHref}
-      className="text-[9px] rounded border px-1.5 py-0.5 hover:bg-gray-100 whitespace-nowrap"
-    >
-      sesión
-    </a>
-  )}
-</div>
+            className={`mt-1 flex items-center ${
+              flag.kind === "LIBRE" ? "justify-start" : "justify-between"
+            } gap-2`}
+          >
+            <MicroBadge ymd={ymd} />
+
+            {/* 👉 Si es PARTIDO => "Plan de partido"; si no, "sesión"; si LIBRE, nada */}
+            {flag.kind === "LIBRE" ? null : (
+              <DashboardMatchChip
+                sessions={sessionsOf(ymd)}
+                turn={activeTurn}
+                className="text-[9px] rounded border px-1.5 py-0.5 hover:bg-gray-100 whitespace-nowrap"
+                fallbackHref={headerHref}
+              />
+            )}
+          </div>
         </div>
 
         <div className="p-2">
@@ -297,9 +300,9 @@ function DashboardSemanaInner() {
           #print-root, #print-root * { visibility: visible !important; }
           #print-root {
             position: absolute; inset: 0; margin: 0; padding: 0;
-            transform: scale(0.94);           /* encaja en 1 hoja */
+            transform: scale(0.94);
             transform-origin: top left;
-            width: 106%;                       /* compensa el scale */
+            width: 106%;
           }
           nav, aside, header[role="banner"], .sidebar, .app-sidebar, .print\\:hidden, .no-print {
             display: none !important;
