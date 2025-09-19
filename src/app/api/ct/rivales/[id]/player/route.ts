@@ -3,7 +3,12 @@ import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
-const prisma = new PrismaClient();
+
+// Reusar Prisma en dev/hot-reload
+const prisma = (globalThis as any).__prisma__ ?? new PrismaClient();
+if (process.env.NODE_ENV !== "production") {
+  (globalThis as any).__prisma__ = prisma;
+}
 
 type RivalBasics = {
   id: string;
@@ -11,7 +16,7 @@ type RivalBasics = {
   logoUrl: string | null;
   coach?: string | null;
   baseSystem?: string | null;
-  nextMatchDate?: string | null;        // ISO
+  nextMatchDate?: string | null; // ISO
   nextMatchCompetition?: string | null;
 };
 
@@ -50,6 +55,16 @@ type RivalStats = {
 type NoteItem = { text: string; done?: boolean };
 type RivalNotes = { observations?: string; checklist?: NoteItem[] };
 
+// ---- Plantel (tipos livianos para el JSON guardado) ----
+type SquadVideo = { title?: string | null; url?: string | null };
+type SquadPlayer = {
+  number?: number | null;
+  name: string;
+  position?: string | null;
+  video?: SquadVideo | null;
+};
+
+// ---- Visibilidad (sumamos showSquad) ----
 type Visibility = {
   showSystem: boolean;
   showKeyPlayers: boolean;
@@ -68,6 +83,9 @@ type Visibility = {
   showStatsRecent: boolean;
 
   showNotesForPlayers: boolean;
+
+  // NUEVO
+  showSquad: boolean;
 };
 
 function defaultVisibility(): Visibility {
@@ -89,6 +107,9 @@ function defaultVisibility(): Visibility {
     showStatsRecent: true,
 
     showNotesForPlayers: false,
+
+    // NUEVO
+    showSquad: true,
   };
 }
 
@@ -97,7 +118,7 @@ function mergeVisibility(saved: any): Visibility {
   const out = { ...defs };
   if (saved && typeof saved === "object") {
     for (const k of Object.keys(defs) as (keyof Visibility)[]) {
-      const v = saved[k];
+      const v = (saved as any)[k];
       if (typeof v === "boolean") (out as any)[k] = v;
     }
   }
@@ -126,6 +147,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         planVideos: true,
         planStats: true,
         planNotes: true,
+
+        // NUEVO: plantel
+        planSquad: true,
       },
     });
 
@@ -161,10 +185,13 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
     // Videos
     const videos: RivalVideo[] = vis.showVideos
-      ? (Array.isArray(r.planVideos) ? (r.planVideos as any[]).map((v) => ({
-          url: typeof v?.url === "string" ? v.url : "",
-          title: typeof v?.title === "string" ? v.title : null,
-        })).filter((x) => x.url) : [])
+      ? (Array.isArray(r.planVideos)
+          ? (r.planVideos as any[]).map((v) => ({
+              url: typeof v?.url === "string" ? v.url : "",
+              title: typeof v?.title === "string" ? v.title : null,
+            }))
+            .filter((x) => x.url)
+          : [])
       : [];
 
     // Stats
@@ -179,7 +206,14 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     };
 
     // Notas (normalmente ocultas)
-    const notes: RivalNotes = vis.showNotesForPlayers ? ((r.planNotes as RivalNotes) || { observations: "", checklist: [] }) : { observations: "", checklist: [] };
+    const notes: RivalNotes = vis.showNotesForPlayers
+      ? ((r.planNotes as RivalNotes) || { observations: "", checklist: [] })
+      : { observations: "", checklist: [] };
+
+    // Plantel (condicionado por visibilidad)
+    const squad: SquadPlayer[] = vis.showSquad
+      ? (Array.isArray(r.planSquad) ? (r.planSquad as any[]) : [])
+      : [];
 
     const data = {
       basics,
@@ -188,6 +222,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       stats,
       notes,
       visibility: vis, // útil para la UI de previsualización
+      squad,           // ← NUEVO
     };
 
     return NextResponse.json({ data });
