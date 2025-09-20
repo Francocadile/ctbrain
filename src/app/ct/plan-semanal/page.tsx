@@ -56,12 +56,10 @@ function parseDayFlagTitle(title?: string | null): DayFlag {
   const parts = raw.split("|").map((x) => (x || "").trim());
   const kind = parts[0];
   if (kind === "PARTIDO") {
-    // Nuevo: PARTIDO|<id>|<name>|<logo>
     if (parts.length >= 4) {
       const [, id, name, logo] = parts;
       return { kind: "PARTIDO", rivalId: id || undefined, rival: name || "", logoUrl: logo || "" };
     }
-    // Viejo: PARTIDO|<name>|<logo>
     if (parts.length >= 3) {
       const [, name, logo] = parts;
       return { kind: "PARTIDO", rival: name || "", logoUrl: logo || "" };
@@ -198,7 +196,6 @@ function PlanSemanalInner() {
   async function loadPrefs() {
     try {
       const r = await fetch("/api/planner/labels", { cache: "no-store" });
-      if (!r.ok) throw new Error("fail");
       const j = await r.json();
       setRowLabels(j.rowLabels || {});
       setPlaces(j.places || []);
@@ -389,7 +386,6 @@ function PlanSemanalInner() {
     const k = cellKey(dayYmd, turn, row);
     const value = pending[k] !== undefined ? pending[k] : original;
 
-    // NOMBRE SESIÓN
     if (row === SESSION_NAME_ROW) {
       const [local, setLocal] = useState(value || "");
       useEffect(() => setLocal(value || ""), [value, k]);
@@ -409,7 +405,6 @@ function PlanSemanalInner() {
       );
     }
 
-    // LUGAR
     if (row === "LUGAR") {
       const [local, setLocal] = useState(value || "");
       useEffect(() => setLocal(value || ""), [value, k]);
@@ -425,7 +420,6 @@ function PlanSemanalInner() {
       );
     }
 
-    // HORA
     if (row === "HORA") {
       const hhmm = /^[0-9]{2}:[0-9]{2}$/.test(value || "") ? value : "";
       return (
@@ -438,7 +432,6 @@ function PlanSemanalInner() {
       );
     }
 
-    // VIDEO
     if (row === "VIDEO") {
       const parsed = parseVideoValue(value || "");
       const [isEditing, setIsEditing] = useState(!(parsed.label || parsed.url));
@@ -579,7 +572,7 @@ function PlanSemanalInner() {
     );
   }
 
-  // ---- Partido (Rival + Logo) — UI simple; id oculto
+  // ---- Partido (Rival + Logo) — UI simple; id oculto (sin lupa)
   function PartidoCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const df = getDayFlag(ymd, turn);
     const isMatch = df.kind === "PARTIDO";
@@ -588,7 +581,6 @@ function PlanSemanalInner() {
       return <div className="h-6 text-[11px] text-gray-400 italic px-1 flex items-center">—</div>;
     }
 
-    // estado visible (rival + logo) y estado oculto (id)
     const [isEditing, setIsEditing] = useState(!(df.rival || df.logoUrl));
     const [localRival, setLocalRival] = useState(df.rival || "");
     const [localLogo, setLocalLogo] = useState(df.logoUrl || "");
@@ -607,24 +599,6 @@ function PlanSemanalInner() {
       setLocalRival(v);
       const maybeId = extractRivalIdFromUrl(v);
       if (maybeId) setHiddenRivalId(maybeId);
-    }
-
-    // Botón 🔎 intenta resolver por nombre (id oculto)
-    async function resolveByName() {
-      const q = (localRival || "").trim();
-      if (!q) return;
-      try {
-        const r = await fetch(`/api/ct/rivales/search?q=${encodeURIComponent(q)}&limit=5`, { cache: "no-store" });
-        const j = await r.json().catch(() => ({} as any));
-        const list: Array<{ id: string; name: string; logoUrl?: string | null }> = Array.isArray(j?.data) ? j.data : [];
-        if (!list.length) return alert("No se encontraron rivales con ese nombre.");
-        const best = list.find((x) => x.name?.toLowerCase() === q.toLowerCase()) || list[0];
-        setHiddenRivalId(best.id);
-        if (!localLogo && best.logoUrl) setLocalLogo(best.logoUrl);
-        setLocalRival(best.name || q);
-      } catch {
-        alert("No se pudo resolver el rival.");
-      }
     }
 
     const commit = async () => {
@@ -647,7 +621,6 @@ function PlanSemanalInner() {
             <span className="truncate">{localRival || "—"}</span>
           </div>
           <div className="flex items-center gap-1">
-            {/* Link al plan del rival (prefiere id si existe) */}
             <PlannerMatchLink
               rivalId={hiddenRivalId || undefined}
               rivalName={localRival || undefined}
@@ -681,30 +654,22 @@ function PlanSemanalInner() {
       );
     }
 
-    // Modo edición — SOLO dos campos visibles + 🔎 + ✓
+    // Modo edición — SOLO dos campos visibles + ✓
     return (
       <div className="flex items-center gap-1.5">
         <input
-          className="h-8 w-[50%] rounded-md border px-2 text-xs"
-          placeholder="Rival (texto o link /ct/rivales/:id)"
+          className="h-8 w-[58%] rounded-md border px-2 text-xs"
+          placeholder="Rival (nombre o link /ct/rivales/:id)"
           value={localRival}
           onChange={(e) => onRivalChange(e.target.value)}
         />
         <input
           type="url"
-          className="h-8 w-[38%] rounded-md border px-2 text-xs"
+          className="h-8 w-[34%] rounded-md border px-2 text-xs"
           placeholder="Logo URL"
           value={localLogo}
           onChange={(e) => setLocalLogo(e.target.value)}
         />
-        <button
-          type="button"
-          className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50"
-          onClick={resolveByName}
-          title="Resolver por nombre"
-        >
-          🔎
-        </button>
         <button
           type="button"
           className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50"
