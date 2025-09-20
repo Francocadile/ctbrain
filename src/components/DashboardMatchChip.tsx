@@ -1,4 +1,5 @@
-// src/components/DashboardMatchChip.tsx
+"use client";
+
 import PlannerMatchLink from "@/components/PlannerMatchLink";
 import type { SessionDTO } from "@/lib/api/sessions";
 
@@ -38,9 +39,13 @@ export default function DashboardMatchChip({
     return (
       <PlannerMatchLink
         rivalName={df.rival || ""}
-        className={className}
+        className={
+          className ??
+          "text-[9px] rounded border px-1.5 py-0.5 hover:bg-gray-100 whitespace-nowrap"
+        }
         label="Plan de partido"
         fallbackHref={fallbackHref}
+        tab="plan"
       />
     );
   }
