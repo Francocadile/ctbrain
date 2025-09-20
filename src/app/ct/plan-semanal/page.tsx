@@ -1,3 +1,4 @@
+// src/app/ct/plan-semanal/page.tsx
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
@@ -42,25 +43,47 @@ const META_ROWS = [SESSION_NAME_ROW, "LUGAR", "HORA", "VIDEO"] as const;
 
 /* ===== Estado del día (tipo) ===== */
 type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
-type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string; rivalId?: string };
+type DayFlag = { kind: DayFlagKind; rivalId?: string; rival?: string; logoUrl?: string };
 const DAYFLAG_TAG = "DAYFLAG";
 const dayFlagMarker = (turn: TurnKey) => `[${DAYFLAG_TAG}:${turn}]`;
 const isDayFlag = (s: SessionDTO, turn: TurnKey) =>
   typeof s.description === "string" && s.description.startsWith(dayFlagMarker(turn));
+
+/** Compat: acepta formato nuevo (PARTIDO|id|name|logo) y viejo (PARTIDO|name|logo) */
 function parseDayFlagTitle(title?: string | null): DayFlag {
-  const t = (title || "").trim();
-  if (!t) return { kind: "NONE" };
-  const [kind, rival, logoUrl, rivalId] = t.split("|").map((x) => (x || "").trim());
-  if (kind === "PARTIDO") return { kind: "PARTIDO", rival, logoUrl, rivalId };
+  const raw = (title || "").trim();
+  if (!raw) return { kind: "NONE" };
+  const parts = raw.split("|").map((x) => (x || "").trim());
+  const kind = parts[0];
+  if (kind === "PARTIDO") {
+    // Nuevo: PARTIDO|<id>|<name>|<logo>
+    if (parts.length >= 4) {
+      const [, id, name, logo] = parts;
+      return { kind: "PARTIDO", rivalId: id || undefined, rival: name || "", logoUrl: logo || "" };
+    }
+    // Viejo: PARTIDO|<name>|<logo>
+    if (parts.length >= 3) {
+      const [, name, logo] = parts;
+      return { kind: "PARTIDO", rival: name || "", logoUrl: logo || "" };
+    }
+    return { kind: "PARTIDO" };
+  }
   if (kind === "LIBRE") return { kind: "LIBRE" };
   return { kind: "NONE" };
 }
+
+function sanitizePipes(s?: string | null) {
+  const t = (s || "").trim();
+  return t.replace(/\|/g, "/");
+}
+
+/** Siempre guarda en formato NUEVO: PARTIDO|<id>|<name>|<logo> (vacíos si no hay) */
 function buildDayFlagTitle(df: DayFlag): string {
   if (df.kind === "PARTIDO") {
-    const name = df.rival ?? "";
-    const logo = df.logoUrl ?? "";
-    const rid = df.rivalId ?? "";
-    return `PARTIDO|${name}|${logo}|${rid}`;
+    const id = (df.rivalId || "").trim();
+    const name = sanitizePipes(df.rival);
+    const logo = sanitizePipes(df.logoUrl);
+    return `PARTIDO|${id}|${name}|${logo}`;
   }
   if (df.kind === "LIBRE") return "LIBRE";
   return "";
@@ -133,6 +156,10 @@ function joinVideoValue(label: string, url: string) {
 }
 function cellKey(dayYmd: string, turn: TurnKey, row: string) {
   return `${dayYmd}::${turn}::${row}`;
+}
+function extractRivalIdFromUrl(s: string): string | undefined {
+  const m = s.match(/\/ct\/rivales\/([a-z0-9]+)(?:[/?#]|$)/i);
+  return m?.[1];
 }
 
 /* =========================================================
@@ -244,24 +271,6 @@ function PlanSemanalInner() {
     const s = findDayFlagSession(dayYmd, turn);
     return parseDayFlagTitle(s?.title ?? "");
   }
-
-  async function resolveRivalIdByName(name: string): Promise<string | undefined> {
-    const q = (name || "").trim();
-    if (!q) return undefined;
-    try {
-      const r = await fetch(`/api/ct/rivales/search?q=${encodeURIComponent(q)}&limit=5`, {
-        cache: "no-store",
-      });
-      const j = await r.json().catch(() => ({} as any));
-      const list: Array<{ id: string; name: string }> = Array.isArray(j?.data) ? j.data : [];
-      const exact =
-        list.find((x) => x.name?.toLowerCase() === q.toLowerCase()) || list[0] || null;
-      return exact?.id || undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
   async function setDayFlag(dayYmd: string, turn: TurnKey, df: DayFlag) {
     const existing = findDayFlagSession(dayYmd, turn);
     const iso = computeISOForSlot(dayYmd, turn);
@@ -502,17 +511,7 @@ function PlanSemanalInner() {
     return (
       <div className="space-y-1">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {flagBadge}
-            {flag.kind === "PARTIDO" ? (
-              <PlannerMatchLink
-                rivalId={flag.rivalId}
-                rivalName={flag.rival || ""}
-                label="Plan rival"
-                className="h-6"
-              />
-            ) : null}
-          </div>
+          <div>{flagBadge}</div>
           {sessionHref ? (
             <a href={sessionHref} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50" title="Abrir el ejercicio completo">
               Ejercicio completo
@@ -555,7 +554,7 @@ function PlanSemanalInner() {
             setKind(k);
             if (k === "NONE") return save({ kind: "NONE" });
             if (k === "LIBRE") return save({ kind: "LIBRE" });
-            if (k === "PARTIDO") return save({ kind: "PARTIDO", rival: "", logoUrl: "", rivalId: "" });
+            if (k === "PARTIDO") return save({ kind: "PARTIDO", rival: "", logoUrl: "", rivalId: undefined });
           }}
         >
           <option value="NONE">Normal</option>
@@ -580,7 +579,7 @@ function PlanSemanalInner() {
     );
   }
 
-  // ---- Partido (Rival + Logo)
+  // ---- Partido (Rival + Logo + Id + Resolver + Link al plan)
   function PartidoCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const df = getDayFlag(ymd, turn);
     const isMatch = df.kind === "PARTIDO";
@@ -589,44 +588,76 @@ function PlanSemanalInner() {
       return <div className="h-6 text-[11px] text-gray-400 italic px-1 flex items-center">—</div>;
     }
 
-    const [isEditing, setIsEditing] = useState(!(df.rival || df.logoUrl));
+    const [isEditing, setIsEditing] = useState(!(df.rival || df.logoUrl || df.rivalId));
     const [localRival, setLocalRival] = useState(df.rival || "");
     const [localLogo, setLocalLogo] = useState(df.logoUrl || "");
+    const [localRivalId, setLocalRivalId] = useState<string>(df.rivalId || "");
 
     useEffect(() => {
       const fresh = getDayFlag(ymd, turn);
-      setIsEditing(!(fresh.rival || fresh.logoUrl));
+      setIsEditing(!(fresh.rival || fresh.logoUrl || fresh.rivalId));
       setLocalRival(fresh.rival || "");
       setLocalLogo(fresh.logoUrl || "");
+      setLocalRivalId(fresh.rivalId || "");
     }, [weekStart, ymd, turn]); // eslint-disable-line
 
+    // Si pegan un link /ct/rivales/:id en "Rival", extraemos id
+    function onRivalChange(v: string) {
+      setLocalRival(v);
+      const maybeId = extractRivalIdFromUrl(v);
+      if (maybeId) setLocalRivalId(maybeId);
+    }
+
+    async function resolveByName() {
+      const q = (localRival || "").trim();
+      if (!q) return;
+      try {
+        const r = await fetch(`/api/ct/rivales/search?q=${encodeURIComponent(q)}&limit=5`, { cache: "no-store" });
+        const j = await r.json().catch(() => ({} as any));
+        const list: Array<{ id: string; name: string; logoUrl?: string | null }> = Array.isArray(j?.data) ? j.data : [];
+        if (!list.length) return alert("No se encontraron rivales con ese nombre.");
+        const best = list.find((x) => x.name?.toLowerCase() === q.toLowerCase()) || list[0];
+        setLocalRivalId(best.id);
+        if (!localLogo && best.logoUrl) setLocalLogo(best.logoUrl);
+        // opcional: ajustar nombre al canonical encontrado
+        setLocalRival(best.name || q);
+      } catch {
+        alert("No se pudo resolver el rival.");
+      }
+    }
+
     const commit = async () => {
-      const rivalId = await resolveRivalIdByName(localRival);
       await setDayFlag(ymd, turn, {
         kind: "PARTIDO",
         rival: (localRival || "").trim(),
         logoUrl: (localLogo || "").trim(),
-        rivalId: rivalId || "",
+        rivalId: (localRivalId || "").trim() || undefined,
       });
       setIsEditing(false);
     };
 
     if (!isEditing) {
+      const fallbackHref = `/ct/sessions/by-day/${ymd}/${turn}`;
       return (
         <div className="flex items-center justify-between gap-1">
           <div className="h-6 text-[11px] px-1 flex items-center truncate gap-1">
-            {localLogo ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={localLogo} alt="Logo" className="w-[16px] h-[16px] object-contain rounded" />
-            ) : null}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {localLogo ? <img src={localLogo} alt="Logo" className="w-[16px] h-[16px] object-contain rounded" /> : null}
             <span className="truncate">{localRival || "—"}</span>
+            {localRivalId ? (
+              <span className="ml-1 text-[10px] text-gray-400" title="ID de rival">
+                #{localRivalId.slice(0, 6)}…
+              </span>
+            ) : null}
           </div>
           <div className="flex items-center gap-1">
+            {/* LINK AL PLAN DEL RIVAL */}
             <PlannerMatchLink
-              rivalId={df.rivalId}
-              rivalName={localRival || df.rival || ""}
+              rivalId={localRivalId || undefined}
+              rivalName={localRival || undefined}
               label="Plan rival"
               className="h-6"
+              fallbackHref={fallbackHref}
             />
             <button
               type="button"
@@ -642,7 +673,8 @@ function PlanSemanalInner() {
               onClick={async () => {
                 setLocalRival("");
                 setLocalLogo("");
-                await setDayFlag(ymd, turn, { kind: "PARTIDO", rival: "", logoUrl: "", rivalId: "" });
+                setLocalRivalId("");
+                await setDayFlag(ymd, turn, { kind: "PARTIDO", rival: "", logoUrl: "", rivalId: undefined });
               }}
               title="Borrar"
             >
@@ -653,22 +685,36 @@ function PlanSemanalInner() {
       );
     }
 
-    // Edición
+    // Modo edición — similar a VIDEO, ahora con 3 inputs + Resolver + ✓
     return (
       <div className="flex items-center gap-1.5">
         <input
-          className="h-8 w-[45%] rounded-md border px-2 text-xs"
-          placeholder="Rival"
+          className="h-8 w-[38%] rounded-md border px-2 text-xs"
+          placeholder="Rival (texto o link /ct/rivales/:id)"
           value={localRival}
-          onChange={(e) => setLocalRival(e.target.value)}
+          onChange={(e) => onRivalChange(e.target.value)}
         />
         <input
           type="url"
-          className="h-8 w-[55%] rounded-md border px-2 text-xs"
+          className="h-8 w-[34%] rounded-md border px-2 text-xs"
           placeholder="Logo URL"
           value={localLogo}
           onChange={(e) => setLocalLogo(e.target.value)}
         />
+        <input
+          className="h-8 w-[18%] rounded-md border px-2 text-xs"
+          placeholder="ID (opcional)"
+          value={localRivalId}
+          onChange={(e) => setLocalRivalId(e.target.value.trim())}
+        />
+        <button
+          type="button"
+          className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50"
+          onClick={resolveByName}
+          title="Resolver por nombre"
+        >
+          🔎
+        </button>
         <button
           type="button"
           className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50"
