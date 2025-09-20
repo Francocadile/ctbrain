@@ -1,5 +1,4 @@
-"use client";
-
+// src/components/DashboardMatchChip.tsx
 import PlannerMatchLink from "@/components/PlannerMatchLink";
 import type { SessionDTO } from "@/lib/api/sessions";
 
@@ -16,10 +15,23 @@ const DAYFLAG_TAG = "DAYFLAG";
 const dayFlagMarker = (turn: TurnKey) => `[${DAYFLAG_TAG}:${turn}]`;
 
 function parseDayFlagTitle(title?: string | null) {
-  const t = (title || "").trim();
-  if (!t) return { kind: "NONE" as const };
-  const [kind, rival, logoUrl] = t.split("|").map((x) => (x || "").trim());
-  if (kind === "PARTIDO") return { kind: "PARTIDO" as const, rival, logoUrl };
+  const raw = (title || "").trim();
+  if (!raw) return { kind: "NONE" as const };
+  const parts = raw.split("|").map((x) => (x || "").trim());
+  const kind = parts[0];
+  if (kind === "PARTIDO") {
+    // Nuevo: PARTIDO|id|name|logo
+    if (parts.length >= 4) {
+      const [, id, name] = parts;
+      return { kind: "PARTIDO" as const, rivalId: id || undefined, rival: name || "" };
+    }
+    // Viejo: PARTIDO|name|logo
+    if (parts.length >= 3) {
+      const [, name] = parts;
+      return { kind: "PARTIDO" as const, rival: name || "" };
+    }
+    return { kind: "PARTIDO" as const };
+  }
   if (kind === "LIBRE") return { kind: "LIBRE" as const };
   return { kind: "NONE" as const };
 }
@@ -38,14 +50,11 @@ export default function DashboardMatchChip({
   if (df.kind === "PARTIDO") {
     return (
       <PlannerMatchLink
+        rivalId={df.rivalId}
         rivalName={df.rival || ""}
-        className={
-          className ??
-          "text-[9px] rounded border px-1.5 py-0.5 hover:bg-gray-100 whitespace-nowrap"
-        }
+        className={className}
         label="Plan de partido"
         fallbackHref={fallbackHref}
-        tab="plan"
       />
     );
   }
