@@ -579,7 +579,7 @@ function PlanSemanalInner() {
     );
   }
 
-  // ---- Partido (Rival + Logo + Id + Resolver + Link al plan)
+  // ---- Partido (Rival + Logo) — UI simple; id oculto
   function PartidoCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
     const df = getDayFlag(ymd, turn);
     const isMatch = df.kind === "PARTIDO";
@@ -588,26 +588,28 @@ function PlanSemanalInner() {
       return <div className="h-6 text-[11px] text-gray-400 italic px-1 flex items-center">—</div>;
     }
 
-    const [isEditing, setIsEditing] = useState(!(df.rival || df.logoUrl || df.rivalId));
+    // estado visible (rival + logo) y estado oculto (id)
+    const [isEditing, setIsEditing] = useState(!(df.rival || df.logoUrl));
     const [localRival, setLocalRival] = useState(df.rival || "");
     const [localLogo, setLocalLogo] = useState(df.logoUrl || "");
-    const [localRivalId, setLocalRivalId] = useState<string>(df.rivalId || "");
+    const [hiddenRivalId, setHiddenRivalId] = useState<string>(df.rivalId || "");
 
     useEffect(() => {
       const fresh = getDayFlag(ymd, turn);
-      setIsEditing(!(fresh.rival || fresh.logoUrl || fresh.rivalId));
+      setIsEditing(!(fresh.rival || fresh.logoUrl));
       setLocalRival(fresh.rival || "");
       setLocalLogo(fresh.logoUrl || "");
-      setLocalRivalId(fresh.rivalId || "");
+      setHiddenRivalId(fresh.rivalId || "");
     }, [weekStart, ymd, turn]); // eslint-disable-line
 
-    // Si pegan un link /ct/rivales/:id en "Rival", extraemos id
+    // Si pegan un link /ct/rivales/:id en "Rival", extraemos id en silencio
     function onRivalChange(v: string) {
       setLocalRival(v);
       const maybeId = extractRivalIdFromUrl(v);
-      if (maybeId) setLocalRivalId(maybeId);
+      if (maybeId) setHiddenRivalId(maybeId);
     }
 
+    // Botón 🔎 intenta resolver por nombre (id oculto)
     async function resolveByName() {
       const q = (localRival || "").trim();
       if (!q) return;
@@ -617,9 +619,8 @@ function PlanSemanalInner() {
         const list: Array<{ id: string; name: string; logoUrl?: string | null }> = Array.isArray(j?.data) ? j.data : [];
         if (!list.length) return alert("No se encontraron rivales con ese nombre.");
         const best = list.find((x) => x.name?.toLowerCase() === q.toLowerCase()) || list[0];
-        setLocalRivalId(best.id);
+        setHiddenRivalId(best.id);
         if (!localLogo && best.logoUrl) setLocalLogo(best.logoUrl);
-        // opcional: ajustar nombre al canonical encontrado
         setLocalRival(best.name || q);
       } catch {
         alert("No se pudo resolver el rival.");
@@ -631,7 +632,7 @@ function PlanSemanalInner() {
         kind: "PARTIDO",
         rival: (localRival || "").trim(),
         logoUrl: (localLogo || "").trim(),
-        rivalId: (localRivalId || "").trim() || undefined,
+        rivalId: (hiddenRivalId || "").trim() || undefined,
       });
       setIsEditing(false);
     };
@@ -644,16 +645,11 @@ function PlanSemanalInner() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             {localLogo ? <img src={localLogo} alt="Logo" className="w-[16px] h-[16px] object-contain rounded" /> : null}
             <span className="truncate">{localRival || "—"}</span>
-            {localRivalId ? (
-              <span className="ml-1 text-[10px] text-gray-400" title="ID de rival">
-                #{localRivalId.slice(0, 6)}…
-              </span>
-            ) : null}
           </div>
           <div className="flex items-center gap-1">
-            {/* LINK AL PLAN DEL RIVAL */}
+            {/* Link al plan del rival (prefiere id si existe) */}
             <PlannerMatchLink
-              rivalId={localRivalId || undefined}
+              rivalId={hiddenRivalId || undefined}
               rivalName={localRival || undefined}
               label="Plan rival"
               className="h-6"
@@ -673,7 +669,7 @@ function PlanSemanalInner() {
               onClick={async () => {
                 setLocalRival("");
                 setLocalLogo("");
-                setLocalRivalId("");
+                setHiddenRivalId("");
                 await setDayFlag(ymd, turn, { kind: "PARTIDO", rival: "", logoUrl: "", rivalId: undefined });
               }}
               title="Borrar"
@@ -685,27 +681,21 @@ function PlanSemanalInner() {
       );
     }
 
-    // Modo edición — similar a VIDEO, ahora con 3 inputs + Resolver + ✓
+    // Modo edición — SOLO dos campos visibles + 🔎 + ✓
     return (
       <div className="flex items-center gap-1.5">
         <input
-          className="h-8 w-[38%] rounded-md border px-2 text-xs"
+          className="h-8 w-[50%] rounded-md border px-2 text-xs"
           placeholder="Rival (texto o link /ct/rivales/:id)"
           value={localRival}
           onChange={(e) => onRivalChange(e.target.value)}
         />
         <input
           type="url"
-          className="h-8 w-[34%] rounded-md border px-2 text-xs"
+          className="h-8 w-[38%] rounded-md border px-2 text-xs"
           placeholder="Logo URL"
           value={localLogo}
           onChange={(e) => setLocalLogo(e.target.value)}
-        />
-        <input
-          className="h-8 w-[18%] rounded-md border px-2 text-xs"
-          placeholder="ID (opcional)"
-          value={localRivalId}
-          onChange={(e) => setLocalRivalId(e.target.value.trim())}
         />
         <button
           type="button"
