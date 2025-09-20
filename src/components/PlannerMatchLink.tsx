@@ -1,4 +1,3 @@
-// src/components/PlannerMatchLink.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -16,11 +15,13 @@ type Props = {
   className?: string;
   /** URL de fallback si no hay id y tampoco se resolvió por nombre */
   fallbackHref?: string;
+  /** Pestaña destino del rival (por defecto: "plan") */
+  tab?: string;
 };
 
 /**
  * Enlaza al plan del rival:
- * - Si hay rivalId: /ct/rivales/:id
+ * - Si hay rivalId: /ct/rivales/:id?tab=<tab>
  * - Si no hay id pero hay nombre: resuelve via /api/ct/rivales/search y usa el mejor match
  * - Si no encuentra, usa fallbackHref si viene; si no, cae a /ct/rivales?search=... o /ct/rivales
  */
@@ -30,6 +31,7 @@ export default function PlannerMatchLink({
   label = "Plan de partido",
   className,
   fallbackHref,
+  tab = "plan",
 }: Props) {
   const [resolved, setResolved] = useState<RivalMini | null>(null);
   const [loading, setLoading] = useState(false);
@@ -37,9 +39,10 @@ export default function PlannerMatchLink({
   const cleanName = (rivalName || "").trim();
 
   const directHref = useMemo(() => {
-    if (rivalId) return `/ct/rivales/${rivalId}`;
-    return "";
-  }, [rivalId]);
+    if (!rivalId) return "";
+    const suffix = tab ? `?tab=${encodeURIComponent(tab)}` : "";
+    return `/ct/rivales/${rivalId}${suffix}`;
+  }, [rivalId, tab]);
 
   useEffect(() => {
     let abort = false;
@@ -56,12 +59,15 @@ export default function PlannerMatchLink({
           `/api/ct/rivales/search?q=${encodeURIComponent(cleanName)}&limit=5`,
           { cache: "no-store" }
         );
+        if (!r.ok) return;
         const j = await r.json().catch(() => ({} as any));
         const list: RivalMini[] = Array.isArray(j?.data) ? j.data : [];
+
         // match exacto (case-insensitive) o primer resultado
         const exact =
           list.find((x) => x.name?.toLowerCase() === cleanName.toLowerCase()) ||
           null;
+
         if (!abort) setResolved(exact || list[0] || null);
       } catch {
         if (!abort) setResolved(null);
@@ -78,11 +84,14 @@ export default function PlannerMatchLink({
 
   const href = useMemo(() => {
     if (directHref) return directHref;
-    if (resolved?.id) return `/ct/rivales/${resolved.id}`;
+    if (resolved?.id) {
+      const suffix = tab ? `?tab=${encodeURIComponent(tab)}` : "";
+      return `/ct/rivales/${resolved.id}${suffix}`;
+    }
     if (fallbackHref) return fallbackHref;
     if (cleanName) return `/ct/rivales?search=${encodeURIComponent(cleanName)}`;
     return `/ct/rivales`;
-  }, [directHref, resolved, fallbackHref, cleanName]);
+  }, [directHref, resolved, fallbackHref, cleanName, tab]);
 
   return (
     <a
