@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 /* ===== Tipos ===== */
@@ -29,8 +29,7 @@ type SquadPlayer = {
 type PlayerEndpoint = {
   basics?: RivalBasics;
   visibility?: { showSquad?: boolean };
-  // opcional: si decidís exponer el plantel a jugadores desde el endpoint player
-  squad?: SquadPlayer[];
+  squad?: SquadPlayer[]; // opcional desde /player
 };
 
 /* ===== Utils ===== */
@@ -48,6 +47,7 @@ function sortPlayers(a: SquadPlayer, b: SquadPlayer) {
 /* ===== Página ===== */
 export default function PlantelPage() {
   const { id } = useParams<{ id: string }>();
+  const search = useSearchParams();
 
   // header
   const [basics, setBasics] = useState<RivalBasics | null>(null);
@@ -58,8 +58,16 @@ export default function PlantelPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Vista jugador
-  const [playerPreview, setPlayerPreview] = useState(false);
+  // Vista jugador: lee de ?player=1 y recuerda en localStorage
+  const initialPlayer = useMemo(() => {
+    if (search.get("player") === "1") return true;
+    try {
+      return typeof window !== "undefined" && localStorage.getItem("ct.playerPreview") === "1";
+    } catch {
+      return false;
+    }
+  }, [search]);
+  const [playerPreview, setPlayerPreview] = useState<boolean>(initialPlayer);
   const [playerLoading, setPlayerLoading] = useState(false);
   const [playerCanSee, setPlayerCanSee] = useState<boolean | null>(null);
   const [playerSquad, setPlayerSquad] = useState<SquadPlayer[] | null>(null);
@@ -73,6 +81,35 @@ export default function PlantelPage() {
   const [newPos, setNewPos] = useState<string>("");
   const [newVidTitle, setNewVidTitle] = useState<string>("");
   const [newVidUrl, setNewVidUrl] = useState<string>("");
+
+  /* ===== Sincronizar playerPreview con URL + localStorage ===== */
+  useEffect(() => {
+    try {
+      localStorage.setItem("ct.playerPreview", playerPreview ? "1" : "0");
+    } catch {}
+    const url = new URL(window.location.href);
+    if (playerPreview) url.searchParams.set("player", "1");
+    else url.searchParams.delete("player");
+    window.history.replaceState(null, "", url.toString());
+  }, [playerPreview]);
+
+  function copyPlayerLink() {
+    const url = new URL(window.location.href);
+    url.searchParams.set("player", "1");
+    navigator.clipboard
+      .writeText(url.toString())
+      .then(() => {
+        // feedback sutil
+        const el = document.getElementById("copy-hint");
+        if (el) {
+          el.textContent = "Link copiado";
+          setTimeout(() => (el.textContent = ""), 1400);
+        } else {
+          alert("Link copiado");
+        }
+      })
+      .catch(() => alert("No se pudo copiar el link"));
+  }
 
   /* ===== Cargas ===== */
   useEffect(() => {
@@ -131,8 +168,7 @@ export default function PlantelPage() {
       const data = j?.data || {};
       const can = !!data?.visibility?.showSquad;
       setPlayerCanSee(can);
-      // si tu endpoint player devuelve plantel, lo usamos; si no, mostramos “sin datos”
-      setPlayerSquad(Array.isArray(data?.squad) ? data!.squad! : null);
+      setPlayerSquad(Array.isArray(data?.squad) ? data.squad! : null);
     } finally {
       setPlayerLoading(false);
     }
@@ -187,7 +223,6 @@ export default function PlantelPage() {
     setSaving(true);
     try {
       const payload = {
-        // la API acepta "squad" (y también "players" si querés)
         squad: players.map((p) => ({
           id: p.id ?? undefined,
           number: p.number ?? null,
@@ -248,7 +283,7 @@ export default function PlantelPage() {
   /* ===== Render ===== */
   return (
     <div className="p-4 space-y-4">
-      {/* breadcrumb */}
+      {/* breadcrumb + toggle + copiar link */}
       <div className="text-sm text-gray-600 flex items-center justify-between">
         <div>
           <Link href={`/ct/rivales/${id}`} className="underline">Rivales</Link>
@@ -256,20 +291,35 @@ export default function PlantelPage() {
           <span className="font-medium">Plantel</span>
         </div>
 
-        <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
-          <span className="text-gray-600">Vista jugador</span>
-          <input
-            type="checkbox"
-            checked={playerPreview}
-            onChange={() => setPlayerPreview((v) => !v)}
-            className="h-4 w-4"
-          />
+        <div className="flex items-center gap-2">
           {playerPreview && (
-            <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
-              Previsualizando
-            </span>
+            <>
+              <button
+                onClick={copyPlayerLink}
+                className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50"
+                title="Copiar link de vista jugador"
+              >
+                Copiar link
+              </button>
+              <span id="copy-hint" className="text-[11px] text-emerald-700"></span>
+            </>
           )}
-        </label>
+
+          <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+            <span className="text-gray-600">Vista jugador</span>
+            <input
+              type="checkbox"
+              checked={playerPreview}
+              onChange={() => setPlayerPreview((v) => !v)}
+              className="h-4 w-4"
+            />
+            {playerPreview && (
+              <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                Previsualizando
+              </span>
+            )}
+          </label>
+        </div>
       </div>
 
       {/* título */}
