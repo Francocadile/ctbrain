@@ -38,10 +38,42 @@ function numOrNull(n: any): number | null {
   return Number.isFinite(v) ? v : null;
 }
 function sortPlayers(a: SquadPlayer, b: SquadPlayer) {
+  // Orden por dorsal ascendente; si no hay dorsal, va al final; empate por nombre
   const an = Number.isFinite(a.number as number) ? (a.number as number) : 9999;
   const bn = Number.isFinite(b.number as number) ? (b.number as number) : 9999;
   if (an !== bn) return an - bn;
   return (a.name || "").localeCompare(b.name || "");
+}
+function csvEscape(val: any): string {
+  const s = (val ?? "").toString();
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+function buildSquadCSV(rows: SquadPlayer[]) {
+  const head = ["number", "name", "position", "videoTitle", "videoUrl"];
+  const lines = [head.join(",")];
+  for (const p of rows) {
+    lines.push(
+      [
+        csvEscape(p.number ?? ""),
+        csvEscape(p.name ?? ""),
+        csvEscape(p.position ?? ""),
+        csvEscape(p.video?.title ?? ""),
+        csvEscape(p.video?.url ?? ""),
+      ].join(",")
+    );
+  }
+  return lines.join("\n");
+}
+function downloadCSV(filename: string, csv: string) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 /* ===== Página ===== */
@@ -99,7 +131,6 @@ export default function PlantelPage() {
     navigator.clipboard
       .writeText(url.toString())
       .then(() => {
-        // feedback sutil
         const el = document.getElementById("copy-hint");
         if (el) {
           el.textContent = "Link copiado";
@@ -218,43 +249,6 @@ export default function PlantelPage() {
     });
   }
 
-  /* ===== Guardar todo (CT) ===== */
-  async function saveAll() {
-    setSaving(true);
-    try {
-      const payload = {
-        squad: players.map((p) => ({
-          id: p.id ?? undefined,
-          number: p.number ?? null,
-          name: p.name.trim(),
-          position: p.position?.toString().trim() || null,
-          video: p.video
-            ? {
-                title: p.video.title?.toString().trim() || null,
-                url: p.video.url?.toString().trim() || null,
-              }
-            : null,
-        })),
-      };
-
-      const res = await fetch(`/api/ct/rivales/${id}/squad`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error(await res.text());
-
-      await loadSquadCT();
-      if (playerPreview) await loadPlayerSafe();
-
-      alert("Plantel guardado");
-    } catch (e: any) {
-      alert(e?.message || "No se pudo guardar el plantel");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   /* ===== Filtros / ordenar ===== */
   const filteredCT = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -279,6 +273,14 @@ export default function PlantelPage() {
         String(p.number || "").includes(t)
     );
   }, [playerSquad, players, q]);
+
+  /* ===== Exportar CSV (CT, respeta filtro/orden actual) ===== */
+  function exportCSV() {
+    const list = filteredCT; // exporta lo que ves
+    const csv = buildSquadCSV(list);
+    const safeName = (basics?.name || "plantel").replace(/[^\w\-]+/g, "_");
+    downloadCSV(`${safeName}_plantel.csv`, csv);
+  }
 
   /* ===== Render ===== */
   return (
@@ -334,7 +336,7 @@ export default function PlantelPage() {
         ) : null}
       </div>
 
-      {/* búsqueda + guardar */}
+      {/* búsqueda + guardar / exportar */}
       <div className="flex items-center justify-between gap-2">
         <input
           className="rounded-md border px-2 py-1.5 text-sm w-64"
@@ -342,15 +344,26 @@ export default function PlantelPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        {!playerPreview && (
-          <button
-            onClick={saveAll}
-            disabled={saving}
-            className={`px-3 py-1.5 rounded-xl text-xs ${saving ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
-          >
-            {saving ? "Guardando…" : "Guardar plantel"}
-          </button>
-        )}
+        {!playerPreview ? (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={exportCSV}
+              className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
+              title="Exporta el listado actual (filtrado y ordenado)"
+            >
+              Exportar CSV
+            </button>
+            <button
+              onClick={saveAll}
+              disabled={saving}
+              className={`px-3 py-1.5 rounded-xl text-xs ${
+                saving ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
+              }`}
+            >
+              {saving ? "Guardando…" : "Guardar plantel"}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {/* Vista jugador */}
@@ -365,9 +378,9 @@ export default function PlantelPage() {
             ) : playerCanSee === false ? (
               <div className="text-sm text-gray-500">Plantel oculto para jugadores.</div>
             ) : (
-              <div className="rounded-xl border overflow-x-auto">
+              <div className="rounded-xl border overflow-auto max-h-[70vh]">
                 <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
                       <th className="text-left p-2 w-16">#</th>
                       <th className="text-left p-2 min-w-[220px]">Jugador</th>
@@ -405,7 +418,9 @@ export default function PlantelPage() {
         <>
           {/* alta manual - SOLO CT */}
           <div className="rounded-xl border p-3 bg-gray-50">
-            <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Alta manual de jugador (opcional)</div>
+            <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">
+              Alta manual de jugador (opcional)
+            </div>
             <div className="grid lg:grid-cols-5 md:grid-cols-4 gap-2">
               <div>
                 <label className="text-[11px] text-gray-500">#</label>
@@ -458,17 +473,25 @@ export default function PlantelPage() {
               </div>
             </div>
             <div className="pt-2">
-              <button onClick={addManualPlayer} className="text-xs px-3 py-1.5 rounded-xl border hover:bg-white">+ Agregar al plantel</button>
+              <button
+                onClick={addManualPlayer}
+                className="text-xs px-3 py-1.5 rounded-xl border hover:bg-white"
+              >
+                + Agregar al plantel
+              </button>
               <span className="ml-3 text-xs text-gray-500">
-                También podés cargar por CSV desde <Link href={`/ct/rivales/${id}?tab=importar`} className="underline">Importar</Link>.
+                También podés cargar por CSV desde{" "}
+                <Link href={`/ct/rivales/${id}?tab=importar`} className="underline">
+                  Importar
+                </Link>.
               </span>
             </div>
           </div>
 
-          {/* tabla CT */}
-          <div className="rounded-xl border overflow-x-auto">
+          {/* tabla CT (sticky header + scroll) */}
+          <div className="rounded-xl border overflow-auto max-h-[70vh]">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr>
                   <th className="text-left p-2 w-16">#</th>
                   <th className="text-left p-2 min-w-[220px]">Jugador</th>
@@ -480,12 +503,18 @@ export default function PlantelPage() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={6} className="p-3 text-gray-500">Cargando…</td></tr>
+                  <tr>
+                    <td colSpan={6} className="p-3 text-gray-500">
+                      Cargando…
+                    </td>
+                  </tr>
                 ) : filteredCT.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="p-3 text-gray-500">
                       Sin jugadores. Podés agregarlos manualmente arriba o cargar el CSV en{" "}
-                      <Link href={`/ct/rivales/${id}?tab=importar`} className="underline">Importar → CSV</Link>.
+                      <Link href={`/ct/rivales/${id}?tab=importar`} className="underline">
+                        Importar → CSV
+                      </Link>.
                     </td>
                   </tr>
                 ) : (
@@ -558,7 +587,9 @@ export default function PlantelPage() {
 
           <div className="text-xs text-gray-500">
             Tip: si ya tenés la planilla, cargala por CSV desde{" "}
-            <Link href={`/ct/rivales/${id}?tab=importar`} className="underline">Importar</Link>{" "}
+            <Link href={`/ct/rivales/${id}?tab=importar`} className="underline">
+              Importar
+            </Link>{" "}
             y después ajustá manualmente acá.
           </div>
         </>
