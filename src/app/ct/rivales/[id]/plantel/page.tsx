@@ -38,7 +38,6 @@ function numOrNull(n: any): number | null {
   return Number.isFinite(v) ? v : null;
 }
 function sortPlayers(a: SquadPlayer, b: SquadPlayer) {
-  // Orden por dorsal ascendente; si no hay dorsal, va al final; empate por nombre
   const an = Number.isFinite(a.number as number) ? (a.number as number) : 9999;
   const bn = Number.isFinite(b.number as number) ? (b.number as number) : 9999;
   if (an !== bn) return an - bn;
@@ -90,7 +89,7 @@ export default function PlantelPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Vista jugador: lee de ?player=1 y recuerda en localStorage
+  // Vista jugador
   const initialPlayer = useMemo(() => {
     if (search.get("player") === "1") return true;
     try {
@@ -188,8 +187,7 @@ export default function PlantelPage() {
 
   useEffect(() => {
     loadSquadCT();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id]); // eslint-disable-line
 
   async function loadPlayerSafe() {
     setPlayerLoading(true);
@@ -249,6 +247,41 @@ export default function PlantelPage() {
     });
   }
 
+  /* ===== Guardar TODO (CT) ===== */
+  async function saveAll() {
+    setSaving(true);
+    try {
+      const payload = {
+        squad: players.map((p) => ({
+          id: p.id ?? undefined,
+          number: p.number ?? null,
+          name: p.name.trim(),
+          position: p.position?.toString().trim() || null,
+          video: p.video
+            ? {
+                title: p.video.title?.toString().trim() || null,
+                url: p.video.url?.toString().trim() || null,
+              }
+            : null,
+        })),
+      };
+
+      const res = await fetch(`/api/ct/rivales/${id}/squad`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(await res.text());
+
+      await loadSquadCT(); // refrescar lista desde el backend
+      alert("Plantel guardado");
+    } catch (e: any) {
+      alert(e?.message || "No se pudo guardar el plantel");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   /* ===== Filtros / ordenar ===== */
   const filteredCT = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -276,7 +309,7 @@ export default function PlantelPage() {
 
   /* ===== Exportar CSV (CT, respeta filtro/orden actual) ===== */
   function exportCSV() {
-    const list = filteredCT; // exporta lo que ves
+    const list = filteredCT;
     const csv = buildSquadCSV(list);
     const safeName = (basics?.name || "plantel").replace(/[^\w\-]+/g, "_");
     downloadCSV(`${safeName}_plantel.csv`, csv);
@@ -289,8 +322,6 @@ export default function PlantelPage() {
       <div className="text-sm text-gray-600 flex items-center justify-between">
         <div>
           <Link href={`/ct/rivales/${id}`} className="underline">Rivales</Link>
-          <span className="mx-1">/</span>
-          <span className="font-medium">Plantel</span>
         </div>
 
         <div className="flex items-center gap-2">
