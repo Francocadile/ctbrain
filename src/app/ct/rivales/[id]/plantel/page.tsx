@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 /* ===== Tipos ===== */
 type RivalBasics = {
@@ -29,7 +29,7 @@ type SquadPlayer = {
 type PlayerEndpoint = {
   basics?: RivalBasics;
   visibility?: { showSquad?: boolean };
-  squad?: SquadPlayer[]; // opcional desde /player
+  squad?: SquadPlayer[];
 };
 
 /* ===== Utils ===== */
@@ -75,6 +75,90 @@ function downloadCSV(filename: string, csv: string) {
   URL.revokeObjectURL(url);
 }
 
+/** CSV parser simple con comillas */
+function parseCSV(text: string): string[][] {
+  const rows: string[][] = [];
+  let cur = "";
+  let row: string[] = [];
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      if (inQuotes && text[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === "," && !inQuotes) {
+      row.push(cur);
+      cur = "";
+    } else if ((ch === "\n" || ch === "\r") && !inQuotes) {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(cur);
+      rows.push(row);
+      row = [];
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur.length > 0 || row.length > 0) {
+    row.push(cur);
+    rows.push(row);
+  }
+  return rows.filter((r) => r.some((c) => c.trim() !== ""));
+}
+
+function mapCSVToPlayers(rows: string[][]): SquadPlayer[] {
+  if (!rows.length) return [];
+  const header = rows[0].map((h) => h.trim().toLowerCase());
+  const idx = {
+    number: header.indexOf("number"),
+    name: header.indexOf("name"),
+    position: header.indexOf("position"),
+    videoTitle: header.indexOf("videotitle"),
+    videoUrl: header.indexOf("videourl"),
+  };
+  const out: SquadPlayer[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const r = rows[i];
+    const name = (idx.name >= 0 ? r[idx.name] : "").trim();
+    if (!name) continue;
+    const numRaw = idx.number >= 0 ? r[idx.number] : "";
+    const pos = (idx.position >= 0 ? r[idx.position] : "").trim() || null;
+    const vt = (idx.videoTitle >= 0 ? r[idx.videoTitle] : "").trim();
+    const vu = (idx.videoUrl >= 0 ? r[idx.videoUrl] : "").trim();
+    const video = vt || vu ? { title: vt || null, url: vu || null } : null;
+    out.push({
+      name,
+      number: numRaw === "" ? null : numOrNull(numRaw),
+      position: pos,
+      video,
+    });
+  }
+  return out;
+}
+
+/** Normalización para comparar "dirty" */
+function normalizePlayers(arr: SquadPlayer[]): any[] {
+  return arr.map((p) => ({
+    number: Number.isFinite(p.number as number) ? p.number : null,
+    name: (p.name || "").trim(),
+    position: p.position ? p.position.toString().trim() : null,
+    video: p.video
+      ? {
+          title: p.video.title ? p.video.title.toString().trim() : null,
+          url: p.video.url ? p.video.url.toString().trim() : null,
+        }
+      : null,
+  }));
+}
+function arraysEqual(a: any[], b: any[]) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 /* ===== Página ===== */
 export default function PlantelPage() {
   const { id } = useParams<{ id: string }>();
@@ -86,6 +170,7 @@ export default function PlantelPage() {
 
   // squad (CT)
   const [players, setPlayers] = useState<SquadPlayer[]>([]);
+  const [baseline, setBaseline] = useState<SquadPlayer[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -113,18 +198,24 @@ export default function PlantelPage() {
   const [newVidTitle, setNewVidTitle] = useState<string>("");
   const [newVidUrl, setNewVidUrl] = useState<string>("");
 
+  // importar CSV (UI)
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
   /* ===== Sincronizar playerPreview con URL + localStorage ===== */
   useEffect(() => {
     try {
       localStorage.setItem("ct.playerPreview", playerPreview ? "1" : "0");
     } catch {}
-    const url = new URL(window.location.href);
-    if (playerPreview) url.searchParams.set("player", "1");
-    else url.searchParams.delete("player");
-    window.history.replaceState(null, "", url.toString());
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (playerPreview) url.searchParams.set("player", "1");
+      else url.searchParams.delete("player");
+      window.history.replaceState(null, "", url.toString());
+    }
   }, [playerPreview]);
 
   function copyPlayerLink() {
+    if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     url.searchParams.set("player", "1");
     navigator.clipboard
@@ -163,6 +254,7 @@ export default function PlantelPage() {
       const res = await fetch(`/api/ct/rivales/${id}/squad`, { cache: "no-store" });
       if (!res.ok) {
         setPlayers([]);
+        setBaseline([]);
         return;
       }
       const json = await res.json().catch(() => ({} as any));
@@ -171,15 +263,15 @@ export default function PlantelPage() {
         : Array.isArray(json?.data?.players)
         ? json.data.players
         : [];
-      setPlayers(
-        (arr || []).map((p) => ({
-          id: p.id,
-          number: numOrNull((p as any).number),
-          name: p.name ?? "",
-          position: p.position ?? null,
-          video: p.video ?? null,
-        }))
-      );
+      const mapped = (arr || []).map((p) => ({
+        id: p.id,
+        number: numOrNull((p as any).number),
+        name: p.name ?? "",
+        position: p.position ?? null,
+        video: p.video ?? null,
+      }));
+      setPlayers(mapped);
+      setBaseline(mapped);
     } finally {
       setLoading(false);
     }
@@ -273,7 +365,7 @@ export default function PlantelPage() {
       });
       if (!res.ok) throw new Error(await res.text());
 
-      await loadSquadCT(); // refrescar lista desde el backend
+      await loadSquadCT(); // refrescar lista desde el backend y fijar baseline
       alert("Plantel guardado");
     } catch (e: any) {
       alert(e?.message || "No se pudo guardar el plantel");
@@ -281,6 +373,22 @@ export default function PlantelPage() {
       setSaving(false);
     }
   }
+
+  /* ===== Dirty state + beforeunload ===== */
+  const isDirty = useMemo(() => {
+    return !arraysEqual(normalizePlayers(players), normalizePlayers(baseline));
+  }, [players, baseline]);
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = ""; // necesario para mostrar prompt nativo
+      }
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isDirty]);
 
   /* ===== Filtros / ordenar ===== */
   const filteredCT = useMemo(() => {
@@ -307,7 +415,7 @@ export default function PlantelPage() {
     );
   }, [playerSquad, players, q]);
 
-  /* ===== Exportar CSV (CT, respeta filtro/orden actual) ===== */
+  /* ===== Exportar / Importar CSV ===== */
   function exportCSV() {
     const list = filteredCT;
     const csv = buildSquadCSV(list);
@@ -315,13 +423,39 @@ export default function PlantelPage() {
     downloadCSV(`${safeName}_plantel.csv`, csv);
   }
 
+  async function handleCSVFile(file: File, mode: "replace" | "append") {
+    const text = await file.text();
+    const rows = parseCSV(text);
+    const parsed = mapCSVToPlayers(rows);
+    if (!parsed.length) {
+      alert("No se encontraron jugadores en el CSV.");
+      return;
+    }
+    if (mode === "replace") {
+      setPlayers(parsed);
+    } else {
+      // append evitando duplicados exactos por name+position+number
+      const key = (p: SquadPlayer) => `${(p.name || "").trim().toLowerCase()}|${(p.position || "").trim().toLowerCase()}|${p.number ?? ""}`;
+      const existing = new Set(players.map(key));
+      const toAdd = parsed.filter((p) => !existing.has(key(p)));
+      setPlayers((ps) => [...ps, ...toAdd]);
+    }
+    // limpiar input file
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
   /* ===== Render ===== */
   return (
     <div className="p-4 space-y-4">
       {/* breadcrumb + toggle + copiar link */}
       <div className="text-sm text-gray-600 flex items-center justify-between">
-        <div>
+        <div className="flex items-center gap-2">
           <Link href={`/ct/rivales/${id}`} className="underline">Rivales</Link>
+          {isDirty && (
+            <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+              Cambios sin guardar
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -367,16 +501,57 @@ export default function PlantelPage() {
         ) : null}
       </div>
 
-      {/* búsqueda + guardar / exportar */}
-      <div className="flex items-center justify-between gap-2">
-        <input
-          className="rounded-md border px-2 py-1.5 text-sm w-64"
-          placeholder="Buscar jugador…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
+      {/* búsqueda + guardar / exportar / importar */}
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-2">
+          <input
+            className="rounded-md border px-2 py-1.5 text-sm w-64"
+            placeholder="Buscar jugador…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+        </div>
+
         {!playerPreview ? (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="text-xs"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                // por defecto, reemplazar (puedes tocar el modo con los botones al lado)
+                handleCSVFile(f, "replace");
+              }}
+              title="Importar CSV (number,name,position,videoTitle,videoUrl)"
+            />
+            <button
+              type="button"
+              className="px-2 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
+              onClick={() => {
+                const f = fileRef.current?.files?.[0];
+                if (!f) return alert("Elegí un CSV primero.");
+                handleCSVFile(f, "replace");
+              }}
+              title="Reemplaza el plantel por el CSV seleccionado"
+            >
+              Reemplazar por CSV
+            </button>
+            <button
+              type="button"
+              className="px-2 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
+              onClick={() => {
+                const f = fileRef.current?.files?.[0];
+                if (!f) return alert("Elegí un CSV primero.");
+                handleCSVFile(f, "append");
+              }}
+              title="Agrega jugadores del CSV (evita duplicados exactos)"
+            >
+              Agregar del CSV
+            </button>
+
             <button
               onClick={exportCSV}
               className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
@@ -386,12 +561,13 @@ export default function PlantelPage() {
             </button>
             <button
               onClick={saveAll}
-              disabled={saving}
+              disabled={saving || !isDirty}
               className={`px-3 py-1.5 rounded-xl text-xs ${
-                saving ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
+                saving || !isDirty ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
               }`}
+              title={isDirty ? "Guardar cambios" : "No hay cambios"}
             >
-              {saving ? "Guardando…" : "Guardar plantel"}
+              {saving ? "Guardando…" : isDirty ? "Guardar plantel" : "Sin cambios"}
             </button>
           </div>
         ) : null}
@@ -409,7 +585,7 @@ export default function PlantelPage() {
             ) : playerCanSee === false ? (
               <div className="text-sm text-gray-500">Plantel oculto para jugadores.</div>
             ) : (
-              <div className="rounded-xl border overflow-auto max-h-[70vh]">
+              <div className="rounded-xl border overflow-auto max-h=[70vh]">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 sticky top-0 z-10">
                     <tr>
@@ -436,11 +612,6 @@ export default function PlantelPage() {
                     )}
                   </tbody>
                 </table>
-              </div>
-            )}
-            {playerCanSee && !playerSquad && (
-              <div className="mt-2 text-xs text-amber-700">
-                Tip: si querés que esta vista use datos “player-safe” desde el backend, devolvé <code>squad</code> en <code>/api/ct/rivales/[id]/player</code>.
               </div>
             )}
           </div>
@@ -511,10 +682,7 @@ export default function PlantelPage() {
                 + Agregar al plantel
               </button>
               <span className="ml-3 text-xs text-gray-500">
-                También podés cargar por CSV desde{" "}
-                <Link href={`/ct/rivales/${id}?tab=importar`} className="underline">
-                  Importar
-                </Link>.
+                También podés cargar un CSV arriba y después <b>Guardar plantel</b>.
               </span>
             </div>
           </div>
@@ -542,10 +710,7 @@ export default function PlantelPage() {
                 ) : filteredCT.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="p-3 text-gray-500">
-                      Sin jugadores. Podés agregarlos manualmente arriba o cargar el CSV en{" "}
-                      <Link href={`/ct/rivales/${id}?tab=importar`} className="underline">
-                        Importar → CSV
-                      </Link>.
+                      Sin jugadores. Agregá manualmente o usá <b>Importar CSV</b> arriba.
                     </td>
                   </tr>
                 ) : (
@@ -617,11 +782,7 @@ export default function PlantelPage() {
           </div>
 
           <div className="text-xs text-gray-500">
-            Tip: si ya tenés la planilla, cargala por CSV desde{" "}
-            <Link href={`/ct/rivales/${id}?tab=importar`} className="underline">
-              Importar
-            </Link>{" "}
-            y después ajustá manualmente acá.
+            Tip: exportá el listado actual con <b>Exportar CSV</b> (respeta filtro/orden) y reimportalo cuando quieras.
           </div>
         </>
       )}
