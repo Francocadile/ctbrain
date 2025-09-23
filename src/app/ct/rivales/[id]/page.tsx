@@ -45,7 +45,7 @@ type RivalStats = {
 type NoteItem = { text: string; done?: boolean };
 type RivalNotes = { observations?: string; checklist?: NoteItem[] };
 
-// --- arriba, donde está type Visibility ---
+// Visibilidad
 type Visibility = {
   showSystem: boolean;
   showKeyPlayers: boolean;
@@ -60,8 +60,6 @@ type Visibility = {
   showStatsTotalsPossession: boolean;
   showStatsRecent: boolean;
   showNotesForPlayers: boolean;
-
-  // NUEVO
   showSquad: boolean;
 };
 
@@ -80,8 +78,6 @@ function defaultVisibility(): Visibility {
     showStatsTotalsPossession: true,
     showStatsRecent: true,
     showNotesForPlayers: false,
-
-    // NUEVO
     showSquad: true,
   };
 }
@@ -91,6 +87,8 @@ export default function RivalFichaPage() {
   const { id } = useParams<{ id: string }>();
   const search = useSearchParams();
   const initialTab = (search.get("tab") as Tab) || "resumen";
+  const initialPlayer = search.get("player") === "1";
+  const autoPrint = search.get("print") === "1";
 
   // Tabs
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -102,7 +100,8 @@ export default function RivalFichaPage() {
   }
 
   // CT / Player preview
-  const [playerPreview, setPlayerPreview] = useState(false);
+  const [playerPreview, setPlayerPreview] = useState<boolean>(initialPlayer);
+  const [copied, setCopied] = useState(false);
 
   // Basics
   const [loading, setLoading] = useState(true);
@@ -310,6 +309,14 @@ export default function RivalFichaPage() {
     if (playerPreview) loadPlayerSafe();
   }, [playerPreview, id]);
 
+  // Auto print si viene print=1
+  useEffect(() => {
+    if (autoPrint) {
+      const t = setTimeout(() => window.print(), 300);
+      return () => clearTimeout(t);
+    }
+  }, [autoPrint]);
+
   // ===== Saves (CT) =====
   async function savePlan(e: React.FormEvent) {
     e.preventDefault();
@@ -502,7 +509,6 @@ export default function RivalFichaPage() {
     }
   }
   async function saveVisAll() {
-    // enviamos TODAS las claves actuales (para forzar estado exacto)
     await saveVisPatch({ ...vis });
   }
   async function resetVisToDefaults() {
@@ -548,6 +554,29 @@ export default function RivalFichaPage() {
     }
   }
 
+  // ===== Helpers share/print + toggle con URL =====
+  function setPlayerPreviewAndURL(next: boolean) {
+    setPlayerPreview(next);
+    const url = new URL(window.location.href);
+    if (next) url.searchParams.set("player", "1");
+    else url.searchParams.delete("player");
+    window.history.replaceState(null, "", url.toString());
+  }
+  function playerShareURL(tab: Tab = "plan") {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", tab);
+    url.searchParams.set("player", "1");
+    url.searchParams.delete("print");
+    return url.toString();
+  }
+  function openPrintView() {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", "plan");
+    url.searchParams.set("player", "1");
+    url.searchParams.set("print", "1");
+    window.open(url.toString(), "_blank");
+  }
+
   // ===== Render =====
   if (loading) return <div className="p-4 text-gray-500">Cargando…</div>;
   if (!rival)
@@ -563,29 +592,54 @@ export default function RivalFichaPage() {
   const isCTView = !playerPreview;
 
   return (
-    <div className="p-4 space-y-4">
-      {/* Breadcrumb + Vista jugador */}
-      <div className="text-sm text-gray-600 flex items-center justify-between">
+    <div className="p-4 space-y-4 print-container">
+      {/* Breadcrumb + Vista jugador + acciones */}
+      <div className="text-sm text-gray-600 flex items-center justify-between print-hidden">
         <div>
           <Link href="/ct/rivales" className="underline">Rivales</Link>
           <span className="mx-1">/</span>
           <span className="font-medium">{basicsForHeader.name}</span>
         </div>
 
-        <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
-          <span className="text-gray-600">Vista jugador</span>
-          <input
-            type="checkbox"
-            checked={playerPreview}
-            onChange={() => setPlayerPreview((v) => !v)}
-            className="h-4 w-4"
-          />
-          {playerPreview && (
-            <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
-              Previsualizando
-            </span>
-          )}
-        </label>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+            <span className="text-gray-600">Vista jugador</span>
+            <input
+              type="checkbox"
+              checked={playerPreview}
+              onChange={() => setPlayerPreviewAndURL(!playerPreview)}
+              className="h-4 w-4"
+            />
+            {playerPreview && (
+              <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+                Previsualizando
+              </span>
+            )}
+          </label>
+
+          <button
+            className="text-xs px-2 py-1 rounded-xl border hover:bg-gray-50"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(playerShareURL("plan"));
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              } catch {}
+            }}
+            title="Copiar enlace en modo jugador (tab Plan)"
+          >
+            Copiar enlace (jugadores)
+          </button>
+          {copied && <span className="text-[11px] text-emerald-700">¡Copiado!</span>}
+
+          <button
+            className="text-xs px-2 py-1 rounded-xl border hover:bg-gray-50"
+            onClick={openPrintView}
+            title="Imprimir / Exportar a PDF (vista jugador)"
+          >
+            Imprimir / Exportar
+          </button>
+        </div>
       </div>
 
       {/* Header */}
@@ -614,9 +668,9 @@ export default function RivalFichaPage() {
         )}
       </header>
 
-      {/* Tabs (único menú) */}
-      <nav className="flex gap-2 border-b">
-        {/* Resumen (tab local) */}
+      {/* Tabs */}
+      <nav className="flex gap-2 border-b print-hidden">
+        {/* Resumen */}
         <button
           onClick={() => setURLTab("resumen")}
           className={`px-3 py-2 text-sm font-medium border-b-2 ${
@@ -628,17 +682,17 @@ export default function RivalFichaPage() {
           Resumen
         </button>
 
-{/* Plantel (ruta absoluta con id) */}
-{(!playerPreview || playerVis?.showSquad) && (
-  <Link
-    href={`/ct/rivales/${id}/plantel`}
-    className="px-3 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-black"
-  >
-    Plantel
-  </Link>
-)}
+        {/* Plantel */}
+        {(!playerPreview || playerVis?.showSquad) && (
+          <Link
+            href={`/ct/rivales/${id}/plantel`}
+            className="px-3 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-black"
+          >
+            Plantel
+          </Link>
+        )}
 
-        {/* Resto de tabs locales */}
+        {/* Resto */}
         {[
           { key: "plan", label: "Plan de partido" },
           { key: "videos", label: "Videos" },
@@ -1189,98 +1243,98 @@ export default function RivalFichaPage() {
           </div>
         )}
 
-{/* VISIBILIDAD */}
-{tab === "visibilidad" && (
-  <div className="space-y-4">
-    <div className="flex items-center justify-between">
-      <h2 className="text-lg font-semibold">Visibilidad (qué ven los jugadores)</h2>
-      <div className="flex gap-2">
-        <button
-          onClick={resetVisToDefaults}
-          disabled={savingVis}
-          className="text-xs px-3 py-1.5 rounded-xl border hover:bg-gray-50"
-          title="Restaurar valores predeterminados"
-        >
-          Restaurar
-        </button>
-        <button
-          onClick={saveVisAll}
-          disabled={savingVis}
-          className={`text-xs px-3 py-1.5 rounded-xl ${savingVis ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
-        >
-          {savingVis ? "Guardando…" : "Guardar cambios"}
-        </button>
-      </div>
-    </div>
+        {/* VISIBILIDAD */}
+        {tab === "visibilidad" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Visibilidad (qué ven los jugadores)</h2>
+              <div className="flex gap-2">
+                <button
+                  onClick={resetVisToDefaults}
+                  disabled={savingVis}
+                  className="text-xs px-3 py-1.5 rounded-xl border hover:bg-gray-50"
+                  title="Restaurar valores predeterminados"
+                >
+                  Restaurar
+                </button>
+                <button
+                  onClick={saveVisAll}
+                  disabled={savingVis}
+                  className={`text-xs px-3 py-1.5 rounded-xl ${savingVis ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
+                >
+                  {savingVis ? "Guardando…" : "Guardar cambios"}
+                </button>
+              </div>
+            </div>
 
-    {loadingVis ? (
-      <div className="text-sm text-gray-500">Cargando…</div>
-    ) : (
-      <>
-        {/* Plan de partido */}
-        <div className="rounded-lg border p-3">
-          <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Plan de partido</div>
-          <Toggle label="Sistema" checked={vis.showSystem} onChange={(v) => setVisKey("showSystem", v)} />
-          <Toggle label="Jugadores clave" checked={vis.showKeyPlayers} onChange={(v) => setVisKey("showKeyPlayers", v)} />
-          <Toggle label="Fortalezas" checked={vis.showStrengths} onChange={(v) => setVisKey("showStrengths", v)} />
-          <Toggle label="Debilidades" checked={vis.showWeaknesses} onChange={(v) => setVisKey("showWeaknesses", v)} />
-          <Toggle label="Balón parado – A favor" checked={vis.showSetPiecesFor} onChange={(v) => setVisKey("showSetPiecesFor", v)} />
-          <Toggle label="Balón parado – En contra" checked={vis.showSetPiecesAgainst} onChange={(v) => setVisKey("showSetPiecesAgainst", v)} />
-        </div>
+            {loadingVis ? (
+              <div className="text-sm text-gray-500">Cargando…</div>
+            ) : (
+              <>
+                {/* Plan de partido */}
+                <div className="rounded-lg border p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Plan de partido</div>
+                  <Toggle label="Sistema" checked={vis.showSystem} onChange={(v) => setVisKey("showSystem", v)} />
+                  <Toggle label="Jugadores clave" checked={vis.showKeyPlayers} onChange={(v) => setVisKey("showKeyPlayers", v)} />
+                  <Toggle label="Fortalezas" checked={vis.showStrengths} onChange={(v) => setVisKey("showStrengths", v)} />
+                  <Toggle label="Debilidades" checked={vis.showWeaknesses} onChange={(v) => setVisKey("showWeaknesses", v)} />
+                  <Toggle label="Balón parado – A favor" checked={vis.showSetPiecesFor} onChange={(v) => setVisKey("showSetPiecesFor", v)} />
+                  <Toggle label="Balón parado – En contra" checked={vis.showSetPiecesAgainst} onChange={(v) => setVisKey("showSetPiecesAgainst", v)} />
+                </div>
 
-        {/* Plantel (NUEVO) */}
-        <div className="rounded-lg border p-3">
-          <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Plantel</div>
-          <Toggle
-            label="Mostrar plantel a jugadores"
-            checked={vis.showSquad}
-            onChange={(v) => setVisKey("showSquad", v)}
-          />
-        </div>
+                {/* Plantel */}
+                <div className="rounded-lg border p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Plantel</div>
+                  <Toggle
+                    label="Mostrar plantel a jugadores"
+                    checked={vis.showSquad}
+                    onChange={(v) => setVisKey("showSquad", v)}
+                  />
+                </div>
 
-        {/* Charla oficial */}
-        <div className="rounded-lg border p-3">
-          <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Charla oficial</div>
-          <Toggle label="Mostrar enlace de charla a jugadores" checked={vis.showCharlaUrl} onChange={(v) => setVisKey("showCharlaUrl", v)} />
-        </div>
+                {/* Charla */}
+                <div className="rounded-lg border p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Charla oficial</div>
+                  <Toggle label="Mostrar enlace de charla a jugadores" checked={vis.showCharlaUrl} onChange={(v) => setVisKey("showCharlaUrl", v)} />
+                </div>
 
-        {/* Videos */}
-        <div className="rounded-lg border p-3">
-          <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Videos</div>
-          <Toggle label="Mostrar lista de videos" checked={vis.showVideos} onChange={(v) => setVisKey("showVideos", v)} />
-        </div>
+                {/* Videos */}
+                <div className="rounded-lg border p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Videos</div>
+                  <Toggle label="Mostrar lista de videos" checked={vis.showVideos} onChange={(v) => setVisKey("showVideos", v)} />
+                </div>
 
-        {/* Estadísticas */}
-        <div className="rounded-lg border p-3">
-          <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Estadísticas</div>
-          <div className="grid md:grid-cols-2 gap-2">
-            <Toggle label="GF (goles a favor)" checked={vis.showStatsTotalsGF} onChange={(v) => setVisKey("showStatsTotalsGF", v)} />
-            <Toggle label="GC (goles en contra)" checked={vis.showStatsTotalsGA} onChange={(v) => setVisKey("showStatsTotalsGA", v)} />
-            <Toggle label="% de posesión" checked={vis.showStatsTotalsPossession} onChange={(v) => setVisKey("showStatsTotalsPossession", v)} />
-            <Toggle label="Últimos partidos" checked={vis.showStatsRecent} onChange={(v) => setVisKey("showStatsRecent", v)} />
+                {/* Estadísticas */}
+                <div className="rounded-lg border p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Estadísticas</div>
+                  <div className="grid md:grid-cols-2 gap-2">
+                    <Toggle label="GF (goles a favor)" checked={vis.showStatsTotalsGF} onChange={(v) => setVisKey("showStatsTotalsGF", v)} />
+                    <Toggle label="GC (goles en contra)" checked={vis.showStatsTotalsGA} onChange={(v) => setVisKey("showStatsTotalsGA", v)} />
+                    <Toggle label="% de posesión" checked={vis.showStatsTotalsPossession} onChange={(v) => setVisKey("showStatsTotalsPossession", v)} />
+                    <Toggle label="Últimos partidos" checked={vis.showStatsRecent} onChange={(v) => setVisKey("showStatsRecent", v)} />
+                  </div>
+                </div>
+
+                {/* Notas */}
+                <div className="rounded-lg border p-3">
+                  <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Notas internas</div>
+                  <Toggle label="Permitir ver notas a jugadores" checked={vis.showNotesForPlayers} onChange={(v) => setVisKey("showNotesForPlayers", v)} />
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    onClick={saveVisAll}
+                    disabled={savingVis}
+                    className={`px-3 py-1.5 rounded-xl text-xs ${savingVis ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
+                  >
+                    {savingVis ? "Guardando…" : "Guardar cambios"}
+                  </button>
+                  <span className="ml-3 text-xs text-gray-500">Tip: activá “Vista jugador” arriba para previsualizar.</span>
+                </div>
+              </>
+            )}
           </div>
-        </div>
-
-        {/* Notas internas */}
-        <div className="rounded-lg border p-3">
-          <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Notas internas</div>
-          <Toggle label="Permitir ver notas a jugadores" checked={vis.showNotesForPlayers} onChange={(v) => setVisKey("showNotesForPlayers", v)} />
-        </div>
-
-        <div className="pt-2">
-          <button
-            onClick={saveVisAll}
-            disabled={savingVis}
-            className={`px-3 py-1.5 rounded-xl text-xs ${savingVis ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
-          >
-            {savingVis ? "Guardando…" : "Guardar cambios"}
-          </button>
-          <span className="ml-3 text-xs text-gray-500">Tip: activá “Vista jugador” arriba para previsualizar.</span>
-        </div>
-      </>
-    )}
-  </div>
-)}
+        )}
 
         {/* ===== IMPORTAR ===== */}
         {tab === "importar" && (
@@ -1344,6 +1398,15 @@ export default function RivalFichaPage() {
           </div>
         )}
       </section>
+
+      {/* Estilos de impresión */}
+      <style jsx global>{`
+        @media print {
+          .print-hidden, nav, header button { display: none !important; }
+          .print-container { padding: 0 !important; border: none !important; box-shadow: none !important; }
+          body { background: #fff !important; }
+        }
+      `}</style>
     </div>
   );
 }
