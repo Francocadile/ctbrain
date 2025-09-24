@@ -2,22 +2,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
+import { routeForRole } from "@/lib/roles";
 
-// 🔒 Prefijos protegidos por rol
+// Prefijos protegidos por rol
 const PROTECTED_PREFIXES = ["/admin", "/ct", "/medico", "/jugador", "/directivo"] as const;
 
-// 🚪 Home por rol
-function homeForRole(role?: string) {
-  const r = (role || "").toUpperCase();
-  if (r === "ADMIN") return "/admin";
-  if (r === "CT") return "/ct";
-  if (r === "MEDICO") return "/medico";
-  if (r === "JUGADOR") return "/jugador";   // <- corregido (antes /player)
-  if (r === "DIRECTIVO") return "/directivo";
-  return "/login";
-}
-
-// ✅ Regla de autorización por ruta
 function isAllowed(pathname: string, role?: string) {
   const r = (role || "").toUpperCase();
   if (pathname.startsWith("/admin")) return r === "ADMIN";
@@ -31,18 +20,19 @@ function isAllowed(pathname: string, role?: string) {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // 🧪 Si no es una ruta protegida, dejar pasar
-  const needsAuth = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p)) || pathname.startsWith("/api/sessions");
+  // Dejar pasar lo no protegido
+  const needsAuth =
+    PROTECTED_PREFIXES.some((p) => pathname.startsWith(p)) ||
+    pathname.startsWith("/api/sessions");
   if (!needsAuth) return NextResponse.next();
 
-  // 🟢 (whitelist) API de jugadores accesible para CT/Médico desde el cliente
-  // Nota: si no matchea en config.matcher, esto es redundante pero inofensivo.
+  // Whitelist específica de APIs públicas si las necesitás:
   if (pathname.startsWith("/api/users/players")) {
     return NextResponse.next();
   }
 
-  // 🔑 Token NextAuth
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+
   if (!token) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
@@ -52,17 +42,15 @@ export async function middleware(req: NextRequest) {
 
   const role = (token as any)?.role as string | undefined;
 
-  // ❌ Si el rol no tiene permiso para este prefijo, redirigimos a su home
   if (!isAllowed(pathname, role)) {
     const url = req.nextUrl.clone();
-    url.pathname = homeForRole(role);
+    url.pathname = routeForRole(role);
     return NextResponse.redirect(url);
   }
 
   return NextResponse.next();
 }
 
-// 🧭 Qué rutas intercepta el middleware
 export const config = {
   matcher: [
     "/admin/:path*",
@@ -71,6 +59,5 @@ export const config = {
     "/jugador/:path*",
     "/directivo/:path*",
     "/api/sessions/:path*",
-    // (NO incluimos /api/users para respetar tu whitelist)
   ],
 };
