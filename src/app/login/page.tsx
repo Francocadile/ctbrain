@@ -1,57 +1,51 @@
 // src/app/login/page.tsx
 "use client";
 
+import { signIn, useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { routeForRole } from "../../lib/roles";
-
-type MeResponse = { ok: boolean; user?: { role?: string | null } };
-type LoginResponse = { ok?: boolean; redirectTo?: string; role?: string };
+import { routeForRole } from "@/lib/roles";
 
 export default function LoginPage() {
+  const { status, data } = useSession();
+  const router = useRouter();
+  const search = useSearchParams();
+
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  // Si ya está logueado, mandalo directo a su panel
+  // Si ya está logueado, lo llevo a su panel.
   useEffect(() => {
-    (async () => {
-      try {
-        const r = await fetch("/api/auth/me", { cache: "no-store" });
-        const j = (await r.json().catch(() => ({}))) as MeResponse;
-        const role = j?.user?.role || undefined;
-        if (j?.ok && role) window.location.href = routeForRole(role);
-      } catch {}
-    })();
-  }, []);
+    if (status === "authenticated") {
+      const role = (data?.user as any)?.role as string | undefined;
+      const cb = search.get("callbackUrl");
+      router.replace(cb || routeForRole(role));
+    }
+  }, [status, data, router, search]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
-    setLoading(true);
+    setSubmitting(true);
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password: pw }),
+      const res = await signIn("credentials", {
+        redirect: false,
+        email,
+        password: pw,
+        callbackUrl: search.get("callbackUrl") || "/",
       });
 
-      if (!res.ok) {
-        const msg = await res.text().catch(() => "");
-        throw new Error(msg || "Credenciales inválidas");
+      if (res?.error) {
+        setErr(res.error === "CredentialsSignin" ? "Email o contraseña inválidos." : res.error);
+        return;
       }
-
-      const data = (await res.json().catch(() => ({}))) as LoginResponse;
-      const next =
-        data?.redirectTo ||
-        (data?.role ? routeForRole(data.role) : "/ct");
-
-      window.location.href = next;
-    } catch (e: any) {
-      setErr(e?.message || "No se pudo iniciar sesión");
+      // el redirect lo maneja el useEffect al detectar sesión
+      router.refresh();
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   }
 
@@ -90,14 +84,12 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={submitting}
             className={`w-full rounded-xl px-4 py-3 text-sm font-semibold ${
-              loading
-                ? "bg-gray-200 text-gray-500"
-                : "bg-black text-white hover:opacity-90"
+              submitting ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
             }`}
           >
-            {loading ? "Ingresando…" : "Ingresar"}
+            {submitting ? "Ingresando…" : "Ingresar"}
           </button>
         </form>
 
