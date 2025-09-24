@@ -8,5 +8,5 @@ export function routeForRole(role?: string) {
   if (r === "MEDICO") return "/medico";
   if (r === "JUGADOR") return "/jugador";
   if (r === "DIRECTIVO") return "/directivo";
-  return "/ct"; // fallback
+  return "/login";
 }
