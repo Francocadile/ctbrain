@@ -6,6 +6,10 @@ import { compare } from "bcryptjs";
 
 const prisma = new PrismaClient();
 
+function isBcryptHash(s?: string | null) {
+  return !!s && (s.startsWith("$2a$") || s.startsWith("$2b$") || s.startsWith("$2y$"));
+}
+
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   session: { strategy: "jwt" },
@@ -22,29 +26,29 @@ export const authOptions: NextAuthOptions = {
         const password = credentials?.password ?? "";
         if (!email || !password) return null;
 
-        // 👇 Ajustá campos según tu Prisma
+        // ✅ Tu schema tiene 'password' (no 'passwordHash')
         const user = await prisma.user.findUnique({
           where: { email },
           select: {
             id: true,
             email: true,
             name: true,
-            role: true,          // 'ADMIN' | 'CT' | 'MEDICO' | 'JUGADOR' | 'DIRECTIVO'
-            passwordHash: true,  // hash bcrypt
-            // password: true,   // (opcional: legacy texto plano solo para dev)
+            role: true,   // 'ADMIN' | 'CT' | 'MEDICO' | 'JUGADOR' | 'DIRECTIVO'
+            password: true,
           },
         });
         if (!user) return null;
 
+        const stored = user.password || "";
         let ok = false;
-        if (user.passwordHash) {
-          ok = await compare(password, user.passwordHash);
-        }
 
-        // Fallback DEV (opcional). Activar con DEV_ALLOW_PLAINTEXT=1 si tenés legacy.
-        // if (!ok && process.env.DEV_ALLOW_PLAINTEXT === "1" && (user as any).password) {
-        //   ok = password === (user as any).password;
-        // }
+        // Si es un hash bcrypt, comparamos con bcrypt
+        if (isBcryptHash(stored)) {
+          ok = await compare(password, stored);
+        } else {
+          // Fallback: contraseña en texto (legacy/dev)
+          ok = password === stored;
+        }
 
         if (!ok) return null;
 
