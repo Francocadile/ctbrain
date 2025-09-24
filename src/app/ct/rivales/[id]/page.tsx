@@ -45,7 +45,7 @@ type RivalStats = {
 type NoteItem = { text: string; done?: boolean };
 type RivalNotes = { observations?: string; checklist?: NoteItem[] };
 
-// Visibilidad
+// --- arriba, donde está type Visibility ---
 type Visibility = {
   showSystem: boolean;
   showKeyPlayers: boolean;
@@ -60,6 +60,8 @@ type Visibility = {
   showStatsTotalsPossession: boolean;
   showStatsRecent: boolean;
   showNotesForPlayers: boolean;
+
+  // NUEVO
   showSquad: boolean;
 };
 
@@ -78,6 +80,8 @@ function defaultVisibility(): Visibility {
     showStatsTotalsPossession: true,
     showStatsRecent: true,
     showNotesForPlayers: false,
+
+    // NUEVO
     showSquad: true,
   };
 }
@@ -100,8 +104,7 @@ export default function RivalFichaPage() {
   }
 
   // CT / Player preview
-  const [playerPreview, setPlayerPreview] = useState<boolean>(initialPlayer);
-  const [copied, setCopied] = useState(false);
+  const [playerPreview, setPlayerPreview] = useState(initialPlayer);
 
   // Basics
   const [loading, setLoading] = useState(true);
@@ -309,13 +312,44 @@ export default function RivalFichaPage() {
     if (playerPreview) loadPlayerSafe();
   }, [playerPreview, id]);
 
-  // Auto print si viene print=1
+  // Si viene con print=1, disparamos la impresión al montar.
   useEffect(() => {
     if (autoPrint) {
-      const t = setTimeout(() => window.print(), 300);
+      const t = setTimeout(() => {
+        try {
+          window.print();
+        } catch {}
+      }, 450);
       return () => clearTimeout(t);
     }
   }, [autoPrint]);
+
+  // ===== Helpers de compartir / imprimir =====
+  function playerShareURL(activeTab?: Tab) {
+    const loc = window.location;
+    const url = new URL(loc.href);
+    // forzamos vista jugador
+    url.searchParams.set("player", "1");
+    // fijamos la tab (si viene)
+    if (activeTab) url.searchParams.set("tab", activeTab);
+    // no queremos imprimir por defecto
+    url.searchParams.delete("print");
+    return url.toString();
+  }
+
+  function openPrintView() {
+    try {
+      const url = new URL(playerShareURL(tab));
+      url.searchParams.set("print", "1");
+      window.open(url.toString(), "_blank");
+    } catch {
+      // fallback: abrir la actual agregando parámetros
+      const u = new URL(window.location.href);
+      u.searchParams.set("player", "1");
+      u.searchParams.set("print", "1");
+      window.open(u.toString(), "_blank");
+    }
+  }
 
   // ===== Saves (CT) =====
   async function savePlan(e: React.FormEvent) {
@@ -509,6 +543,7 @@ export default function RivalFichaPage() {
     }
   }
   async function saveVisAll() {
+    // enviamos TODAS las claves actuales (para forzar estado exacto)
     await saveVisPatch({ ...vis });
   }
   async function resetVisToDefaults() {
@@ -554,29 +589,6 @@ export default function RivalFichaPage() {
     }
   }
 
-  // ===== Helpers share/print + toggle con URL =====
-  function setPlayerPreviewAndURL(next: boolean) {
-    setPlayerPreview(next);
-    const url = new URL(window.location.href);
-    if (next) url.searchParams.set("player", "1");
-    else url.searchParams.delete("player");
-    window.history.replaceState(null, "", url.toString());
-  }
-  function playerShareURL(tab: Tab = "plan") {
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", tab);
-    url.searchParams.set("player", "1");
-    url.searchParams.delete("print");
-    return url.toString();
-  }
-  function openPrintView() {
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", "plan");
-    url.searchParams.set("player", "1");
-    url.searchParams.set("print", "1");
-    window.open(url.toString(), "_blank");
-  }
-
   // ===== Render =====
   if (loading) return <div className="p-4 text-gray-500">Cargando…</div>;
   if (!rival)
@@ -593,53 +605,64 @@ export default function RivalFichaPage() {
 
   return (
     <div className="p-4 space-y-4 print-container">
-      {/* Breadcrumb + Vista jugador + acciones */}
+      <style>{`
+        @media print {
+          .print-hidden { display: none !important; }
+          .print-container { padding: 0 !important; }
+          .print-card { border: none !important; box-shadow: none !important; }
+        }
+      `}</style>
+
+      {/* Breadcrumb + Vista jugador + Acciones (ocultar en print) */}
       <div className="text-sm text-gray-600 flex items-center justify-between print-hidden">
-        <div>
-          <Link href="/ct/rivales" className="underline">Rivales</Link>
-          <span className="mx-1">/</span>
-          <span className="font-medium">{basicsForHeader.name}</span>
+        <div className="flex items-center gap-3">
+          <div>
+            <Link href="/ct/rivales" className="underline">Rivales</Link>
+            <span className="mx-1">/</span>
+            <span className="font-medium">{basicsForHeader.name}</span>
+          </div>
+
+          {/* Acciones rápidas */}
+          <div className="hidden md:flex items-center gap-1">
+            <button
+              onClick={() => {
+                try {
+                  const url = playerShareURL(tab);
+                  navigator.clipboard?.writeText(url);
+                  alert("Enlace copiado (vista jugadores).");
+                } catch {
+                  alert("No se pudo copiar. Copiá desde la barra del navegador.");
+                }
+              }}
+              className="text-[11px] px-2 py-1 rounded-md border hover:bg-gray-50"
+              title="Copia un enlace que abre esta ficha en modo jugador"
+            >
+              Copiar enlace (jugadores)
+            </button>
+            <button
+              onClick={openPrintView}
+              className="text-[11px] px-2 py-1 rounded-md border hover:bg-gray-50"
+              title="Abre la Vista Jugador e imprime/exporta"
+            >
+              Imprimir / Exportar
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
-            <span className="text-gray-600">Vista jugador</span>
-            <input
-              type="checkbox"
-              checked={playerPreview}
-              onChange={() => setPlayerPreviewAndURL(!playerPreview)}
-              className="h-4 w-4"
-            />
-            {playerPreview && (
-              <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
-                Previsualizando
-              </span>
-            )}
-          </label>
-
-          <button
-            className="text-xs px-2 py-1 rounded-xl border hover:bg-gray-50"
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(playerShareURL("plan"));
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1500);
-              } catch {}
-            }}
-            title="Copiar enlace en modo jugador (tab Plan)"
-          >
-            Copiar enlace (jugadores)
-          </button>
-          {copied && <span className="text-[11px] text-emerald-700">¡Copiado!</span>}
-
-          <button
-            className="text-xs px-2 py-1 rounded-xl border hover:bg-gray-50"
-            onClick={openPrintView}
-            title="Imprimir / Exportar a PDF (vista jugador)"
-          >
-            Imprimir / Exportar
-          </button>
-        </div>
+        <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+          <span className="text-gray-600">Vista jugador</span>
+          <input
+            type="checkbox"
+            checked={playerPreview}
+            onChange={() => setPlayerPreview((v) => !v)}
+            className="h-4 w-4"
+          />
+          {playerPreview && (
+            <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800">
+              Previsualizando
+            </span>
+          )}
+        </label>
       </div>
 
       {/* Header */}
@@ -662,15 +685,15 @@ export default function RivalFichaPage() {
           <p className="text-sm text-gray-600">Próximo partido: {nm}</p>
         </div>
         {isCTView && tab === "resumen" && (
-          <button onClick={() => setEditingBasics((v) => !v)} className="text-xs px-3 py-1.5 rounded-xl border hover:bg-gray-50">
+          <button onClick={() => setEditingBasics((v) => !v)} className="text-xs px-3 py-1.5 rounded-xl border hover:bg-gray-50 print-hidden">
             {editingBasics ? "Cancelar" : "Editar"}
           </button>
         )}
       </header>
 
-      {/* Tabs */}
+      {/* Tabs (ocultar en print) */}
       <nav className="flex gap-2 border-b print-hidden">
-        {/* Resumen */}
+        {/* Resumen (tab local) */}
         <button
           onClick={() => setURLTab("resumen")}
           className={`px-3 py-2 text-sm font-medium border-b-2 ${
@@ -682,7 +705,7 @@ export default function RivalFichaPage() {
           Resumen
         </button>
 
-        {/* Plantel */}
+        {/* Plantel (ruta absoluta con id) */}
         {(!playerPreview || playerVis?.showSquad) && (
           <Link
             href={`/ct/rivales/${id}/plantel`}
@@ -692,7 +715,7 @@ export default function RivalFichaPage() {
           </Link>
         )}
 
-        {/* Resto */}
+        {/* Resto de tabs locales */}
         {[
           { key: "plan", label: "Plan de partido" },
           { key: "videos", label: "Videos" },
@@ -714,7 +737,7 @@ export default function RivalFichaPage() {
       </nav>
 
       {/* Contenido por tab */}
-      <section className="rounded-xl border bg-white p-4">
+      <section className="rounded-xl border bg-white p-4 print-card">
         {/* RESUMEN */}
         {tab === "resumen" && (
           <>
@@ -726,7 +749,7 @@ export default function RivalFichaPage() {
                   <li>Sistema base: {basicsForHeader.baseSystem || "—"}</li>
                   <li>Próximo partido: {nm}</li>
                 </ul>
-                <p className="text-xs text-gray-500 mt-2">
+                <p className="text-xs text-gray-500 mt-2 print-hidden">
                   * Estos campos se pueden editar desde el listado de rivales (o más adelante desde esta ficha).
                 </p>
               </div>
@@ -771,7 +794,7 @@ export default function RivalFichaPage() {
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Plan de partido</h2>
               {playerPreview && (
-                <span className="text-[11px] px-2 py-1 rounded-md bg-amber-100 text-amber-800">
+                <span className="text-[11px] px-2 py-1 rounded-md bg-amber-100 text-amber-800 print-hidden">
                   Vista jugador (aplicando visibilidad)
                 </span>
               )}
@@ -1282,7 +1305,7 @@ export default function RivalFichaPage() {
                   <Toggle label="Balón parado – En contra" checked={vis.showSetPiecesAgainst} onChange={(v) => setVisKey("showSetPiecesAgainst", v)} />
                 </div>
 
-                {/* Plantel */}
+                {/* Plantel (NUEVO) */}
                 <div className="rounded-lg border p-3">
                   <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Plantel</div>
                   <Toggle
@@ -1292,7 +1315,7 @@ export default function RivalFichaPage() {
                   />
                 </div>
 
-                {/* Charla */}
+                {/* Charla oficial */}
                 <div className="rounded-lg border p-3">
                   <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Charla oficial</div>
                   <Toggle label="Mostrar enlace de charla a jugadores" checked={vis.showCharlaUrl} onChange={(v) => setVisKey("showCharlaUrl", v)} />
@@ -1315,7 +1338,7 @@ export default function RivalFichaPage() {
                   </div>
                 </div>
 
-                {/* Notas */}
+                {/* Notas internas */}
                 <div className="rounded-lg border p-3">
                   <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Notas internas</div>
                   <Toggle label="Permitir ver notas a jugadores" checked={vis.showNotesForPlayers} onChange={(v) => setVisKey("showNotesForPlayers", v)} />
@@ -1398,15 +1421,6 @@ export default function RivalFichaPage() {
           </div>
         )}
       </section>
-
-      {/* Estilos de impresión */}
-      <style jsx global>{`
-        @media print {
-          .print-hidden, nav, header button { display: none !important; }
-          .print-container { padding: 0 !important; border: none !important; box-shadow: none !important; }
-          body { background: #fff !important; }
-        }
-      `}</style>
     </div>
   );
 }
