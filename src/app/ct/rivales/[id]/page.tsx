@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Tab = "resumen" | "plan" | "videos" | "stats" | "notas" | "visibilidad" | "importar";
 
@@ -45,7 +45,6 @@ type RivalStats = {
 type NoteItem = { text: string; done?: boolean };
 type RivalNotes = { observations?: string; checklist?: NoteItem[] };
 
-// --- arriba, donde está type Visibility ---
 type Visibility = {
   showSystem: boolean;
   showKeyPlayers: boolean;
@@ -60,8 +59,6 @@ type Visibility = {
   showStatsTotalsPossession: boolean;
   showStatsRecent: boolean;
   showNotesForPlayers: boolean;
-
-  // NUEVO
   showSquad: boolean;
 };
 
@@ -80,10 +77,19 @@ function defaultVisibility(): Visibility {
     showStatsTotalsPossession: true,
     showStatsRecent: true,
     showNotesForPlayers: false,
-
-    // NUEVO
     showSquad: true,
   };
+}
+
+// ===== Helpers generales =====
+function isHttpUrl(u?: string | null) {
+  if (!u) return true; // vacío es válido si el campo es opcional
+  try {
+    const x = new URL(u);
+    return x.protocol === "http:" || x.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 // ==== Página ====
@@ -316,9 +322,7 @@ export default function RivalFichaPage() {
   useEffect(() => {
     if (autoPrint) {
       const t = setTimeout(() => {
-        try {
-          window.print();
-        } catch {}
+        try { window.print(); } catch {}
       }, 450);
       return () => clearTimeout(t);
     }
@@ -328,28 +332,29 @@ export default function RivalFichaPage() {
   function playerShareURL(activeTab?: Tab) {
     const loc = window.location;
     const url = new URL(loc.href);
-    // forzamos vista jugador
     url.searchParams.set("player", "1");
-    // fijamos la tab (si viene)
     if (activeTab) url.searchParams.set("tab", activeTab);
-    // no queremos imprimir por defecto
     url.searchParams.delete("print");
     return url.toString();
   }
-
   function openPrintView() {
     try {
       const url = new URL(playerShareURL(tab));
       url.searchParams.set("print", "1");
       window.open(url.toString(), "_blank");
     } catch {
-      // fallback: abrir la actual agregando parámetros
       const u = new URL(window.location.href);
       u.searchParams.set("player", "1");
       u.searchParams.set("print", "1");
       window.open(u.toString(), "_blank");
     }
   }
+
+  // ====== VALIDACIÓN de URLs (Videos) ======
+  const hasInvalidVideoUrls = useMemo(() => {
+    if (newVidUrl && !isHttpUrl(newVidUrl)) return true;
+    return (videos || []).some((v) => !!v.url && !isHttpUrl(v.url));
+  }, [newVidUrl, videos]);
 
   // ===== Saves (CT) =====
   async function savePlan(e: React.FormEvent) {
@@ -423,6 +428,10 @@ export default function RivalFichaPage() {
     setVideos((v) => v.filter((_, i) => i !== idx));
   }
   async function saveVideos() {
+    if (hasInvalidVideoUrls) {
+      alert("Hay URLs de video inválidas. Corregilas para guardar.");
+      return;
+    }
     setSavingVideos(true);
     try {
       const res = await fetch(`/api/ct/rivales/${id}/videos`, {
@@ -543,7 +552,6 @@ export default function RivalFichaPage() {
     }
   }
   async function saveVisAll() {
-    // enviamos TODAS las claves actuales (para forzar estado exacto)
     await saveVisPatch({ ...vis });
   }
   async function resetVisToDefaults() {
@@ -693,7 +701,6 @@ export default function RivalFichaPage() {
 
       {/* Tabs (ocultar en print) */}
       <nav className="flex gap-2 border-b print-hidden">
-        {/* Resumen (tab local) */}
         <button
           onClick={() => setURLTab("resumen")}
           className={`px-3 py-2 text-sm font-medium border-b-2 ${
@@ -705,7 +712,6 @@ export default function RivalFichaPage() {
           Resumen
         </button>
 
-        {/* Plantel (ruta absoluta con id) */}
         {(!playerPreview || playerVis?.showSquad) && (
           <Link
             href={`/ct/rivales/${id}/plantel`}
@@ -715,7 +721,6 @@ export default function RivalFichaPage() {
           </Link>
         )}
 
-        {/* Resto de tabs locales */}
         {[
           { key: "plan", label: "Plan de partido" },
           { key: "videos", label: "Videos" },
@@ -805,7 +810,6 @@ export default function RivalFichaPage() {
                 <div className="text-gray-500 text-sm">Cargando…</div>
               ) : (
                 <div className="space-y-3">
-                  {/* Charla si está habilitada */}
                   {playerVis?.showCharlaUrl && playerPlan?.charlaUrl ? (
                     <div className="rounded-lg border bg-gray-50 p-3">
                       <div className="text-[12px] font-semibold uppercase tracking-wide mb-1">Charla oficial</div>
@@ -836,9 +840,7 @@ export default function RivalFichaPage() {
                 </div>
               )
             ) : (
-              // Vista CT (edición)
               <form onSubmit={savePlan} className="space-y-4">
-                {/* Charla */}
                 <div className="rounded-lg border bg-gray-50 p-3">
                   <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">
                     Charla oficial (PDF/PPT/Keynote) – Solo CT
@@ -864,7 +866,6 @@ export default function RivalFichaPage() {
                   </div>
                 </div>
 
-                {/* Informe visual */}
                 <div className="rounded-lg border p-3">
                   <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">
                     Informe visual (visible para jugadores según visibilidad)
@@ -987,7 +988,7 @@ export default function RivalFichaPage() {
                     onChange={(e) => setNewVidTitle(e.target.value)}
                   />
                   <input
-                    className="rounded-md border px-2 py-1 text-sm flex-1"
+                    className={`rounded-md border px-2 py-1 text-sm flex-1 ${newVidUrl && !isHttpUrl(newVidUrl) ? "border-red-500 bg-red-50" : ""}`}
                     placeholder="URL del video"
                     value={newVidUrl}
                     onChange={(e) => setNewVidUrl(e.target.value)}
@@ -996,27 +997,34 @@ export default function RivalFichaPage() {
                   <button onClick={addVideoLocal} className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50">+ Agregar</button>
                 </div>
 
+                {hasInvalidVideoUrls && (
+                  <div className="text-xs text-red-600">Hay URLs inválidas. Corregilas para poder guardar.</div>
+                )}
+
                 {loadingVideos ? (
                   <div className="text-sm text-gray-500">Cargando…</div>
                 ) : (
                   <ul className="space-y-2">
                     {(videos || []).length === 0 && <li className="text-sm text-gray-500">Sin videos.</li>}
-                    {videos.map((v, i) => (
-                      <li key={i} className="flex items-center gap-2">
-                        <span className="text-sm flex-1 truncate">
-                          {v.title ? `${v.title} — ` : ""}{v.url}
-                        </span>
-                        <button onClick={() => removeVideoLocal(i)} className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50">Borrar</button>
-                      </li>
-                    ))}
+                    {videos.map((v, i) => {
+                      const bad = !!v.url && !isHttpUrl(v.url);
+                      return (
+                        <li key={i} className="flex items-center gap-2">
+                          <span className={`text-sm flex-1 truncate ${bad ? "text-red-700" : ""}`}>
+                            {v.title ? `${v.title} — ` : ""}{v.url}
+                          </span>
+                          <button onClick={() => removeVideoLocal(i)} className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50">Borrar</button>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
 
                 <div className="pt-1">
                   <button
                     onClick={saveVideos}
-                    disabled={savingVideos}
-                    className={`px-3 py-1.5 rounded-xl text-xs ${savingVideos ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
+                    disabled={savingVideos || hasInvalidVideoUrls}
+                    className={`px-3 py-1.5 rounded-xl text-xs ${savingVideos || hasInvalidVideoUrls ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
                   >
                     {savingVideos ? "Guardando…" : "Guardar videos"}
                   </button>
@@ -1078,7 +1086,6 @@ export default function RivalFichaPage() {
               )
             ) : (
               <div className="space-y-4">
-                {/* Totales */}
                 <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1">
                     <label className="text-[11px] text-gray-500">GF</label>
@@ -1109,7 +1116,6 @@ export default function RivalFichaPage() {
                   </div>
                 </div>
 
-                {/* Últimos partidos */}
                 <div className="rounded-lg border">
                   <div className="flex items-center justify-between p-2">
                     <div className="text-[12px] font-semibold uppercase tracking-wide">Últimos partidos</div>
@@ -1294,7 +1300,6 @@ export default function RivalFichaPage() {
               <div className="text-sm text-gray-500">Cargando…</div>
             ) : (
               <>
-                {/* Plan de partido */}
                 <div className="rounded-lg border p-3">
                   <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Plan de partido</div>
                   <Toggle label="Sistema" checked={vis.showSystem} onChange={(v) => setVisKey("showSystem", v)} />
@@ -1305,7 +1310,6 @@ export default function RivalFichaPage() {
                   <Toggle label="Balón parado – En contra" checked={vis.showSetPiecesAgainst} onChange={(v) => setVisKey("showSetPiecesAgainst", v)} />
                 </div>
 
-                {/* Plantel (NUEVO) */}
                 <div className="rounded-lg border p-3">
                   <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Plantel</div>
                   <Toggle
@@ -1315,19 +1319,16 @@ export default function RivalFichaPage() {
                   />
                 </div>
 
-                {/* Charla oficial */}
                 <div className="rounded-lg border p-3">
                   <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Charla oficial</div>
                   <Toggle label="Mostrar enlace de charla a jugadores" checked={vis.showCharlaUrl} onChange={(v) => setVisKey("showCharlaUrl", v)} />
                 </div>
 
-                {/* Videos */}
                 <div className="rounded-lg border p-3">
                   <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Videos</div>
                   <Toggle label="Mostrar lista de videos" checked={vis.showVideos} onChange={(v) => setVisKey("showVideos", v)} />
                 </div>
 
-                {/* Estadísticas */}
                 <div className="rounded-lg border p-3">
                   <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Estadísticas</div>
                   <div className="grid md:grid-cols-2 gap-2">
@@ -1338,7 +1339,6 @@ export default function RivalFichaPage() {
                   </div>
                 </div>
 
-                {/* Notas internas */}
                 <div className="rounded-lg border p-3">
                   <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">Notas internas</div>
                   <Toggle label="Permitir ver notas a jugadores" checked={vis.showNotesForPlayers} onChange={(v) => setVisKey("showNotesForPlayers", v)} />
@@ -1365,17 +1365,12 @@ export default function RivalFichaPage() {
             <h2 className="text-lg font-semibold">Importar datos (Wyscout PDF / CSV)</h2>
 
             <div className="grid md:grid-cols-2 gap-4">
-              {/* PDF */}
               <div className="rounded-lg border p-3">
                 <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">PDF de informe de equipo</div>
                 <p className="text-sm text-gray-600 mb-2">
                   Subí el PDF de Wyscout (informe de equipo). Intentaremos extraer DT, sistema base, jugadores clave, fortalezas/debilidades y algunos totales.
                 </p>
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
-                />
+                <input type="file" accept="application/pdf" onChange={(e) => setPdfFile(e.target.files?.[0] || null)} />
                 <div className="pt-2">
                   <button
                     onClick={importPDF}
@@ -1387,18 +1382,13 @@ export default function RivalFichaPage() {
                 </div>
               </div>
 
-              {/* CSV */}
               <div className="rounded-lg border p-3">
                 <div className="text-[12px] font-semibold uppercase tracking-wide mb-2">CSV de resultados/estadística</div>
                 <p className="text-sm text-gray-600 mb-2">
                   Subí un CSV con columnas típicas (date, opponent, comp, homeAway, gf, ga, possession).  
                   Se actualizarán “Últimos partidos” y los totales (GF/GA/Posesión).
                 </p>
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
-                />
+                <input type="file" accept=".csv,text/csv" onChange={(e) => setCsvFile(e.target.files?.[0] || null)} />
                 <div className="pt-2">
                   <button
                     onClick={importCSV}
@@ -1411,9 +1401,7 @@ export default function RivalFichaPage() {
               </div>
             </div>
 
-            {importMsg && (
-              <div className="text-sm px-3 py-2 rounded-md border bg-gray-50">{importMsg}</div>
-            )}
+            {importMsg && <div className="text-sm px-3 py-2 rounded-md border bg-gray-50">{importMsg}</div>}
 
             <div className="text-xs text-gray-500">
               Nota: El parseo es heurístico. Si algún dato no sale perfecto, podés corregirlo a mano en las pestañas “Plan” y “Estadísticas”.
@@ -1434,7 +1422,6 @@ function InfoBlock({ title, content }: { title: string; content?: string | null 
     </div>
   );
 }
-
 function ListBlock({ title, items }: { title: string; items?: string[] }) {
   return (
     <div className="rounded-lg border p-3">
@@ -1449,7 +1436,6 @@ function ListBlock({ title, items }: { title: string; items?: string[] }) {
     </div>
   );
 }
-
 function StatBox({ label, value, hidden }: { label: string; value?: number; hidden?: boolean }) {
   if (hidden) return null;
   const show = typeof value === "number" && Number.isFinite(value);
@@ -1460,7 +1446,6 @@ function StatBox({ label, value, hidden }: { label: string; value?: number; hidd
     </div>
   );
 }
-
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="flex items-center justify-between gap-3 py-1.5">
