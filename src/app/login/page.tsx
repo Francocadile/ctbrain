@@ -1,48 +1,57 @@
-// src/app/login/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { signIn, useSession } from "next-auth/react";
-import { routeForRole } from "@/lib/roles";
+import { routeForRole } from "../../lib/roles";
+
+type MeResponse = { ok: boolean; user?: { role?: string | null } };
+type LoginResponse = { ok?: boolean; redirectTo?: string; role?: string };
 
 export default function LoginPage() {
-  const { data: session } = useSession();
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [callbackUrl, setCallbackUrl] = useState<string | undefined>(undefined);
 
+  // Si ya está logueado, mandalo directo a su panel
   useEffect(() => {
-    try {
-      const u = new URL(window.location.href);
-      setCallbackUrl(u.searchParams.get("callbackUrl") || undefined);
-    } catch {}
+    (async () => {
+      try {
+        const r = await fetch("/api/auth/me", { cache: "no-store" });
+        const j = (await r.json().catch(() => ({}))) as MeResponse;
+        const role = j?.user?.role || undefined;
+        if (j?.ok && role) window.location.href = routeForRole(role);
+      } catch {}
+    })();
   }, []);
-
-  useEffect(() => {
-    const role = (session?.user as any)?.role as string | undefined;
-    if (role) window.location.href = callbackUrl || routeForRole(role);
-  }, [session, callbackUrl]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
     setLoading(true);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: pw }),
+      });
 
-    const res = await signIn("credentials", {
-      email,
-      password: pw,
-      redirect: false,
-      callbackUrl: callbackUrl || "/",
-    });
+      if (!res.ok) {
+        const msg = await res.text().catch(() => "");
+        throw new Error(msg || "Credenciales inválidas");
+      }
 
-    setLoading(false);
+      const data = (await res.json().catch(() => ({}))) as LoginResponse;
+      const next =
+        data?.redirectTo ||
+        (data?.role ? routeForRole(data.role) : "/ct");
 
-    if (!res) return setErr("No se pudo conectar con el servidor.");
-    if (res.ok) return (window.location.href = res.url || "/");
-    setErr(res.error || "Credenciales inválidas");
+      window.location.href = next;
+    } catch (e: any) {
+      setErr(e?.message || "No se pudo iniciar sesión");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -82,7 +91,9 @@ export default function LoginPage() {
             type="submit"
             disabled={loading}
             className={`w-full rounded-xl px-4 py-3 text-sm font-semibold ${
-              loading ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
+              loading
+                ? "bg-gray-200 text-gray-500"
+                : "bg-black text-white hover:opacity-90"
             }`}
           >
             {loading ? "Ingresando…" : "Ingresar"}
