@@ -6,7 +6,6 @@ import { getToken } from "next-auth/jwt";
 // Prefijos protegidos por rol
 const PROTECTED_PREFIXES = ["/admin", "/ct", "/medico", "/jugador", "/directivo"] as const;
 
-// Home por rol
 function homeForRole(role?: string) {
   const r = (role || "").toUpperCase();
   if (r === "ADMIN") return "/admin";
@@ -17,7 +16,6 @@ function homeForRole(role?: string) {
   return "/login";
 }
 
-// Permisos por prefijo
 function isAllowed(pathname: string, role?: string) {
   const r = (role || "").toUpperCase();
   if (pathname.startsWith("/admin")) return r === "ADMIN";
@@ -31,19 +29,14 @@ function isAllowed(pathname: string, role?: string) {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Solo protegemos prefijos definidos y /api/sessions
   const needsAuth =
     PROTECTED_PREFIXES.some((p) => pathname.startsWith(p)) ||
     pathname.startsWith("/api/sessions");
 
   if (!needsAuth) return NextResponse.next();
 
-  // Whitelist explícito si tenés endpoints públicos adicionales:
-  if (pathname.startsWith("/api/users/players")) {
-    return NextResponse.next();
-  }
-
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+
   if (!token) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
@@ -52,6 +45,7 @@ export async function middleware(req: NextRequest) {
   }
 
   const role = (token as any)?.role as string | undefined;
+
   if (!isAllowed(pathname, role)) {
     const url = req.nextUrl.clone();
     url.pathname = homeForRole(role);
