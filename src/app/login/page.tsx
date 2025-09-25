@@ -3,51 +3,58 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { signIn, getSession } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { routeForRole } from "@/lib/roles";
 
 export default function LoginPage() {
+  const { data: session } = useSession();
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [callbackUrl, setCallbackUrl] = useState<string | undefined>(undefined);
 
-  // Si ya está logueado, mandalo directo a su panel
+  // Lee callbackUrl sin useSearchParams (evita el error de Suspense en build)
   useEffect(() => {
-    (async () => {
-      try {
-        const s = await getSession();
-        const role = (s?.user as any)?.role as string | undefined;
-        if (role) window.location.href = routeForRole(role);
-      } catch {}
-    })();
+    try {
+      const u = new URL(window.location.href);
+      const c = u.searchParams.get("callbackUrl") || undefined;
+      setCallbackUrl(c);
+    } catch {}
   }, []);
+
+  // Ya logueado → redirigir a su panel
+  useEffect(() => {
+    const role = (session?.user as any)?.role as string | undefined;
+    if (role) {
+      window.location.href = callbackUrl || routeForRole(role);
+    }
+  }, [session, callbackUrl]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
     setLoading(true);
-    try {
-      const res = await signIn("credentials", {
-        email,
-        password: pw,
-        redirect: false, // manejamos el redirect acá
-      });
 
-      if (!res || !res.ok) {
-        throw new Error("Credenciales inválidas");
-      }
+    const res = await signIn("credentials", {
+      email,
+      password: pw,
+      redirect: false,
+      callbackUrl: callbackUrl || "/",
+    });
 
-      // Recuperamos la session para conocer el rol y redirigir
-      const s = await getSession();
-      const role = (s?.user as any)?.role as string | undefined;
-      const next = role ? routeForRole(role) : "/ct";
-      window.location.href = next;
-    } catch (e: any) {
-      setErr(e?.message || "No se pudo iniciar sesión");
-    } finally {
-      setLoading(false);
+    setLoading(false);
+
+    if (!res) {
+      setErr("No se pudo conectar con el servidor.");
+      return;
     }
+    if (res.ok) {
+      window.location.href = res.url || "/";
+      return;
+    }
+    // NextAuth pone detalle en res.error
+    setErr(res.error || "Credenciales inválidas");
   }
 
   return (
