@@ -1,39 +1,20 @@
-// middleware.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-const PROTECTED_PREFIXES = ["/admin", "/ct", "/medico", "/jugador", "/directivo"] as const;
-
-function homeForRole(role?: string) {
-  const r = (role || "").toUpperCase();
-  if (r === "ADMIN") return "/admin";
-  if (r === "CT") return "/ct";
-  if (r === "MEDICO") return "/medico";
-  if (r === "JUGADOR") return "/jugador";
-  if (r === "DIRECTIVO") return "/directivo";
-  return "/login";
-}
-
-function isAllowed(pathname: string, role?: string) {
-  const r = (role || "").toUpperCase();
-  if (pathname.startsWith("/admin")) return r === "ADMIN";
-  if (pathname.startsWith("/ct")) return r === "CT" || r === "ADMIN";
-  if (pathname.startsWith("/medico")) return r === "MEDICO" || r === "ADMIN";
-  if (pathname.startsWith("/jugador")) return r === "JUGADOR" || r === "ADMIN";
-  if (pathname.startsWith("/directivo")) return r === "DIRECTIVO" || r === "ADMIN";
-  return true;
-}
+// ✅ Solo protegemos rutas del CT (y lo que definas explícito)
+const CT_PATHS = [/^\/ct(?:\/|$)/, /^\/api\/sessions(?:\/|$)/];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  const needsAuth =
-    PROTECTED_PREFIXES.some((p) => pathname.startsWith(p)) ||
-    pathname.startsWith("/api/sessions");
+  // ✅ Whitelist explícito para la API de jugadores (la necesitan MÉDICO y CT)
+  if (pathname.startsWith("/api/users/players")) {
+    return NextResponse.next();
+  }
 
-  if (!needsAuth) return NextResponse.next();
-  if (pathname.startsWith("/api/users/players")) return NextResponse.next();
+  const needsCT = CT_PATHS.some((r) => r.test(pathname));
+  if (!needsCT) return NextResponse.next();
 
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
   if (!token) {
@@ -43,23 +24,25 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  const role = (token as any)?.role as string | undefined;
-  if (!isAllowed(pathname, role)) {
+  const role = (token as any).role;
+  const isAdminOrCT = role === "CT" || role === "ADMIN";
+  if (!isAdminOrCT) {
     const url = req.nextUrl.clone();
-    url.pathname = homeForRole(role);
+    url.pathname =
+      role === "MEDICO" ? "/medico" :
+      role === "JUGADOR" ? "/player" :
+      role === "DIRECTIVO" ? "/directivo" : "/";
     return NextResponse.redirect(url);
   }
 
   return NextResponse.next();
 }
 
+// ✅ Sacamos '/api/users/:path*' del matcher
 export const config = {
   matcher: [
-    "/admin/:path*",
     "/ct/:path*",
-    "/medico/:path*",
-    "/jugador/:path*",
-    "/directivo/:path*",
     "/api/sessions/:path*",
+    // (no incluimos /api/users)
   ],
 };
