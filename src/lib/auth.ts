@@ -2,11 +2,10 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./prisma";
-import bcrypt from "bcryptjs";
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
-  pages: { signIn: "/login" }, // nuestra pantalla propia
+  pages: { signIn: "/login" },
 
   providers: [
     CredentialsProvider({
@@ -19,27 +18,24 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.email || !credentials?.password) return null;
 
         const email = credentials.email.toLowerCase().trim();
+
+        // 👇 Seleccionamos SOLO campos que existen en tu modelo
         const user = await prisma.user.findUnique({
           where: { email },
           select: {
             id: true,
             email: true,
             name: true,
-            role: true,            // 'ADMIN' | 'CT' | 'MEDICO' | 'JUGADOR' | 'DIRECTIVO'
-            password: true,        // texto plano (legacy/dev)
-            passwordHash: true,    // bcrypt (si existe en tu esquema)
+            role: true,    // 'ADMIN' | 'CT' | 'MEDICO' | 'JUGADOR' | 'DIRECTIVO'
+            password: true // texto plano (legacy/dev)
           },
         });
 
         if (!user) return null;
 
-        // Acepta password plano (dev) o bcrypt
-        const plainOk = !!user.password && credentials.password === user.password;
-        let hashOk = false;
-        if (user.passwordHash) {
-          try { hashOk = await bcrypt.compare(credentials.password, user.passwordHash); } catch {}
-        }
-        if (!plainOk && !hashOk) return null;
+        // Validación simple (como venías usando): 123456 etc.
+        const ok = !!user.password && credentials.password === user.password;
+        if (!ok) return null;
 
         return {
           id: String(user.id),
