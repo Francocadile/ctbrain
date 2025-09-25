@@ -33,8 +33,6 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/api/sessions");
 
   if (!needsAuth) return NextResponse.next();
-
-  // Whitelist específico si lo necesitás
   if (pathname.startsWith("/api/users/players")) return NextResponse.next();
 
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
