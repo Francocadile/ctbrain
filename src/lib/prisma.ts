@@ -6,12 +6,11 @@ declare global {
   var __prisma: PrismaClient | undefined;
 }
 
-// Reutiliza la instancia en dev para evitar demasiadas conexiones
 export const prisma = globalThis.__prisma ?? new PrismaClient();
 
 if (process.env.NODE_ENV !== "production") {
   globalThis.__prisma = prisma;
 }
 
-// ✅ Export default + named para que funcionen ambos estilos de import
+// Export default + named (por compatibilidad)
 export default prisma;
