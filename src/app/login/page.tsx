@@ -2,10 +2,28 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { routeForRole } from "../../lib/roles";
 
 type MeResponse = { ok: boolean; user?: { role?: string | null } };
 type LoginResponse = { ok?: boolean; redirectTo?: string; role?: string };
+
+// --- MOVIDO AQUÍ: routeForRole ---
+function routeForRole(role?: string): string {
+  const r = (role || "").toUpperCase();
+  switch (r) {
+    case "ADMIN":
+      return "/admin";
+    case "CT":
+      return "/ct";
+    case "MEDICO":
+      return "/medico";
+    case "JUGADOR":
+      return "/jugador";   // importante: /jugador (no /player)
+    case "DIRECTIVO":
+      return "/directivo";
+    default:
+      return "/login";
+  }
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
