@@ -1,61 +1,48 @@
 // src/lib/auth.ts
 import type { NextAuthOptions } from "next-auth";
-import Credentials from "next-auth/providers/credentials";
-import { PrismaClient } from "@prisma/client";
-import { compare } from "bcryptjs";
+import CredentialsProvider from "next-auth/providers/credentials";
+import { prisma } from "./prisma";
 
-const prisma = new PrismaClient();
-
-function isBcryptHash(s?: string | null) {
-  return !!s && (s.startsWith("$2a$") || s.startsWith("$2b$") || s.startsWith("$2y$"));
-}
+// Nota: usamos el campo `password` de la tabla User.
+// Si más adelante migrás a hash (bcrypt), acá se agrega compare().
 
 export const authOptions: NextAuthOptions = {
-  secret: process.env.NEXTAUTH_SECRET,
   session: { strategy: "jwt" },
-  pages: { signIn: "/login" },
   providers: [
-    Credentials({
-      name: "Email & Password",
+    CredentialsProvider({
+      name: "Email y contraseña",
       credentials: {
         email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
+        password: { label: "Contraseña", type: "password" },
       },
       async authorize(credentials) {
-        const email = credentials?.email?.toLowerCase().trim();
-        const password = credentials?.password ?? "";
+        const email = credentials?.email?.trim().toLowerCase() || "";
+        const password = credentials?.password || "";
         if (!email || !password) return null;
 
-        // ✅ Tu schema tiene 'password' (no 'passwordHash')
+        // Traemos lo necesario (incluye password para comparar)
         const user = await prisma.user.findUnique({
           where: { email },
           select: {
             id: true,
             email: true,
             name: true,
-            role: true,   // 'ADMIN' | 'CT' | 'MEDICO' | 'JUGADOR' | 'DIRECTIVO'
-            password: true,
+            role: true,       // 'ADMIN' | 'CT' | 'MEDICO' | 'JUGADOR' | 'DIRECTIVO'
+            password: true,   // texto plano (tu estado actual)
           },
         });
-        if (!user) return null;
 
-        const stored = user.password || "";
-        let ok = false;
+        if (!user || !user.password) return null;
 
-        // Si es un hash bcrypt, comparamos con bcrypt
-        if (isBcryptHash(stored)) {
-          ok = await compare(password, stored);
-        } else {
-          // Fallback: contraseña en texto (legacy/dev)
-          ok = password === stored;
-        }
-
+        // Comparación simple (texto plano). Si migrás a bcrypt:
+        // const ok = await compare(password, user.password);
+        const ok = user.password === password;
         if (!ok) return null;
 
         return {
           id: String(user.id),
           email: user.email,
-          name: user.name || "",
+          name: user.name ?? undefined,
           role: user.role,
         } as any;
       },
@@ -63,12 +50,21 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user) token.role = (user as any).role;
+      if (user) {
+        token.role = (user as any).role;
+      }
       return token;
     },
     async session({ session, token }) {
-      if (session.user) (session.user as any).role = (token as any).role;
+      // Exponemos role en session.user.role
+      if (session.user) {
+        (session.user as any).id = token.sub;
+        (session.user as any).role = token.role;
+      }
       return session;
     },
+  },
+  pages: {
+    signIn: "/login",
   },
 };
