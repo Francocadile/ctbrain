@@ -3,12 +3,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { signIn, getSession } from "next-auth/react";
 import { routeForRole } from "@/lib/roles";
-
-export const dynamic = "force-dynamic";
-
-type MeResponse = { ok: boolean; user?: { role?: string | null } };
-type LoginResponse = { ok?: boolean; redirectTo?: string; role?: string };
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -20,47 +16,32 @@ export default function LoginPage() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch("/api/auth/me", { cache: "no-store" });
-        const j = (await r.json().catch(() => ({}))) as MeResponse;
-        const role = j?.user?.role || undefined;
-        if (j?.ok && role) window.location.href = routeForRole(role);
+        const s = await getSession();
+        const role = (s?.user as any)?.role as string | undefined;
+        if (role) window.location.href = routeForRole(role);
       } catch {}
     })();
   }, []);
-
-  function getCallbackUrl(): string | null {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const cb = params.get("callbackUrl");
-      return cb && cb.startsWith("/") ? cb : null; // sanitiza
-    } catch {
-      return null;
-    }
-  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password: pw }),
+      const res = await signIn("credentials", {
+        email,
+        password: pw,
+        redirect: false, // manejamos el redirect acá
       });
 
-      if (!res.ok) {
-        const msg = await res.text().catch(() => "");
-        throw new Error(msg || "Credenciales inválidas");
+      if (!res || !res.ok) {
+        throw new Error("Credenciales inválidas");
       }
 
-      const data = (await res.json().catch(() => ({}))) as LoginResponse;
-      const cb = getCallbackUrl();
-      const next =
-        cb ||
-        data?.redirectTo ||
-        (data?.role ? routeForRole(data.role) : "/ct");
-
+      // Recuperamos la session para conocer el rol y redirigir
+      const s = await getSession();
+      const role = (s?.user as any)?.role as string | undefined;
+      const next = role ? routeForRole(role) : "/ct";
       window.location.href = next;
     } catch (e: any) {
       setErr(e?.message || "No se pudo iniciar sesión");
