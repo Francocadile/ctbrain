@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-// Prefijos protegidos por rol
 const PROTECTED_PREFIXES = ["/admin", "/ct", "/medico", "/jugador", "/directivo"] as const;
 
 function homeForRole(role?: string) {
@@ -35,8 +34,10 @@ export async function middleware(req: NextRequest) {
 
   if (!needsAuth) return NextResponse.next();
 
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  // Whitelist específico si lo necesitás
+  if (pathname.startsWith("/api/users/players")) return NextResponse.next();
 
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
   if (!token) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
@@ -45,7 +46,6 @@ export async function middleware(req: NextRequest) {
   }
 
   const role = (token as any)?.role as string | undefined;
-
   if (!isAllowed(pathname, role)) {
     const url = req.nextUrl.clone();
     url.pathname = homeForRole(role);
