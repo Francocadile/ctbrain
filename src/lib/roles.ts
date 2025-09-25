@@ -1,10 +1,11 @@
 // src/lib/roles.ts
 export function routeForRole(role?: string) {
-  const r = (role || "").toUpperCase();
-  if (r === "ADMIN") return "/admin";
-  if (r === "CT") return "/ct";
-  if (r === "MEDICO") return "/medico";
-  if (r === "JUGADOR") return "/jugador";
-  if (r === "DIRECTIVO") return "/directivo";
-  return "/login";
+  switch ((role || "").toUpperCase()) {
+    case "ADMIN": return "/admin";
+    case "CT": return "/ct";
+    case "MEDICO": return "/medico";
+    case "JUGADOR": return "/jugador";
+    case "DIRECTIVO": return "/directivo";
+    default: return "/login";
+  }
 }
