@@ -1,6 +1,4 @@
 // src/lib/roles.ts
-export type Role = "ADMIN" | "CT" | "MEDICO" | "JUGADOR" | "DIRECTIVO";
-
 export function routeForRole(role?: string) {
   const r = (role || "").toUpperCase();
   if (r === "ADMIN") return "/admin";
