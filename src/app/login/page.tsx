@@ -14,21 +14,16 @@ export default function LoginPage() {
   const [err, setErr] = useState<string | null>(null);
   const [callbackUrl, setCallbackUrl] = useState<string | undefined>(undefined);
 
-  // Lee callbackUrl sin useSearchParams (evita el error de Suspense en build)
   useEffect(() => {
     try {
       const u = new URL(window.location.href);
-      const c = u.searchParams.get("callbackUrl") || undefined;
-      setCallbackUrl(c);
+      setCallbackUrl(u.searchParams.get("callbackUrl") || undefined);
     } catch {}
   }, []);
 
-  // Ya logueado → redirigir a su panel
   useEffect(() => {
     const role = (session?.user as any)?.role as string | undefined;
-    if (role) {
-      window.location.href = callbackUrl || routeForRole(role);
-    }
+    if (role) window.location.href = callbackUrl || routeForRole(role);
   }, [session, callbackUrl]);
 
   async function onSubmit(e: React.FormEvent) {
@@ -45,15 +40,8 @@ export default function LoginPage() {
 
     setLoading(false);
 
-    if (!res) {
-      setErr("No se pudo conectar con el servidor.");
-      return;
-    }
-    if (res.ok) {
-      window.location.href = res.url || "/";
-      return;
-    }
-    // NextAuth pone detalle en res.error
+    if (!res) return setErr("No se pudo conectar con el servidor.");
+    if (res.ok) return (window.location.href = res.url || "/");
     setErr(res.error || "Credenciales inválidas");
   }
 
@@ -94,9 +82,7 @@ export default function LoginPage() {
             type="submit"
             disabled={loading}
             className={`w-full rounded-xl px-4 py-3 text-sm font-semibold ${
-              loading
-                ? "bg-gray-200 text-gray-500"
-                : "bg-black text-white hover:opacity-90"
+              loading ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
             }`}
           >
             {loading ? "Ingresando…" : "Ingresar"}
