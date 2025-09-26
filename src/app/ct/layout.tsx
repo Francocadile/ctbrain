@@ -67,11 +67,11 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
             </NavItem>
           </li>
 
-          {/* ÚNICO ítem para Rpe unificado */}
+          {/* ÚNICO ítem para RPE unificado */}
           <li>
             <NavItem
-              href={"/ct/metrics/Rpe" satisfies Route}
-              active={isActive("/ct/metrics/Rpe")}
+              href={"/ct/metrics/RPE" satisfies Route}
+              active={isActive("/ct/metrics/RPE")}
             >
               Rpe
             </NavItem>
