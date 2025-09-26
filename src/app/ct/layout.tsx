@@ -63,7 +63,7 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
               href={"/ct/metrics/wellness" satisfies Route}
               active={isActive("/ct/metrics/wellness")}
             >
-              Wellness (día)
+              Wellness
             </NavItem>
           </li>
 
