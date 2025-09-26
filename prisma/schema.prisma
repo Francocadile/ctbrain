@@ -192,6 +192,7 @@ model RPEEntry {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   date      DateTime
+  session   Int      @default(1) // 1 = turno mañana, 2 = turno tarde, etc.
   rpe       Int
   duration  Int?
   load      Int?
@@ -199,7 +200,7 @@ model RPEEntry {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([userId, date])
+  @@unique([userId, date, session], name: "userId_date_session")
   @@index([date])
   @@index([userId, date])
 }
