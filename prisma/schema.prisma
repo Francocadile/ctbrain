@@ -192,7 +192,7 @@ model RPEEntry {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   date      DateTime
-  session   Int      @default(1) // 1 = turno mañana, 2 = turno tarde, etc.
+  session   Int      @default(1)   // ← multi-sesión por día
   rpe       Int
   duration  Int?
   load      Int?
@@ -202,7 +202,7 @@ model RPEEntry {
 
   @@unique([userId, date, session], name: "userId_date_session")
   @@index([date])
-  @@index([userId, date])
+  @@index([userId, date, session])
 }
 
 model WellnessEntry {
