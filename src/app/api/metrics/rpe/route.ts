@@ -29,6 +29,7 @@ function clamp010(n: any): number {
  * Query:
  * - date=YYYY-MM-DD (opcional) → devuelve entradas de ese día
  * - userId=... (opcional)
+ * - session=1..N (opcional)
  * Sin date → últimas 30 entradas (global).
  * Devuelve cada fila con userName para CT.
  */
@@ -37,6 +38,9 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const date = searchParams.get("date") || "";
     const userId = searchParams.get("userId") || undefined;
+    const session = searchParams.get("session")
+      ? Number(searchParams.get("session"))
+      : undefined;
 
     if (date) {
       const start = toUTCStart(date);
@@ -45,9 +49,10 @@ export async function GET(req: Request) {
         where: {
           date: { gte: start, lt: end },
           ...(userId ? { userId } : {}),
+          ...(session ? { session } : {}),
         },
         include: { user: { select: { name: true, email: true } } },
-        orderBy: [{ date: "desc" }],
+        orderBy: [{ date: "desc" }, { session: "asc" }],
       });
       const mapped = rows.map((r) => ({
         ...r,
@@ -58,7 +63,7 @@ export async function GET(req: Request) {
 
     const rows = await prisma.rPEEntry.findMany({
       include: { user: { select: { name: true, email: true } } },
-      orderBy: [{ date: "desc" }],
+      orderBy: [{ date: "desc" }, { session: "asc" }],
       take: 30,
     });
     const mapped = rows.map((r) => ({
@@ -77,28 +82,32 @@ export async function GET(req: Request) {
  * {
  *   userId: string,
  *   date: "YYYY-MM-DD",
+ *   session?: number (default 1),
  *   rpe: 0..10,
  *   duration?: number // opcional (min)
  * }
- * Unicidad: (userId, date). Recalcula load si hay duration.
+ * Unicidad: (userId, date, session). Recalcula load si hay duration.
  */
 export async function POST(req: Request) {
   try {
     const b = await req.json();
     const userId = String(b?.userId || "").trim();
     const dateStr = String(b?.date || "").trim();
+    const session = Number.isInteger(b?.session) ? Number(b.session) : 1;
+
     if (!userId || !dateStr) {
       return new NextResponse("userId y date requeridos", { status: 400 });
     }
     const start = toUTCStart(dateStr);
     const rpe = clamp010(b?.rpe);
-    const duration = b?.duration != null ? Math.max(0, Number(b.duration)) : null;
+    const duration =
+      b?.duration != null ? Math.max(0, Number(b.duration)) : null;
     const load = duration != null ? rpe * duration : null;
 
     const entry = await prisma.rPEEntry.upsert({
-      where: { userId_date: { userId, date: start } },
+      where: { userId_date_session: { userId, date: start, session } },
       update: { rpe, duration, load },
-      create: { userId, date: start, rpe, duration, load },
+      create: { userId, date: start, session, rpe, duration, load },
       include: { user: { select: { name: true, email: true } } },
     });
 
@@ -110,3 +119,4 @@ export async function POST(req: Request) {
     return new NextResponse(e?.message || "Error", { status: 500 });
   }
 }
+
