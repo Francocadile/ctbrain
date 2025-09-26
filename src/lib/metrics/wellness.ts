@@ -1,118 +1,106 @@
 // src/lib/metrics/wellness.ts
 
-/** Tipado mínimo compatible con las UIs CT/Jugador */
+/** -------- Tipos -------- */
 export type WellnessRaw = {
-  userId?: string;
-  userName?: string;
+  // Identidad
+  userName?: string | null;
   user?: { name?: string | null; email?: string | null } | null;
 
-  // Compat con comparaciones por nombre/clave:
-  playerKey?: string | null;
+  // Ítems (todos opcionales porque pueden faltar en la carga)
+  sleepHours?: number | null;       // horas de sueño
+  muscleSoreness?: number | null;   // 1..5 (1 = muy bien, 5 = muy mal) — ajustá si tu escala es otra
+  stress?: number | null;           // 1..5
+  fatigue?: number | null;          // 1..5
+  mood?: number | null;             // 1..5
 
-  date?: string; // YYYY-MM-DD
-  sleepQuality?: number;   // 1..5
-  sleepHours?: number | null;
-  fatigue?: number;        // 1..5
-  muscleSoreness?: number; // 1..5
-  stress?: number;         // 1..5
-  mood?: number;           // 1..5
+  // Otros
   comment?: string | null;
-
-  total?: number | null;   // opcional (precalculado)
 };
 
-/** Baseline usado en la UI (incluye n) */
-export type Baseline = { mean: number; sd: number; n: number };
-
-/** Utils de fecha */
-export function toYMD(d: Date) { return d.toISOString().slice(0, 10); }
-export function fromYMD(s: string) {
-  const [y, m, dd] = s.split("-").map(Number);
-  return new Date(y, (m || 1) - 1, dd || 1);
+/** -------- Utils de fecha -------- */
+export function toYMD(d: Date): string {
+  return d.toISOString().slice(0, 10);
 }
-export function addDays(d: Date, days: number) {
+export function fromYMD(s: string): Date {
+  const [y, m, dd] = s.split("-").map(Number);
+  return new Date(y, (m ?? 1) - 1, dd ?? 1);
+}
+export function addDays(d: Date, days: number): Date {
   const x = new Date(d);
   x.setDate(x.getDate() + days);
   return x;
 }
-/** Acepta Date o string (YYYY-MM-DD) y devuelve YYYY-MM-DD de ayer */
-export function yesterday(base: Date | string = new Date()) {
-  const b = typeof base === "string" ? fromYMD(base) : base;
-  return toYMD(addDays(b, -1));
+export function yesterday(d: Date): Date {
+  return addDays(d, -1);
 }
 
-/** Estadística simple */
-export function mean(nums: number[]): number {
-  const v = nums.filter((x) => Number.isFinite(x));
+/** -------- Estadísticos simples -------- */
+export function mean(arr: number[]): number {
+  const v = arr.filter((x) => Number.isFinite(x));
   return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0;
 }
-export function sdSample(nums: number[]): number {
-  const v = nums.filter((x) => Number.isFinite(x));
-  const n = v.length;
-  if (n <= 1) return 0;
+export function sdSample(arr: number[]): number {
+  const v = arr.filter((x) => Number.isFinite(x));
+  if (v.length < 2) return 0;
   const m = mean(v);
-  const varS = v.reduce((acc, x) => acc + (x - m) ** 2, 0) / (n - 1);
-  return Math.sqrt(varS);
+  const s2 = v.reduce((a, b) => a + (b - m) ** 2, 0) / (v.length - 1);
+  return Math.sqrt(s2);
 }
 
-/** Calcula un baseline simple a partir de una serie */
-export function computeBaseline(series: number[]): Baseline {
-  const clean = series.filter((v) => Number.isFinite(v));
-  return { mean: mean(clean), sd: sdSample(clean), n: clean.length };
-}
-
-/**
- * computeSDW: índice simple de bienestar.
- * Usa 5 dimensiones (1–5): fatiga, dolor muscular, estrés, ánimo, calidad de sueño.
- * Devuelve z-score aproximado centrado en 3 (sd~1).
+/** -------- SDW (score compuesto de wellness) --------
+ * Implementación base: promedia ítems 1..5 (invertidos para que ↑ = mejor),
+ * y agrega un pequeño ajuste por horas de sueño si está disponible.
+ * Si tu escala es distinta, podés reemplazar esta función sin romper el resto.
  */
-export function computeSDW(row: WellnessRaw): number {
-  const vals = [
-    Number(row.fatigue ?? 0),
-    Number(row.muscleSoreness ?? 0),
-    Number(row.stress ?? 0),
-    Number(row.mood ?? 0),
-    Number(row.sleepQuality ?? 0),
-  ].filter((x) => x > 0);
+export function computeSDW(r: WellnessRaw): number {
+  // Invertimos ítems 1..5 para que 5=mejor → 5 - (v - 1) = 6 - v
+  const inv = (v: number | null | undefined) =>
+    v == null ? null : 6 - Number(v);
 
-  if (!vals.length) return 0;
+  const parts: number[] = [];
+  const ms = inv(r.muscleSoreness ?? null);
+  const st = inv(r.stress ?? null);
+  const fa = inv(r.fatigue ?? null);
+  const mo = inv(r.mood ?? null);
 
-  const avg = mean(vals); // 1..5
-  const z = (avg - 3) / 1; // sd aprox = 1
-  return Number(z.toFixed(2));
+  if (ms != null) parts.push(ms);
+  if (st != null) parts.push(st);
+  if (fa != null) parts.push(fa);
+  if (mo != null) parts.push(mo);
+
+  // Ajuste por sueño (si existe): normalizamos a 0..5 con pivote en 7h
+  if (r.sleepHours != null) {
+    const h = Number(r.sleepHours);
+    // Clamp 0..10, luego map a 0..5 (aprox)
+    const clamped = Math.max(0, Math.min(10, h));
+    const sleepScore = Math.max(0, Math.min(5, (clamped / 10) * 5));
+    parts.push(sleepScore);
+  }
+
+  if (!parts.length) return 0;
+  // Escala final ≈ 0..5
+  const score = mean(parts);
+  // Redondeamos a 2 decimales para estabilidad visual
+  return Number(score.toFixed(2));
 }
 
-/** Color por z-score (negativo=mejor; positivo=alerta). Acepta null. */
-export function zToColor(z: number | null | undefined): string {
-  if (z == null || !Number.isFinite(z)) return "#9ca3af"; // gray-400
-  if (z >= 1.0) return "#ef4444";   // red-500
-  if (z >= 0.5) return "#f59e0b";   // amber-500
-  if (z <= -0.5) return "#10b981";  // emerald-500
-  return "#6b7280";                 // gray-500
+/** -------- Colores por Z-score (opcional) -------- */
+export function zToColor(z: number | null): string {
+  if (z == null || !Number.isFinite(z)) return "bg-gray-100";
+  if (z <= -1.0) return "bg-red-100";
+  if (z <= -0.5) return "bg-amber-100";
+  if (z >= 1.0) return "bg-emerald-100";
+  if (z >= 0.5) return "bg-emerald-50";
+  return "bg-gray-50";
 }
 
-/**
- * Reglas MVP de alerta aplicadas al color base.
- * Firma compatible con tu UI: (baseColor, row) => string (color final).
+/** -------- Reglas de override (opcional) --------
+ * Podés aplicar banderines/ajustes de color segun el registro.
+ * En este stub, devolvemos el color tal cual.
  */
-export function applyOverrides(baseColor: string, row: WellnessRaw): string {
-  let final = baseColor;
-
-  const stress = Number(row.stress ?? 0);
-  const soreness = Number(row.muscleSoreness ?? 0);
-  const fatigue = Number(row.fatigue ?? 0);
-  const mood = Number(row.mood ?? 0);
-  const sleepQ = Number(row.sleepQuality ?? 0);
-
-  const anyAlert =
-    stress >= 4 ||
-    soreness >= 4 ||
-    fatigue >= 4 ||
-    (mood > 0 && mood <= 2) ||
-    (sleepQ > 0 && sleepQ <= 2);
-
-  // Si hay alerta clínica, priorizamos rojo.
-  if (anyAlert) final = "#ef4444"; // red-500
-
-  return final;
+export function applyOverrides(baseColor: string, _r: WellnessRaw): string {
+  return baseColor;
 }
+
+/** -------- Baseline (media, sd, n) -------- */
+export type Baseline = { mean: number; sd: number; n: number };
