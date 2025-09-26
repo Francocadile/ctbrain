@@ -1,6 +1,6 @@
+// src/app/jugador/rpe/page.tsx
 "use client";
 import { useEffect, useState } from "react";
-// Si no tenés estos helpers, podés reemplazar por tu auth de NextAuth:
 import { fetchSessionUser, clearPlayerName } from "@/lib/player";
 
 // Util simple
@@ -15,17 +15,17 @@ type BorgStep = {
 };
 
 const BORG_STEPS: BorgStep[] = [
-  { value: 0,  label: "REPOSO",                tone: "bg-sky-300" },
-  { value: 1,  label: "MUY MUY SUAVE",         tone: "bg-sky-300" },
-  { value: 2,  label: "MUY SUAVE",             tone: "bg-sky-300" },
-  { value: 3,  label: "SUAVE",                 tone: "bg-lime-200" },
-  { value: 4,  label: "ALGO DURO",             tone: "bg-lime-300" },
-  { value: 5,  label: "DURO",                  tone: "bg-yellow-200" },
-  { value: 6,  label: "MÁS DURO",              tone: "bg-yellow-300" },
-  { value: 7,  label: "MUY DURO",              tone: "bg-orange-300" },
-  { value: 8,  label: "MUY MUY DURO",          tone: "bg-orange-400" },
-  { value: 9,  label: "MÁXIMO",                tone: "bg-red-500" },
-  { value: 10, label: "EXTREMADAMENTE MÁXIMO", tone: "bg-red-600" },
+  { value: 0,  label: "REPOSO",                      tone: "bg-sky-300" },
+  { value: 1,  label: "MUY MUY SUAVE",               tone: "bg-sky-300" },
+  { value: 2,  label: "MUY SUAVE",                   tone: "bg-sky-300" },
+  { value: 3,  label: "SUAVE",                       tone: "bg-lime-200" },
+  { value: 4,  label: "ALGO DURO",                   tone: "bg-lime-300" },
+  { value: 5,  label: "DURO",                        tone: "bg-yellow-200" },
+  { value: 6,  label: "MÁS DURO",                    tone: "bg-yellow-300" },
+  { value: 7,  label: "MUY DURO",                    tone: "bg-orange-300" },
+  { value: 8,  label: "MUY MUY DURO",                tone: "bg-orange-400" },
+  { value: 9,  label: "MÁXIMO",                      tone: "bg-red-500" },
+  { value: 10, label: "EXTREMADAMENTE MÁXIMO",       tone: "bg-red-600" },
 ];
 
 export default function RPEJugador() {
@@ -35,7 +35,6 @@ export default function RPEJugador() {
   const [loadingIdentity, setLoadingIdentity] = useState(true);
 
   const [rpe, setRpe] = useState<number | null>(null);
-  const [session, setSession] = useState<number>(1); // 🆕 multi-sesión
   const [loaded, setLoaded] = useState(false);
   const [sent, setSent] = useState(false);
 
@@ -60,7 +59,7 @@ export default function RPEJugador() {
     async function fetchExisting() {
       if (!userId && !name) { setLoaded(true); return; }
       const qp = userId ? `userId=${encodeURIComponent(userId)}` : `playerKey=${encodeURIComponent(name)}`;
-      const url = `/api/metrics/rpe?date=${date}&${qp}&session=${session}`;
+      const url = `/api/metrics/rpe?date=${date}&${qp}`;
       const res = await fetch(url, { cache: "no-store" });
       const data = res.ok ? await res.json() : [];
       if (Array.isArray(data) && data.length) {
@@ -74,7 +73,7 @@ export default function RPEJugador() {
       setLoaded(true);
     }
     fetchExisting();
-  }, [date, userId, name, session]);
+  }, [date, userId, name]);
 
   async function submit() {
     if (loadingIdentity) { alert("Cargando identidad…"); return; }
@@ -83,10 +82,9 @@ export default function RPEJugador() {
 
     const body = {
       date,
-      userId,           // requerido por API
-      playerKey: name,  // compat opcional
+      userId,           // tu API lo requiere
+      playerKey: name,  // compat
       rpe: Number(rpe),
-      session: Number(session || 1),
     };
 
     const res = await fetch("/api/metrics/rpe", {
@@ -105,7 +103,7 @@ export default function RPEJugador() {
   }
 
   function signOut() {
-    clearPlayerName?.();
+    clearPlayerName();
     window.location.href = "/api/auth/signout?callbackUrl=/jugador";
   }
 
@@ -123,7 +121,7 @@ export default function RPEJugador() {
       </p>
 
       {/* Fecha + identidad */}
-      <div className="grid md:grid-cols-3 gap-3">
+      <div className="grid md:grid-cols-2 gap-3">
         <div>
           <label className="text-[12px] text-gray-500">Fecha</label>
           <input
@@ -132,18 +130,6 @@ export default function RPEJugador() {
             value={date}
             onChange={(e) => setDate(e.target.value)}
           />
-        </div>
-        <div>
-          <label className="text-[12px] text-gray-500">Sesión del día</label>
-          <select
-            className="w-full rounded-md border px-2 py-1.5"
-            value={session}
-            onChange={(e) => setSession(Number(e.target.value))}
-          >
-            <option value={1}>Sesión 1</option>
-            <option value={2}>Sesión 2</option>
-            <option value={3}>Sesión 3</option>
-          </select>
         </div>
         <div>
           <label className="text-[12px] text-gray-500">Tu nombre</label>
@@ -178,7 +164,7 @@ export default function RPEJugador() {
 
         {loaded && sent && (
           <div className="mt-3 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2 py-1">
-            Ya enviaste tu RPE en esta sesión. Podés corregirlo y volver a <b>Guardar</b>.
+            Ya enviaste tu RPE hoy. Podés corregirlo y volver a <b>Guardar</b>.
           </div>
         )}
 
