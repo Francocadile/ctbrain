@@ -29,7 +29,7 @@ function clamp010(n: any): number {
  * Query:
  * - date=YYYY-MM-DD (opcional) → devuelve entradas de ese día
  * - userId=... (opcional)
- * - session=1..N (opcional)
+ * - session=N (opcional)
  * Sin date → últimas 30 entradas (global).
  * Devuelve cada fila con userName para CT.
  */
@@ -82,9 +82,9 @@ export async function GET(req: Request) {
  * {
  *   userId: string,
  *   date: "YYYY-MM-DD",
- *   session?: number (default 1),
  *   rpe: 0..10,
  *   duration?: number // opcional (min)
+ *   session?: number  // opcional, default = 1
  * }
  * Unicidad: (userId, date, session). Recalcula load si hay duration.
  */
