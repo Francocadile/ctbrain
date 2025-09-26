@@ -188,11 +188,21 @@ model Exercise {
 
 model RPEEntry {
   id        String   @id @default(cuid())
+
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   date      DateTime
-  session   Int      @default(1)   // ← multi-sesión por día
+
+  /// Índice de sesión dentro del día (1,2,3...). Determina la unicidad.
+  session   Int      @default(1)
+
+  /// Etiqueta opcional visible (p.ej. "AM", "PM", "Gimnasio", "Campo")
+  sessionLabel String?
+
+  /// Referencia opcional a una sesión externa (planner/schedule)
+  sessionUid   String?
+
   rpe       Int
   duration  Int?
   load      Int?
@@ -203,6 +213,8 @@ model RPEEntry {
   @@unique([userId, date, session], name: "userId_date_session")
   @@index([date])
   @@index([userId, date, session])
+  @@index([date, session])
+  @@index([sessionUid])
 }
 
 model WellnessEntry {
@@ -246,7 +258,7 @@ model ClinicalEntry {
   id        String   @id @default(cuid())
 
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], references: [id], onDelete: Cascade)
 
   date      DateTime
   status    ClinicalStatus
