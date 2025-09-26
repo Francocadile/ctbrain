@@ -109,10 +109,14 @@ function RPECTUnified() {
   const [saving, setSaving] = useState(false);
   const [injuriesToday, setInjuriesToday] = useState<Record<string, InjuryRow>>({});
 
-  // KPIs de rango (día → tarjetas en tab KPIs semanales ya no existe, lo mantenemos acotado a “semana” abajo)
+  // (quedan hooks para serie corta si más adelante los necesitás)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [rangeDays, setRangeDays] = useState<7 | 14 | 21>(7);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [rangeLoading, setRangeLoading] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [dailyTeamSRPE, setDailyTeamSRPE] = useState<number[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [srpeHistBins, setSrpeHistBins] = useState<number[]>([0, 0, 0, 0, 0]);
 
   // QuickView
@@ -341,7 +345,7 @@ function RPECTUnified() {
     }
   }
 
-  /* ======= Estado Semana (agrego aquí la lógica de la antigua /semana) ======= */
+  /* ======= Estado Semana ======= */
   type RPERaw = {
     id: string;
     user?: { name?: string; email?: string };
@@ -358,7 +362,7 @@ function RPECTUnified() {
     userName: string;
     daysAU: number[];     // 7 valores L..D
     totalAU: number;      // suma semanal
-    acute7: number;       // = totalAU (semana seleccionada)
+    acute7: number;       // = totalAU
     chronic28: number;    // promedio 28d * 7
     acwr: number | null;  // acute7 / chronic28
     mean: number;         // media diaria semana
@@ -838,7 +842,7 @@ function RPECTUnified() {
           ) : rows.length === 0 ? (
             <div className="p-3 text-gray-500 italic">Sin datos hoy</div>
           ) : (
-            <ul className="mt-2 grid md:grid-cols-2 lg:grid-cols-3 gap-2">
+            <ul className="mt-2 grid md:grid-cols-2 lg:gridCols-3 gap-2">
               {rows
                 .slice()
                 .sort((a, b) => (a.userName || "").localeCompare(b.userName || "") || srpeOf(b) - srpeOf(a))
