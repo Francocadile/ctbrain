@@ -1,4 +1,3 @@
-// src/app/ct/metrics/rpe/page.tsx
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -28,11 +27,6 @@ type InjuryRow = { userId: string; userName: string; status: string };
 function toYMD(d: Date) { return d.toISOString().slice(0, 10); }
 function fromYMD(s: string) { const [y,m,dd] = s.split("-").map(Number); return new Date(y, m - 1, dd); }
 function addDays(d: Date, days: number) { const x = new Date(d); x.setDate(x.getDate() + days); return x; }
-
-/** ---------- nombre en Wellness (sin playerKey) ---------- */
-function nameOfW(w: WellnessRaw): string {
-  return w.userName || w.user?.name || w.user?.email || "—";
-}
 
 /** ---------- barras KPIs ---------- */
 function BarsInline({
@@ -302,7 +296,14 @@ function RPECT() {
       const sdwSeries: number[] = [];
       for (let i = 0; i < daysW.length; i++) {
         const arr = wData[i] || [];
-        const row = arr.find((it) => nameOfW(it) === playerName);
+        const row = arr.find(
+          (it) =>
+            (it.userName ||
+              it.user?.name ||
+              it.user?.email ||
+              it.playerKey ||
+              "—") === playerName
+        );
         sdwSeries.push(row ? Number(computeSDW(row).toFixed(2)) : 0);
       }
       setQuickSDW7(sdwSeries);
@@ -374,7 +375,7 @@ function RPECT() {
       {/* Respuestas */}
       {tab === "respuestas" && (
         <>
-          <section className="rounded-2xl border bg-white p-3 flex flex-wrap items-center gap-2">
+          <section className="rounded-xl border bg-white p-3 flex flex-wrap items-center gap-2">
             <div className="text-sm font-medium mr-2">
               Acciones:{" "}
               <HelpTip text="“Aplicar a vacíos” asigna X minutos a filas sin duración. “Limpiar” borra las duraciones del día." />
