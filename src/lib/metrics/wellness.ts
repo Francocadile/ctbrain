@@ -21,25 +21,17 @@ export type WellnessRaw = {
   total?: number | null;   // opcional (precalculado)
 };
 
-/** Baseline (promedio y desviación) que algunas vistas importan */
-export type Baseline = { mean: number; sd: number };
+/** Baseline usado en la UI (incluye n) */
+export type Baseline = { mean: number; sd: number; n: number };
 
 /** Utils de fecha */
-export function toYMD(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
+export function toYMD(d: Date) { return d.toISOString().slice(0, 10); }
 export function fromYMD(s: string) {
   const [y, m, dd] = s.split("-").map(Number);
   return new Date(y, (m || 1) - 1, dd || 1);
 }
-export function addDays(d: Date, days: number) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + days);
-  return x;
-}
-export function yesterday(base = new Date()) {
-  return toYMD(addDays(base, -1));
-}
+export function addDays(d: Date, days: number) { const x = new Date(d); x.setDate(x.getDate() + days); return x; }
+export function yesterday(base = new Date()) { return toYMD(addDays(base, -1)); }
 
 /** Estadística simple */
 export function mean(nums: number[]): number {
@@ -57,7 +49,8 @@ export function sdSample(nums: number[]): number {
 
 /** Calcula un baseline simple a partir de una serie */
 export function computeBaseline(series: number[]): Baseline {
-  return { mean: mean(series), sd: sdSample(series) };
+  const clean = series.filter((v) => Number.isFinite(v));
+  return { mean: mean(clean), sd: sdSample(clean), n: clean.length };
 }
 
 /**
