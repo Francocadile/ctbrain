@@ -1,4 +1,3 @@
-// src/app/ct/metrics/wellness/page.tsx
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -12,6 +11,7 @@ import {
   toYMD,
   fromYMD,
   addDays,
+  yesterday,
   mean,
   sdSample,
   computeSDW,
@@ -21,33 +21,10 @@ import {
 
 export const dynamic = "force-dynamic";
 
-/** ---------- utils fecha ---------- */
-function yesterdayYMD(ymd: string) {
-  return toYMD(addDays(fromYMD(ymd), -1));
-}
-
 /** ---------- Tipos ---------- */
-/**
- * Algunos proyectos traen WellnessRaw sin tipar campos como sleepQuality, etc.
- * Para evitar errores de TS durante el build, explicitamos los que usamos aquí como opcionales.
- */
 type DayRow = WellnessRaw & {
-  // extras internos
   _userName: string;
   _sdw: number;
-
-  // campos que usamos en la tabla/CSV (opcionales por seguridad)
-  id?: string | number;
-  date?: string;
-  sleepQuality?: number;
-  sleepHours?: number;
-  fatigue?: number;
-  muscleSoreness?: number;
-  stress?: number;
-  mood?: number;
-  comment?: string;
-  userName?: string;
-  user?: { name?: string; email?: string } | null;
 };
 
 type Alert = {
@@ -139,12 +116,6 @@ function BarsInline({
   );
 }
 
-/** ---------- nombre consistente ---------- */
-function nameOf(r: WellnessRaw): string {
-  // @ts-expect-error – distintos backends pueden no tipar user/userName
-  return r.userName || r.user?.name || r.user?.email || "Jugador";
-}
-
 /** ---------- Componente ---------- */
 function WellnessCT_Day() {
   type Tab = "respuestas" | "kpis" | "reportes";
@@ -202,10 +173,9 @@ function WellnessCT_Day() {
     const arr = await res.json();
     if (!Array.isArray(arr)) return [];
     return arr.map((r: any) => {
-      const srpeVal =
-        r.load ?? r.srpe ?? Number(r.rpe ?? 0) * Number(r.duration ?? 0) ?? 0;
+      const srpeVal = r.load ?? r.srpe ?? Number(r.rpe ?? 0) * Number(r.duration ?? 0) ?? 0;
       return {
-        userName: r.userName || r.user?.name || r.user?.email || "Jugador",
+        userName: r.userName || r.playerKey || r.user?.name || r.user?.email || "Jugador",
         srpe: Number(srpeVal),
       };
     });
@@ -229,7 +199,7 @@ function WellnessCT_Day() {
     // Día actual
     const today = await fetchWellnessDay(date);
     const todayFixed: DayRow[] = today.map((it: any) => {
-      const nm = nameOf(it);
+      const nm = it.userName || it.user?.name || it.user?.email || it.playerKey || "—";
       return { ...it, _userName: nm, _sdw: computeSDW(it) };
     });
 
@@ -248,7 +218,7 @@ function WellnessCT_Day() {
     for (let di = 0; di < prevDataChunks.length; di++) {
       const dayArr = prevDataChunks[di];
       for (const it of dayArr) {
-        const nm = nameOf(it);
+        const nm = it.userName || it.user?.name || it.user?.email || it.playerKey || "—";
         const sdw = computeSDW(it);
         if (!map[nm]) map[nm] = [];
         map[nm].push(sdw);
@@ -266,7 +236,7 @@ function WellnessCT_Day() {
     }
 
     // sRPE de ayer
-    const ysrpe = await fetchRPE(yesterdayYMD(date));
+    const ysrpe = await fetchRPE(yesterday(date));
     const srpeMap: Record<string, number> = {};
     for (const r of ysrpe) srpeMap[r.userName] = r.srpe || 0;
 
@@ -281,15 +251,15 @@ function WellnessCT_Day() {
 
     // alertas
     const alertsList: Alert[] = [];
-    for (const r of withStats as any[]) {
-      const base = r._base as Baseline;
-      const z = r._z as number | null;
-      const color = r._color as "green" | "yellow" | "red";
+    for (const r of withStats) {
+      const base = (r as any)._base as Baseline;
+      const z = (r as any)._z as number | null;
+      const color = (r as any)._color as "green" | "yellow" | "red";
 
       const overrides: string[] = [];
       if ((r.sleepHours ?? null) !== null && (r.sleepHours as number) < 4) overrides.push("Sueño <4h");
-      if (r.muscleSoreness != null && r.muscleSoreness <= 2) overrides.push("Dolor muscular ≤2");
-      if (r.stress != null && r.stress <= 2) overrides.push("Estrés ≤2");
+      if (r.muscleSoreness <= 2) overrides.push("Dolor muscular ≤2");
+      if (r.stress <= 2) overrides.push("Estrés ≤2");
 
       const srpe = srpeYesterday[r._userName] ?? 0;
 
@@ -346,7 +316,7 @@ function WellnessCT_Day() {
     const sdwAvg = sdws.length ? mean(sdws) : 0;
 
     let reds = 0, yellows = 0, greens = 0;
-    const zVals: number[] = [];
+    let zVals: number[] = [];
     for (const r of rowsToday as any[]) {
       const c = r._color as "green" | "yellow" | "red";
       if (c === "red") reds++; else if (c === "yellow") yellows++; else greens++;
@@ -388,21 +358,21 @@ function WellnessCT_Day() {
     const lines = [header.join(",")];
 
     for (const r of filtered) {
-      const wk = r.date ?? date; // fallback robusto
+      const wk = r.date;
       const color = (r as any)._color as string;
       lines.push(
         [
           `"${r._userName.replace(/"/g, '""')}"`,
-          r.date ?? date, // fallback robusto
-          r.sleepQuality ?? "",
+          r.date,
+          r.sleepQuality,
           (r.sleepHours ?? "") as any,
-          r.fatigue ?? "",
-          r.muscleSoreness ?? "",
-          r.stress ?? "",
-          r.mood ?? "",
+          r.fatigue,
+          r.muscleSoreness,
+          r.stress,
+          r.mood,
           (r as any)._sdw.toFixed(2),
           `"${(r.comment || "").replace(/"/g, '""')}"`,
-          (color || "").toUpperCase(),
+          color.toUpperCase(),
           wk,
         ].join(",")
       );
@@ -448,7 +418,8 @@ function WellnessCT_Day() {
         const universe = new Set<string>();
         for (const rows of data) {
           for (const it of rows) {
-            universe.add(nameOf(it));
+            const nm = it.userName || it.user?.name || it.user?.email || it.playerKey || "—";
+            universe.add(nm);
           }
         }
         const universeSize = universe.size || 1;
@@ -657,18 +628,18 @@ function WellnessCT_Day() {
                         const z = (r as any)._z as number | null;
                         const baseTone = (r as any)._color as "green" | "yellow" | "red";
                         const worst = [
-                          { k: "Sueño", v: r.sleepQuality ?? 0 },
-                          { k: "Fatiga", v: r.fatigue ?? 0 },
-                          { k: "Dolor", v: r.muscleSoreness ?? 0 },
-                          { k: "Estrés", v: r.stress ?? 0 },
-                          { k: "Ánimo", v: r.mood ?? 0 },
+                          { k: "Sueño", v: r.sleepQuality },
+                          { k: "Fatiga", v: r.fatigue },
+                          { k: "Dolor", v: r.muscleSoreness },
+                          { k: "Estrés", v: r.stress },
+                          { k: "Ánimo", v: r.mood },
                         ].sort((a, b) => a.v - b.v).slice(0, 2);
                         const spark = (last7[r._userName] || []).slice().reverse();
                         const srpe = srpeYesterday[r._userName] ?? null;
                         const inj = injuriesToday[r._userName] || null;
 
                         return (
-                          <tr key={(r.id as any) ?? r._userName} className="border-b last:border-0 align-top">
+                          <tr key={r.id} className="border-b last:border-0 align-top">
                             <td className="px-3 py-2 font-medium">
                               {r._userName}{" "}
                               {inj && <span className="ml-1"><Badge tone="gray">LESIONADO</Badge></span>}
@@ -706,7 +677,7 @@ function WellnessCT_Day() {
         <>
           <section className="rounded-2xl border bg-white px-4 py-3">
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              {/* KPIs del día (si querés sumar tarjetas acá) */}
+              {/* (KPIs del día – tu bloque actual) */}
             </div>
           </section>
 
@@ -736,12 +707,13 @@ function WellnessCT_Day() {
               </div>
             </div>
 
-            {/* Colocá tus series/histogramas aquí si los necesitás */}
+            {/* Aquí van tus tarjetas/series/histogramas actuales */}
+            {/* … */}
           </section>
         </>
       )}
 
-      {/* Leyenda + QuickView */}
+      {/* Reportes + leyenda + QuickView (igual) */}
       <div className="rounded-xl border bg-white p-3 text-xs text-gray-600">
         <b>Semáforo por Z:</b> verde ≥ −0.5, amarillo [−1.0, −0.5), rojo &lt; −1.0. Overrides:
         Sueño &lt;4h ⇒ ≥ amarillo; Dolor ≤2 ⇒ rojo; Estrés ≤2 ⇒ ≥ amarillo.
