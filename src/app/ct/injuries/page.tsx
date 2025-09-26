@@ -1,3 +1,4 @@
+// src/app/ct/injuries/page.tsx
 "use client";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,7 @@ import {
 } from "react";
 import { useSearchParams } from "next/navigation";
 import HelpTip from "@/components/HelpTip";
+import { toCsv } from "@/lib/csv";
 
 type InjuryStatus = "BAJA" | "REINTEGRO" | "LIMITADA" | "ALTA";
 type Laterality = "IZQ" | "DER" | "BILATERAL" | "NA" | null;
@@ -227,7 +229,24 @@ function CtInjuriesInner() {
   }
 
   function exportCSV() {
-    const header = [
+    const rows = filtered.map((r) => ({
+      Jugador: r.userName,
+      Fecha: r.date,
+      Estado: r.status || "",
+      Disponibilidad: r.availability || "",
+      Zona: r.bodyPart || "",
+      Lateralidad: r.laterality || "",
+      Mecanismo: r.mechanism || "",
+      Severidad: r.severity || "",
+      ETR: r.expectedReturn || "",
+      CapMin: r.capMinutes ?? "",
+      NoSprint: r.noSprint ? "1" : "",
+      NoCOD: r.noChangeOfDirection ? "1" : "",
+      SoloGym: r.gymOnly ? "1" : "",
+      NoContacto: r.noContact ? "1" : "",
+    }));
+
+    const headers = [
       "Jugador",
       "Fecha",
       "Estado",
@@ -243,27 +262,8 @@ function CtInjuriesInner() {
       "SoloGym",
       "NoContacto",
     ];
-    const lines = filtered.map((r) =>
-      [
-        r.userName,
-        r.date,
-        r.status || "",
-        r.availability || "",
-        r.bodyPart || "",
-        r.laterality || "",
-        r.mechanism || "",
-        r.severity || "",
-        r.expectedReturn || "",
-        r.capMinutes ?? "",
-        r.noSprint ? "1" : "",
-        r.noChangeOfDirection ? "1" : "",
-        r.gymOnly ? "1" : "",
-        r.noContact ? "1" : "",
-      ]
-        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-        .join(",")
-    );
-    const csv = [header.join(","), ...lines].join("\n");
+
+    const csv = toCsv(rows, headers);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
