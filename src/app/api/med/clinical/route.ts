@@ -1,4 +1,3 @@
-// src/app/api/med/clinical/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getToken } from "next-auth/jwt";
@@ -43,7 +42,7 @@ function nextDay(d: Date) {
   return x;
 }
 
-/* =============== GET (lista por día) =============== */
+/* =============== GET (lista con activos persistentes) =============== */
 export async function GET(req: NextRequest) {
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
   const role = (token as any)?.role as string | undefined;
@@ -53,52 +52,117 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = req.nextUrl;
   const dateStr = searchParams.get("date");
-  const baseDate =
-    parseYMD(dateStr) ?? (dateStr ? new Date(dateStr) : new Date());
+  const mode = searchParams.get("mode") || ""; // "day-only" => compat
+  const baseDate = parseYMD(dateStr) ?? (dateStr ? new Date(dateStr) : new Date());
 
   const from = startOfDay(baseDate);
   const to = nextDay(baseDate);
 
-  const rows = await prisma.clinicalEntry.findMany({
-    where: { date: { gte: from, lt: to } },
+  // --- COMPAT: solo el día exacto (como antes)
+  if (mode === "day-only") {
+    const rows = await prisma.clinicalEntry.findMany({
+      where: { date: { gte: from, lt: to } },
+      include: { user: { select: { name: true, email: true} } },
+      orderBy: [{ date: "desc" }, { updatedAt: "desc" }],
+    });
+
+    const mapped = rows.map((r) => ({
+      id: r.id,
+      userId: r.userId,
+      userName: r.user?.name || r.user?.email || "—",
+      date: toYMD(r.date),
+      status: r.status,
+      leaveStage: r.leaveStage,
+      leaveKind: r.leaveKind,
+      diagnosis: r.diagnosis,
+      bodyPart: r.bodyPart,
+      laterality: r.laterality,
+      mechanism: r.mechanism,
+      severity: r.severity,
+      illSystem: r.illSystem,
+      illSymptoms: r.illSymptoms,
+      illContagious: r.illContagious,
+      illIsolationDays: r.illIsolationDays,
+      illAptitude: r.illAptitude,
+      feverMax: r.feverMax,
+      startDate: r.startDate ? toYMD(r.startDate) : null,
+      expectedReturn: r.expectedReturn ? toYMD(r.expectedReturn) : null,
+      expectedReturnManual: r.expectedReturnManual,
+      capMinutes: r.capMinutes,
+      noSprint: r.noSprint,
+      noChangeOfDirection: r.noChangeOfDirection,
+      gymOnly: r.gymOnly,
+      noContact: r.noContact,
+      notes: r.notes,
+      medSignature: r.medSignature,
+      protocolObjectives: r.protocolObjectives,
+      protocolTasks: r.protocolTasks,
+      protocolControls: r.protocolControls,
+      protocolCriteria: r.protocolCriteria,
+    }));
+
+    return NextResponse.json(mapped, { headers: { "cache-control": "no-store" }});
+  }
+
+  // --- NUEVO: Activos persistentes hasta ALTA (+ ALTAS del día)
+  // 1) Traer TODO hasta el final del día seleccionado (date < nextDay)
+  const upTo = nextDay(baseDate);
+  const allUpTo = await prisma.clinicalEntry.findMany({
+    where: { date: { lt: upTo } },
     include: { user: { select: { name: true, email: true } } },
-    orderBy: [{ date: "desc" }, { updatedAt: "desc" }],
+    orderBy: [{ userId: "asc" }, { date: "desc" }, { updatedAt: "desc" }],
   });
 
-  const mapped = rows.map((r) => ({
+  // 2) Para cada jugador, quedarse con la última entrada (<= fecha) y descartar ALTAs
+  const latestByUser = new Map<string, typeof allUpTo[number]>();
+  for (const r of allUpTo) {
+    if (!latestByUser.has(r.userId)) {
+      latestByUser.set(r.userId, r);
+    }
+  }
+  const activeLatest = Array.from(latestByUser.values()).filter(
+    (r) => r.status !== "ALTA"
+  );
+
+  // 3) ALTAS del día seleccionado: incluirlas aunque no aparezcan como activas
+  const altasToday = await prisma.clinicalEntry.findMany({
+    where: { date: { gte: from, lt: to }, status: "ALTA" as ClinicalStatus },
+    include: { user: { select: { name: true, email: true } } },
+    orderBy: [{ updatedAt: "desc" }],
+  });
+
+  // 4) Mezclar: si un usuario tiene ALTA hoy, mostramos la ALTA (no una BAJA vieja)
+  const byUser: Record<string, typeof allUpTo[number]> = {};
+  for (const r of activeLatest) byUser[r.userId] = r;
+  for (const r of altasToday) byUser[r.userId] = r;
+
+  const result = Object.values(byUser).map((r) => ({
     id: r.id,
     userId: r.userId,
     userName: r.user?.name || r.user?.email || "—",
     date: toYMD(r.date),
     status: r.status,
-
     leaveStage: r.leaveStage,
     leaveKind: r.leaveKind,
-
     diagnosis: r.diagnosis,
     bodyPart: r.bodyPart,
     laterality: r.laterality,
     mechanism: r.mechanism,
     severity: r.severity,
-
     illSystem: r.illSystem,
     illSymptoms: r.illSymptoms,
     illContagious: r.illContagious,
     illIsolationDays: r.illIsolationDays,
     illAptitude: r.illAptitude,
     feverMax: r.feverMax,
-
     startDate: r.startDate ? toYMD(r.startDate) : null,
-    // ❌ flujo nuevo sin daysMin/daysMax
     expectedReturn: r.expectedReturn ? toYMD(r.expectedReturn) : null,
     expectedReturnManual: r.expectedReturnManual,
-
     capMinutes: r.capMinutes,
     noSprint: r.noSprint,
     noChangeOfDirection: r.noChangeOfDirection,
     gymOnly: r.gymOnly,
     noContact: r.noContact,
-
     notes: r.notes,
     medSignature: r.medSignature,
     protocolObjectives: r.protocolObjectives,
@@ -107,9 +171,30 @@ export async function GET(req: NextRequest) {
     protocolCriteria: r.protocolCriteria,
   }));
 
-  return NextResponse.json(mapped, {
-    headers: { "cache-control": "no-store" },
+  // Orden final: BAJA → REINTEGRO → LIMITADA → ALTA, luego ETR asc, luego nombre
+  const rank: Record<string, number> = { BAJA: 0, REINTEGRO: 1, LIMITADA: 2, ALTA: 3 };
+  const parse = (s?: string | null) => {
+    if (!s) return null;
+    const [y, m, d] = s.split("-").map(Number);
+    const dt = new Date(y, (m || 1) - 1, d || 1);
+    dt.setHours(0, 0, 0, 0);
+    return isNaN(dt.getTime()) ? null : dt;
+  };
+  result.sort((a, b) => {
+    const ra = rank[a.status] ?? 99;
+    const rb = rank[b.status] ?? 99;
+    if (ra !== rb) return ra - rb;
+    const da = parse(a.expectedReturn);
+    const db = parse(b.expectedReturn);
+    if (da && db) {
+      const diff = da.getTime() - db.getTime();
+      if (diff !== 0) return diff;
+    } else if (da && !db) return -1;
+    else if (!da && db) return 1;
+    return (a.userName || "").localeCompare(b.userName || "");
   });
+
+  return NextResponse.json(result, { headers: { "cache-control": "no-store" } });
 }
 
 /* =============== POST (upsert por userId+date) =============== */
