@@ -1,10 +1,10 @@
-// src/components/episodes/EpisodeList.tsx
 "use client";
 
 import * as React from "react";
 import { useEpisodes, type Episode, todayYMD } from "@/hooks/useEpisodes";
 import StatusBadge from "./StatusBadge";
 import RestrictionsChips from "./RestrictionsChips";
+import { toCsv } from "@/lib/csv";
 
 type Props = {
   onNew?: (date?: string) => void;
@@ -99,22 +99,6 @@ export default function EpisodeList({
   }, [items, query]);
 
   function exportCSV() {
-    const headers = [
-      "Fecha",
-      "Jugador",
-      "Estado",
-      "Tipo",
-      "Diagnóstico/Síntomas",
-      "Zona",
-      "Lateralidad",
-      "Mecanismo",
-      "Gravedad",
-      "ETR",
-      "Restricciones",
-      "TopeMin",
-      "Firma",
-    ];
-
     const rows = filtered.map((r) => {
       const tipo = r.leaveKind || "";
       const diag =
@@ -128,39 +112,29 @@ export default function EpisodeList({
         r.noChangeOfDirection ? "Sin COD" : "",
         r.noContact ? "Sin contacto" : "",
         r.gymOnly ? "Gimnasio" : "",
+        typeof r.capMinutes === "number" ? `Tope ${r.capMinutes}′` : "",
       ]
         .filter(Boolean)
         .join(" | ");
 
-      return [
-        r.date || "",
-        r.userName || "",
-        r.status || "",
-        tipo,
-        diag,
-        r.bodyPart || "",
-        r.laterality || "",
-        r.mechanism || "",
-        r.severity || "",
-        r.expectedReturn || "",
-        restr,
-        r.capMinutes ?? "",
-        r.medSignature || "",
-      ];
+      return {
+        Fecha: r.date || "",
+        Jugador: r.userName || "",
+        Estado: r.status || "",
+        Tipo: tipo,
+        "Diagnóstico/Síntomas": diag,
+        Zona: r.bodyPart || "",
+        Lateralidad: r.laterality || "",
+        Mecanismo: r.mechanism || "",
+        Gravedad: r.severity || "",
+        ETR: r.expectedReturn || "",
+        Restricciones: restr,
+        TopeMin: r.capMinutes ?? "",
+        Firma: r.medSignature || "",
+      };
     });
 
-    const csv =
-      [headers, ...rows]
-        .map((r) =>
-          r
-            .map((c) => {
-              const s = String(c ?? "");
-              return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-            })
-            .join(";")
-        )
-        .join("\n") + "\n";
-
+    const csv = toCsv(rows);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -169,6 +143,15 @@ export default function EpisodeList({
     a.click();
     URL.revokeObjectURL(url);
   }
+
+  const helpChip = {
+    BAJA: "Fuera de actividad (OUT).",
+    REINTEGRO: "RTP: retorno progresivo con restricciones.",
+    LIMITADA: "LIM: entrena con limitaciones.",
+    ALTA: "Alta médica del día (FULL).",
+  };
+
+  const showEmptyCreate = !loading && filtered.length === 0;
 
   return (
     <section className={`rounded-xl border bg-white p-5 shadow-sm ${className}`}>
@@ -224,16 +207,28 @@ export default function EpisodeList({
 
       {/* Contadores por estado */}
       <div className="mb-3 flex flex-wrap gap-2 text-xs">
-        <span className="rounded-full bg-red-50 text-red-700 ring-1 ring-red-200 px-2 py-1">
+        <span
+          className="rounded-full bg-red-50 text-red-700 ring-1 ring-red-200 px-2 py-1"
+          title={helpChip.BAJA}
+        >
           BAJA: {counts.BAJA}
         </span>
-        <span className="rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200 px-2 py-1">
+        <span
+          className="rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200 px-2 py-1"
+          title={helpChip.REINTEGRO}
+        >
           REINTEGRO: {counts.REINTEGRO}
         </span>
-        <span className="rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200 px-2 py-1">
+        <span
+          className="rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-200 px-2 py-1"
+          title={helpChip.LIMITADA}
+        >
           LIMITADA: {counts.LIMITADA}
         </span>
-        <span className="rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2 py-1">
+        <span
+          className="rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2 py-1"
+          title={helpChip.ALTA}
+        >
           ALTA: {counts.ALTA}
         </span>
       </div>
@@ -262,14 +257,32 @@ export default function EpisodeList({
               </tr>
             )}
 
-            {!loading && filtered.length === 0 && (
+            {showEmptyCreate && (
               <tr>
                 <td className="px-3 py-3 text-sm text-slate-500" colSpan={8}>
-                  {error === "EMPTY"
-                    ? "No hay episodios para esta fecha."
-                    : error === "ERR"
-                    ? "No se pudo cargar."
-                    : "Sin resultados."}
+                  {error === "ERR" ? (
+                    <div className="flex items-center justify-between">
+                      <span>No se pudo cargar.</span>
+                      <button
+                        className="rounded-md border px-3 py-1 text-sm"
+                        onClick={() => reload(date)}
+                      >
+                        Reintentar
+                      </button>
+                    </div>
+                  ) : query ? (
+                    <>Sin resultados para “{query}”.</>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <span>No hay activos ni altas del día.</span>
+                      <button
+                        className="rounded-md border px-3 py-1 text-sm"
+                        onClick={() => onNew?.(date)}
+                      >
+                        Nuevo episodio
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             )}
