@@ -258,7 +258,7 @@ model ClinicalEntry {
   id        String   @id @default(cuid())
 
   userId    String
-  user      User     @relation(fields: [userId], references: [id], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   date      DateTime
   status    ClinicalStatus
