@@ -1,12 +1,10 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL") // <- usa esta var (coincide con tu código)
+  url      = env("DATABASE_URL")
 }
 
 // ===== Enums base =====
@@ -123,11 +121,13 @@ model Rival {
   name     String  @unique
   logoUrl  String?
 
+  // Datos opcionales
   coach                 String?
   baseSystem            String?
   nextMatchDate         DateTime?
   nextMatchCompetition  String?
 
+  // Plan de partido
   planCharlaUrl   String?
   planReport      Json?   @default("{}")
   planVideos      Json?   @default("[]")
@@ -135,6 +135,7 @@ model Rival {
   planNotes       Json?   @default("{}")
   planVisibility  Json?   @default("{}")
 
+  // Plantel
   planSquad       Json?   @default("[]")
 
   createdAt DateTime @default(now())
@@ -249,15 +250,18 @@ model ClinicalEntry {
   date      DateTime
   status    ClinicalStatus
 
+  // Si estado = BAJA
   leaveStage LeaveStage?
   leaveKind  LeaveKind?
 
+  // Si leaveKind = LESION
   diagnosis  String?
   bodyPart   String?
   laterality Laterality?
   mechanism  Mechanism?
   severity   Severity?
 
+  // Si leaveKind = ENFERMEDAD
   illSystem        SystemAffected?
   illSymptoms      String?
   illContagious    Boolean?
@@ -265,20 +269,24 @@ model ClinicalEntry {
   illAptitude      IllAptitude?
   feverMax         Float?
 
+  // Cronología
   startDate            DateTime?
   daysPlanned          Int?
   expectedReturn       DateTime?
   expectedReturnManual Boolean? @default(false)
 
+  // Restricciones (REINTEGRO / LIMITADA)
   capMinutes          Int?
   noSprint            Boolean  @default(false)
   noChangeOfDirection Boolean  @default(false)
   gymOnly             Boolean  @default(false)
   noContact           Boolean  @default(false)
 
+  // Documentación
   notes        String?
   medSignature String?
 
+  // Plan / Protocolo semanal
   protocolObjectives String?
   protocolTasks      String?
   protocolControls   String?
