@@ -1,10 +1,13 @@
 // src/lib/metrics/wellness.ts
 
-/** Tipado mínimo compatible con tu UI */
+/** Tipado mínimo compatible con las UIs CT/Jugador */
 export type WellnessRaw = {
   userId?: string;
   userName?: string;
   user?: { name?: string | null; email?: string | null } | null;
+
+  // Compat con páginas que comparan por nombre/clave:
+  playerKey?: string | null;
 
   date?: string; // YYYY-MM-DD
   sleepQuality?: number;   // 1..5
@@ -18,8 +21,10 @@ export type WellnessRaw = {
   total?: number | null;   // opcional (precalculado)
 };
 
-/** Utiles de fecha */
-export function toYMD(d: Date) { return d.toISOString().slice(0, 10); }
+/** Utils de fecha */
+export function toYMD(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
 export function fromYMD(s: string) {
   const [y, m, dd] = s.split("-").map(Number);
   return new Date(y, (m || 1) - 1, dd || 1);
@@ -48,9 +53,9 @@ export function sdSample(nums: number[]): number {
 }
 
 /**
- * computeSDW: “score” simple de wellness para graficar/alertar.
- * Escala 1–5 en 5 dimensiones (fatigue, soreness, stress, mood, sleepQuality).
- * Devuelve promedio (1..5) centrado en 3 y escalado a z ~ [-2..+2] aproximado.
+ * computeSDW: índice simple de bienestar.
+ * Usa 5 dimensiones (1–5): fatiga, dolor muscular, estrés, ánimo, calidad de sueño.
+ * Devuelve z-score aproximado centrado en 3 (sd~1).
  */
 export function computeSDW(row: WellnessRaw): number {
   const vals = [
@@ -64,24 +69,22 @@ export function computeSDW(row: WellnessRaw): number {
   if (!vals.length) return 0;
 
   const avg = mean(vals); // 1..5
-  // z-score aproximado usando media 3 y sd=1 como referencia práctica
-  const z = (avg - 3) / 1;
-  // para tu UI, devolvemos un número con 2 decimales
+  const z = (avg - 3) / 1; // sd aprox = 1
   return Number(z.toFixed(2));
 }
 
-/** Coloreo rápido por z-score (negativo=mejor, positivo=alerta) */
+/** Color por z-score (negativo=mejor; positivo=alerta) */
 export function zToColor(z: number): string {
   if (!Number.isFinite(z)) return "#9ca3af"; // gray-400
   if (z >= 1.0) return "#ef4444";   // red-500
   if (z >= 0.5) return "#f59e0b";   // amber-500
   if (z <= -0.5) return "#10b981";  // emerald-500
-  return "#6b7280";                 // gray-500 neutro
+  return "#6b7280";                 // gray-500
 }
 
 /**
- * applyOverrides: reglas simples de alerta (MVP).
- * Devuelve un objeto con flags que tu UI puede usar.
+ * applyOverrides: reglas MVP de alerta.
+ * Retorna flags para la UI (semáforo/tooltip).
  */
 export function applyOverrides(row: WellnessRaw) {
   const stress = Number(row.stress ?? 0);
@@ -89,13 +92,12 @@ export function applyOverrides(row: WellnessRaw) {
   const fatigue = Number(row.fatigue ?? 0);
   const mood = Number(row.mood ?? 0);
   const sleepQ = Number(row.sleepQuality ?? 0);
-  const flags: { alert: boolean; reasons: string[] } = { alert: false, reasons: [] };
 
+  const flags: { alert: boolean; reasons: string[] } = { alert: false, reasons: [] };
   if (stress >= 4) { flags.alert = true; flags.reasons.push("Estrés alto"); }
   if (soreness >= 4) { flags.alert = true; flags.reasons.push("Dolor muscular alto"); }
   if (fatigue >= 4) { flags.alert = true; flags.reasons.push("Fatiga alta"); }
   if (mood > 0 && mood <= 2) { flags.alert = true; flags.reasons.push("Ánimo bajo"); }
-  if (sleepQ > 0 && sleepQ <= 2) { flags.alert = true; flags.reasons.push("Sueño pobre"); }
-
+  if (sleepQ > 0 && sleepQ <= 2) { flags.alert = true; flags.reasons.push("Sueño deficiente"); }
   return flags;
 }
