@@ -1,4 +1,3 @@
-// src/app/ct/injuries/page.tsx
 "use client";
 
 export const dynamic = "force-dynamic";
@@ -89,6 +88,13 @@ function deriveAvailability(status: InjuryStatus | undefined, apiAvail?: Availab
       return "OUT";
   }
 }
+
+const STATUS_HELP: Record<InjuryStatus, string> = {
+  BAJA: "Fuera de toda actividad (OUT).",
+  REINTEGRO: "RTP: retorno progresivo con restricciones.",
+  LIMITADA: "LIM: entrena con limitaciones.",
+  ALTA: "Alta médica: sin restricciones (FULL).",
+};
 
 export default function CtInjuriesPage() {
   return (
@@ -266,6 +272,13 @@ function CtInjuriesInner() {
     URL.revokeObjectURL(a.href);
   }
 
+  function statusTitle(s: InjuryStatus, avail: Availability | null) {
+    const base = STATUS_HELP[s];
+    const suffix =
+      avail === "FULL" ? " (FULL)" : avail === "MODIFIED" ? " (MODIFIED)" : " (OUT)";
+    return `${base}${suffix}`;
+  }
+
   function BarList({
     items,
     max,
@@ -301,7 +314,7 @@ function CtInjuriesInner() {
           <h1 className="text-2xl font-bold">Parte clínico — Vista CT</h1>
           <p className="mt-1 text-sm text-gray-600">
             Métricas del período + lista diaria.{" "}
-            <HelpTip text="Semáforo: Verde=Alta/Full · Amarillo=Reintegro/Modified · Rojo=Activo/Out" />
+            <HelpTip text="Semáforo: Verde=Alta/Full · Amarillo=Reintegro/Limitada (Modified) · Rojo=Baja (Out)" />
           </p>
         </div>
 
@@ -491,7 +504,7 @@ function CtInjuriesInner() {
                           className={`inline-block rounded-full border px-2 py-0.5 text-[11px] mr-2 ${badgeColor(
                             r
                           )}`}
-                          title={`${r.status} / ${r.availability ?? "—"}`}
+                          title={statusTitle(r.status, r.availability)}
                         >
                           ●
                         </span>
