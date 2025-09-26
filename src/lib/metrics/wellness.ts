@@ -21,6 +21,9 @@ export type WellnessRaw = {
   total?: number | null;   // opcional (precalculado)
 };
 
+/** Baseline (promedio y desviación) que algunas vistas importan */
+export type Baseline = { mean: number; sd: number };
+
 /** Utils de fecha */
 export function toYMD(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -50,6 +53,11 @@ export function sdSample(nums: number[]): number {
   const m = mean(v);
   const varS = v.reduce((acc, x) => acc + (x - m) ** 2, 0) / (n - 1);
   return Math.sqrt(varS);
+}
+
+/** Calcula un baseline simple a partir de una serie */
+export function computeBaseline(series: number[]): Baseline {
+  return { mean: mean(series), sd: sdSample(series) };
 }
 
 /**
