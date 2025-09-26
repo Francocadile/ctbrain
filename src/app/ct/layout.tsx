@@ -17,8 +17,7 @@ function NavItem({
   active?: boolean;
   soon?: boolean;
 }) {
-  const base =
-    "block rounded-md px-2 py-1.5 text-sm transition";
+  const base = "block rounded-md px-2 py-1.5 text-sm transition";
   const activeCls = active ? "bg-black text-white" : "hover:bg-gray-100";
   if (!href) {
     return (
@@ -49,10 +48,7 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
         </div>
         <ul className="space-y-0.5 mb-2">
           <li>
-            <NavItem
-              href={"/ct" satisfies Route}
-              active={pathname === "/ct"}
-            >
+            <NavItem href={"/ct" satisfies Route} active={pathname === "/ct"}>
               Dashboard / Inicio rápido
             </NavItem>
           </li>
@@ -70,27 +66,19 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
               Wellness (día)
             </NavItem>
           </li>
+
+          {/* ÚNICO ítem para RPE unificado */}
           <li>
             <NavItem
               href={"/ct/metrics/rpe" satisfies Route}
               active={isActive("/ct/metrics/rpe")}
             >
-              RPE (día)
+              RPE
             </NavItem>
           </li>
+
           <li>
-            <NavItem
-              href={"/ct/metrics/rpe/semana" satisfies Route}
-              active={isActive("/ct/metrics/rpe/semana")}
-            >
-              RPE (semana)
-            </NavItem>
-          </li>
-          <li>
-            <NavItem
-              href={"/ct/injuries" as Route}
-              active={isActive("/ct/injuries")}
-            >
+            <NavItem href={"/ct/injuries" as Route} active={isActive("/ct/injuries")}>
               Lesionados
             </NavItem>
           </li>
@@ -109,10 +97,7 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
             </NavItem>
           </li>
           <li>
-            <NavItem
-              href={"/ct/sessions" satisfies Route}
-              active={isActive("/ct/sessions")}
-            >
+            <NavItem href={"/ct/sessions" satisfies Route} active={isActive("/ct/sessions")}>
               Sesiones
             </NavItem>
           </li>
