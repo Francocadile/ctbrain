@@ -27,10 +27,27 @@ function yesterdayYMD(ymd: string) {
 }
 
 /** ---------- Tipos ---------- */
+/**
+ * Algunos proyectos traen WellnessRaw sin tipar campos como sleepQuality, etc.
+ * Para evitar errores de TS durante el build, explicitamos los que usamos aquí como opcionales.
+ */
 type DayRow = WellnessRaw & {
+  // extras internos
   _userName: string;
   _sdw: number;
-  date?: string; // agregado para alinear con uso en exportCSV
+
+  // campos que usamos en la tabla/CSV (opcionales por seguridad)
+  id?: string | number;
+  date?: string;
+  sleepQuality?: number;
+  sleepHours?: number;
+  fatigue?: number;
+  muscleSoreness?: number;
+  stress?: number;
+  mood?: number;
+  comment?: string;
+  userName?: string;
+  user?: { name?: string; email?: string } | null;
 };
 
 type Alert = {
@@ -124,6 +141,7 @@ function BarsInline({
 
 /** ---------- nombre consistente ---------- */
 function nameOf(r: WellnessRaw): string {
+  // @ts-expect-error – distintos backends pueden no tipar user/userName
   return r.userName || r.user?.name || r.user?.email || "Jugador";
 }
 
@@ -376,15 +394,15 @@ function WellnessCT_Day() {
         [
           `"${r._userName.replace(/"/g, '""')}"`,
           r.date ?? date, // fallback robusto
-          r.sleepQuality,
+          r.sleepQuality ?? "",
           (r.sleepHours ?? "") as any,
-          r.fatigue,
-          r.muscleSoreness,
-          r.stress,
-          r.mood,
+          r.fatigue ?? "",
+          r.muscleSoreness ?? "",
+          r.stress ?? "",
+          r.mood ?? "",
           (r as any)._sdw.toFixed(2),
           `"${(r.comment || "").replace(/"/g, '""')}"`,
-          color.toUpperCase(),
+          (color || "").toUpperCase(),
           wk,
         ].join(",")
       );
@@ -639,18 +657,18 @@ function WellnessCT_Day() {
                         const z = (r as any)._z as number | null;
                         const baseTone = (r as any)._color as "green" | "yellow" | "red";
                         const worst = [
-                          { k: "Sueño", v: r.sleepQuality },
-                          { k: "Fatiga", v: r.fatigue },
-                          { k: "Dolor", v: r.muscleSoreness },
-                          { k: "Estrés", v: r.stress },
-                          { k: "Ánimo", v: r.mood },
+                          { k: "Sueño", v: r.sleepQuality ?? 0 },
+                          { k: "Fatiga", v: r.fatigue ?? 0 },
+                          { k: "Dolor", v: r.muscleSoreness ?? 0 },
+                          { k: "Estrés", v: r.stress ?? 0 },
+                          { k: "Ánimo", v: r.mood ?? 0 },
                         ].sort((a, b) => a.v - b.v).slice(0, 2);
                         const spark = (last7[r._userName] || []).slice().reverse();
                         const srpe = srpeYesterday[r._userName] ?? null;
                         const inj = injuriesToday[r._userName] || null;
 
                         return (
-                          <tr key={r.id} className="border-b last:border-0 align-top">
+                          <tr key={(r.id as any) ?? r._userName} className="border-b last:border-0 align-top">
                             <td className="px-3 py-2 font-medium">
                               {r._userName}{" "}
                               {inj && <span className="ml-1"><Badge tone="gray">LESIONADO</Badge></span>}
