@@ -23,9 +23,9 @@ function clamp010(n: any): number {
 /**
  * GET /api/metrics/rpe
  * Query:
- *  - date=YYYY-MM-DD (opcional)
+ *  - date=YYYY-MM-DD (opcional) → entradas de ese día
  *  - userId=... (opcional)
- * Sin date → últimas 30 entradas globalmente.
+ * Sin date → últimas 30 entradas (global).
  */
 export async function GET(req: Request) {
   try {
@@ -67,8 +67,14 @@ export async function GET(req: Request) {
 
 /**
  * POST /api/metrics/rpe
- * Body: { userId: string, date: "YYYY-MM-DD", rpe: 0..10, duration?: number }
- * Upsert por (userId, date). `load = rpe × duration` si hay duración.
+ * Body:
+ * {
+ *   userId: string,
+ *   date: "YYYY-MM-DD",
+ *   rpe: 0..10,
+ *   duration?: number // min
+ * }
+ * Upsert por (userId, date). load = rpe × duration si hay duración.
  */
 export async function POST(req: Request) {
   try {
