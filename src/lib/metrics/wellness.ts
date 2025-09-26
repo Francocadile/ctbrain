@@ -6,7 +6,7 @@ export type WellnessRaw = {
   userName?: string;
   user?: { name?: string | null; email?: string | null } | null;
 
-  // Compat con páginas que comparan por nombre/clave:
+  // Compat con comparaciones por nombre/clave:
   playerKey?: string | null;
 
   date?: string; // YYYY-MM-DD
@@ -30,8 +30,12 @@ export function fromYMD(s: string) {
   const [y, m, dd] = s.split("-").map(Number);
   return new Date(y, (m || 1) - 1, dd || 1);
 }
-export function addDays(d: Date, days: number) { const x = new Date(d); x.setDate(x.getDate() + days); return x; }
-/** Acepta Date o string (YYYY-MM-DD) */
+export function addDays(d: Date, days: number) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + days);
+  return x;
+}
+/** Acepta Date o string (YYYY-MM-DD) y devuelve YYYY-MM-DD de ayer */
 export function yesterday(base: Date | string = new Date()) {
   const b = typeof base === "string" ? fromYMD(base) : base;
   return toYMD(addDays(b, -1));
@@ -78,9 +82,9 @@ export function computeSDW(row: WellnessRaw): number {
   return Number(z.toFixed(2));
 }
 
-/** Color por z-score (negativo=mejor; positivo=alerta) */
-export function zToColor(z: number): string {
-  if (!Number.isFinite(z)) return "#9ca3af"; // gray-400
+/** Color por z-score (negativo=mejor; positivo=alerta). Acepta null. */
+export function zToColor(z: number | null | undefined): string {
+  if (z == null || !Number.isFinite(z)) return "#9ca3af"; // gray-400
   if (z >= 1.0) return "#ef4444";   // red-500
   if (z >= 0.5) return "#f59e0b";   // amber-500
   if (z <= -0.5) return "#10b981";  // emerald-500
@@ -88,21 +92,27 @@ export function zToColor(z: number): string {
 }
 
 /**
- * applyOverrides: reglas MVP de alerta.
- * Retorna flags para la UI (semáforo/tooltip).
+ * Reglas MVP de alerta aplicadas al color base.
+ * Firma compatible con tu UI: (baseColor, row) => string (color final).
  */
-export function applyOverrides(row: WellnessRaw) {
+export function applyOverrides(baseColor: string, row: WellnessRaw): string {
+  let final = baseColor;
+
   const stress = Number(row.stress ?? 0);
   const soreness = Number(row.muscleSoreness ?? 0);
   const fatigue = Number(row.fatigue ?? 0);
   const mood = Number(row.mood ?? 0);
   const sleepQ = Number(row.sleepQuality ?? 0);
 
-  const flags: { alert: boolean; reasons: string[] } = { alert: false, reasons: [] };
-  if (stress >= 4) { flags.alert = true; flags.reasons.push("Estrés alto"); }
-  if (soreness >= 4) { flags.alert = true; flags.reasons.push("Dolor muscular alto"); }
-  if (fatigue >= 4) { flags.alert = true; flags.reasons.push("Fatiga alta"); }
-  if (mood > 0 && mood <= 2) { flags.alert = true; flags.reasons.push("Ánimo bajo"); }
-  if (sleepQ > 0 && sleepQ <= 2) { flags.alert = true; flags.reasons.push("Sueño deficiente"); }
-  return flags;
+  const anyAlert =
+    stress >= 4 ||
+    soreness >= 4 ||
+    fatigue >= 4 ||
+    (mood > 0 && mood <= 2) ||
+    (sleepQ > 0 && sleepQ <= 2);
+
+  // Si hay alerta clínica, priorizamos rojo.
+  if (anyAlert) final = "#ef4444"; // red-500
+
+  return final;
 }
