@@ -2,28 +2,26 @@
 
 export type RPERow = {
   id?: string;
-  date?: string;            // YYYY-MM-DD (opcional)
-  rpe?: number | null;      // 0..10
-  duration?: number | null; // minutos
-  load?: number | null;     // sRPE (AU calculada)
-  userName?: string | null;
   playerKey?: string | null;
-  user?: { name?: string | null; email?: string | null } | null;
+  userName?: string | null;
+  user?: { name?: string; email?: string };
+  date?: string;
+  rpe: number;              // 0..10
+  duration?: number | null; // min
+  load?: number | null;     // sRPE (AU)
 };
 
 /** sRPE = RPE × minutos (si load viene, priorizarlo) */
-export function srpeOf(r: RPERow): number {
-  const au =
-    (r.load ?? null) != null
-      ? Number(r.load)
-      : Number(r.rpe ?? 0) * Number(r.duration ?? 0);
-  return Number.isFinite(au) ? au : 0;
+export function srpeOf(r: RPERow) {
+  if (r.load != null) return Number(r.load);
+  const dur = r.duration == null ? 0 : Number(r.duration);
+  return Number(r.rpe ?? 0) * dur;
 }
 
-/** Promedio simple (ignora no finitos) */
-export function mean(arr: number[]): number {
-  const v = arr.filter((x) => Number.isFinite(x));
-  return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0;
+/** Promedio simple */
+export function mean(nums: number[]) {
+  if (!nums.length) return 0;
+  return nums.reduce((a, b) => a + b, 0) / nums.length;
 }
 
 /** Bins de AU útiles para monitoreo */
