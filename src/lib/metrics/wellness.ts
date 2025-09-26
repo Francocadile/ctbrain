@@ -31,7 +31,11 @@ export function fromYMD(s: string) {
   return new Date(y, (m || 1) - 1, dd || 1);
 }
 export function addDays(d: Date, days: number) { const x = new Date(d); x.setDate(x.getDate() + days); return x; }
-export function yesterday(base = new Date()) { return toYMD(addDays(base, -1)); }
+/** Acepta Date o string (YYYY-MM-DD) */
+export function yesterday(base: Date | string = new Date()) {
+  const b = typeof base === "string" ? fromYMD(base) : base;
+  return toYMD(addDays(b, -1));
+}
 
 /** Estadística simple */
 export function mean(nums: number[]): number {
