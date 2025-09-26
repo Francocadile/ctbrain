@@ -30,6 +30,7 @@ function yesterdayYMD(ymd: string) {
 type DayRow = WellnessRaw & {
   _userName: string;
   _sdw: number;
+  date?: string; // agregado para alinear con uso en exportCSV
 };
 
 type Alert = {
@@ -369,12 +370,12 @@ function WellnessCT_Day() {
     const lines = [header.join(",")];
 
     for (const r of filtered) {
-      const wk = r.date;
+      const wk = r.date ?? date; // fallback robusto
       const color = (r as any)._color as string;
       lines.push(
         [
           `"${r._userName.replace(/"/g, '""')}"`,
-          r.date,
+          r.date ?? date, // fallback robusto
           r.sleepQuality,
           (r.sleepHours ?? "") as any,
           r.fatigue,
