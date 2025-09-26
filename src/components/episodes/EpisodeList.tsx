@@ -1,3 +1,4 @@
+// src/components/episodes/EpisodeList.tsx
 "use client";
 
 import * as React from "react";
@@ -134,7 +135,23 @@ export default function EpisodeList({
       };
     });
 
-    const csv = toCsv(rows);
+    const headers = [
+      "Fecha",
+      "Jugador",
+      "Estado",
+      "Tipo",
+      "Diagnóstico/Síntomas",
+      "Zona",
+      "Lateralidad",
+      "Mecanismo",
+      "Gravedad",
+      "ETR",
+      "Restricciones",
+      "TopeMin",
+      "Firma",
+    ];
+
+    const csv = toCsv(rows, headers);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
