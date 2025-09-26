@@ -1,4 +1,3 @@
-// src/app/med/injuries/[id]/page.tsx
 "use client";
 
 export const dynamic = "force-dynamic";
@@ -44,11 +43,26 @@ export default function MedEpisodeEditPage() {
 
   return (
     <main className="min-h-[70vh] px-6 py-8">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold">Editar episodio clínico</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Actualizá estado, ETR, restricciones o plan. El CT lo verá en lectura.
-        </p>
+      <header className="mb-6 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Editar episodio clínico</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Actualizá estado, ETR, restricciones o plan. El CT lo verá en lectura.
+          </p>
+        </div>
+
+        {/* Acciones de cabecera */}
+        {!loading && !err && initial ? (
+          <div className="flex gap-2">
+            <button
+              className="h-9 rounded-md border px-3 text-sm"
+              onClick={() => router.push(`/med/injuries/new?from=${encodeURIComponent(String(id))}`)}
+              title="Crea un nuevo parte con estos datos como base (fecha y estado podés ajustarlos)."
+            >
+              Duplicar como nuevo
+            </button>
+          </div>
+        ) : null}
       </header>
 
       {loading ? (
