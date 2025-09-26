@@ -73,7 +73,7 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
               href={"/ct/metrics/RPE" satisfies Route}
               active={isActive("/ct/metrics/RPE")}
             >
-              Rpe
+              rpe
             </NavItem>
           </li>
 
