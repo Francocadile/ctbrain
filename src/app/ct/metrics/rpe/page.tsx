@@ -295,7 +295,7 @@ function RPECT() {
       const wData = await Promise.all(daysW.map((d) => fetchWellnessDay(d)));
       const sdwSeries: number[] = [];
       for (let i = 0; i < daysW.length; i++) {
-        const arr = wData[i] || [];
+        const arr = (wData[i] || []) as WellnessRaw[];
         const row = arr.find(
           (it) =>
             (it.userName ||
