@@ -1,106 +1,94 @@
 // src/lib/metrics/wellness.ts
+// Utilidades y tipos compartidos para Wellness (CT)
 
-/** -------- Tipos -------- */
 export type WellnessRaw = {
-  // Identidad
-  userName?: string | null;
-  user?: { name?: string | null; email?: string | null } | null;
-
-  // Ítems (todos opcionales porque pueden faltar en la carga)
-  sleepHours?: number | null;       // horas de sueño
-  muscleSoreness?: number | null;   // 1..5 (1 = muy bien, 5 = muy mal) — ajustá si tu escala es otra
-  stress?: number | null;           // 1..5
-  fatigue?: number | null;          // 1..5
-  mood?: number | null;             // 1..5
-
-  // Otros
+  id: string;
+  user?: { name?: string; email?: string } | null;
+  userName?: string | null; // compat con API
+  playerKey?: string | null; // compat con API
+  date: string; // YYYY-MM-DD
+  sleepQuality: number; // 1..5 (5=mejor)
+  sleepHours?: number | null; // 0..14
+  fatigue: number; // 1..5 (5=mejor)
+  muscleSoreness: number; // 1..5 (5=mejor → menor dolor)
+  stress: number; // 1..5 (5=mejor → menor estrés)
+  mood: number; // 1..5 (5=mejor)
   comment?: string | null;
 };
 
-/** -------- Utils de fecha -------- */
-export function toYMD(d: Date): string {
+export type Baseline = {
+  mean: number; // media SDW (21d)
+  sd: number; // desvío estándar SDW (21d)
+  n: number; // días válidos
+};
+
+/** ---------- Fechas ---------- */
+export function toYMD(d: Date) {
+  // ISO local-date
   return d.toISOString().slice(0, 10);
 }
-export function fromYMD(s: string): Date {
+export function fromYMD(s: string) {
   const [y, m, dd] = s.split("-").map(Number);
-  return new Date(y, (m ?? 1) - 1, dd ?? 1);
+  return new Date(y, m - 1, dd);
 }
-export function addDays(d: Date, days: number): Date {
+export function addDays(d: Date, days: number) {
   const x = new Date(d);
   x.setDate(x.getDate() + days);
   return x;
 }
-export function yesterday(d: Date): Date {
-  return addDays(d, -1);
+export function yesterday(ymd: string) {
+  return toYMD(addDays(fromYMD(ymd), -1));
 }
 
-/** -------- Estadísticos simples -------- */
-export function mean(arr: number[]): number {
-  const v = arr.filter((x) => Number.isFinite(x));
-  return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0;
+/** ---------- Stats ---------- */
+export function mean(arr: number[]) {
+  if (!arr.length) return 0;
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
 }
-export function sdSample(arr: number[]): number {
-  const v = arr.filter((x) => Number.isFinite(x));
-  if (v.length < 2) return 0;
-  const m = mean(v);
-  const s2 = v.reduce((a, b) => a + (b - m) ** 2, 0) / (v.length - 1);
-  return Math.sqrt(s2);
+export function sdSample(arr: number[]) {
+  const n = arr.length;
+  if (n < 2) return 0;
+  const m = mean(arr);
+  const v = arr.reduce((acc, v) => acc + (v - m) * (v - m), 0) / (n - 1);
+  return Math.sqrt(v);
 }
 
-/** -------- SDW (score compuesto de wellness) --------
- * Implementación base: promedia ítems 1..5 (invertidos para que ↑ = mejor),
- * y agrega un pequeño ajuste por horas de sueño si está disponible.
- * Si tu escala es distinta, podés reemplazar esta función sin romper el resto.
- */
-export function computeSDW(r: WellnessRaw): number {
-  // Invertimos ítems 1..5 para que 5=mejor → 5 - (v - 1) = 6 - v
-  const inv = (v: number | null | undefined) =>
-    v == null ? null : 6 - Number(v);
+/** SDW = promedio (1..5) de los 5 ítems orientados a 5=mejor */
+export function computeSDW(r: Partial<WellnessRaw>) {
+  const vals = [
+    Number(r.sleepQuality ?? 0),
+    Number(r.fatigue ?? 0),
+    Number(r.muscleSoreness ?? 0),
+    Number(r.stress ?? 0),
+    Number(r.mood ?? 0),
+  ];
+  const valid = vals.filter((v) => v > 0);
+  if (!valid.length) return 0;
+  return valid.reduce((a, b) => a + b, 0) / valid.length;
+}
 
-  const parts: number[] = [];
-  const ms = inv(r.muscleSoreness ?? null);
-  const st = inv(r.stress ?? null);
-  const fa = inv(r.fatigue ?? null);
-  const mo = inv(r.mood ?? null);
+/** Semáforo por Z-score según especificación */
+export function zToColor(z: number | null): "green" | "yellow" | "red" {
+  if (z === null) return "yellow"; // sin baseline suficiente → atención leve
+  if (z >= -0.5) return "green";
+  if (z >= -1.0) return "yellow";
+  return "red";
+}
 
-  if (ms != null) parts.push(ms);
-  if (st != null) parts.push(st);
-  if (fa != null) parts.push(fa);
-  if (mo != null) parts.push(mo);
-
-  // Ajuste por sueño (si existe): normalizamos a 0..5 con pivote en 7h
-  if (r.sleepHours != null) {
-    const h = Number(r.sleepHours);
-    // Clamp 0..10, luego map a 0..5 (aprox)
-    const clamped = Math.max(0, Math.min(10, h));
-    const sleepScore = Math.max(0, Math.min(5, (clamped / 10) * 5));
-    parts.push(sleepScore);
+/** Eleva severidad de color según overrides clínicos */
+export function applyOverrides<
+  T extends { sleepHours?: number | null; muscleSoreness?: number; stress?: number }
+>(base: "green" | "yellow" | "red", r: T) {
+  let level = base; // green < yellow < red
+  const sleepH = r.sleepHours ?? null;
+  if (sleepH !== null && sleepH < 4) {
+    level = level === "green" ? "yellow" : level;
   }
-
-  if (!parts.length) return 0;
-  // Escala final ≈ 0..5
-  const score = mean(parts);
-  // Redondeamos a 2 decimales para estabilidad visual
-  return Number(score.toFixed(2));
+  if ((r.muscleSoreness ?? 3) <= 2) {
+    level = "red";
+  }
+  if ((r.stress ?? 3) <= 2) {
+    level = level === "green" ? "yellow" : level;
+  }
+  return level;
 }
-
-/** -------- Colores por Z-score (opcional) -------- */
-export function zToColor(z: number | null): string {
-  if (z == null || !Number.isFinite(z)) return "bg-gray-100";
-  if (z <= -1.0) return "bg-red-100";
-  if (z <= -0.5) return "bg-amber-100";
-  if (z >= 1.0) return "bg-emerald-100";
-  if (z >= 0.5) return "bg-emerald-50";
-  return "bg-gray-50";
-}
-
-/** -------- Reglas de override (opcional) --------
- * Podés aplicar banderines/ajustes de color segun el registro.
- * En este stub, devolvemos el color tal cual.
- */
-export function applyOverrides(baseColor: string, _r: WellnessRaw): string {
-  return baseColor;
-}
-
-/** -------- Baseline (media, sd, n) -------- */
-export type Baseline = { mean: number; sd: number; n: number };
