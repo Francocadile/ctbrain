@@ -4,32 +4,45 @@ import { PrismaClient, Role } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+// POST /api/users  -> alta simple (usado en /login)
+// Por defecto: JUGADOR con isApproved = false (pendiente)
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
-    const name = String(body?.name || "").trim();
-    const email = String(body?.email || "").trim().toLowerCase();
-    const password = String(body?.password || "");
-    // Aunque envíen "role", el alta pública siempre crea JUGADOR
-    const role: Role = "JUGADOR";
+    const name = (body?.name || "").trim();
+    const email = (body?.email || "").trim().toLowerCase();
+    const password = (body?.password || "").trim();
+    const role: Role = (body?.role as Role) || "JUGADOR";
 
     if (!name || !email || !password) {
-      return NextResponse.json({ error: "Faltan campos (name, email, password)" }, { status: 400 });
+      return NextResponse.json({ error: "Faltan campos" }, { status: 400 });
     }
 
-    const exists = await prisma.user.findUnique({ where: { email } });
-    if (exists) {
-      return NextResponse.json({ error: "Ya existe un usuario con ese email" }, { status: 409 });
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      return NextResponse.json({ error: "El email ya está registrado" }, { status: 409 });
     }
 
     const user = await prisma.user.create({
-      data: { name, email, password, role },
-      select: { id: true, name: true, email: true, role: true, createdAt: true },
+      data: {
+        name,
+        email,
+        password, // (mantengo tu flujo actual)
+        role,
+        isApproved: false, // queda pendiente hasta aprobación
+      },
     });
 
-    return NextResponse.json({ ok: true, user }, { status: 201 });
-  } catch (err) {
-    console.error("POST /api/users error:", err);
-    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+    return NextResponse.json({
+      ok: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        isApproved: user.isApproved,
+      },
+    });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Error" }, { status: 500 });
   }
 }
