@@ -16,26 +16,29 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(creds) {
         if (!creds?.email) return null;
+        // Login “soft”: busca por email
         const user = await prisma.user.findUnique({ where: { email: creds.email } });
         if (!user) return null;
-
-        // Mantengo tu lógica actual (sin hash) y agrego isApproved
-        return {
-          id: user.id,
-          name: user.name ?? user.email,
-          email: user.email,
-          role: user.role,
-          isApproved: user.isApproved,
-        } as any;
+        // Devuelvo lo mínimo; el resto lo completa el callback jwt con lectura a DB
+        return { id: user.id, name: user.name ?? user.email, email: user.email, role: user.role } as any;
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user) {
-        token.id = (user as any).id;
-        token.role = (user as any).role;
-        token.isApproved = (user as any).isApproved ?? true;
+      // En el primer login (cuando viene "user") refresco desde DB y guardo role + isApproved
+      if (user?.id || user?.email) {
+        const dbUser =
+          (user?.id
+            ? await prisma.user.findUnique({ where: { id: (user as any).id } })
+            : user?.email
+            ? await prisma.user.findUnique({ where: { email: (user as any).email } })
+            : null) as any;
+
+        token.id = dbUser?.id ?? (user as any)?.id ?? token.id;
+        token.role = dbUser?.role ?? (user as any)?.role ?? token.role;
+        // <- puede no existir en tu schema aún; si no existe será undefined y no rompe
+        token.isApproved = dbUser?.isApproved ?? token?.isApproved ?? true;
       }
       return token;
     },
@@ -44,7 +47,7 @@ export const authOptions: NextAuthOptions = {
         ...(session.user ?? {}),
         id: token.id as string,
         role: token.role as string,
-        isApproved: (token as any).isApproved ?? true,
+        isApproved: (token as any).isApproved,
       };
       return session;
     },
