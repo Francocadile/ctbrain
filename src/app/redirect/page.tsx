@@ -1,11 +1,9 @@
 // Server Component
-import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 
-type Role = "ADMIN" | "CT" | "MEDICO" | "JUGADOR" | "DIRECTIVO";
-
-function homeFor(role?: Role) {
+function roleHome(role?: string) {
   switch (role) {
     case "ADMIN":
       return "/admin";
@@ -14,7 +12,7 @@ function homeFor(role?: Role) {
     case "MEDICO":
       return "/medico";
     case "JUGADOR":
-      return "/jugador";
+      return "/jugador";   // 👈 usamos /jugador (coincide con tus rutas)
     case "DIRECTIVO":
       return "/directivo";
     default:
@@ -25,29 +23,16 @@ function homeFor(role?: Role) {
 export default async function RedirectByRolePage() {
   const session = await getServerSession(authOptions);
 
-  // No logueado → login
+  // Si no hay sesión, volver al login
   if (!session?.user?.id) {
     redirect("/login");
   }
 
-  const role = (session.user as any).role as Role | undefined;
+  const role = (session.user as any)?.role as string | undefined;
 
-  // ⛳️ SOFT-GUARD de aprobación:
-  // Si la propiedad no existe aún en la sesión/DB, asumimos aprobado (true).
-  const isApprovedRaw = (session.user as any).isApproved;
-  const isApproved =
-    typeof isApprovedRaw === "boolean" ? isApprovedRaw : true;
+  // Nota futura: si luego agregás `approved` en el token/usuario,
+  // acá podrías hacer:
+  // if (approved === false) redirect("/pending-approval");
 
-  // (Opcional) Si en algún momento querés forzar el uso del gate,
-  // podés setear NEXT_PUBLIC_REQUIRE_APPROVAL="1" y entonces
-  // los no aprobados (salvo ADMIN) irán a /pending-approval.
-  const requireApproval =
-    process.env.NEXT_PUBLIC_REQUIRE_APPROVAL === "1";
-
-  if (requireApproval && !isApproved && role !== "ADMIN") {
-    redirect("/pending-approval");
-  }
-
-  // Enviar al home de su rol
-  redirect(homeFor(role));
+  redirect(roleHome(role));
 }
