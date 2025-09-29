@@ -24,7 +24,7 @@ export default function LoginPage() {
       email,
       password,
       redirect: true,
-      callbackUrl: "/redirect", // 👈 redirige al handler que manda según rol
+      callbackUrl: "/redirect",
     });
 
     setLoadingLogin(false);
@@ -57,7 +57,7 @@ export default function LoginPage() {
         throw new Error(msg);
       }
 
-      setSuccessMsg("Cuenta creada. Ya podés iniciar sesión.");
+      setSuccessMsg("Cuenta creada. Un Admin debe aprobar tu acceso. Podés iniciar sesión luego.");
       form.reset();
     } catch (err: any) {
       setErrorMsg(err?.message ?? "Error creando la cuenta");
@@ -182,7 +182,7 @@ export default function LoginPage() {
           </form>
 
           <p className="mt-3 text-xs text-gray-500">
-            ¿Necesitás acceso como <b>CT</b> o <b>Médico</b>? Pedilo a un Admin.
+            ¿Necesitás acceso como <b>CT</b>, <b>Médico</b> o <b>Directivo</b>? Pedilo a un Admin.
           </p>
         </section>
       </div>
