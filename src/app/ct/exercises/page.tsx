@@ -1,6 +1,3 @@
-// src/app/ct/exercises/page.tsx
-import { redirect } from "next/navigation";
-
-export default function ExercisesRedirect() {
-  redirect("/ct/sessions/buscar");
-}
+// Mantiene la URL /ct/exercises pero renderiza la misma UI que /ct/sessions/buscar
+export { default } from "@/app/ct/sessions/buscar/page";
+export const dynamic = "force-dynamic";
