@@ -1,23 +1,43 @@
-// src/app/redirect/page.tsx
-import { getServerSession } from "next-auth";
+// Server Component
 import { redirect } from "next/navigation";
+import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
-export default async function RedirectPage() {
-  const session = await getServerSession(authOptions);
-  const role = (session?.user as any)?.role;
+type Role = "ADMIN" | "CT" | "MEDICO" | "JUGADOR" | "DIRECTIVO";
 
-  if (!session) {
+function homeFor(role?: Role) {
+  switch (role) {
+    case "ADMIN":
+      return "/admin";
+    case "CT":
+      return "/ct";
+    case "MEDICO":
+      return "/medico";
+    case "JUGADOR":
+      return "/jugador";
+    case "DIRECTIVO":
+      return "/directivo";
+    default:
+      return "/";
+  }
+}
+
+export default async function RedirectByRolePage() {
+  const session = await getServerSession(authOptions);
+
+  // No logueado → login
+  if (!session?.user?.id) {
     redirect("/login");
   }
 
-  const map: Record<string, string> = {
-    ADMIN: "/admin",
-    CT: "/ct",
-    MEDICO: "/medico",
-    JUGADOR: "/jugador",
-    DIRECTIVO: "/directivo",
-  };
+  const role = (session.user as any).role as Role | undefined;
+  const isApproved = Boolean((session.user as any).isApproved);
 
-  redirect(map[role as string] ?? "/login");
+  // Si no está aprobado (y no es admin), a "pendiente de aprobación"
+  if (!isApproved && role !== "ADMIN") {
+    redirect("/pending-approval");
+  }
+
+  // Enviar al home de su rol
+  redirect(homeFor(role));
 }
