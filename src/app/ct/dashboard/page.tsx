@@ -1,3 +1,4 @@
+// src/app/ct/dashboard/page.tsx
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
@@ -29,11 +30,29 @@ const DAYFLAG_TAG = "DAYFLAG";
 const dayFlagMarker = (turn: TurnKey) => `[${DAYFLAG_TAG}:${turn}]`;
 const isDayFlag = (s: SessionDTO, turn: TurnKey) =>
   typeof s.description === "string" && s.description.startsWith(dayFlagMarker(turn));
+
+/** Compat: formato NUEVO (PARTIDO|id|name|logo) y VIEJO (PARTIDO|name|logo) */
 function parseDayFlagTitle(title?: string | null): DayFlag {
-  const t = (title || "").trim();
-  if (!t) return { kind: "NONE" };
-  const [kind, rival, logoUrl, rivalId] = t.split("|").map((x) => (x || "").trim());
-  if (kind === "PARTIDO") return { kind: "PARTIDO", rival, logoUrl, rivalId };
+  const raw = (title || "").trim();
+  if (!raw) return { kind: "NONE" };
+
+  const parts = raw.split("|").map((x) => (x || "").trim());
+  const kind = parts[0];
+
+  if (kind === "PARTIDO") {
+    // NUEVO: PARTIDO|<id>|<name>|<logo>
+    if (parts.length >= 4) {
+      const [, id, name, logo] = parts;
+      return { kind: "PARTIDO", rivalId: id || undefined, rival: name || "", logoUrl: logo || "" };
+    }
+    // VIEJO: PARTIDO|<name>|<logo>
+    if (parts.length >= 3) {
+      const [, name, logo] = parts;
+      return { kind: "PARTIDO", rival: name || "", logoUrl: logo || "" };
+    }
+    return { kind: "PARTIDO" };
+  }
+
   if (kind === "LIBRE") return { kind: "LIBRE" };
   return { kind: "NONE" };
 }
