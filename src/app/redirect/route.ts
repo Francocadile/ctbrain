@@ -22,17 +22,12 @@ function roleHome(role?: string) {
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   const url = new URL(req.url);
+  const base = `${url.protocol}//${url.host}`;
 
-  // Permite opcionalmente forzar destino con ?to=/alguna/ruta
-  const forced = url.searchParams.get("to");
-
-  if (!session?.user) {
-    const back = url.searchParams.get("callbackUrl") || "/";
-    const redirectTo = `/login?callbackUrl=${encodeURIComponent(back)}`;
-    return NextResponse.redirect(new URL(redirectTo, url.origin));
+  if (!session?.user?.role) {
+    return NextResponse.redirect(`${base}/login`);
   }
 
-  const role = (session.user as any)?.role as string | undefined;
-  const dest = forced || roleHome(role);
-  return NextResponse.redirect(new URL(dest, url.origin));
+  const home = roleHome(session.user.role as string | undefined);
+  return NextResponse.redirect(`${base}${home}`);
 }
