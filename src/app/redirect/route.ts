@@ -2,6 +2,9 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
 
 function roleHome(role?: string) {
   switch (role) {
@@ -30,16 +33,28 @@ export async function GET(req: Request) {
     return NextResponse.redirect(`${base}/login`);
   }
 
-  // Aprobación por admin:
-  // - Si isApproved es boolean y es false → /pending
-  // - Si es undefined (columna aún no creada) → dejar pasar para no romper
-  const raw = (session.user as any)?.isApproved;
-  const approved = typeof raw === "boolean" ? raw : true;
-  if (!approved) {
-    return NextResponse.redirect(`${base}/pending`);
+  // Cargamos el usuario para (eventualmente) chequear isApproved
+  // Nota: tu schema actual no tiene isApproved; si no existe, tratamos como aprobado (fallback = true).
+  let dbUser: any = null;
+  try {
+    dbUser = await prisma.user.findUnique({
+      where: { id: String(session.user.id) },
+    });
+  } catch {
+    // En caso de error de DB, no bloqueamos el acceso
   }
 
-  // Enviar al home según rol
-  const home = roleHome(session.user.role as string | undefined);
+  const isApproved =
+    dbUser && typeof dbUser.isApproved === "boolean" ? dbUser.isApproved : true;
+
+  if (!isApproved) {
+    // Usuario pendiente → pantalla de aprobación
+    return NextResponse.redirect(`${base}/pending-approval`);
+  }
+
+  // Resolvemos home por rol (priorizamos DB; si no, lo que venga en session)
+  const role = (dbUser?.role as string | undefined) ?? (session.user as any)?.role;
+  const home = roleHome(role);
+
   return NextResponse.redirect(`${base}${home}`);
 }
