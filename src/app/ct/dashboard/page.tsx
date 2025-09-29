@@ -15,6 +15,8 @@ import PlannerMatchLink from "@/components/PlannerMatchLink";
    Tipos / filas
 ========================================================= */
 type TurnKey = "morning" | "afternoon";
+
+// IDs internos (no cambian). El label visible se resuelve con rowLabels.
 const ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 
 const SESSION_NAME_ROW = "NOMBRE SESIÓN" as const;
@@ -31,7 +33,7 @@ const dayFlagMarker = (turn: TurnKey) => `[${DAYFLAG_TAG}:${turn}]`;
 const isDayFlag = (s: SessionDTO, turn: TurnKey) =>
   typeof s.description === "string" && s.description.startsWith(dayFlagMarker(turn));
 
-/** Compat: formato NUEVO (PARTIDO|id|name|logo) y VIEJO (PARTIDO|name|logo) */
+/** Compatibilidad: NUEVO (PARTIDO|id|name|logo) y VIEJO (PARTIDO|name|logo) */
 function parseDayFlagTitle(title?: string | null): DayFlag {
   const raw = (title || "").trim();
   if (!raw) return { kind: "NONE" };
@@ -40,19 +42,16 @@ function parseDayFlagTitle(title?: string | null): DayFlag {
   const kind = parts[0];
 
   if (kind === "PARTIDO") {
-    // NUEVO: PARTIDO|<id>|<name>|<logo>
-    if (parts.length >= 4) {
+    if (parts.length >= 4) { // nuevo
       const [, id, name, logo] = parts;
       return { kind: "PARTIDO", rivalId: id || undefined, rival: name || "", logoUrl: logo || "" };
     }
-    // VIEJO: PARTIDO|<name>|<logo>
-    if (parts.length >= 3) {
+    if (parts.length >= 3) { // viejo
       const [, name, logo] = parts;
       return { kind: "PARTIDO", rival: name || "", logoUrl: logo || "" };
     }
     return { kind: "PARTIDO" };
   }
-
   if (kind === "LIBRE") return { kind: "LIBRE" };
   return { kind: "NONE" };
 }
@@ -133,6 +132,27 @@ function DashboardSemanaInner() {
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
 
+  // ===== Row labels (mismos que el Editor) =====
+  const [rowLabels, setRowLabels] = useState<Record<string, string>>({});
+  const label = (id: string) => rowLabels[id] || id;
+
+  async function loadRowLabels() {
+    try {
+      const r = await fetch("/api/planner/labels", { cache: "no-store" });
+      const j = await r.json();
+      setRowLabels(j?.rowLabels || {});
+    } catch {
+      setRowLabels({});
+    }
+  }
+
+  useEffect(() => {
+    loadRowLabels();
+    const onUpd = () => loadRowLabels();
+    window.addEventListener("planner-row-labels-updated", onUpd as any);
+    return () => window.removeEventListener("planner-row-labels-updated", onUpd as any);
+  }, []);
+
   async function loadWeek(d: Date) {
     setLoadingWeek(true);
     try {
@@ -147,7 +167,7 @@ function DashboardSemanaInner() {
     }
   }
   useEffect(() => {
-    loadWeek(base); // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadWeek(base); // eslint-disable-line react-hooks/exhaustive-deps
   }, [base]);
 
   const orderedDays = useMemo(() => {
@@ -385,14 +405,14 @@ function DashboardSemanaInner() {
                 className="mt-2 grid gap-[6px]"
                 style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
               >
-                {META_ROWS.map((label) => (
-                  <div key={`meta-${label}`} className="contents">
+                {META_ROWS.map((labelText) => (
+                  <div key={`meta-${labelText}`} className="contents">
                     <div className="bg-gray-50/60 border rounded-md px-2 py-1 text-[10px] font-medium text-gray-600">
-                      {label}
+                      {labelText}
                     </div>
                     {orderedDays.map((ymd) => (
-                      <div key={`${label}-${ymd}`} className="rounded-md border px-1 py-0.5">
-                        <ReadonlyMetaCell ymd={ymd} row={label} />
+                      <div key={`${labelText}-${ymd}`} className="rounded-md border px-1 py-0.5">
+                        <ReadonlyMetaCell ymd={ymd} row={labelText} />
                       </div>
                     ))}
                   </div>
@@ -415,9 +435,9 @@ function DashboardSemanaInner() {
                 style={{ gridTemplateRows: `${DAY_HEADER_H}px repeat(4, ${ROW_H}px)` }}
               >
                 <div />
-                {ROWS.map((r) => (
-                  <div key={r} className="bg-gray-50/60 border rounded-md px-2 text-[10px] font-medium text-gray-600 flex items-center">
-                    <span className="leading-[14px] whitespace-pre-line">{r}</span>
+                {ROWS.map((rowId) => (
+                  <div key={rowId} className="bg-gray-50/60 border rounded-md px-2 text-[10px] font-medium text-gray-600 flex items-center">
+                    <span className="leading-[14px] whitespace-pre-line">{label(rowId)}</span>
                   </div>
                 ))}
               </div>
