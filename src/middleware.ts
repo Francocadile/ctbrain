@@ -1,28 +1,30 @@
+// src/middleware.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-// Rutas que requieren CT o ADMIN
-const CT_PATHS = [
-  /^\/ct(?:\/|$)/,
-  /^\/api\/ct(?:\/|$)/,
-  // heredado de tu setup previo
-  /^\/api\/sessions(?:\/|$)/,
-  /^\/api\/users(?:\/|$)/,
-];
+// Zonas por rol
+const CT_PATHS = [/^\/ct(?:\/|$)/, /^\/api\/ct(?:\/|$)/, /^\/api\/sessions(?:\/|$)/, /^\/api\/users(?:\/|$)/];
 
-// Rutas que requieren MEDICO o ADMIN (por defecto)
-const MED_PATHS = [
-  /^\/med(?:\/|$)/,
-  /^\/api\/med(?:\/|$)/,
-];
+// Médico -> tu app usa /medico (no /med) para UI
+const MED_PATHS = [/^\/medico(?:\/|$)/, /^\/api\/med(?:\/|$)/];
 
-// --- excepciones: CT puede LEER (GET) endpoints clínicos ---
-function isClinicalReadForCT(pathname: string, method: string) {
-  if (method !== "GET") return false;
-  // /api/med/clinical y /api/med/clinical/analytics (+ subrutas)
-  return /^\/api\/med\/clinical(?:\/|$)/.test(pathname);
-}
+// Otras zonas
+const PLAYER_PATHS = [/^\/jugador(?:\/|$)/, /^\/player(?:\/|$)/];
+const DIRECTIVO_PATHS = [/^\/directivo(?:\/|$)/];
+const ADMIN_PATHS = [/^\/admin(?:\/|$)/];
+
+const PUBLIC_ALLOWLIST = [
+  /^\/$/,
+  /^\/login(?:\/|$)/,
+  /^\/redirect(?:\/|$)/,
+  /^\/pending-approval(?:\/|$)/,
+  /^\/api\/auth(?:\/|$)/, // next-auth
+  /^\/_next(?:\/|$)/,
+  /^\/favicon\.ico$/,
+  /^\/images(?:\/|$)/,
+  /^\/public(?:\/|$)/,
+];
 
 function matchAny(pathname: string, patterns: RegExp[]) {
   return patterns.some((r) => r.test(pathname));
@@ -45,39 +47,22 @@ function roleHome(role?: string) {
   }
 }
 
-/** Excepciones públicas (no requieren auth) */
-function isPublicException(pathname: string, method: string) {
-  // Signup público: crear usuario
-  if (method === "POST" && /^\/api\/users\/?$/.test(pathname)) return true;
-  return false;
-}
-
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const isAPI = pathname.startsWith("/api");
 
-  // Excepciones públicas (dejan pasar antes de chequear roles)
-  if (isPublicException(pathname, req.method)) {
-    return NextResponse.next();
-  }
+  if (matchAny(pathname, PUBLIC_ALLOWLIST)) return NextResponse.next();
 
-  // ¿Qué guard aplica?
-  const needsCT = matchAny(pathname, CT_PATHS);
-  const needsMED = matchAny(pathname, MED_PATHS);
+  const protectedZone =
+    matchAny(pathname, CT_PATHS) ||
+    matchAny(pathname, MED_PATHS) ||
+    matchAny(pathname, PLAYER_PATHS) ||
+    matchAny(pathname, DIRECTIVO_PATHS) ||
+    matchAny(pathname, ADMIN_PATHS);
 
-  if (!needsCT && !needsMED) {
-    return NextResponse.next();
-  }
+  if (!protectedZone) return NextResponse.next();
 
-  // Auth
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
   if (!token) {
-    if (isAPI) {
-      return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "content-type": "application/json" },
-      });
-    }
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("callbackUrl", pathname);
@@ -85,38 +70,40 @@ export async function middleware(req: NextRequest) {
   }
 
   const role = (token as any).role as string | undefined;
+  const isApproved = (token as any).isApproved as boolean | undefined;
 
-  // Guard CT
-  if (needsCT) {
-    const allowed = role === "CT" || role === "ADMIN";
-    if (!allowed) {
-      if (isAPI) {
-        return new NextResponse(JSON.stringify({ error: "Forbidden", role }), {
-          status: 403,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      const url = req.nextUrl.clone();
-      url.pathname = roleHome(role);
-      return NextResponse.redirect(url);
-    }
+  // Gate global: no aprobados → pendiente
+  if (isApproved === false && !/^\/pending-approval/.test(pathname)) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/pending-approval";
+    return NextResponse.redirect(url);
   }
 
-  // Guard Médico (con excepción de lectura para CT)
-  if (needsMED) {
-    const allowCTReadOnly = role === "CT" && isClinicalReadForCT(pathname, req.method);
-    const allowed = role === "MEDICO" || role === "ADMIN" || allowCTReadOnly;
-    if (!allowed) {
-      if (isAPI) {
-        return new NextResponse(JSON.stringify({ error: "Forbidden", role }), {
-          status: 403,
-          headers: { "content-type": "application/json" },
-        });
-      }
-      const url = req.nextUrl.clone();
-      url.pathname = roleHome(role);
-      return NextResponse.redirect(url);
-    }
+  // Reglas por zona
+  if (matchAny(pathname, CT_PATHS) && !(role === "CT" || role === "ADMIN")) {
+    const url = req.nextUrl.clone();
+    url.pathname = roleHome(role);
+    return NextResponse.redirect(url);
+  }
+  if (matchAny(pathname, MED_PATHS) && !(role === "MEDICO" || role === "ADMIN")) {
+    const url = req.nextUrl.clone();
+    url.pathname = roleHome(role);
+    return NextResponse.redirect(url);
+  }
+  if (matchAny(pathname, PLAYER_PATHS) && !(role === "JUGADOR" || role === "ADMIN")) {
+    const url = req.nextUrl.clone();
+    url.pathname = roleHome(role);
+    return NextResponse.redirect(url);
+  }
+  if (matchAny(pathname, DIRECTIVO_PATHS) && !(role === "DIRECTIVO" || role === "ADMIN")) {
+    const url = req.nextUrl.clone();
+    url.pathname = roleHome(role);
+    return NextResponse.redirect(url);
+  }
+  if (matchAny(pathname, ADMIN_PATHS) && role !== "ADMIN") {
+    const url = req.nextUrl.clone();
+    url.pathname = roleHome(role);
+    return NextResponse.redirect(url);
   }
 
   return NextResponse.next();
@@ -124,14 +111,17 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    // CT
     "/ct/:path*",
     "/api/ct/:path*",
     "/api/sessions/:path*",
     "/api/users/:path*",
 
-    // Médico
-    "/med/:path*",
+    "/medico/:path*",
     "/api/med/:path*",
+
+    "/jugador/:path*",
+    "/player/:path*",
+    "/directivo/:path*",
+    "/admin/:path*",
   ],
 };
