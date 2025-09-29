@@ -16,20 +16,15 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(creds) {
         if (!creds?.email) return null;
-
-        // ⚠️ Mantengo tu comportamiento actual (sin check de contraseña) para no romper nada.
-        // Cuando quieras activar hash + verificación, lo hacemos sin cambiar el resto.
-        const user = await prisma.user.findUnique({
-          where: { email: creds.email.toLowerCase() },
-        });
+        const user = await prisma.user.findUnique({ where: { email: creds.email } });
         if (!user) return null;
 
+        // Mantengo tu lógica actual (sin hash) y agrego isApproved
         return {
           id: user.id,
           name: user.name ?? user.email,
           email: user.email,
           role: user.role,
-          // 👇 clave para aprobación por admin
           isApproved: user.isApproved,
         } as any;
       },
@@ -40,7 +35,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = (user as any).id;
         token.role = (user as any).role;
-        token.isApproved = (user as any).isApproved; // 👈 pasa al JWT
+        token.isApproved = (user as any).isApproved ?? true;
       }
       return token;
     },
@@ -49,7 +44,7 @@ export const authOptions: NextAuthOptions = {
         ...(session.user ?? {}),
         id: token.id as string,
         role: token.role as string,
-        isApproved: (token as any).isApproved as boolean, // 👈 disponible en cliente/servidor
+        isApproved: (token as any).isApproved ?? true,
       };
       return session;
     },
