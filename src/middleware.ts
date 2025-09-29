@@ -1,28 +1,35 @@
-// src/middleware.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-// Rutas que requieren CT o ADMIN
+/* ========= Paths protegidos por rol ========= */
+
+// CT o ADMIN
 const CT_PATHS = [
   /^\/ct(?:\/|$)/,
   /^\/api\/ct(?:\/|$)/,
-  // heredado de tu setup previo
+  // compat con tu backend actual
   /^\/api\/sessions(?:\/|$)/,
   /^\/api\/users(?:\/|$)/,
 ];
 
-// Rutas que requieren MEDICO o ADMIN (por defecto)
+// MÉDICO o ADMIN (por defecto)
 const MED_PATHS = [
-  /^\/med(?:\/|$)/,
-  /^\/api\/med(?:\/|$)/,
+  /^\/medico(?:\/|$)/,
+  /^\/api\/medico(?:\/|$)/,
 ];
 
-// --- excepciones: CT puede LEER (GET) endpoints clínicos ---
+// ADMIN puro
+const ADMIN_PATHS = [
+  /^\/admin(?:\/|$)/,
+  /^\/api\/admin(?:\/|$)/,
+];
+
+/** Excepción: CT puede LEER (GET) endpoints clínicos */
 function isClinicalReadForCT(pathname: string, method: string) {
   if (method !== "GET") return false;
-  // /api/med/clinical y /api/med/clinical/analytics (+ subrutas)
-  return /^\/api\/med\/clinical(?:\/|$)/.test(pathname);
+  // /api/medico/clinical y /api/medico/clinical/analytics (+ subrutas)
+  return /^\/api\/medico\/clinical(?:\/|$)/.test(pathname);
 }
 
 function matchAny(pathname: string, patterns: RegExp[]) {
@@ -31,16 +38,16 @@ function matchAny(pathname: string, patterns: RegExp[]) {
 
 function roleHome(role?: string) {
   switch (role) {
-    case "MEDICO":
-      return "/medico";
+    case "ADMIN":
+      return "/admin";
     case "CT":
       return "/ct";
+    case "MEDICO":
+      return "/medico";
     case "JUGADOR":
-      return "/player";
+      return "/jugador";   // 👈 ruta jugador en tu app
     case "DIRECTIVO":
       return "/directivo";
-    case "ADMIN":
-      return "/";
     default:
       return "/";
   }
@@ -50,11 +57,12 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isAPI = pathname.startsWith("/api");
 
-  // ¿Qué guard aplica?
   const needsCT = matchAny(pathname, CT_PATHS);
   const needsMED = matchAny(pathname, MED_PATHS);
+  const needsADMIN = matchAny(pathname, ADMIN_PATHS);
 
-  if (!needsCT && !needsMED) {
+  // Si no requiere guardia, seguir
+  if (!needsCT && !needsMED && !needsADMIN) {
     return NextResponse.next();
   }
 
@@ -108,6 +116,22 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  // Guard Admin
+  if (needsADMIN) {
+    const allowed = role === "ADMIN";
+    if (!allowed) {
+      if (isAPI) {
+        return new NextResponse(JSON.stringify({ error: "Forbidden", role }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      const url = req.nextUrl.clone();
+      url.pathname = roleHome(role);
+      return NextResponse.redirect(url);
+    }
+  }
+
   return NextResponse.next();
 }
 
@@ -120,7 +144,11 @@ export const config = {
     "/api/users/:path*",
 
     // Médico
-    "/med/:path*",
-    "/api/med/:path*",
+    "/medico/:path*",
+    "/api/medico/:path*",
+
+    // Admin
+    "/admin/:path*",
+    "/api/admin/:path*",
   ],
 };
