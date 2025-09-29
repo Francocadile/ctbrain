@@ -31,10 +31,20 @@ export default async function RedirectByRolePage() {
   }
 
   const role = (session.user as any).role as Role | undefined;
-  const isApproved = Boolean((session.user as any).isApproved);
 
-  // Si no está aprobado (y no es admin), a "pendiente de aprobación"
-  if (!isApproved && role !== "ADMIN") {
+  // ⛳️ SOFT-GUARD de aprobación:
+  // Si la propiedad no existe aún en la sesión/DB, asumimos aprobado (true).
+  const isApprovedRaw = (session.user as any).isApproved;
+  const isApproved =
+    typeof isApprovedRaw === "boolean" ? isApprovedRaw : true;
+
+  // (Opcional) Si en algún momento querés forzar el uso del gate,
+  // podés setear NEXT_PUBLIC_REQUIRE_APPROVAL="1" y entonces
+  // los no aprobados (salvo ADMIN) irán a /pending-approval.
+  const requireApproval =
+    process.env.NEXT_PUBLIC_REQUIRE_APPROVAL === "1";
+
+  if (requireApproval && !isApproved && role !== "ADMIN") {
     redirect("/pending-approval");
   }
 
