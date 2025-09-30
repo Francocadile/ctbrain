@@ -83,17 +83,17 @@ enum IllAptitude {
 
 // ===== Modelos =====
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  password  String?
-  role      Role     @default(JUGADOR)
+  id         String   @id @default(cuid())
+  email      String   @unique
+  name       String?
+  password   String?
+  role       Role     @default(JUGADOR)
 
-  /// Aprobación por Admin (nuevo)
-  isApproved Boolean  @default(true)
+  /// Aprobación por Admin (pendiente por defecto)
+  isApproved Boolean  @default(false)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   sessions        Session[]      @relation("UserSessions")
   rpeEntries      RPEEntry[]
