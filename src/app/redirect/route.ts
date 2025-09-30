@@ -1,4 +1,3 @@
-// src/app/redirect/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -23,6 +22,13 @@ export async function GET(req: Request) {
     return NextResponse.redirect(`${base}/login`);
   }
 
-  const home = roleHome(session.user.role as string | undefined);
+  const role = (session.user as any).role as string;
+  const isApproved = (session.user as any).isApproved as boolean | undefined;
+
+  if (role !== "ADMIN" && isApproved === false) {
+    return NextResponse.redirect(`${base}/pending-approval`);
+  }
+
+  const home = roleHome(role);
   return NextResponse.redirect(`${base}${home}`);
 }
