@@ -1,8 +1,15 @@
+// src/lib/auth.ts
 import type { NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
-const prisma = new PrismaClient();
+declare global {
+  // eslint-disable-next-line no-var
+  var prisma: PrismaClient | undefined;
+}
+const prisma = global.prisma ?? new PrismaClient();
+if (process.env.NODE_ENV !== "production") global.prisma = prisma;
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
@@ -14,15 +21,41 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(creds) {
-        if (!creds?.email) return null;
-        // Login simple: si existe el usuario por email, lo dejamos pasar.
-        // (Tu validación real de password la podés agregar cuando quieras)
+        // Pequeño delay para evitar timing attacks triviales
+        await new Promise((r) => setTimeout(r, 300));
+
+        const email = (creds?.email || "").trim().toLowerCase();
+        const password = (creds?.password || "").trim();
+
+        if (!email || !password) return null;
+
         const user = await prisma.user.findUnique({
-          where: { email: creds.email },
-          select: { id: true, name: true, email: true, role: true, isApproved: true },
+          where: { email },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            isApproved: true,
+            password: true,
+          },
         });
-        if (!user) return null;
-        return { id: user.id, name: user.name ?? user.email, email: user.email, role: user.role, isApproved: user.isApproved };
+
+        if (!user || !user.password) {
+          // Usuario sin password seteada o inexistente
+          return null;
+        }
+
+        const ok = await bcrypt.compare(password, user.password);
+        if (!ok) return null;
+
+        return {
+          id: user.id,
+          name: user.name ?? user.email,
+          email: user.email,
+          role: user.role,
+          isApproved: user.isApproved,
+        } as any;
       },
     }),
   ],
@@ -30,9 +63,10 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       // Primer login
       if (user) {
-        token.id = (user as any).id;
-        token.role = (user as any).role;
+        (token as any).id = (user as any).id;
+        (token as any).role = (user as any).role;
         (token as any).isApproved = (user as any).isApproved ?? false;
+        token.email = (user as any).email ?? token.email;
         return token;
       }
       // Refresco: traigo estado actualizado (p.ej., si el Admin aprobó)
@@ -43,19 +77,21 @@ export const authOptions: NextAuthOptions = {
             select: { id: true, role: true, isApproved: true },
           });
           if (u) {
-            token.id = u.id;
-            token.role = u.role;
+            (token as any).id = u.id;
+            (token as any).role = u.role;
             (token as any).isApproved = u.isApproved;
           }
-        } catch {}
+        } catch {
+          // noop
+        }
       }
       return token;
     },
     async session({ session, token }) {
       (session as any).user = {
         ...(session.user ?? {}),
-        id: token.id as string,
-        role: token.role as string,
+        id: (token as any).id as string,
+        role: (token as any).role as string,
         isApproved: (token as any).isApproved ?? false,
       };
       return session;
