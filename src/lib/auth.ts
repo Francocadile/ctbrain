@@ -11,6 +11,11 @@ declare global {
 const prisma = global.prisma ?? new PrismaClient();
 if (process.env.NODE_ENV !== "production") global.prisma = prisma;
 
+function looksLikeBcrypt(hash: string | null | undefined) {
+  if (!hash) return false;
+  return /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(hash);
+}
+
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
   providers: [
@@ -21,12 +26,11 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(creds) {
-        // Pequeño delay para evitar timing attacks triviales
+        // Delay leve para suavizar timing
         await new Promise((r) => setTimeout(r, 300));
 
         const email = (creds?.email || "").trim().toLowerCase();
         const password = (creds?.password || "").trim();
-
         if (!email || !password) return null;
 
         const user = await prisma.user.findUnique({
@@ -40,14 +44,21 @@ export const authOptions: NextAuthOptions = {
             password: true,
           },
         });
+        if (!user || !user.password) return null;
 
-        if (!user || !user.password) {
-          // Usuario sin password seteada o inexistente
-          return null;
+        // 1) Si es bcrypt: comparar normalmente
+        if (looksLikeBcrypt(user.password)) {
+          const ok = await bcrypt.compare(password, user.password);
+          if (!ok) return null;
+        } else {
+          // 2) Autoconversión: si coincide en texto plano, re-hashear
+          if (password !== user.password) return null;
+          const newHash = await bcrypt.hash(password, 10);
+          await prisma.user.update({
+            where: { email },
+            data: { password: newHash },
+          });
         }
-
-        const ok = await bcrypt.compare(password, user.password);
-        if (!ok) return null;
 
         return {
           id: user.id,
@@ -61,7 +72,6 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async jwt({ token, user }) {
-      // Primer login
       if (user) {
         (token as any).id = (user as any).id;
         (token as any).role = (user as any).role;
@@ -69,7 +79,6 @@ export const authOptions: NextAuthOptions = {
         token.email = (user as any).email ?? token.email;
         return token;
       }
-      // Refresco: traigo estado actualizado (p.ej., si el Admin aprobó)
       if (token?.email) {
         try {
           const u = await prisma.user.findUnique({
