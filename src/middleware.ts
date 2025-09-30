@@ -5,13 +5,11 @@ import { getToken } from "next-auth/jwt";
 
 // Rutas públicas (no pedir sesión)
 const PUBLIC = [
-  /^\/$/, // home
+  /^\/$/,                      // home
   /^\/login(?:\/|$)/,
-  /^\/signup(?:\/|$)/,
   /^\/pending-approval(?:\/|$)/,
   /^\/redirect(?:\/|$)/,
   /^\/api\/auth(?:\/|$)/,
-  /^\/api\/users(?:\/|$)/, // signup público
   /^\/_next\/static(?:\/|$)/,
   /^\/favicon\.ico$/,
 ];
@@ -21,13 +19,12 @@ const CT_PATHS = [
   /^\/ct(?:\/|$)/,
   /^\/api\/ct(?:\/|$)/,
   /^\/api\/sessions(?:\/|$)/,
-  // ⚠️ /api/users queda público para permitir signup
+  /^\/api\/users(?:\/|$)/,
 ];
 
-// Guard Médico / API Médico (incluye compat /medico)
+// Guard Médico / API Médico
 const MED_PATHS = [
   /^\/med(?:\/|$)/,
-  /^\/medico(?:\/|$)/, // ← compatibilidad
   /^\/api\/med(?:\/|$)/,
 ];
 
@@ -43,18 +40,12 @@ function matchAny(pathname: string, patterns: RegExp[]) {
 
 function roleHome(role?: string) {
   switch (role) {
-    case "ADMIN":
-      return "/admin";
-    case "CT":
-      return "/ct";
-    case "MEDICO":
-      return "/med"; // ← fix: ruta real
-    case "JUGADOR":
-      return "/jugador";
-    case "DIRECTIVO":
-      return "/directivo";
-    default:
-      return "/login";
+    case "ADMIN": return "/admin";
+    case "CT": return "/ct";
+    case "MEDICO": return "/medico";
+    case "JUGADOR": return "/jugador";
+    case "DIRECTIVO": return "/directivo";
+    default: return "/login";
   }
 }
 
@@ -62,7 +53,6 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isAPI = pathname.startsWith("/api");
 
-  // Públicos
   if (matchAny(pathname, PUBLIC)) {
     return NextResponse.next();
   }
@@ -97,13 +87,10 @@ export async function middleware(req: NextRequest) {
   // Gate global: si no está aprobado y NO es admin → pending
   if (role !== "ADMIN" && isApproved === false) {
     if (isAPI) {
-      return new NextResponse(
-        JSON.stringify({ error: "Forbidden", pendingApproval: true }),
-        {
-          status: 403,
-          headers: { "content-type": "application/json" },
-        }
-      );
+      return new NextResponse(JSON.stringify({ error: "Forbidden", pendingApproval: true }), {
+        status: 403,
+        headers: { "content-type": "application/json" },
+      });
     }
     const url = req.nextUrl.clone();
     url.pathname = "/pending-approval";
@@ -122,12 +109,10 @@ export async function middleware(req: NextRequest) {
 
   // Guard Médico (con excepción de lectura para CT)
   if (needsMED) {
-    const allowCTReadOnly =
-      role === "CT" && isClinicalReadForCT(pathname, req.method);
+    const allowCTReadOnly = role === "CT" && isClinicalReadForCT(pathname, req.method);
     const allowed = role === "MEDICO" || role === "ADMIN" || allowCTReadOnly;
     if (!allowed) {
       const url = req.nextUrl.clone();
-      // si vino por /medico, igual lo mandamos a su home correcto
       url.pathname = roleHome(role);
       return NextResponse.redirect(url);
     }
@@ -138,11 +123,12 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
+    // Home y login quedan públicos; protegemos resto
     "/ct/:path*",
     "/api/ct/:path*",
     "/api/sessions/:path*",
+    "/api/users/:path*",
     "/med/:path*",
-    "/medico/:path*", // ← compatibilidad para pasar por el guard
     "/api/med/:path*",
     "/admin/:path*",
   ],
