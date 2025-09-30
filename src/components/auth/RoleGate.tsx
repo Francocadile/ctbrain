@@ -20,7 +20,7 @@ export default async function RoleGate({
     const map: Record<Role, string> = {
       ADMIN: "/admin",
       CT: "/ct",
-      MEDICO: "/medico",
+      MEDICO: "/med",       // ← fix: ruta canónica
       JUGADOR: "/jugador",
       DIRECTIVO: "/directivo",
     };
@@ -29,4 +29,3 @@ export default async function RoleGate({
 
   return <>{children}</>;
 }
-
