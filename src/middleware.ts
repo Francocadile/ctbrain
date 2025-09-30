@@ -21,11 +21,15 @@ const CT_PATHS = [
   /^\/ct(?:\/|$)/,
   /^\/api\/ct(?:\/|$)/,
   /^\/api\/sessions(?:\/|$)/,
-  // ⚠️ sacamos /api/users de aquí para permitir signup público
+  // ⚠️ /api/users queda público para permitir signup
 ];
 
-// Guard Médico / API Médico
-const MED_PATHS = [/^\/med(?:\/|$)/, /^\/api\/med(?:\/|$)/];
+// Guard Médico / API Médico (incluye compat /medico)
+const MED_PATHS = [
+  /^\/med(?:\/|$)/,
+  /^\/medico(?:\/|$)/, // ← compatibilidad
+  /^\/api\/med(?:\/|$)/,
+];
 
 // Excepción: CT puede LEER endpoints clínicos
 function isClinicalReadForCT(pathname: string, method: string) {
@@ -44,7 +48,7 @@ function roleHome(role?: string) {
     case "CT":
       return "/ct";
     case "MEDICO":
-      return "/med"; // <- fix: ruta real
+      return "/med"; // ← fix: ruta real
     case "JUGADOR":
       return "/jugador";
     case "DIRECTIVO":
@@ -123,6 +127,7 @@ export async function middleware(req: NextRequest) {
     const allowed = role === "MEDICO" || role === "ADMIN" || allowCTReadOnly;
     if (!allowed) {
       const url = req.nextUrl.clone();
+      // si vino por /medico, igual lo mandamos a su home correcto
       url.pathname = roleHome(role);
       return NextResponse.redirect(url);
     }
@@ -136,8 +141,8 @@ export const config = {
     "/ct/:path*",
     "/api/ct/:path*",
     "/api/sessions/:path*",
-    // ⚠️ removemos /api/users para que no pase por el guard
     "/med/:path*",
+    "/medico/:path*", // ← compatibilidad para pasar por el guard
     "/api/med/:path*",
     "/admin/:path*",
   ],
