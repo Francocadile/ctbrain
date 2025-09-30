@@ -1,4 +1,3 @@
-// src/lib/auth.ts
 import type { NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaClient } from "@prisma/client";
@@ -16,29 +15,39 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(creds) {
         if (!creds?.email) return null;
-        // Login “soft”: busca por email
-        const user = await prisma.user.findUnique({ where: { email: creds.email } });
+        // Login simple: si existe el usuario por email, lo dejamos pasar.
+        // (Tu validación real de password la podés agregar cuando quieras)
+        const user = await prisma.user.findUnique({
+          where: { email: creds.email },
+          select: { id: true, name: true, email: true, role: true, isApproved: true },
+        });
         if (!user) return null;
-        // Devuelvo lo mínimo; el resto lo completa el callback jwt con lectura a DB
-        return { id: user.id, name: user.name ?? user.email, email: user.email, role: user.role } as any;
+        return { id: user.id, name: user.name ?? user.email, email: user.email, role: user.role, isApproved: user.isApproved };
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
-      // En el primer login (cuando viene "user") refresco desde DB y guardo role + isApproved
-      if (user?.id || user?.email) {
-        const dbUser =
-          (user?.id
-            ? await prisma.user.findUnique({ where: { id: (user as any).id } })
-            : user?.email
-            ? await prisma.user.findUnique({ where: { email: (user as any).email } })
-            : null) as any;
-
-        token.id = dbUser?.id ?? (user as any)?.id ?? token.id;
-        token.role = dbUser?.role ?? (user as any)?.role ?? token.role;
-        // <- puede no existir en tu schema aún; si no existe será undefined y no rompe
-        token.isApproved = dbUser?.isApproved ?? token?.isApproved ?? true;
+      // Primer login
+      if (user) {
+        token.id = (user as any).id;
+        token.role = (user as any).role;
+        (token as any).isApproved = (user as any).isApproved ?? false;
+        return token;
+      }
+      // Refresco: traigo estado actualizado (p.ej., si el Admin aprobó)
+      if (token?.email) {
+        try {
+          const u = await prisma.user.findUnique({
+            where: { email: token.email as string },
+            select: { id: true, role: true, isApproved: true },
+          });
+          if (u) {
+            token.id = u.id;
+            token.role = u.role;
+            (token as any).isApproved = u.isApproved;
+          }
+        } catch {}
       }
       return token;
     },
@@ -47,7 +56,7 @@ export const authOptions: NextAuthOptions = {
         ...(session.user ?? {}),
         id: token.id as string,
         role: token.role as string,
-        isApproved: (token as any).isApproved,
+        isApproved: (token as any).isApproved ?? false,
       };
       return session;
     },
