@@ -5,6 +5,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Route } from "next"; // typedRoutes
+import { signOut } from "next-auth/react";
 
 function NavItem({
   href,
@@ -116,6 +117,22 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
             <NavItem href={"/ct/rivales" as Route} active={isActive("/ct/rivales")}>
               Rivales / Plan de partido
             </NavItem>
+          </li>
+        </ul>
+
+        {/* SALIR */}
+        <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
+          SALIR
+        </div>
+        <ul className="space-y-0.5">
+          <li>
+            <button
+              aria-label="Cerrar sesión"
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="block w-full text-left rounded-md px-2 py-1.5 text-sm transition hover:bg-gray-100"
+            >
+              Cerrar sesión
+            </button>
           </li>
         </ul>
       </aside>
