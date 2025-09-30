@@ -2,6 +2,7 @@
 "use client";
 
 import { signIn } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 
 export default function LoginPage() {
@@ -9,22 +10,25 @@ export default function LoginPage() {
   const [loadingSignup, setLoadingSignup] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const search = useSearchParams();
+  const cb = search.get("callbackUrl") || "/redirect"; // adonde volver tras login
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (loadingLogin) return;
     setErrorMsg(null);
     setSuccessMsg(null);
     setLoadingLogin(true);
 
     const form = e.currentTarget;
-    const email = (form.elements.namedItem("email") as HTMLInputElement).value;
+    const email = (form.elements.namedItem("email") as HTMLInputElement).value.trim();
     const password = (form.elements.namedItem("password") as HTMLInputElement).value;
 
     await signIn("credentials", {
       email,
       password,
       redirect: true,
-      callbackUrl: "/redirect",
+      callbackUrl: cb,
     });
 
     setLoadingLogin(false);
@@ -32,32 +36,37 @@ export default function LoginPage() {
 
   async function handleSignup(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (loadingSignup) return;
     setErrorMsg(null);
     setSuccessMsg(null);
     setLoadingSignup(true);
 
     const form = e.currentTarget;
     const name = (form.elements.namedItem("name") as HTMLInputElement).value.trim();
-    const email = (form.elements.namedItem("email") as HTMLInputElement).value.trim().toLowerCase();
+    const email = (form.elements.namedItem("email") as HTMLInputElement).value
+      .trim()
+      .toLowerCase();
     const password = (form.elements.namedItem("password") as HTMLInputElement).value;
 
     try {
       const r = await fetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        // Alta pública: solo rol JUGADOR
         body: JSON.stringify({ name, email, password, role: "JUGADOR" }),
       });
 
       if (!r.ok) {
         const data = await r.json().catch(() => ({}));
         const msg =
-          (data?.error && typeof data.error === "string"
-            ? data.error
-            : "No se pudo crear el usuario") || "No se pudo crear el usuario";
+          (typeof data?.error === "string" && data.error) ||
+          "No se pudo crear el usuario";
         throw new Error(msg);
       }
 
-      setSuccessMsg("Cuenta creada. Un Admin debe aprobar tu acceso. Podés iniciar sesión luego.");
+      setSuccessMsg(
+        "Cuenta creada. Un Admin debe aprobar tu acceso. Podés iniciar sesión luego."
+      );
       form.reset();
     } catch (err: any) {
       setErrorMsg(err?.message ?? "Error creando la cuenta");
@@ -69,7 +78,7 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen bg-gray-50">
       <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 px-6 py-12 lg:grid-cols-2">
-        {/* Columna Izquierda: Login */}
+        {/* LOGIN */}
         <section className="rounded-2xl border bg-white p-6 shadow-sm">
           <header>
             <h1 className="text-2xl font-bold">Iniciar sesión</h1>
@@ -103,37 +112,15 @@ export default function LoginPage() {
               {loadingLogin ? "Ingresando..." : "Ingresar"}
             </button>
           </form>
-
-          <div className="mt-3 text-xs text-gray-500">
-            ¿Ya estás logueado? Navegá directo a tu panel:
-            <span className="ml-2 underline">
-              <a href="/admin">Admin</a>
-            </span>
-            {" · "}
-            <a className="underline" href="/ct">
-              CT
-            </a>
-            {" · "}
-            <a className="underline" href="/medico">
-              Médico
-            </a>
-            {" · "}
-            <a className="underline" href="/jugador">
-              Jugador
-            </a>
-            {" · "}
-            <a className="underline" href="/directivo">
-              Directivo
-            </a>
-          </div>
         </section>
 
-        {/* Columna Derecha: Alta rápida Jugador */}
+        {/* ALTA RÁPIDA JUGADOR */}
         <section className="rounded-2xl border bg-white p-6 shadow-sm">
           <header>
             <h2 className="text-lg font-semibold">Crear cuenta (Jugador)</h2>
             <p className="mt-1 text-sm text-gray-600">
-              Alta pública habilitada solo para <b>JUGADOR</b>. Otros roles se crean desde Admin.
+              Alta pública habilitada solo para <b>JUGADOR</b>. Otros roles se crean
+              desde Admin.
             </p>
           </header>
 
@@ -182,7 +169,8 @@ export default function LoginPage() {
           </form>
 
           <p className="mt-3 text-xs text-gray-500">
-            ¿Necesitás acceso como <b>CT</b>, <b>Médico</b> o <b>Directivo</b>? Pedilo a un Admin.
+            ¿Necesitás acceso como <b>CT</b>, <b>Médico</b> o <b>Directivo</b>? Pedilo a
+            un Admin.
           </p>
         </section>
       </div>
