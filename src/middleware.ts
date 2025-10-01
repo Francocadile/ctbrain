@@ -7,9 +7,11 @@ import { getToken } from "next-auth/jwt";
 const PUBLIC = [
   /^\/$/,                      // home
   /^\/login(?:\/|$)/,
+  /^\/signup(?:\/|$)/,         // página de alta pública
   /^\/pending-approval(?:\/|$)/,
   /^\/redirect(?:\/|$)/,
   /^\/api\/auth(?:\/|$)/,
+  /^\/api\/users(?:\/|$)/,     // ← API de signup PÚBLICA
   /^\/_next\/static(?:\/|$)/,
   /^\/favicon\.ico$/,
 ];
@@ -19,7 +21,7 @@ const CT_PATHS = [
   /^\/ct(?:\/|$)/,
   /^\/api\/ct(?:\/|$)/,
   /^\/api\/sessions(?:\/|$)/,
-  /^\/api\/users(?:\/|$)/,
+  // ⚠️ /api/users ya NO va acá (es público)
 ];
 
 // Guard Médico / API Médico
@@ -53,6 +55,7 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isAPI = pathname.startsWith("/api");
 
+  // Públicos -> dejar pasar
   if (matchAny(pathname, PUBLIC)) {
     return NextResponse.next();
   }
@@ -127,7 +130,7 @@ export const config = {
     "/ct/:path*",
     "/api/ct/:path*",
     "/api/sessions/:path*",
-    "/api/users/:path*",
+    // "/api/users/:path*" ← lo sacamos del matcher, así ni pasa por el middleware
     "/med/:path*",
     "/api/med/:path*",
     "/admin/:path*",
