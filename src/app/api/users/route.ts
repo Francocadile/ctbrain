@@ -1,6 +1,7 @@
 // src/app/api/users/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient, Role } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 import { rateLimit } from "@/lib/rateLimit";
 
 const prisma = new PrismaClient();
@@ -16,8 +17,8 @@ function getClientIP(req: Request): string {
   return ip;
 }
 
-// POST /api/users  -> alta simple (usado en /login)
-// Por defecto: JUGADOR con isApproved = false (pendiente)
+// POST /api/users  -> alta pública
+// Siempre crea JUGADOR pendiente, ignora cualquier "role" entrante
 export async function POST(req: Request) {
   const ip = getClientIP(req);
 
@@ -26,7 +27,6 @@ export async function POST(req: Request) {
     const name = (body?.name || "").trim();
     const email = (body?.email || "").trim().toLowerCase();
     const password = (body?.password || "").trim();
-    const role: Role = (body?.role as Role) || "JUGADOR";
 
     // ===== Rate Limit (5 req / 10 min por IP+email) =====
     const identifier = `signup:${ip}:${email || "no-email"}`;
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // ===== Validación básica de payload =====
+    // ===== Validación básica =====
     if (!name || !email || !password) {
       return NextResponse.json({ error: "Faltan campos" }, { status: 400 });
     }
@@ -68,14 +68,19 @@ export async function POST(req: Request) {
       );
     }
 
+    // Hash de la contraseña desde el alta
+    const hash = await bcrypt.hash(password, 10);
+
     const user = await prisma.user.create({
       data: {
         name,
         email,
-        password, // (flujo original, sin hash — se migrará en el primer login)
-        role,
-        isApproved: false, // queda pendiente hasta aprobación
+        password: hash,
+        role: "JUGADOR",     // forzado
+        isApproved: false,   // pendiente
+        mustChangePassword: false,
       },
+      select: { id: true, email: true, role: true, isApproved: true },
     });
 
     console.info("[signup:created]", {
@@ -85,15 +90,7 @@ export async function POST(req: Request) {
       approved: user.isApproved,
     });
 
-    return NextResponse.json({
-      ok: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        isApproved: user.isApproved,
-      },
-    });
+    return NextResponse.json({ ok: true, user });
   } catch (e: any) {
     console.error("[signup:error]", { ip, error: e?.message || String(e) });
     return NextResponse.json({ error: e?.message || "Error" }, { status: 500 });
