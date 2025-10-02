@@ -7,22 +7,17 @@ declare module "next-auth" {
     user: {
       id: string;
       role: Role;
-      isApproved: boolean;
     } & DefaultSession["user"];
   }
 
   interface User {
     id: string;
     role: Role;
-    isApproved: boolean;
   }
 }
 
 declare module "next-auth/jwt" {
   interface JWT {
-    id?: string;
-    email?: string | null;
     role?: Role;
-    isApproved?: boolean;
   }
 }
