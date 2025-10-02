@@ -10,6 +10,7 @@ const PUBLIC = [
   /^\/signup(?:\/|$)/,         // alta pública
   /^\/pending-approval(?:\/|$)/,
   /^\/redirect(?:\/|$)/,
+  /^\/first-login(?:\/|$)/,    // ← permitir flujo de primer login
   /^\/api\/auth(?:\/|$)/,
   /^\/api\/users(?:\/|$)/,     // signup público
   /^\/_next\/static(?:\/|$)/,
@@ -30,12 +31,11 @@ const MED_PATHS = [
   /^\/api\/med(?:\/|$)/,
 ];
 
-// Guard Admin (nuevo explícito)
+// Guard Admin explícito
 const ADMIN_PATHS = [
   /^\/admin(?:\/|$)/,
 ];
 
-// Excepción: CT puede LEER endpoints clínicos
 function isClinicalReadForCT(pathname: string, method: string) {
   if (method !== "GET") return false;
   return /^\/api\/med\/clinical(?:\/|$)/.test(pathname);
@@ -49,7 +49,7 @@ function roleHome(role?: string) {
   switch (role) {
     case "ADMIN": return "/admin";
     case "CT": return "/ct";
-    case "MEDICO": return "/med";    // ← canónica
+    case "MEDICO": return "/medico"; // tu mapping actual
     case "JUGADOR": return "/jugador";
     case "DIRECTIVO": return "/directivo";
     default: return "/login";
@@ -91,6 +91,14 @@ export async function middleware(req: NextRequest) {
 
   const role = (token as any).role as string | undefined;
   const isApproved = (token as any).isApproved as boolean | undefined;
+  const mustChangePassword = (token as any).mustChangePassword as boolean | undefined;
+
+  // Forzar cambio de contraseña (solo páginas, no APIs)
+  if (!isAPI && mustChangePassword === true && !/^\/first-login(?:\/|$)/.test(pathname)) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/first-login";
+    return NextResponse.redirect(url);
+  }
 
   // Gate global: si no está aprobado y NO es admin → pending
   if (role !== "ADMIN" && isApproved === false) {
@@ -147,6 +155,6 @@ export const config = {
     "/med/:path*",
     "/medico/:path*",   // compat
     "/api/med/:path*",
-    "/admin/:path*",    // ← ahora guard explícito
+    "/admin/:path*",
   ],
 };
