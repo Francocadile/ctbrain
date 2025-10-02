@@ -8,7 +8,6 @@ declare module "next-auth" {
       id: string;
       role: Role;
       isApproved: boolean;
-      mustChangePassword: boolean;
     } & DefaultSession["user"];
   }
 
@@ -16,7 +15,6 @@ declare module "next-auth" {
     id: string;
     role: Role;
     isApproved: boolean;
-    mustChangePassword: boolean;
   }
 }
 
@@ -26,6 +24,5 @@ declare module "next-auth/jwt" {
     email?: string | null;
     role?: Role;
     isApproved?: boolean;
-    mustChangePassword?: boolean;
   }
 }
