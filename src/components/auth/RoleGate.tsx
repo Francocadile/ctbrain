@@ -20,7 +20,7 @@ export default async function RoleGate({
     const map: Record<Role, string> = {
       ADMIN: "/admin",
       CT: "/ct",
-      MEDICO: "/med",     // ← canónica
+      MEDICO: "/medico",
       JUGADOR: "/jugador",
       DIRECTIVO: "/directivo",
     };
