@@ -1,12 +1,9 @@
 // src/lib/auth.ts
 import type { NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { prisma } from "@/lib/prisma";
 
-const prisma = new PrismaClient();
-
-/** Heurística para detectar si el string parece un hash bcrypt */
 function looksLikeBcrypt(hash?: string | null) {
   if (!hash) return false;
   return /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(hash);
@@ -42,12 +39,12 @@ export const authOptions: NextAuthOptions = {
         });
         if (!user || !user.password) return null;
 
-        // Caso A: ya es bcrypt
+        // 1) Si ya es bcrypt -> comparar
         if (looksLikeBcrypt(user.password)) {
           const ok = await bcrypt.compare(password, user.password);
           if (!ok) return null;
         } else {
-          // Caso B: plaintext viejo → migración silenciosa si coincide
+          // 2) Si está en texto plano y coincide -> migrar a bcrypt
           if (password !== user.password) return null;
           const newHash = await bcrypt.hash(password, 10);
           await prisma.user.update({ where: { email }, data: { password: newHash } });
@@ -73,7 +70,7 @@ export const authOptions: NextAuthOptions = {
         token.email = (user as any).email ?? token.email;
         return token;
       }
-      // Refresco: sincronizar cambios (aprobación/rol)
+      // Refresco: traigo estado actualizado (p. ej., si el Admin aprobó)
       if (token?.email) {
         try {
           const u = await prisma.user.findUnique({
@@ -85,7 +82,9 @@ export const authOptions: NextAuthOptions = {
             (token as any).role = u.role;
             (token as any).isApproved = u.isApproved;
           }
-        } catch {}
+        } catch {
+          // noop
+        }
       }
       return token;
     },
