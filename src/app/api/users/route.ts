@@ -27,7 +27,7 @@ export async function POST(req: Request) {
       data: {
         name,
         email,
-        password, // flujo original 1.2: sin hash (se migrará al primer login)
+        password, // (flujo original, sin hash)
         role,
         isApproved: false, // queda pendiente hasta aprobación
       },
