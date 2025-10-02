@@ -53,6 +53,9 @@ function Card({
     </div>
   );
 
-  if (href && !disabledNote) return <Link href={href} className="block">{Inner}</Link>;
+  if (href && !disabledNote) {
+    return <Link href={href} className="block">{Inner}</Link>;
+  }
+
   return <div className="block pointer-events-none">{Inner}</div>;
 }
