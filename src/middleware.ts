@@ -7,11 +7,11 @@ import { getToken } from "next-auth/jwt";
 const PUBLIC = [
   /^\/$/,                      // home
   /^\/login(?:\/|$)/,
-  /^\/signup(?:\/|$)/,         // página de alta pública
+  /^\/signup(?:\/|$)/,         // alta pública
   /^\/pending-approval(?:\/|$)/,
   /^\/redirect(?:\/|$)/,
   /^\/api\/auth(?:\/|$)/,
-  /^\/api\/users(?:\/|$)/,     // ← API de signup PÚBLICA
+  /^\/api\/users(?:\/|$)/,     // signup público
   /^\/_next\/static(?:\/|$)/,
   /^\/favicon\.ico$/,
 ];
@@ -21,13 +21,18 @@ const CT_PATHS = [
   /^\/ct(?:\/|$)/,
   /^\/api\/ct(?:\/|$)/,
   /^\/api\/sessions(?:\/|$)/,
-  // ⚠️ /api/users ya NO va acá (es público)
 ];
 
-// Guard Médico / API Médico
+// Guard Médico / API Médico (incluye compat /medico)
 const MED_PATHS = [
   /^\/med(?:\/|$)/,
+  /^\/medico(?:\/|$)/, // compat
   /^\/api\/med(?:\/|$)/,
+];
+
+// Guard Admin (nuevo explícito)
+const ADMIN_PATHS = [
+  /^\/admin(?:\/|$)/,
 ];
 
 // Excepción: CT puede LEER endpoints clínicos
@@ -44,7 +49,7 @@ function roleHome(role?: string) {
   switch (role) {
     case "ADMIN": return "/admin";
     case "CT": return "/ct";
-    case "MEDICO": return "/medico";
+    case "MEDICO": return "/med";    // ← canónica
     case "JUGADOR": return "/jugador";
     case "DIRECTIVO": return "/directivo";
     default: return "/login";
@@ -60,12 +65,12 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // ¿Qué guard aplica?
   const needsCT = matchAny(pathname, CT_PATHS);
   const needsMED = matchAny(pathname, MED_PATHS);
+  const needsADMIN = matchAny(pathname, ADMIN_PATHS);
 
-  // Si no matchea nada, dejar pasar
-  if (!needsCT && !needsMED) {
+  // Si no matchea ningún guard -> dejar pasar
+  if (!needsCT && !needsMED && !needsADMIN) {
     return NextResponse.next();
   }
 
@@ -100,6 +105,16 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Guard ADMIN
+  if (needsADMIN) {
+    const allowed = role === "ADMIN";
+    if (!allowed) {
+      const url = req.nextUrl.clone();
+      url.pathname = roleHome(role);
+      return NextResponse.redirect(url);
+    }
+  }
+
   // Guard CT
   if (needsCT) {
     const allowed = role === "CT" || role === "ADMIN";
@@ -126,13 +141,12 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    // Home y login quedan públicos; protegemos resto
     "/ct/:path*",
     "/api/ct/:path*",
     "/api/sessions/:path*",
-    // "/api/users/:path*" ← lo sacamos del matcher, así ni pasa por el middleware
     "/med/:path*",
+    "/medico/:path*",   // compat
     "/api/med/:path*",
-    "/admin/:path*",
+    "/admin/:path*",    // ← ahora guard explícito
   ],
 };
