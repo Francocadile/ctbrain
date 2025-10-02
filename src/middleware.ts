@@ -11,7 +11,7 @@ const PUBLIC = [
   /^\/pending-approval(?:\/|$)/,
   /^\/redirect(?:\/|$)/,
   /^\/api\/auth(?:\/|$)/,
-  /^\/api\/users(?:\/|$)/,     // signup público
+  /^\/api\/users(?:\/|$)/,     // ← API de signup PÚBLICA
   /^\/_next\/static(?:\/|$)/,
   /^\/favicon\.ico$/,
 ];
@@ -43,7 +43,7 @@ function roleHome(role?: string) {
   switch (role) {
     case "ADMIN": return "/admin";
     case "CT": return "/ct";
-    case "MEDICO": return "/medico"; // mapping original
+    case "MEDICO": return "/medico";
     case "JUGADOR": return "/jugador";
     case "DIRECTIVO": return "/directivo";
     default: return "/login";
@@ -54,16 +54,16 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isAPI = pathname.startsWith("/api");
 
-  // Públicos -> pasar
+  // Públicos -> dejar pasar
   if (matchAny(pathname, PUBLIC)) {
     return NextResponse.next();
   }
 
-  // Qué guard aplica?
+  // ¿Qué guard aplica?
   const needsCT = matchAny(pathname, CT_PATHS);
   const needsMED = matchAny(pathname, MED_PATHS);
 
-  // Si no matchea nada -> pasar
+  // Si no matchea nada (p. ej., /admin), dejar pasar
   if (!needsCT && !needsMED) {
     return NextResponse.next();
   }
@@ -86,7 +86,7 @@ export async function middleware(req: NextRequest) {
   const role = (token as any).role as string | undefined;
   const isApproved = (token as any).isApproved as boolean | undefined;
 
-  // Gate global: si no está aprobado y no es admin → pending
+  // Gate global: si no está aprobado y NO es admin → pending
   if (role !== "ADMIN" && isApproved === false) {
     if (isAPI) {
       return new NextResponse(JSON.stringify({ error: "Forbidden", pendingApproval: true }), {
@@ -128,7 +128,7 @@ export const config = {
     "/ct/:path*",
     "/api/ct/:path*",
     "/api/sessions/:path*",
-    // "/api/users/:path*"  ← NO va en matcher (que quede PÚBLICA)
+    // "/api/users" NO va en el matcher para que sea completamente pública
     "/med/:path*",
     "/api/med/:path*",
     "/admin/:path*",
