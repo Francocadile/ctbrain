@@ -36,8 +36,7 @@ export type ScoutingPlayer = {
 
 // ---------- utils ----------
 const CAT_KEY = "ct_scout_categories";
-const PLY_KEY_PREFIX = "ct_scout_players_"; // por categoria
-const ONE = (x: unknown) => x;
+const PLY_KEY_PREFIX = "ct_scout_players_"; // por categoría
 
 async function safeFetch<T = any>(
   url: string,
@@ -66,12 +65,14 @@ async function safeFetch<T = any>(
 export async function listCategories(): Promise<ScoutingCategory[]> {
   const api = await safeFetch<{ data: ScoutingCategory[] }>("/api/ct/scouting/categories");
   if (api?.data) {
-    try { localStorage.setItem(CAT_KEY, JSON.stringify(api.data)); } catch {}
+    try {
+      localStorage.setItem(CAT_KEY, JSON.stringify(api.data));
+    } catch {}
     return api.data;
   }
   try {
     const raw = localStorage.getItem(CAT_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) return JSON.parse(raw) as ScoutingCategory[];
   } catch {}
   return [];
 }
@@ -85,11 +86,16 @@ export async function createCategory(nombre: string): Promise<ScoutingCategory> 
   if (api?.data) {
     const list = await listCategories();
     list.push(api.data);
-    try { localStorage.setItem(CAT_KEY, JSON.stringify(list)); } catch {}
+    try {
+      localStorage.setItem(CAT_KEY, JSON.stringify(list));
+    } catch {}
     return api.data;
   }
   // local (fallback simple)
-  const slug = nombre.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\-]/g, "");
+  const slug = nombre
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9\-]/g, "");
   const cat: ScoutingCategory = {
     id: `local_${Date.now()}`,
     nombre,
@@ -100,11 +106,16 @@ export async function createCategory(nombre: string): Promise<ScoutingCategory> 
   };
   const list = await listCategories();
   list.push(cat);
-  try { localStorage.setItem(CAT_KEY, JSON.stringify(list)); } catch {}
+  try {
+    localStorage.setItem(CAT_KEY, JSON.stringify(list));
+  } catch {}
   return cat;
 }
 
-export async function updateCategory(id: string, patch: Partial<ScoutingCategory>) {
+export async function updateCategory(
+  id: string,
+  patch: Partial<ScoutingCategory>
+): Promise<ScoutingCategory | undefined> {
   const api = await safeFetch<{ data: ScoutingCategory }>(`/api/ct/scouting/categories/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -112,38 +123,55 @@ export async function updateCategory(id: string, patch: Partial<ScoutingCategory
   });
   if (api?.data) {
     const list = await listCategories();
-    const idx = list.findIndex(c => c.id === id);
+    const idx = list.findIndex((c: ScoutingCategory) => c.id === id);
     if (idx >= 0) list[idx] = api.data;
-    try { localStorage.setItem(CAT_KEY, JSON.stringify(list)); } catch {}
+    try {
+      localStorage.setItem(CAT_KEY, JSON.stringify(list));
+    } catch {}
     return api.data;
   }
   // local
   const list = await listCategories();
-  const idx = list.findIndex(c => c.id === id);
+  const idx = list.findIndex((c: ScoutingCategory) => c.id === id);
   if (idx >= 0) list[idx] = { ...list[idx], ...patch } as ScoutingCategory;
-  try { localStorage.setItem(CAT_KEY, JSON.stringify(list)); } catch {}
+  try {
+    localStorage.setItem(CAT_KEY, JSON.stringify(list));
+  } catch {}
   return list[idx];
 }
 
-export async function deleteCategory(id: string) {
-  const api = await safeFetch<{ ok: true }>(`/api/ct/scouting/categories/${id}`, {
-    method: "DELETE",
-  });
-  const list = (await listCategories()).filter(c => c.id !== id);
-  try { localStorage.setItem(CAT_KEY, JSON.stringify(list)); } catch {}
-  return api?.ok ? { ok: true } : { ok: true };
+export async function deleteCategory(id: string): Promise<{ ok: true } | { error: string }> {
+  const api = await safeFetch<{ ok: true } | { error: string }>(
+    `/api/ct/scouting/categories/${id}`,
+    { method: "DELETE" }
+  );
+  const list = (await listCategories()).filter((c: ScoutingCategory) => c.id !== id);
+  try {
+    localStorage.setItem(CAT_KEY, JSON.stringify(list));
+  } catch {}
+  return (api as any)?.ok ? { ok: true } : (api as any)?.error ? (api as any) : { ok: true };
 }
 
 // ---------- Jugadores ----------
-export async function listPlayers(params?: { categoriaId?: string; q?: string; estado?: ScoutingStatus }) {
+export async function listPlayers(
+  params?: { categoriaId?: string; q?: string; estado?: ScoutingStatus }
+): Promise<ScoutingPlayer[]> {
   const qs = new URLSearchParams();
   if (params?.categoriaId) qs.set("categoriaId", params.categoriaId);
   if (params?.q) qs.set("q", params.q);
   if (params?.estado) qs.set("estado", params.estado);
-  const api = await safeFetch<{ data: ScoutingPlayer[] }>(`/api/ct/scouting/players?${qs.toString()}`);
+
+  const api = await safeFetch<{ data: ScoutingPlayer[] }>(
+    `/api/ct/scouting/players?${qs.toString()}`
+  );
   if (api?.data) {
     if (params?.categoriaId) {
-      try { localStorage.setItem(PLY_KEY_PREFIX + params.categoriaId, JSON.stringify(api.data)); } catch {}
+      try {
+        localStorage.setItem(
+          PLY_KEY_PREFIX + params.categoriaId,
+          JSON.stringify(api.data)
+        );
+      } catch {}
     }
     return api.data;
   }
@@ -151,7 +179,7 @@ export async function listPlayers(params?: { categoriaId?: string; q?: string; e
   if (params?.categoriaId) {
     try {
       const raw = localStorage.getItem(PLY_KEY_PREFIX + params.categoriaId);
-      if (raw) return JSON.parse(raw);
+      if (raw) return JSON.parse(raw) as ScoutingPlayer[];
     } catch {}
   }
   return [];
@@ -162,24 +190,37 @@ export async function getPlayer(id: string): Promise<ScoutingPlayer | null> {
   return api?.data ?? null;
 }
 
-export async function upsertPlayer(payload: Partial<ScoutingPlayer> & { fullName: string }) {
+export async function upsertPlayer(
+  payload: Partial<ScoutingPlayer> & { fullName: string }
+): Promise<ScoutingPlayer> {
   const body = { ...payload };
-  const url = payload.id ? `/api/ct/scouting/players/${payload.id}` : "/api/ct/scouting/players";
+  const url = payload.id
+    ? `/api/ct/scouting/players/${payload.id}`
+    : "/api/ct/scouting/players";
   const method = payload.id ? "PUT" : "POST";
+
   const api = await safeFetch<{ data: ScoutingPlayer }>(url, {
     method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+
   if (api?.data) {
     if (api.data.categoriaId) {
       const list = await listPlayers({ categoriaId: api.data.categoriaId });
-      const idx = list.findIndex(p => p.id === api.data.id);
-      if (idx >= 0) list[idx] = api.data; else list.push(api.data);
-      try { localStorage.setItem(PLY_KEY_PREFIX + api.data.categoriaId, JSON.stringify(list)); } catch {}
+      const idx = list.findIndex((p: ScoutingPlayer) => p.id === api.data.id); // ← tipado explícito
+      if (idx >= 0) list[idx] = api.data;
+      else list.push(api.data);
+      try {
+        localStorage.setItem(
+          PLY_KEY_PREFIX + api.data.categoriaId,
+          JSON.stringify(list)
+        );
+      } catch {}
     }
     return api.data;
   }
+
   // local simple
   const p: ScoutingPlayer = {
     id: payload.id ?? `local_${Date.now()}`,
@@ -199,16 +240,21 @@ export async function upsertPlayer(payload: Partial<ScoutingPlayer> & { fullName
     rating: payload.rating ?? null,
     tags: payload.tags ?? [],
   };
+
   if (p.categoriaId) {
     const list = await listPlayers({ categoriaId: p.categoriaId });
-    const idx = list.findIndex(x => x.id === p.id);
-    if (idx >= 0) list[idx] = p; else list.push(p);
-    try { localStorage.setItem(PLY_KEY_PREFIX + p.categoriaId, JSON.stringify(list)); } catch {}
+    const idx = list.findIndex((x: ScoutingPlayer) => x.id === p.id);
+    if (idx >= 0) list[idx] = p;
+    else list.push(p);
+    try {
+      localStorage.setItem(PLY_KEY_PREFIX + p.categoriaId, JSON.stringify(list));
+    } catch {}
   }
   return p;
 }
 
-export async function deletePlayer(id: string) {
+export async function deletePlayer(id: string): Promise<{ ok: true }> {
   await safeFetch<{ ok: true }>(`/api/ct/scouting/players/${id}`, { method: "DELETE" });
+  // (Opcional) podríamos limpiar caches locales por categoría si lo necesitáramos
   return { ok: true };
 }
