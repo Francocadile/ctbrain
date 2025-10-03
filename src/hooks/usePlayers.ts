@@ -3,7 +3,6 @@
 import * as React from "react";
 
 export type PlayerOpt = { id: string; label: string };
-
 type ErrorKind = "EMPTY" | "ERR" | null;
 
 function usePlayersBase(endpoint: string) {
@@ -40,18 +39,12 @@ function usePlayersBase(endpoint: string) {
   return { players, loading, error, reload };
 }
 
-/**
- * Hook genérico (compat) – usa el endpoint médico.
- * Devuelve { players, loading, error, reload }.
- */
+/** Hook genérico (compat) – usa el endpoint médico. */
 export function usePlayers() {
-  return usePlayersBase("/api/med/users/players");
+  return usePlayersBase("/api/medico/users/players");
 }
 
-/**
- * Hook explícito para pantallas de Médico.
- * Igual que usePlayers, exportado para mantener la API esperada.
- */
+/** Hook explícito para pantallas de Médico. */
 export function usePlayersMed() {
-  return usePlayersBase("/api/med/users/players");
+  return usePlayersBase("/api/medico/users/players");
 }
