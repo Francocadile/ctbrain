@@ -1,4 +1,3 @@
-// src/app/medico/page.tsx
 import RoleGate from "@/components/auth/RoleGate";
 import Link from "next/link";
 import type { Route } from "next";
@@ -15,11 +14,11 @@ export default async function MedicoPage() {
         </header>
 
         <section className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Lesiones -> ahora enlaza a /med/injuries */}
+          {/* Lesiones -> ahora enlaza a /medico/injuries */}
           <Card
             title="Lesiones"
             desc="Altas, bajas y evolución clínica."
-            href={"/med/injuries" as Route}
+            href={"/medico/injuries" as Route}
           />
 
           {/* Informativas (sin enlace por ahora) */}
