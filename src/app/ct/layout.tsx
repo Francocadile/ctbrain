@@ -4,7 +4,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { Route } from "next"; // typedRoutes
+import type { Route } from "next";
 import { signOut } from "next-auth/react";
 
 function NavItem({
@@ -36,7 +36,6 @@ function NavItem({
 
 export default function CTLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-
   const isActive = (prefix: string) =>
     pathname === prefix || pathname?.startsWith(prefix + "/");
 
@@ -67,8 +66,6 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
               Wellness
             </NavItem>
           </li>
-
-          {/* ÚNICO ítem para Rpe unificado */}
           <li>
             <NavItem
               href={"/ct/metrics/rpe" satisfies Route}
@@ -77,7 +74,6 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
               Rpe
             </NavItem>
           </li>
-
           <li>
             <NavItem href={"/ct/injuries" as Route} active={isActive("/ct/injuries")}>
               Lesionados
@@ -116,6 +112,11 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
           <li>
             <NavItem href={"/ct/rivales" as Route} active={isActive("/ct/rivales")}>
               Rivales / Plan de partido
+            </NavItem>
+          </li>
+          <li>
+            <NavItem href={"/ct/scouting" as Route} active={isActive("/ct/scouting")}>
+              Scouting
             </NavItem>
           </li>
         </ul>
