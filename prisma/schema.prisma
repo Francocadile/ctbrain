@@ -8,7 +8,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/* ========= Enums base ========= */
+// ========= Enums base =========
 enum Role {
   ADMIN
   CT
@@ -25,7 +25,7 @@ enum SessionType {
   RECUPERACION
 }
 
-/* ========= Enums clínicos ========= */
+// ========= Enums clínicos =========
 enum ClinicalStatus {
   BAJA
   REINTEGRO
@@ -82,7 +82,7 @@ enum IllAptitude {
   NINGUNO
 }
 
-/* ========= Modelos existentes ========= */
+// ========= Modelos existentes =========
 model User {
   id         String   @id @default(cuid())
   email      String   @unique
@@ -90,7 +90,6 @@ model User {
   password   String?
   role       Role     @default(JUGADOR)
 
-  /// Aprobación por Admin (pendiente por defecto)
   isApproved Boolean  @default(false)
 
   createdAt  DateTime @default(now())
@@ -126,13 +125,11 @@ model Rival {
   name     String  @unique
   logoUrl  String?
 
-  // Datos opcionales
   coach                 String?
   baseSystem            String?
   nextMatchDate         DateTime?
   nextMatchCompetition  String?
 
-  // Plan de partido
   planCharlaUrl   String?
   planReport      Json?   @default("{}")
   planVideos      Json?   @default("[]")
@@ -140,7 +137,6 @@ model Rival {
   planNotes       Json?   @default("{}")
   planVisibility  Json?   @default("{}")
 
-  // Plantel
   planSquad       Json?   @default("[]")
 
   createdAt DateTime @default(now())
@@ -198,14 +194,8 @@ model RPEEntry {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   date      DateTime
-
-  /// Índice de sesión dentro del día (1,2,3...). Determina la unicidad.
   session   Int      @default(1)
-
-  /// Etiqueta opcional visible (p.ej. "AM", "PM", "Gimnasio", "Campo")
   sessionLabel String?
-
-  /// Referencia opcional a una sesión externa (planner/schedule)
   sessionUid   String?
 
   rpe       Int
@@ -258,7 +248,7 @@ model PlannerPrefs {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-/* ========= Clínico ========= */
+// ========= Clínico =========
 model ClinicalEntry {
   id        String   @id @default(cuid())
 
@@ -268,18 +258,15 @@ model ClinicalEntry {
   date      DateTime
   status    ClinicalStatus
 
-  // Si estado = BAJA
   leaveStage LeaveStage?
   leaveKind  LeaveKind?
 
-  // Si leaveKind = LESION
   diagnosis  String?
   bodyPart   String?
   laterality Laterality?
   mechanism  Mechanism?
   severity   Severity?
 
-  // Si leaveKind = ENFERMEDAD
   illSystem        SystemAffected?
   illSymptoms      String?
   illContagious    Boolean?
@@ -287,24 +274,20 @@ model ClinicalEntry {
   illAptitude      IllAptitude?
   feverMax         Float?
 
-  // Cronología
   startDate            DateTime?
   daysPlanned          Int?
   expectedReturn       DateTime?
   expectedReturnManual Boolean? @default(false)
 
-  // Restricciones (REINTEGRO / LIMITADA)
   capMinutes          Int?
   noSprint            Boolean  @default(false)
   noChangeOfDirection Boolean  @default(false)
   gymOnly             Boolean  @default(false)
   noContact           Boolean  @default(false)
 
-  // Documentación
   notes        String?
   medSignature String?
 
-  // Plan / Protocolo semanal
   protocolObjectives String?
   protocolTasks      String?
   protocolControls   String?
@@ -321,7 +304,7 @@ model ClinicalEntry {
   @@index([userId, date])
 }
 
-/* ========= Scouting ========= */
+// ========= Scouting =========
 enum ScoutingStatus {
   ACTIVO
   WATCHLIST
@@ -346,16 +329,15 @@ model ScoutingCategory {
 }
 
 model ScoutingPlayer {
-  id           String           @id @default(cuid())
+  id           String            @id @default(cuid())
   fullName     String
-  positions    String[]         @default([])
+  positions    String[]          @default([])
   club         String?
-  estado       ScoutingStatus   @default(ACTIVO)
+  estado       ScoutingStatus    @default(ACTIVO)
 
   categoriaId  String?
   categoria    ScoutingCategory? @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
 
-  // Contacto
   agentName    String?
   agentPhone   String?
   agentEmail   String?
@@ -363,16 +345,13 @@ model ScoutingPlayer {
   playerEmail  String?
   instagram    String?
 
-  // Media
-  videos       String[]         @default([])
-
-  // Otros
+  videos       String[]          @default([])
   notes        String?
   rating       Int?
-  tags         String[]         @default([])
+  tags         String[]          @default([])
 
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
   @@index([categoriaId])
   @@index([estado])
