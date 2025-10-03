@@ -23,7 +23,7 @@ export default function ScoutingConfigPage() {
     setLoading(true);
     try {
       const rows = await listCategories();
-      setList(rows.sort((a,b)=>a.orden-b.orden));
+      setList(rows.sort((a, b) => a.orden - b.orden));
     } finally {
       setLoading(false);
     }
@@ -53,7 +53,10 @@ export default function ScoutingConfigPage() {
     const ok = confirm(`¿Borrar la categoría "${cat.nombre}"? (Solo si no tiene jugadores)`);
     if (!ok) return;
     const res = await deleteCategory(cat.id);
-    if ((res as any).error) alert((res as any).error);
+    if ("error" in res) {
+      alert(res.error);
+      return;
+    }
     await load();
   }
 
@@ -76,7 +79,7 @@ export default function ScoutingConfigPage() {
             className="w-full md:w-80 rounded-md border px-2 py-1.5 text-sm"
             placeholder="Ej: Jugadores locales"
             value={name}
-            onChange={(e)=>setName(e.target.value)}
+            onChange={(e) => setName(e.target.value)}
           />
           <button onClick={add} className="px-3 py-1.5 rounded-xl text-xs bg-black text-white hover:opacity-90">
             Agregar
