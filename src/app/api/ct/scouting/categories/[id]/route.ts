@@ -2,6 +2,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
+export async function GET(_req: Request, { params }: { params: { id: string } }) {
+  try {
+    const data = await prisma.scoutingCategory.findUnique({ where: { id: params.id } });
+    if (!data) return NextResponse.json({ error: "Categoría no encontrada" }, { status: 404 });
+    return NextResponse.json({ data });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message ?? "Error" }, { status: 500 });
+  }
+}
+
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {
     const body = await req.json();
@@ -16,16 +26,18 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     });
     return NextResponse.json({ data });
   } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message || "No se pudo actualizar la categoría" },
-      { status: 500 }
-    );
+    // Si no existe, Prisma tira error; devolvemos 404 amigable
+    const msg = String(err?.message ?? "");
+    if (msg.includes("Record to update not found")) {
+      return NextResponse.json({ error: "Categoría no encontrada" }, { status: 404 });
+    }
+    return NextResponse.json({ error: err?.message ?? "Error al actualizar" }, { status: 500 });
   }
 }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   try {
-    // ¿Tiene jugadores?
+    // no permitir borrar si tiene jugadores asignados
     const countPlayers = await prisma.scoutingPlayer.count({
       where: { categoriaId: params.id },
     });
@@ -36,20 +48,13 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
       );
     }
 
-    // Borrado seguro (evita throw si no existe)
-    const res = await prisma.scoutingCategory.deleteMany({
-      where: { id: params.id },
-    });
-
+    const res = await prisma.scoutingCategory.deleteMany({ where: { id: params.id } });
     if (res.count === 0) {
       return NextResponse.json({ error: "Categoría no encontrada" }, { status: 404 });
     }
 
     return NextResponse.json({ ok: true });
   } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message || "Error al borrar la categoría" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: err?.message ?? "Error al borrar" }, { status: 500 });
   }
 }
