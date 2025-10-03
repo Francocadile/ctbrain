@@ -1,4 +1,3 @@
-// src/hooks/useEpisodes.ts
 "use client";
 
 import * as React from "react";
@@ -14,7 +13,7 @@ export function todayYMD(d = new Date()) {
 /** Enums front (alineados a Prisma) */
 export type ClinicalStatus = "BAJA" | "REINTEGRO" | "LIMITADA" | "ALTA";
 
-/** Estructura que devuelve GET /api/med/clinical */
+/** Estructura que devuelve GET /api/medico/clinical */
 export type Episode = {
   id: string;
   userId: string;
@@ -49,8 +48,8 @@ export type Episode = {
   feverMax?: number | null;
 
   // Cronología
-  startDate?: string | null; // YYYY-MM-DD | null
-  expectedReturn?: string | null; // YYYY-MM-DD | null
+  startDate?: string | null;
+  expectedReturn?: string | null;
   expectedReturnManual?: boolean | null;
 
   // Restricciones
@@ -85,7 +84,7 @@ export function useEpisodes(initialDate?: string) {
       try {
         const q = new URLSearchParams();
         if (d) q.set("date", d);
-        const res = await fetch(`/api/med/clinical?${q.toString()}`, { cache: "no-store" });
+        const res = await fetch(`/api/medico/clinical?${q.toString()}`, { cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as Episode[];
         setItems(Array.isArray(data) ? data : []);
@@ -101,7 +100,6 @@ export function useEpisodes(initialDate?: string) {
   );
 
   React.useEffect(() => {
-    // Simple: no esperamos cleanup; reload devuelve Promise
     reload(date);
   }, [date, reload]);
 
@@ -110,7 +108,7 @@ export function useEpisodes(initialDate?: string) {
     const body = { ...payload };
     if (!body.date) body.date = date;
 
-    const res = await fetch("/api/med/clinical", {
+    const res = await fetch("/api/medico/clinical", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
@@ -123,13 +121,5 @@ export function useEpisodes(initialDate?: string) {
     return res.json();
   }
 
-  return {
-    date,
-    setDate,
-    items,
-    loading,
-    error,
-    reload,
-    saveEpisode,
-  };
+  return { date, setDate, items, loading, error, reload, saveEpisode };
 }
