@@ -1,4 +1,3 @@
-// src/middleware.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
@@ -26,14 +25,14 @@ const CT_PATHS = [
 
 // Guard Médico / API Médico
 const MED_PATHS = [
-  /^\/med(?:\/|$)/,
-  /^\/api\/med(?:\/|$)/,
+  /^\/medico(?:\/|$)/,
+  /^\/api\/medico(?:\/|$)/,
 ];
 
 // Excepción: CT puede LEER endpoints clínicos
 function isClinicalReadForCT(pathname: string, method: string) {
   if (method !== "GET") return false;
-  return /^\/api\/med\/clinical(?:\/|$)/.test(pathname);
+  return /^\/api\/medico\/clinical(?:\/|$)/.test(pathname);
 }
 
 function matchAny(pathname: string, patterns: RegExp[]) {
@@ -131,8 +130,8 @@ export const config = {
     "/api/ct/:path*",
     "/api/sessions/:path*",
     // "/api/users/:path*" ← lo sacamos del matcher, así ni pasa por el middleware
-    "/med/:path*",
-    "/api/med/:path*",
+    "/medico/:path*",
+    "/api/medico/:path*",
     "/admin/:path*",
   ],
 };
