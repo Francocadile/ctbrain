@@ -22,7 +22,8 @@ export default function MedEpisodeEditPage() {
       setLoading(true);
       setErr(null);
       try {
-        const res = await fetch(`/api/med/clinical/${id}`, { cache: "no-store" });
+        // 🔁 apuntar al nuevo endpoint
+        const res = await fetch(`/api/medico/clinical/${id}`, { cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as Episode;
         if (!active) return;
@@ -56,7 +57,10 @@ export default function MedEpisodeEditPage() {
           <div className="flex gap-2">
             <button
               className="h-9 rounded-md border px-3 text-sm"
-              onClick={() => router.push(`/med/injuries/new?from=${encodeURIComponent(String(id))}`)}
+              // 🔁 ruta UI nueva
+              onClick={() =>
+                router.push(`/medico/injuries/new?from=${encodeURIComponent(String(id))}`)
+              }
               title="Crea un nuevo parte con estos datos como base (fecha y estado podés ajustarlos)."
             >
               Duplicar como nuevo
@@ -71,10 +75,7 @@ export default function MedEpisodeEditPage() {
         <div className="rounded-xl border bg-white p-5 text-red-600">
           Error: {err}
           <div className="mt-3">
-            <button
-              className="h-9 rounded-md border px-3 text-sm"
-              onClick={() => router.back()}
-            >
+            <button className="h-9 rounded-md border px-3 text-sm" onClick={() => router.back()}>
               Volver
             </button>
           </div>
@@ -85,7 +86,8 @@ export default function MedEpisodeEditPage() {
             initial={initial}
             defaultDate={initial.date}
             onCancel={() => router.back()}
-            onSaved={() => router.push("/med/injuries")}
+            // 🔁 volver al listado nuevo
+            onSaved={() => router.push("/medico/injuries")}
           />
         </section>
       ) : (
