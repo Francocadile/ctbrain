@@ -29,8 +29,8 @@ export default async function SeguimientoCTPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <h2 className="text-xl font-bold mb-4">Seguimiento de visualizaciones</h2>
+    <div className="container max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+      <h2 className="text-2xl font-semibold mb-4">Seguimiento de visualizaciones</h2>
       <Filtros filtros={filtros} setFiltros={setFiltros} />
       <TablaSeguimiento logs={logs} conteo={conteo} />
     </div>
@@ -41,7 +41,7 @@ function Filtros({ filtros, setFiltros }: any) {
   return (
     <form className="mb-4 flex gap-2 items-end">
       <select
-        className="border rounded p-2"
+        className="border rounded-lg p-2"
         value={filtros.entityType}
         onChange={e => setFiltros((f: any) => ({ ...f, entityType: e.target.value }))}
       >
@@ -49,13 +49,13 @@ function Filtros({ filtros, setFiltros }: any) {
       </select>
       <input
         type="date"
-        className="border rounded p-2"
+        className="border rounded-lg p-2"
         value={filtros.desde}
         onChange={e => setFiltros((f: any) => ({ ...f, desde: e.target.value }))}
       />
       <input
         type="date"
-        className="border rounded p-2"
+        className="border rounded-lg p-2"
         value={filtros.hasta}
         onChange={e => setFiltros((f: any) => ({ ...f, hasta: e.target.value }))}
       />
@@ -64,7 +64,7 @@ function Filtros({ filtros, setFiltros }: any) {
 }
 
 function TablaSeguimiento({ logs, conteo }: { logs: any[]; conteo: Record<string, number> }) {
-  if (!logs.length) return <div className="p-4">Sin registros</div>;
+  if (!logs.length) return <div className="text-center text-gray-500 py-8">Sin registros.</div>;
   return (
     <table className="w-full border">
       <thead>

@@ -16,12 +16,17 @@ export default async function VideosJugadorPage() {
   }
 
   if (!videos.length) {
-    return <div className="p-6 text-center">Sin videos disponibles</div>;
+    return (
+      <div className="container max-w-3xl mx-auto px-4 sm:px-6 py-8">
+        <h2 className="text-2xl font-semibold mb-4">Videos del DT</h2>
+        <div className="text-center text-gray-500 py-8">Sin videos disponibles.</div>
+      </div>
+    );
   }
 
   return (
-    <div className="max-w-xl mx-auto p-6">
-      <h2 className="text-xl font-bold mb-4">Videos del DT</h2>
+    <div className="container max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+      <h2 className="text-2xl font-semibold mb-4">Videos del DT</h2>
       <div className="grid gap-4">
         {videos.map(video => (
           <VideoCard key={video.id} video={video} vistos={vistos[video.id] || 0} />
@@ -34,6 +39,7 @@ export default async function VideosJugadorPage() {
 function VideoCard({ video, vistos }: { video: any; vistos: number }) {
   const [visto, setVisto] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState('');
 
   async function marcarVisto() {
     setLoading(true);
@@ -43,24 +49,28 @@ function VideoCard({ video, vistos }: { video: any; vistos: number }) {
         entityId: video.id,
       });
       setVisto(true);
-    } catch {}
+      setMsg('¡Marcado como visto!');
+    } catch {
+      setMsg('Error al marcar como visto');
+    }
     setLoading(false);
   }
 
   return (
-    <div className="border rounded p-4 shadow">
+    <div className="border rounded-lg p-4 shadow space-y-2">
       <div className="font-semibold mb-2">{video.title}</div>
       <div className="mb-2">
         <a href={video.url} target="_blank" rel="noopener" className="text-blue-600 underline">Ver video</a>
         <div className="text-xs mt-1">Visto por {vistos} usuario(s)</div>
       </div>
       <button
-        className={`px-3 py-1 rounded ${visto ? 'bg-green-500 text-white' : 'bg-blue-600 text-white'}`}
+        className={`px-3 py-1 rounded-lg ${visto ? 'bg-green-500 text-white' : 'bg-blue-600 text-white'} transition`}
         onClick={marcarVisto}
         disabled={visto || loading}
       >
-        {visto ? 'Visto' : loading ? 'Marcando...' : 'Marcar visto'}
+        {visto ? 'Visto' : loading ? 'Marcando...' : 'Marcar como visto'}
       </button>
+      {msg && <div className={`text-sm ${msg.includes('Error') ? 'text-red-500' : 'text-green-600'}`}>{msg}</div>}
     </div>
   );
 }
