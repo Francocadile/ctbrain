@@ -1,3 +1,12 @@
-/* Removed @tailwind directives because Tailwind is not configured to process this CSS file. */
+/* Remove Tailwind directives if not using Tailwind CSS */
+/* @tailwind base; */
+/* @tailwind components; */
+/* @tailwind utilities; */
 
-/* Puedes agregar aquí tus estilos globales si lo necesitas. */
+/* Opcional: estilos base mínimos */
+:root {
+  color-scheme: light dark;
+}
+html, body, #__next {
+  height: 100%;
+}
