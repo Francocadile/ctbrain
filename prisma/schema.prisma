@@ -357,3 +357,16 @@ model ScoutingPlayer {
   @@index([estado])
   @@index([fullName])
 }
+
+model sharedAsset {
+  id          String   @id @default(cuid())
+  title       String
+  type        String
+  url         String
+  note        String?
+  weekStart   DateTime
+  audience    String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
