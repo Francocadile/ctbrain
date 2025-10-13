@@ -9,55 +9,41 @@ export default function LeftMenu() {
     <nav className="p-3 space-y-4">
       {/* INICIO */}
       <div>
-        <div className="px-3 py-1 text-[11px] font-semibold tracking-wide text-gray-500 uppercase">
-          Inicio
-        </div>
+        <div className="px-3 py-1 text-[11px] font-semibold tracking-wide text-gray-500 uppercase">INICIO</div>
         <MenuLink href="/ct/dashboard">Dashboard / Inicio rápido</MenuLink>
-      </div>
-
-      {/* PLANIFICACIÓN */}
-      <div>
-        <div className="px-3 py-1 text-[11px] font-semibold tracking-wide text-gray-500 uppercase">
-          Planificación
-        </div>
-        <MenuLink href="/ct/sessions/editor">Plan semanal (Editor)</MenuLink>
-        <MenuLink soon>Sesiones y Ejercicios (almacén)</MenuLink>
-        <MenuLink soon>Plan de partido (Rivales & Videos)</MenuLink>
-        <MenuLink soon>Videos propios (colectivo / individual)</MenuLink>
-        <MenuLink soon>Calendario general / Competencia</MenuLink>
-          <MenuLink href="/ct/rutinas">Rutinas</MenuLink>
-          <MenuLink href="/ct/share">Compartir material</MenuLink>
-          <MenuLink href="/ct/seguimiento">Seguimiento</MenuLink>
       </div>
 
       {/* MONITOREO */}
       <div>
-        <div className="px-3 py-1 text-[11px] font-semibold tracking-wide text-gray-500 uppercase">
-          Monitoreo
-        </div>
-        <MenuLink soon>Carga semanal (planificado vs ejecutado)</MenuLink>
-        <MenuLink soon>Rendimiento (colectivo / individual)</MenuLink>
-        {/* NUEVOS LINKS ACTIVOS */}
-        <MenuLink href="/ct/metrics/wellness">Wellness (día)</MenuLink>
-        <MenuLink href="/ct/metrics/rpe">RPE (día)</MenuLink>
+        <div className="px-3 py-1 text-[11px] font-semibold tracking-wide text-gray-500 uppercase">MONITOREO</div>
+        <MenuLink href="/ct/metrics/wellness">Wellness</MenuLink>
+        <MenuLink href="/ct/metrics/rpe">Rpe</MenuLink>
         <MenuLink soon>Lesionados</MenuLink>
       </div>
 
-      {/* PERSONAS & RECURSOS */}
+      {/* PLANIFICACIÓN */}
       <div>
-        <div className="px-3 py-1 text-[11px] font-semibold tracking-wide text-gray-500 uppercase">
-          Personas & Recursos
-        </div>
-        <MenuLink soon>Jugadores (ficha integral)</MenuLink>
-        <MenuLink soon>Biblioteca / Recursos compartidos</MenuLink>
-        <MenuLink soon>Notas / Bitácora del CT</MenuLink>
+        <div className="px-3 py-1 text-[11px] font-semibold tracking-wide text-gray-500 uppercase">PLANIFICACIÓN</div>
+        <MenuLink href="/ct/sessions/editor">Plan semanal (Editor)</MenuLink>
+        <MenuLink soon>Sesiones</MenuLink>
+        <MenuLink soon>Ejercicios</MenuLink>
+  <MenuLink href="/ct/rutinas">Rutinas de fuerza</MenuLink>
+  <MenuLink href="/ct/rutinas">Planificador de rutinas</MenuLink>
+        <MenuLink href="/ct/videos">Videos DT</MenuLink>
+        <MenuLink href="/ct/share">Material compartido</MenuLink>
+        <MenuLink href="/ct/seguimiento">Seguimiento de lectura</MenuLink>
+      </div>
+
+      {/* TÉCNICA */}
+      <div>
+        <div className="px-3 py-1 text-[11px] font-semibold tracking-wide text-gray-500 uppercase">TÉCNICA</div>
+        <MenuLink soon>Rivales / Plan de partido</MenuLink>
+        <MenuLink soon>Scouting</MenuLink>
       </div>
 
       {/* SALIR */}
       <div>
-        <div className="px-3 py-1 text-[11px] font-semibold tracking-wide text-gray-500 uppercase">
-          Salir
-        </div>
+        <div className="px-3 py-1 text-[11px] font-semibold tracking-wide text-gray-500 uppercase">SALIR</div>
         <button
           onClick={() => signOut()}
           className="w-full text-left block rounded-md px-3 py-1.5 text-[13px] text-gray-800 hover:bg-gray-100"
