@@ -16,15 +16,15 @@ export default async function MaterialJugadorPage() {
   if (!assets.length) {
     return (
       <div className="container max-w-3xl mx-auto px-4 sm:px-6 py-8">
-  <h2 className="h2 text-ink-900 mb-4 tracking-tight">Material de la semana</h2>
-  <div className="text-center text-ink-500 py-8">Sin materiales esta semana.</div>
+  <h2 className="text-2xl font-semibold mb-4">Material de la semana</h2>
+  <div className="text-center text-gray-500 py-8">Sin materiales esta semana.</div>
       </div>
     );
   }
 
   return (
     <div className="container max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-  <h2 className="h2 text-ink-900 mb-4 tracking-tight">Material de la semana</h2>
+  <h2 className="text-2xl font-semibold mb-4">Material de la semana</h2>
       <div className="grid gap-4">
         {assets.map(asset => (
           <AssetCard key={asset.id} asset={asset} />
@@ -55,27 +55,27 @@ function AssetCard({ asset }: { asset: any }) {
   }
 
   return (
-    <div className="card space-y-2">
-      <div className="h3 text-ink-900 mb-2 tracking-tight">{asset.title}</div>
+    <div className="border rounded-lg p-4 shadow space-y-2">
+      <div className="font-semibold mb-2">{asset.title}</div>
       <div className="mb-2">
         {asset.type === 'PDF' && asset.url && (
-          <a href={asset.url} target="_blank" rel="noopener" className="btn-secondary">Ver PDF</a>
+          <a href={asset.url} target="_blank" rel="noopener" className="text-blue-600 underline">Ver PDF</a>
         )}
         {asset.type === 'LINK' && asset.url && (
-          <a href={asset.url} target="_blank" rel="noopener" className="btn-secondary">Abrir enlace</a>
+          <a href={asset.url} target="_blank" rel="noopener" className="text-blue-600 underline">Abrir enlace</a>
         )}
         {asset.type === 'NOTE' && asset.note && (
-          <div className="bg-base-50 p-2 rounded small text-ink-700">{asset.note}</div>
+          <div className="bg-gray-100 p-2 rounded">{asset.note}</div>
         )}
       </div>
       <button
-  className={`btn-primary ui-min ${visto ? 'opacity-60' : ''}`}
+  className={`px-3 py-1 rounded-lg ${visto ? 'bg-green-500 text-white' : 'bg-blue-600 text-white'} transition`}
         onClick={marcarVisto}
         disabled={visto || loading}
       >
         {visto ? 'Visto' : loading ? 'Marcando...' : 'Marcar como visto'}
       </button>
-  {msg && <div className={`small ${msg.includes('Error') ? 'badge-error' : 'badge-success'}`}>{msg}</div>}
+  {msg && <div className={`text-sm ${msg.includes('Error') ? 'text-red-500' : 'text-green-600'}`}>{msg}</div>}
     </div>
   );
 }
