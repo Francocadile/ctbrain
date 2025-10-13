@@ -31,17 +31,17 @@ function AsignarRutinaContent() {
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4">
-      <h1 className="text-2xl font-bold mb-6">Asignar rutina a jugadores</h1>
+  <h1 className="h2 text-ink-900 mb-6 tracking-tight">Asignar rutina a jugadores</h1>
       <div className="mb-4">
         <PlayerSelectMed
           value={""}
           onChange={id => setSelectedPlayers(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id])}
           label="Selecciona jugadores (puedes elegir varios)"
         />
-        <div className="mt-2 text-sm text-gray-500">Jugadores seleccionados: {selectedPlayers.length}</div>
+    <div className="mt-2 small text-ink-500">Jugadores seleccionados: {selectedPlayers.length}</div>
       </div>
-      <button className="bg-green-600 text-white px-4 py-2 rounded-lg" onClick={handleAsignar}>Asignar rutina</button>
-      {msg && <div className={`mt-2 text-sm ${msg.includes('Error') ? 'text-red-500' : 'text-green-600'}`}>{msg}</div>}
+  <button className="btn-primary ui-min" onClick={handleAsignar}>Asignar rutina</button>
+  {msg && <div className={`mt-2 small ${msg.includes('Error') ? 'badge-error' : 'badge-success'}`}>{msg}</div>}
     </div>
   );
 }

@@ -64,23 +64,22 @@ export default function InjuryEditor({ open, onClose, row, onSaved }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-3">
-      <div className="w-full max-w-2xl rounded-2xl border bg-white shadow-xl">
+      <div className="w-full max-w-2xl card">
         <header className="px-4 py-3 border-b flex items-center justify-between">
           <div>
-            <div className="text-sm text-gray-500">Detalle lesional</div>
-            <div className="font-semibold">{row?.userName || "Jugador"}</div>
+            <div className="label-ui text-ink-500">Detalle lesional</div>
+            <div className="h4 text-ink-900 font-semibold tracking-tight">{row?.userName || "Jugador"}</div>
           </div>
-          <button onClick={onClose} className="rounded-md border px-3 py-1 text-sm hover:bg-gray-50">Cerrar</button>
+          <button onClick={onClose} className="btn-secondary ui-min">Cerrar</button>
         </header>
-
         <div className="p-4 space-y-4">
           {/* Disponibilidad */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <label className="text-sm">
+            <label className="small text-ink-700">
               Disponibilidad{" "}
               <HelpTip text="OUT: no entrena. MODIFIED: con restricciones. FULL: sin restricciones." />
               <select
-                className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
+                className="mt-1 w-full rounded-md border px-2 py-1.5 small"
                 value={form.availability}
                 onChange={e=>setForm((f:any)=>({ ...f, availability: e.target.value }))}
               >
@@ -89,38 +88,32 @@ export default function InjuryEditor({ open, onClose, row, onSaved }: Props) {
                 <option value="FULL">FULL</option>
               </select>
             </label>
-
-            <label className="text-sm">
+            <label className="small text-ink-700">
               Cap de minutos{" "}
               <HelpTip text="Límite operativo sugerido por CM. El CT lo usa en Plan y RPE." />
               <input
-                className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
+                className="mt-1 w-full rounded-md border px-2 py-1.5 small tabular"
                 placeholder="ej: 30"
                 inputMode="numeric"
                 value={form.capMinutes ?? ""}
                 onChange={e=>setForm((f:any)=>({ ...f, capMinutes: e.target.value===""?null:Number(e.target.value) }))}
               />
             </label>
-
-            <label className="text-sm">
+            <label className="small text-ink-700">
               Fecha estimada de regreso{" "}
               <HelpTip text="ETA (estimación) de alta deportiva. Ajustable día a día." />
               <input
                 type="date"
-                className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
+                className="mt-1 w-full rounded-md border px-2 py-1.5 small"
                 value={form.expectedReturn}
                 onChange={e=>setForm((f:any)=>({ ...f, expectedReturn: e.target.value }))}
               />
             </label>
           </div>
-
           {/* Restricciones operativas */}
-          <div className="rounded-xl border p-3">
-            <div className="text-[12px] font-semibold uppercase mb-2">
-              Restricciones{" "}
-              <HelpTip text="Flags que ve el CT para adaptar tareas: sin sprint, sin cambios de dirección, solo gym, sin contacto." />
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+          <div className="card p-3">
+            <div className="micro label-ui mb-2">Restricciones</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 small text-ink-700">
               {[
                 ["noSprint","Sin Sprint"],
                 ["noCoD","Sin CoD"],
@@ -138,14 +131,13 @@ export default function InjuryEditor({ open, onClose, row, onSaved }: Props) {
               ))}
             </div>
           </div>
-
           {/* Clínica */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <label className="text-sm">
+            <label className="small text-ink-700">
               Severidad{" "}
               <HelpTip text="MENOR 1–3d, MODERADA 4–28d, SEVERA >28d (referencia adaptable)." />
               <select
-                className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
+                className="mt-1 w-full rounded-md border px-2 py-1.5 small"
                 value={form.severity ?? ""}
                 onChange={e=>setForm((f:any)=>({ ...f, severity: e.target.value || null }))}
               >
@@ -155,12 +147,11 @@ export default function InjuryEditor({ open, onClose, row, onSaved }: Props) {
                 <option value="SEVERE">SEVERE</option>
               </select>
             </label>
-
-            <label className="text-sm">
+            <label className="small text-ink-700">
               Mecanismo{" "}
               <HelpTip text="CONTACT / NON_CONTACT / OVERUSE / UNKNOWN." />
               <select
-                className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
+                className="mt-1 w-full rounded-md border px-2 py-1.5 small"
                 value={form.mechanism ?? ""}
                 onChange={e=>setForm((f:any)=>({ ...f, mechanism: e.target.value || null }))}
               >
@@ -171,12 +162,11 @@ export default function InjuryEditor({ open, onClose, row, onSaved }: Props) {
                 <option value="UNKNOWN">UNKNOWN</option>
               </select>
             </label>
-
-            <label className="text-sm">
+            <label className="small text-ink-700">
               Lateralidad{" "}
               <HelpTip text="Izq/Der/Bilateral cuando aplique (miembro inferior/superior)." />
               <select
-                className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
+                className="mt-1 w-full rounded-md border px-2 py-1.5 small"
                 value={form.side ?? ""}
                 onChange={e=>setForm((f:any)=>({ ...f, side: e.target.value || null }))}
               >
@@ -187,27 +177,23 @@ export default function InjuryEditor({ open, onClose, row, onSaved }: Props) {
               </select>
             </label>
           </div>
-
-          <label className="block text-sm">
+          <label className="block small text-ink-700">
             Notas{" "}
             <HelpTip text="Observaciones clínicas y pautas de trabajo. Se muestran al CT en Plan." />
             <textarea
-              className="mt-1 w-full rounded-md border px-2 py-1.5 text-sm"
+              className="mt-1 w-full rounded-md border px-2 py-1.5 small"
               rows={4}
               value={form.note}
               onChange={e=>setForm((f:any)=>({ ...f, note: e.target.value }))}
             />
           </label>
         </div>
-
         <footer className="px-4 py-3 border-t flex items-center justify-end gap-2">
-          <button onClick={onClose} className="rounded-md border px-3 py-1.5 text-sm hover:bg-gray-50">
-            Cancelar
-          </button>
+          <button onClick={onClose} className="btn-secondary ui-min">Cancelar</button>
           <button
             onClick={save}
             disabled={saving}
-            className={`rounded-md px-3 py-1.5 text-sm ${saving ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"}`}
+            className={`btn-primary ui-min ${saving ? "opacity-60" : ""}`}
           >
             Guardar
           </button>
