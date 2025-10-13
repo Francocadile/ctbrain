@@ -101,6 +101,7 @@ model User {
   plannerPrefs    PlannerPrefs?
   exercises       Exercise[]
   clinicalEntries ClinicalEntry[]
+  playerRoutines  playerRoutine[]
 }
 
 model Session {
