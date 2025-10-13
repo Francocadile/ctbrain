@@ -382,3 +382,14 @@ model playerRoutine {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+model coachVideo {
+  id          String   @id @default(cuid())
+  title       String
+  topic       String?
+  url         String
+  tags        String[] @default([])
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
