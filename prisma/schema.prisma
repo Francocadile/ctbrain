@@ -62,13 +62,14 @@ enum ViewLogEntityType {
 
 model PlayerRoutine {
   id        String   @id @default(cuid())
-  userId    String   @index
+  userId    String
   day       DateTime
   ejercicios Json
   feedback  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([userId])
   @@index([userId, day])
 }
 
@@ -98,11 +99,14 @@ model CoachVideo {
 
 model ViewLog {
   id         String            @id @default(cuid())
-  userId     String            @index
+  userId     String
   entityType ViewLogEntityType
-  entityId   String            @index
+  entityId   String
   viewedAt   DateTime          @default(now())
   extra      Json?
+
+  @@index([userId])
+  @@index([entityId])
 }
 
 enum LeaveKind {
