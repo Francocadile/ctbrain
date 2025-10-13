@@ -103,6 +103,21 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
               Ejercicios
             </NavItem>
           </li>
+          <li>
+            <NavItem href={"/ct/rutinas" as Route} active={isActive("/ct/rutinas")}>Rutinas de fuerza</NavItem>
+          </li>
+          <li>
+            <NavItem href={"/ct/rutinas" as Route} active={isActive("/ct/rutinas")}>Planificador de rutinas</NavItem>
+          </li>
+          <li>
+            <NavItem href={"/ct/videos" as Route} active={isActive("/ct/videos")}>Videos DT</NavItem>
+          </li>
+          <li>
+            <NavItem href={"/ct/share" as Route} active={isActive("/ct/share")}>Material compartido</NavItem>
+          </li>
+          <li>
+            <NavItem href={"/ct/seguimiento" as Route} active={isActive("/ct/seguimiento")}>Seguimiento de lectura</NavItem>
+          </li>
         </ul>
 
         <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
