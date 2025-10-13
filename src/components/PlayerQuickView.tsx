@@ -23,8 +23,8 @@ type RPERowAny = RPERow & { date?: string };
 
 function Section({ title, children }: { title: string; children: any }) {
   return (
-    <section className="rounded-xl border bg-white p-3">
-      <div className="text-[12px] font-semibold uppercase mb-1">{title}</div>
+  <section className="card p-3">
+  <div className="micro label-ui mb-1">{title}</div>
       {children}
     </section>
   );
@@ -161,16 +161,16 @@ export default function PlayerQuickView({ open, onClose, playerName, date }: Pro
         aria-hidden="true"
       />
       {/* Panel */}
-      <div className="absolute right-0 top-0 h-full w-full max-w-[420px] bg-white shadow-2xl flex flex-col">
+  <div className="absolute right-0 top-0 h-full w-full max-w-[420px] bg-white shadow-2xl flex flex-col card">
         {/* Header */}
-        <div className="p-3 border-b flex items-center justify-between">
+  <div className="p-3 border-b flex items-center justify-between">
           <div>
-            <div className="text-xs uppercase text-gray-500">Resumen rápido</div>
-            <div className="text-lg font-bold">{playerName || "Jugador"}</div>
+            <div className="label-ui text-ink-500">Resumen rápido</div>
+            <div className="h3 text-ink-900 tracking-tight">{playerName || "Jugador"}</div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg border px-2 py-1 text-sm hover:bg-gray-50"
+            className="btn-secondary ui-min"
             aria-label="Cerrar"
           >
             Cerrar
@@ -180,30 +180,30 @@ export default function PlayerQuickView({ open, onClose, playerName, date }: Pro
         {/* Body */}
         <div className="p-3 space-y-3 overflow-auto">
           {loading ? (
-            <div className="text-gray-500">Cargando…</div>
+            <div className="text-ink-500">Cargando…</div>
           ) : (
             <>
               <Section title="Wellness — últimos 7 días">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <div className="text-[11px] text-gray-500">SDW promedio (7d)</div>
-                    <div className="text-xl font-semibold">{sdwAvg7 ?? "—"}</div>
+                    <div className="micro text-ink-500">SDW promedio (7d)</div>
+                    <div className="h4 text-ink-900 font-semibold tabular">{sdwAvg7 ?? "—"}</div>
                   </div>
                   <div>
-                    <div className="text-[11px] text-gray-500">Hoy</div>
-                    <div className="text-xl font-semibold">
+                    <div className="micro text-ink-500">Hoy</div>
+                    <div className="h4 text-ink-900 font-semibold tabular">
                       {todayRow ? computeSDW(todayRow).toFixed(2) : "—"}
                     </div>
                   </div>
                 </div>
                 <div className="mt-2">
                   <BarsInline values={last7SDW} maxHint={5} titlePrefix="SDW: " />
-                  <div className="mt-1 text-[11px] text-gray-500">
+                  <div className="mt-1 micro text-ink-500">
                     Serie: hoy → hace 6 días (más alto = mejor)
                   </div>
                 </div>
                 {todayRow && (
-                  <div className="mt-2 text-xs text-gray-700 grid grid-cols-2 gap-1">
+                  <div className="mt-2 small text-ink-700 grid grid-cols-2 gap-1">
                     <div>Sueño: <b>{todayRow.sleepQuality}</b></div>
                     <div>Horas: <b>{todayRow.sleepHours ?? "—"}</b></div>
                     <div>Fatiga: <b>{todayRow.fatigue}</b></div>
@@ -216,10 +216,10 @@ export default function PlayerQuickView({ open, onClose, playerName, date }: Pro
 
               <Section title="RPE — últimos registros">
                 {lastRPE.length === 0 ? (
-                  <div className="text-gray-500 text-sm">Sin AU recientes</div>
+                  <div className="small text-ink-500">Sin AU recientes</div>
                 ) : (
                   <div className="space-y-2">
-                    <div className="grid grid-cols-3 gap-2 text-[11px] text-gray-500">
+                    <div className="grid grid-cols-3 gap-2 micro text-ink-500">
                       <div>Fecha</div>
                       <div>RPE × min</div>
                       <div className="text-right">sRPE (AU)</div>
@@ -227,7 +227,7 @@ export default function PlayerQuickView({ open, onClose, playerName, date }: Pro
                     {lastRPE.map((r, i) => {
                       const au = srpeOf(r);
                       return (
-                        <div key={i} className="grid grid-cols-3 gap-2 text-sm">
+                        <div key={i} className="grid grid-cols-3 gap-2 small text-ink-900 tabular">
                           <div>{r.date}</div>
                           <div>
                             {Number(r.rpe).toFixed(0)} × {r.duration ?? "—"}
