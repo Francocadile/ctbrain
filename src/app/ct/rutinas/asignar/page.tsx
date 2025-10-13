@@ -1,10 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import PlayerSelectMed from "@/components/PlayerSelectMed";
-import prisma from "@/lib/prisma";
 
-export default function AsignarRutinaPage() {
+function AsignarRutinaContent() {
   const params = useSearchParams();
   const rutinaId = params.get("id") || "";
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
@@ -18,7 +17,6 @@ export default function AsignarRutinaPage() {
       return;
     }
     try {
-      // Aquí deberías hacer el POST a la API para asignar la rutina a los jugadores
       await fetch(`/api/routines/assign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -45,5 +43,13 @@ export default function AsignarRutinaPage() {
       <button className="bg-green-600 text-white px-4 py-2 rounded-lg" onClick={handleAsignar}>Asignar rutina</button>
       {msg && <div className={`mt-2 text-sm ${msg.includes('Error') ? 'text-red-500' : 'text-green-600'}`}>{msg}</div>}
     </div>
+  );
+}
+
+export default function AsignarRutinaPage() {
+  return (
+    <Suspense>
+      <AsignarRutinaContent />
+    </Suspense>
   );
 }
