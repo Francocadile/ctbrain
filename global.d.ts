@@ -27,7 +27,7 @@ declare module 'pdf-parse' {
     version?: string;
   }
 
-  export type PDFSource = Buffer | Uint8Array | ArrayBuffer;
+  // export type PDFSource = Buffer | Uint8Array | ArrayBuffer;
 
   export default function pdf(dataBuffer: PDFSource, options?: any): Promise<PDFData>;
 }
