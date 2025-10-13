@@ -1,4 +1,4 @@
-import RoutineEditor from '../RoutineEditor';
+import RoutineEditor from '../../RoutineEditor';
 
 export default function EditarRutinaCTPage({ params }: { params: { id: string } }) {
   return (
