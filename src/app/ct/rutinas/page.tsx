@@ -7,14 +7,6 @@ export default async function RutinasCTPage() {
     take: 10,
   });
 
-  type PlayerRoutine = {
-    id: string;
-    userId: string;
-    day: string;
-    ejercicios?: { sections: Record<string, any[]> };
-    updatedAt: string;
-  };
-
   return (
     <div className="container max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
       <div className="flex items-center justify-between mb-4">
@@ -32,12 +24,12 @@ export default async function RutinasCTPage() {
           </tr>
         </thead>
         <tbody>
-          {rutinas.map((rutina: PlayerRoutine) => (
+          {rutinas.map((rutina: any) => (
             <tr key={rutina.id} className="border-b">
               <td className="px-2 py-1">{rutina.userId}</td>
-              <td className="px-2 py-1">{new Date(rutina.day).toLocaleDateString()}</td>
-              <td className="px-2 py-1">{Array.isArray(rutina.ejercicios?.sections) ? Object.values(rutina.ejercicios.sections).flat().length : 0}</td>
-              <td className="px-2 py-1">{new Date(rutina.updatedAt).toLocaleDateString()}</td>
+              <td className="px-2 py-1">{rutina.day instanceof Date ? rutina.day.toLocaleDateString() : String(rutina.day)}</td>
+              <td className="px-2 py-1">{rutina.ejercicios && typeof rutina.ejercicios === 'object' && 'sections' in rutina.ejercicios && Array.isArray(rutina.ejercicios.sections) ? Object.values(rutina.ejercicios.sections).flat().length : 0}</td>
+              <td className="px-2 py-1">{rutina.updatedAt instanceof Date ? rutina.updatedAt.toLocaleDateString() : String(rutina.updatedAt)}</td>
               <td className="px-2 py-1 space-x-2">
                 <Link href={`/ct/rutinas/${rutina.id}/edit`} className="text-blue-600 underline">Editar</Link>
                 <Link href={`/ct/rutinas/nuevo?copy=${rutina.id}`} className="text-gray-600 underline">Duplicar</Link>
