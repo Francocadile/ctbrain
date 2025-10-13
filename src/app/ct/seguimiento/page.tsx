@@ -1,3 +1,5 @@
+
+"use client";
 import { getJSON } from '@/lib/api';
 import { useState } from 'react';
 
