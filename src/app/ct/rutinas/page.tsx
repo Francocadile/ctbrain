@@ -1,8 +1,19 @@
 import Link from "next/link";
-import { getJSON } from "@/lib/api";
+import prisma from "@/lib/prisma";
 
 export default async function RutinasCTPage() {
-  const rutinas = await getJSON<any[]>("/api/routines");
+  const rutinas = await prisma.playerRoutine.findMany({
+    orderBy: { updatedAt: "desc" },
+    take: 10,
+  });
+
+  type PlayerRoutine = {
+    id: string;
+    userId: string;
+    day: string;
+    ejercicios?: { sections: Record<string, any[]> };
+    updatedAt: string;
+  };
 
   return (
     <div className="container max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6">
@@ -21,11 +32,11 @@ export default async function RutinasCTPage() {
           </tr>
         </thead>
         <tbody>
-          {rutinas.slice(0, 10).map(rutina => (
+          {rutinas.map((rutina: PlayerRoutine) => (
             <tr key={rutina.id} className="border-b">
               <td className="px-2 py-1">{rutina.userId}</td>
               <td className="px-2 py-1">{new Date(rutina.day).toLocaleDateString()}</td>
-              <td className="px-2 py-1">{Array.isArray(rutina.ejercicios) ? rutina.ejercicios.length : 0}</td>
+              <td className="px-2 py-1">{Array.isArray(rutina.ejercicios?.sections) ? Object.values(rutina.ejercicios.sections).flat().length : 0}</td>
               <td className="px-2 py-1">{new Date(rutina.updatedAt).toLocaleDateString()}</td>
               <td className="px-2 py-1 space-x-2">
                 <Link href={`/ct/rutinas/${rutina.id}/edit`} className="text-blue-600 underline">Editar</Link>
