@@ -25,6 +25,9 @@ export default function LeftMenu() {
         <MenuLink soon>Plan de partido (Rivales & Videos)</MenuLink>
         <MenuLink soon>Videos propios (colectivo / individual)</MenuLink>
         <MenuLink soon>Calendario general / Competencia</MenuLink>
+          <MenuLink href="/ct/rutinas">Rutinas</MenuLink>
+          <MenuLink href="/ct/share">Compartir material</MenuLink>
+          <MenuLink href="/ct/seguimiento">Seguimiento</MenuLink>
       </div>
 
       {/* MONITOREO */}

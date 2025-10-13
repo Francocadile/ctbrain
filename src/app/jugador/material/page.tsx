@@ -14,12 +14,17 @@ export default async function MaterialJugadorPage() {
   }
 
   if (!assets.length) {
-    return <div className="p-6 text-center">Sin materiales asignados</div>;
+    return (
+      <div className="container max-w-3xl mx-auto px-4 sm:px-6 py-8">
+        <h2 className="text-2xl font-semibold mb-4">Material de la semana</h2>
+        <div className="text-center text-gray-500 py-8">Sin materiales esta semana.</div>
+      </div>
+    );
   }
 
   return (
-    <div className="max-w-xl mx-auto p-6">
-      <h2 className="text-xl font-bold mb-4">Material semanal</h2>
+    <div className="container max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+      <h2 className="text-2xl font-semibold mb-4">Material de la semana</h2>
       <div className="grid gap-4">
         {assets.map(asset => (
           <AssetCard key={asset.id} asset={asset} />
@@ -32,6 +37,7 @@ export default async function MaterialJugadorPage() {
 function AssetCard({ asset }: { asset: any }) {
   const [visto, setVisto] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState('');
 
   async function marcarVisto() {
     setLoading(true);
@@ -41,12 +47,15 @@ function AssetCard({ asset }: { asset: any }) {
         entityId: asset.id,
       });
       setVisto(true);
-    } catch {}
+      setMsg('¡Marcado como visto!');
+    } catch {
+      setMsg('Error al marcar como visto');
+    }
     setLoading(false);
   }
 
   return (
-    <div className="border rounded p-4 shadow">
+    <div className="border rounded-lg p-4 shadow space-y-2">
       <div className="font-semibold mb-2">{asset.title}</div>
       <div className="mb-2">
         {asset.type === 'PDF' && asset.url && (
@@ -60,12 +69,13 @@ function AssetCard({ asset }: { asset: any }) {
         )}
       </div>
       <button
-        className={`px-3 py-1 rounded ${visto ? 'bg-green-500 text-white' : 'bg-blue-600 text-white'}`}
+        className={`px-3 py-1 rounded-lg ${visto ? 'bg-green-500 text-white' : 'bg-blue-600 text-white'} transition`}
         onClick={marcarVisto}
         disabled={visto || loading}
       >
-        {visto ? 'Visto' : loading ? 'Marcando...' : 'Marcar visto'}
+        {visto ? 'Visto' : loading ? 'Marcando...' : 'Marcar como visto'}
       </button>
+      {msg && <div className={`text-sm ${msg.includes('Error') ? 'text-red-500' : 'text-green-600'}`}>{msg}</div>}
     </div>
   );
 }
