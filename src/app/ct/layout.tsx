@@ -104,10 +104,10 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
             </NavItem>
           </li>
           <li>
-            <NavItem href={"/ct/rutinas" as Route} active={isActive("/ct/rutinas")}>Rutinas de fuerza</NavItem>
+            <NavItem href={"/ct/rutinas" as Route} active={isActive("/ct/rutinas")}>Planificador de rutinas</NavItem>
           </li>
           <li>
-            <NavItem href={"/ct/rutinas" as Route} active={isActive("/ct/rutinas")}>Planificador de rutinas</NavItem>
+            <NavItem href={"/ct/rutinas/biblioteca" as Route} active={isActive("/ct/rutinas/biblioteca")}>Biblioteca de rutinas</NavItem>
           </li>
           <li>
             <NavItem href={"/ct/videos" as Route} active={isActive("/ct/videos")}>Videos DT</NavItem>
