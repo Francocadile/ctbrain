@@ -15,8 +15,8 @@ export default async function RutinaJugadorPage() {
   if (!rutina) {
     return (
       <div className="container max-w-3xl mx-auto px-4 sm:px-6 py-8">
-        <h2 className="h2 text-ink-900 mb-4 tracking-tight">Rutina de fuerza</h2>
-        <div className="text-center text-ink-500 py-8">Sin rutina asignada todavía.</div>
+  <h2 className="text-2xl font-semibold mb-4">Rutina de fuerza</h2>
+  <div className="text-center text-gray-500 py-8">Sin rutina asignada todavía.</div>
       </div>
     );
   }
@@ -25,39 +25,39 @@ export default async function RutinaJugadorPage() {
   const plan = rutina.ejercicios?.sections ? rutina.ejercicios : null;
   return (
     <div className="container max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-      <h2 className="h2 text-ink-900 mb-4 tracking-tight">Rutina de fuerza</h2>
+  <h2 className="text-2xl font-semibold mb-4">Rutina de fuerza</h2>
       <div className="mb-4">
-        <span className="label-ui text-ink-700">Día:</span> <span className="tabular">{new Date(rutina.day).toLocaleDateString()}</span>
+  <span className="font-medium">Día:</span> {new Date(rutina.day).toLocaleDateString()}
       </div>
       {plan ? (
         <div className="space-y-6">
           {Object.entries(plan.sections).map(([section, ejercicios]) => {
             const ejerciciosList = Array.isArray(ejercicios) ? ejercicios : [];
             return (
-              <div key={section} className="card p-4">
-                <h3 className="h3 text-ink-900 mb-2 tracking-tight">
+              <div key={section} className="border rounded-lg p-4">
+                <h3 className="font-semibold mb-2 text-lg">
                   {section === 'warmup' ? 'Entrada en calor' : `Bloque ${section}`}
                 </h3>
-                {!ejerciciosList.length && <div className="text-ink-300">Sin ejercicios en esta sección.</div>}
+                {!ejerciciosList.length && <div className="text-gray-400">Sin ejercicios en esta sección.</div>}
                 <ul className="space-y-2">
                   {ejerciciosList.map((ej: any, idx: number) => (
-                    <li key={ej.id || idx} className="bg-base-50 rounded p-2">
+                    <li key={ej.id || idx} className="bg-gray-50 rounded p-2">
                       <div className="flex flex-col md:flex-row md:items-center md:gap-4">
-                        <span className="font-medium text-ink-900">{ej.name}</span>
+                        <span className="font-medium text-blue-700">{ej.name}</span>
                         {ej.videoId && ej.videoUrl && (
                           <VideoEmbed url={ej.videoUrl} />
                         )}
                         {ej.videoUrl && !ej.videoId && <VideoEmbed url={ej.videoUrl} />}
-                        {ej.sets && <span className="badge-success ml-2">{ej.sets} sets</span>}
-                        {ej.reps && <span className="badge-success ml-2">{ej.reps} reps</span>}
-                        {ej.tempo && <span className="badge-warning ml-2">Tempo: {ej.tempo}</span>}
-                        {ej.restSec && <span className="badge-info ml-2">Pausa: {ej.restSec}s</span>}
-                        {ej.load && <span className="badge-info ml-2">Carga: {ej.load}</span>}
-                        {ej.unilateral && <span className="badge-info ml-2">Unilateral</span>}
+                        {ej.sets && <span className="badge bg-blue-100 text-blue-800 ml-2">{ej.sets} sets</span>}
+                        {ej.reps && <span className="badge bg-green-100 text-green-800 ml-2">{ej.reps} reps</span>}
+                        {ej.tempo && <span className="badge bg-yellow-100 text-yellow-800 ml-2">Tempo: {ej.tempo}</span>}
+                        {ej.restSec && <span className="badge bg-gray-200 text-gray-800 ml-2">Pausa: {ej.restSec}s</span>}
+                        {ej.load && <span className="badge bg-purple-100 text-purple-800 ml-2">Carga: {ej.load}</span>}
+                        {ej.unilateral && <span className="badge bg-pink-100 text-pink-800 ml-2">Unilateral</span>}
                       </div>
-                      {ej.notes && <div className="small text-ink-700 mt-1">{ej.notes}</div>}
+                      {ej.notes && <div className="text-sm text-gray-600 mt-1">{ej.notes}</div>}
                       {ej.equipment && ej.equipment.length > 0 && (
-                        <div className="micro text-ink-500 mt-1">Equipo: {ej.equipment.join(', ')}</div>
+                        <div className="text-xs text-gray-500 mt-1">Equipo: {ej.equipment.join(', ')}</div>
                       )}
                     </li>
                   ))}
