@@ -101,7 +101,6 @@ model User {
   plannerPrefs    PlannerPrefs?
   exercises       Exercise[]
   clinicalEntries ClinicalEntry[]
-  playerRoutines  playerRoutine[]
 }
 
 model Session {
@@ -357,39 +356,4 @@ model ScoutingPlayer {
   @@index([categoriaId])
   @@index([estado])
   @@index([fullName])
-}
-
-model sharedAsset {
-  id          String   @id @default(cuid())
-  title       String
-  type        String
-  url         String
-  note        String?
-  weekStart   DateTime
-  audience    String?
-  createdById String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model playerRoutine {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  day         DateTime
-  ejercicios  Json
-  feedback    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model coachVideo {
-  id          String   @id @default(cuid())
-  title       String
-  topic       String?
-  url         String
-  tags        String[] @default([])
-  createdById String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
 }
