@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import React, { useState } from "react";
 
 export function MarkAsViewedButton({ entityType, entityId }: { entityType: 'SESSION' | 'EXERCISE'; entityId: string }) {
   const [loading, setLoading] = useState(false);
