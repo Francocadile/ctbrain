@@ -9,7 +9,6 @@ import { listKinds, addKind as apiAddKind, replaceKinds } from "@/lib/settings";
 type TurnKey = "morning" | "afternoon";
 
 type Exercise = {
-  id: string;
   title: string;
   kind: string;
   space: string;
@@ -80,14 +79,10 @@ function decodeExercises(desc: string | null | undefined): { prefix: string; exe
   const prefix = text.slice(0, idx).trimEnd();
   const rest = text.slice(idx + EX_TAG.length).trim();
   const b64 = rest.split(/\s+/)[0] || "";
-  function genId() {
-    return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
-  }
   try {
     const arr = decodeB64Json<Partial<Exercise>[]>(b64);
     if (Array.isArray(arr)) {
       const fixed = arr.map((e) => ({
-        id: genId(),
         title: e.title ?? "",
         kind: e.kind ?? "",
         space: e.space ?? "",
@@ -120,8 +115,6 @@ export default function SesionDetailEditorPage() {
   const [prefix, setPrefix] = useState<string>("");
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [kinds, setKinds] = useState<string[]>([]);
-  const [sessionVisibility, setSessionVisibility] = useState<boolean>(s?.isVisibleToPlayers ?? false);
-  const [exerciseVisibility, setExerciseVisibility] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     (async () => setKinds(await listKinds()))();
@@ -144,7 +137,6 @@ export default function SesionDetailEditorPage() {
             ? d.exercises
             : [
                 {
-                  id: "",
                   title: "",
                   kind: "",
                   space: "",
@@ -152,22 +144,6 @@ export default function SesionDetailEditorPage() {
                   duration: "",
                   description: "",
                   imageUrl: "",
-                },
-              ]
-        );
-        setExercises(
-          d.exercises.length
-            ? d.exercises
-            : [
-                {
-                  id: '',
-                  title: '',
-                  kind: '',
-                  space: '',
-                  players: '',
-                  duration: '',
-                  description: '',
-                  imageUrl: '',
                 },
               ]
         );
@@ -183,24 +159,13 @@ export default function SesionDetailEditorPage() {
     load();
   }, [id]);
 
-  useEffect(() => {
-    if (s) setSessionVisibility(s.isVisibleToPlayers ?? false);
-    if (exercises.length) {
-      const vis: Record<number, boolean> = {};
-      exercises.forEach((ex: Exercise, idx: number) => {
-        vis[idx] = (ex as any).isVisibleToPlayers ?? false;
-      });
-      setExerciseVisibility(vis);
-    }
-  }, [s, exercises]);
-
   const marker = useMemo(
     () => parseMarker(typeof s?.description === "string" ? s?.description : ""),
     [s?.description]
   );
 
   function updateExercise(idx: number, patch: Partial<Exercise>) {
-    setExercises((prev: Exercise[]) => {
+    setExercises((prev) => {
       const next = [...prev];
       next[idx] = { ...next[idx], ...patch };
       return next;
@@ -208,10 +173,9 @@ export default function SesionDetailEditorPage() {
   }
 
   function addExercise() {
-    setExercises((prev: Exercise[]) => [
+    setExercises((prev) => [
       ...prev,
       {
-        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
         title: "",
         kind: "",
         space: "",
@@ -224,7 +188,7 @@ export default function SesionDetailEditorPage() {
   }
 
   function removeExercise(idx: number) {
-  setExercises((prev: Exercise[]) => prev.filter((_: Exercise, i: number) => i !== idx));
+    setExercises((prev) => prev.filter((_, i) => i !== idx));
   }
 
   function addKind() {
@@ -276,55 +240,6 @@ export default function SesionDetailEditorPage() {
     }
   }
 
-  async function handleSessionVisibilityToggle(val: boolean) {
-    try {
-      const res = await fetch(`/api/ct/sessions/${s?.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isVisibleToPlayers: val }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setSessionVisibility(data.isVisibleToPlayers);
-        window.alert('Visibilidad de sesión actualizada');
-      } else {
-        window.alert(data.error || 'Error al actualizar visibilidad');
-      }
-    } catch (e) {
-      window.alert('Error de red');
-    }
-  }
-
-  async function handleExerciseVisibilityToggle(idx: number, val: boolean) {
-    const ex = exercises[idx];
-    if (!ex || !ex.id) {
-      window.alert('Ejercicio sin ID');
-      return;
-    }
-  setExerciseVisibility((prev: Record<number, boolean>) => ({ ...prev, [idx]: val }));
-    try {
-      const res = await fetch(`/api/ct/exercises/${ex.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isVisibleToPlayers: val }),
-      });
-      const data = await res.json();
-      if (res.status === 401) {
-        window.alert('No autorizado (401)');
-      } else if (res.status === 403) {
-        window.alert('No autorizado (403)');
-      } else if (res.status === 404) {
-        window.alert('Ejercicio no encontrado (404)');
-      } else if (!res.ok) {
-        window.alert(data.error || 'Error al actualizar visibilidad');
-      } else {
-        window.alert('Visibilidad de ejercicio actualizada');
-      }
-    } catch (e) {
-      window.alert('Error de red');
-    }
-  }
-
   if (loading) return <div className="p-6 text-gray-500">Cargando…</div>;
   if (!s)
     return (
@@ -337,34 +252,6 @@ export default function SesionDetailEditorPage() {
 
   return (
     <div id="print-root" className="p-4 md:p-6 space-y-4 print:!p-2">
-      {/* Bloque Visibilidad al jugador */}
-      <section className="rounded-xl border bg-white shadow-sm p-4 mb-4">
-        <h2 className="text-2xl font-semibold mb-2">Visibilidad al jugador</h2>
-        <div className="flex items-center gap-4 mb-2">
-          <span className="font-semibold">Sesión visible:</span>
-          <input
-            type="checkbox"
-            checked={sessionVisibility}
-            onChange={(e) => handleSessionVisibilityToggle(e.target.checked)}
-            className="toggle"
-          />
-        </div>
-        <div className="space-y-2">
-          <span className="font-semibold">Ejercicios visibles:</span>
-          {exercises.map((ex, idx) => (
-            <div key={idx} className="flex items-center gap-2">
-              <span className="text-sm">{ex.title || `Ejercicio #${idx + 1}`}</span>
-              <input
-                type="checkbox"
-                checked={exerciseVisibility[idx] ?? false}
-                onChange={(e) => handleExerciseVisibilityToggle(idx, e.target.checked)}
-                className="toggle"
-              />
-            </div>
-          ))}
-        </div>
-      </section>
-
       {/* Header */}
       <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between print:hidden">
         <div>

@@ -114,7 +114,6 @@ model Session {
 
   createdBy   String
   user        User        @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
-    isVisibleToPlayers Boolean @default(false)
 
   @@index([date])
   @@index([type])
@@ -179,7 +178,6 @@ model Exercise {
   imageUrl    String?
 
   tags        String[]      @default([])
-    isVisibleToPlayers Boolean @default(false)
 
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
@@ -187,20 +185,6 @@ model Exercise {
   @@index([userId, createdAt])
   @@index([userId, title])
   @@index([kindId])
-}
-enum EntityType {
-  SESSION
-  EXERCISE
-}
-model ViewLog {
-  id         String     @id @default(uuid())
-  userId     String
-  entityType EntityType
-  entityId   String
-  createdAt  DateTime   @default(now())
-
-  @@index([userId])
-  @@index([entityId])
 }
 
 model RPEEntry {
