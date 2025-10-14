@@ -273,19 +273,29 @@ export default function SesionDetailEditorPage() {
   }
 
   async function handleExerciseVisibilityToggle(idx: number, val: boolean) {
+    const ex = exercises[idx];
+    if (!ex || !ex.id) {
+      window.alert('Ejercicio sin ID');
+      return;
+    }
+    setExerciseVisibility((prev) => ({ ...prev, [idx]: val }));
     try {
-      const exId = (exercises[idx] as any).id;
-      const res = await fetch(`/api/ct/exercises/${exId}`, {
+      const res = await fetch(`/api/ct/exercises/${ex.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isVisibleToPlayers: val }),
       });
       const data = await res.json();
-      if (res.ok) {
-        setExerciseVisibility((prev) => ({ ...prev, [idx]: data.isVisibleToPlayers }));
-        window.alert('Visibilidad de ejercicio actualizada');
-      } else {
+      if (res.status === 401) {
+        window.alert('No autorizado (401)');
+      } else if (res.status === 403) {
+        window.alert('No autorizado (403)');
+      } else if (res.status === 404) {
+        window.alert('Ejercicio no encontrado (404)');
+      } else if (!res.ok) {
         window.alert(data.error || 'Error al actualizar visibilidad');
+      } else {
+        window.alert('Visibilidad de ejercicio actualizada');
       }
     } catch (e) {
       window.alert('Error de red');
