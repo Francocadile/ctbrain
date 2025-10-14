@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { getSessionById, updateSession, type SessionDTO } from "@/lib/api/sessions";
 import { listKinds, addKind as apiAddKind, replaceKinds } from "@/lib/settings";
-import { useToast } from '@/components/ui/toast';
 
 type TurnKey = "morning" | "afternoon";
 
@@ -118,7 +117,6 @@ export default function SesionDetailEditorPage() {
   const [kinds, setKinds] = useState<string[]>([]);
   const [sessionVisibility, setSessionVisibility] = useState<boolean>(s?.isVisibleToPlayers ?? false);
   const [exerciseVisibility, setExerciseVisibility] = useState<Record<number, boolean>>({});
-  const toast = useToast();
 
   useEffect(() => {
     (async () => setKinds(await listKinds()))();
@@ -265,12 +263,12 @@ export default function SesionDetailEditorPage() {
       const data = await res.json();
       if (res.ok) {
         setSessionVisibility(data.isVisibleToPlayers);
-        toast.success('Visibilidad de sesión actualizada');
+        window.alert('Visibilidad de sesión actualizada');
       } else {
-        toast.error(data.error || 'Error al actualizar visibilidad');
+        window.alert(data.error || 'Error al actualizar visibilidad');
       }
     } catch (e) {
-      toast.error('Error de red');
+      window.alert('Error de red');
     }
   }
 
@@ -285,12 +283,12 @@ export default function SesionDetailEditorPage() {
       const data = await res.json();
       if (res.ok) {
         setExerciseVisibility((prev) => ({ ...prev, [idx]: data.isVisibleToPlayers }));
-        toast.success('Visibilidad de ejercicio actualizada');
+        window.alert('Visibilidad de ejercicio actualizada');
       } else {
-        toast.error(data.error || 'Error al actualizar visibilidad');
+        window.alert(data.error || 'Error al actualizar visibilidad');
       }
     } catch (e) {
-      toast.error('Error de red');
+      window.alert('Error de red');
     }
   }
 

@@ -1,10 +1,8 @@
 "use client";
 import { useState } from "react";
-import { useToast } from "@/components/ui/toast";
 
 export function MarkAsViewedButton({ entityType, entityId }: { entityType: 'SESSION' | 'EXERCISE'; entityId: string }) {
   const [loading, setLoading] = useState(false);
-  const toast = useToast();
   const [done, setDone] = useState(false);
 
   async function handleClick() {
@@ -18,12 +16,12 @@ export function MarkAsViewedButton({ entityType, entityId }: { entityType: 'SESS
       const data = await res.json();
       if (res.ok && data.ok) {
         setDone(true);
-        toast.success("Marcado como visto");
+        window.alert("Marcado como visto");
       } else {
-        toast.error(data.error || "Error al marcar");
+        window.alert(data.error || "Error al marcar");
       }
     } catch {
-      toast.error("Error de red");
+      window.alert("Error de red");
     } finally {
       setLoading(false);
     }
