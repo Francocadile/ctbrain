@@ -144,6 +144,7 @@ export default function SesionDetailEditorPage() {
             ? d.exercises
             : [
                 {
+                  id: "",
                   title: "",
                   kind: "",
                   space: "",
@@ -151,6 +152,22 @@ export default function SesionDetailEditorPage() {
                   duration: "",
                   description: "",
                   imageUrl: "",
+                },
+              ]
+        );
+        setExercises(
+          d.exercises.length
+            ? d.exercises
+            : [
+                {
+                  id: '',
+                  title: '',
+                  kind: '',
+                  space: '',
+                  players: '',
+                  duration: '',
+                  description: '',
+                  imageUrl: '',
                 },
               ]
         );
@@ -170,7 +187,7 @@ export default function SesionDetailEditorPage() {
     if (s) setSessionVisibility(s.isVisibleToPlayers ?? false);
     if (exercises.length) {
       const vis: Record<number, boolean> = {};
-      exercises.forEach((ex, idx) => {
+      exercises.forEach((ex: Exercise, idx: number) => {
         vis[idx] = (ex as any).isVisibleToPlayers ?? false;
       });
       setExerciseVisibility(vis);
@@ -183,7 +200,7 @@ export default function SesionDetailEditorPage() {
   );
 
   function updateExercise(idx: number, patch: Partial<Exercise>) {
-    setExercises((prev) => {
+    setExercises((prev: Exercise[]) => {
       const next = [...prev];
       next[idx] = { ...next[idx], ...patch };
       return next;
@@ -191,7 +208,7 @@ export default function SesionDetailEditorPage() {
   }
 
   function addExercise() {
-    setExercises((prev) => [
+    setExercises((prev: Exercise[]) => [
       ...prev,
       {
         id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
@@ -207,7 +224,7 @@ export default function SesionDetailEditorPage() {
   }
 
   function removeExercise(idx: number) {
-    setExercises((prev) => prev.filter((_, i) => i !== idx));
+  setExercises((prev: Exercise[]) => prev.filter((_: Exercise, i: number) => i !== idx));
   }
 
   function addKind() {
@@ -284,7 +301,7 @@ export default function SesionDetailEditorPage() {
       window.alert('Ejercicio sin ID');
       return;
     }
-    setExerciseVisibility((prev) => ({ ...prev, [idx]: val }));
+  setExerciseVisibility((prev: Record<number, boolean>) => ({ ...prev, [idx]: val }));
     try {
       const res = await fetch(`/api/ct/exercises/${ex.id}`, {
         method: 'PATCH',
