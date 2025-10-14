@@ -9,6 +9,7 @@ import { listKinds, addKind as apiAddKind, replaceKinds } from "@/lib/settings";
 type TurnKey = "morning" | "afternoon";
 
 type Exercise = {
+  id: string;
   title: string;
   kind: string;
   space: string;
@@ -79,10 +80,14 @@ function decodeExercises(desc: string | null | undefined): { prefix: string; exe
   const prefix = text.slice(0, idx).trimEnd();
   const rest = text.slice(idx + EX_TAG.length).trim();
   const b64 = rest.split(/\s+/)[0] || "";
+  function genId() {
+    return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+  }
   try {
     const arr = decodeB64Json<Partial<Exercise>[]>(b64);
     if (Array.isArray(arr)) {
       const fixed = arr.map((e) => ({
+        id: genId(),
         title: e.title ?? "",
         kind: e.kind ?? "",
         space: e.space ?? "",
@@ -189,6 +194,7 @@ export default function SesionDetailEditorPage() {
     setExercises((prev) => [
       ...prev,
       {
+        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2),
         title: "",
         kind: "",
         space: "",
