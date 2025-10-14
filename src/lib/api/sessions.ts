@@ -10,6 +10,7 @@ export type SessionDTO = {
   updatedAt?: string;
   createdBy?: string;
   user?: { id: string; name: string | null; email: string | null; role?: string | null } | null;
+  isVisibleToPlayers?: boolean;
 };
 
 export type WeekResponse = {
