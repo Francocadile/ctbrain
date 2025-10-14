@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { getSessionById, updateSession, type SessionDTO } from "@/lib/api/sessions";
 import { listKinds, addKind as apiAddKind, replaceKinds } from "@/lib/settings";
+import { useToast } from '@/components/ui/toast';
 
 type TurnKey = "morning" | "afternoon";
 
@@ -115,6 +116,9 @@ export default function SesionDetailEditorPage() {
   const [prefix, setPrefix] = useState<string>("");
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [kinds, setKinds] = useState<string[]>([]);
+  const [sessionVisibility, setSessionVisibility] = useState<boolean>(s?.isVisibleToPlayers ?? false);
+  const [exerciseVisibility, setExerciseVisibility] = useState<Record<number, boolean>>({});
+  const toast = useToast();
 
   useEffect(() => {
     (async () => setKinds(await listKinds()))();
@@ -158,6 +162,17 @@ export default function SesionDetailEditorPage() {
     }
     load();
   }, [id]);
+
+  useEffect(() => {
+    if (s) setSessionVisibility(s.isVisibleToPlayers ?? false);
+    if (exercises.length) {
+      const vis: Record<number, boolean> = {};
+      exercises.forEach((ex, idx) => {
+        vis[idx] = (ex as any).isVisibleToPlayers ?? false;
+      });
+      setExerciseVisibility(vis);
+    }
+  }, [s, exercises]);
 
   const marker = useMemo(
     () => parseMarker(typeof s?.description === "string" ? s?.description : ""),
@@ -240,6 +255,45 @@ export default function SesionDetailEditorPage() {
     }
   }
 
+  async function handleSessionVisibilityToggle(val: boolean) {
+    try {
+      const res = await fetch(`/api/ct/sessions/${s?.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isVisibleToPlayers: val }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSessionVisibility(data.isVisibleToPlayers);
+        toast.success('Visibilidad de sesión actualizada');
+      } else {
+        toast.error(data.error || 'Error al actualizar visibilidad');
+      }
+    } catch (e) {
+      toast.error('Error de red');
+    }
+  }
+
+  async function handleExerciseVisibilityToggle(idx: number, val: boolean) {
+    try {
+      const exId = (exercises[idx] as any).id;
+      const res = await fetch(`/api/ct/exercises/${exId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isVisibleToPlayers: val }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setExerciseVisibility((prev) => ({ ...prev, [idx]: data.isVisibleToPlayers }));
+        toast.success('Visibilidad de ejercicio actualizada');
+      } else {
+        toast.error(data.error || 'Error al actualizar visibilidad');
+      }
+    } catch (e) {
+      toast.error('Error de red');
+    }
+  }
+
   if (loading) return <div className="p-6 text-gray-500">Cargando…</div>;
   if (!s)
     return (
@@ -252,6 +306,34 @@ export default function SesionDetailEditorPage() {
 
   return (
     <div id="print-root" className="p-4 md:p-6 space-y-4 print:!p-2">
+      {/* Bloque Visibilidad al jugador */}
+      <section className="rounded-xl border bg-white shadow-sm p-4 mb-4">
+        <h2 className="text-2xl font-semibold mb-2">Visibilidad al jugador</h2>
+        <div className="flex items-center gap-4 mb-2">
+          <span className="font-semibold">Sesión visible:</span>
+          <input
+            type="checkbox"
+            checked={sessionVisibility}
+            onChange={(e) => handleSessionVisibilityToggle(e.target.checked)}
+            className="toggle"
+          />
+        </div>
+        <div className="space-y-2">
+          <span className="font-semibold">Ejercicios visibles:</span>
+          {exercises.map((ex, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <span className="text-sm">{ex.title || `Ejercicio #${idx + 1}`}</span>
+              <input
+                type="checkbox"
+                checked={exerciseVisibility[idx] ?? false}
+                onChange={(e) => handleExerciseVisibilityToggle(idx, e.target.checked)}
+                className="toggle"
+              />
+            </div>
+          ))}
+        </div>
+      </section>
+
       {/* Header */}
       <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between print:hidden">
         <div>
