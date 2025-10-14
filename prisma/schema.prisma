@@ -194,10 +194,13 @@ enum EntityType {
 }
 model ViewLog {
   id         String     @id @default(uuid())
-  userId     String     @index
+  userId     String
   entityType EntityType
-  entityId   String     @index
+  entityId   String
   createdAt  DateTime   @default(now())
+
+  @@index([userId])
+  @@index([entityId])
 }
 
 model RPEEntry {
