@@ -1,5 +1,3 @@
-/// <reference types="react" />
-/// <reference types="react-dom" />
 // global.d.ts
 declare module 'pdf-parse' {
   export interface PDFInfo {
