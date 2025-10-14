@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireSessionWithRoles } from '@/lib/auth-helpers';
-import { utcToZonedTime } from 'date-fns-tz';
 
 const TIMEZONE = 'America/Argentina/Mendoza';
 
@@ -13,9 +12,11 @@ export async function GET() {
     } catch (err: any) {
       return NextResponse.json({ error: err.message }, { status: err.status || 401 });
     }
-  // Determinar fecha local "hoy"
-  const now = utcToZonedTime(new Date(), TIMEZONE);
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    // Determinar fecha local "hoy" en zona horaria Mendoza
+    const now = new Date();
+    // Convertir a hora local de Mendoza
+    const localeNow = new Date(now.toLocaleString('en-US', { timeZone: TIMEZONE }));
+    const today = new Date(localeNow.getFullYear(), localeNow.getMonth(), localeNow.getDate());
     // Buscar sesión visible de hoy
     const sesion = await prisma.session.findFirst({
       where: {
