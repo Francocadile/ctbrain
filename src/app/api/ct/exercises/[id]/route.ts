@@ -153,3 +153,32 @@ export async function PUT(req: Request, ctx: { params: { id: string } }) {
     return new NextResponse(e?.message || "Error", { status: 500 });
   }
 }
+
+// ===== PATCH: actualizar visibilidad de un ejercicio ==========================
+export async function PATCH(req: Request, ctx: { params: { id: string } }) {
+  try {
+    let session;
+    try {
+      session = await requireSessionWithRoles(["CT", "ADMIN"]);
+    } catch (err: any) {
+      return NextResponse.json({ error: err.message }, { status: err.status || 401 });
+    }
+    const { isVisibleToPlayers } = await req.json();
+    if (typeof isVisibleToPlayers !== "boolean") {
+      return NextResponse.json({ error: "Valor inválido" }, { status: 400 });
+    }
+    const updated = await prisma.exercise.update({
+      where: { id: ctx.params.id },
+      data: { isVisibleToPlayers },
+    });
+    if (!updated) {
+      return NextResponse.json({ error: "Ejercicio no encontrado" }, { status: 404 });
+    }
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    if (err.code === "P2025") {
+      return NextResponse.json({ error: "Ejercicio no encontrado" }, { status: 404 });
+    }
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
+}
