@@ -1,6 +1,7 @@
 // src/app/api/ct/exercises/[id]/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { requireSessionWithRoles } from "@/lib/auth-helpers";
 
 const prisma = new PrismaClient();
 
