@@ -26,18 +26,22 @@ export async function GET() {
         },
         isVisibleToPlayers: true,
       },
-      include: {
-        exercises: {
-          where: { isVisibleToPlayers: true },
-          select: { id: true, title: true, description: true },
-        },
-      },
       orderBy: { date: 'asc' },
     });
     if (!sesion) {
       return NextResponse.json({ error: 'Sin sesión publicada para hoy' }, { status: 404 });
     }
-    return NextResponse.json({ sesion });
+    // Buscar ejercicios visibles del usuario en la sesión del día
+    const exercises = await prisma.exercise.findMany({
+      where: {
+        userId: session.user.id,
+        isVisibleToPlayers: true,
+        // Si hay campo de fecha o sessionId, agregar aquí
+        // Ejemplo: sessionId: sesion.id
+      },
+      select: { id: true, title: true, description: true },
+    });
+    return NextResponse.json({ sesion: { ...sesion, exercises } });
   } catch (err) {
     return NextResponse.json({ error: 'Error interno', details: String(err) }, { status: 500 });
   }
