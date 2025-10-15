@@ -1,23 +1,15 @@
 
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import LoginClient from "./LoginClient";
 
-export default async function LoginPage() {
-  const session = await getServerSession(authOptions);
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const runtime = "nodejs";
 
-  // Si ya está logueado, mandamos a "/"
-  if (session?.user?.id) {
-    redirect("/");
-  }
-
+export default function LoginPage() {
   return (
-    <main className="min-h-screen flex items-center justify-center p-6">
-      <div className="w-full max-w-sm space-y-4">
-        <h1 className="text-2xl font-bold text-center">Iniciar sesión</h1>
-        <LoginClient />
-      </div>
-    </main>
+    <Suspense fallback={<div className="p-6 text-sm text-gray-500">Cargando…</div>}>
+      <LoginClient />
+    </Suspense>
   );
 }
