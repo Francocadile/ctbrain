@@ -115,7 +115,7 @@ export async function POST(req: Request) {
     const teamId = (sessionObj as any)?.user?.teamId as string | undefined;
     if (!teamId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const entry = await prisma.rPEEntry.upsert({
-      where: { userId_date_session: { userId, date: start, session, teamId } },
+      where: { userId_date_session: { userId, date: start, session } },
       update: { rpe, duration, load, teamId },
       create: { userId, date: start, session, rpe, duration, load, teamId },
       include: { user: { select: { name: true, email: true } } },
