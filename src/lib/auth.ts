@@ -22,11 +22,24 @@ export const authOptions: NextAuthOptions = {
       async authorize(creds) {
         const email = (creds?.email || "").trim().toLowerCase();
         const password = (creds?.password || "").trim();
-        if (!email || !password) return null;
+        if (!email) return null;
 
         const user = await prisma.user.findUnique({ where: { email } });
-        if (!user || !user.password) return null;
+        if (!user) return null;
 
+        // DEV-ONLY: permitir login por email si ENV está activo
+        if (process.env.ALLOW_EMAIL_LOGIN === "1") {
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name ?? user.email,
+            role: user.role,
+            isApproved: user.isApproved,
+          } as any;
+        }
+
+        // Camino normal con bcrypt
+        if (!password || !user.password) return null;
         const bcrypt = await import("bcryptjs");
         const isValid = await bcrypt.compare(password, user.password);
         if (!isValid) return null;
