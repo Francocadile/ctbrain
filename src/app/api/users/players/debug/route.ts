@@ -11,6 +11,11 @@ export const dynamic = "force-dynamic";
  * detectados por distintos criterios.
  */
 export async function GET() {
+  const { getServerSession } = await import("next-auth");
+  const session = await getServerSession();
+  if (!session?.user || session.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  }
   try {
     const counts = await prisma.$queryRaw<
       Array<{ role: string | null; total: number }>
