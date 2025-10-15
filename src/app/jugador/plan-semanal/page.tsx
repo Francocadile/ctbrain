@@ -1,7 +1,13 @@
 "use client";
 
 import * as React from "react";
-import EmptyState from "@/components/EmptyState";
+
+
+const Info = ({ text }: { text: string }) => (
+  <div role="status" className="rounded-xl border p-3 text-sm text-muted-foreground">
+    {text}
+  </div>
+);
 
 type AnySession = {
   id?: string | number;
@@ -123,10 +129,10 @@ export default function JugadorPlanSemanalPage() {
       </header>
 
       {loading && <p className="text-sm">Cargando…</p>}
-      {error && <EmptyState message={error} />}
+  {error && <Info text={error} />}
 
       {!loading && !error && byDay.length === 0 && (
-        <EmptyState message="No hay sesiones planificadas esta semana" />
+        <Info text="No hay sesiones planificadas esta semana" />
       )}
 
       {!loading && !error && byDay.length > 0 && (
