@@ -1,6 +1,7 @@
 // src/app/api/users/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient, Role } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
@@ -23,11 +24,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "El email ya está registrado" }, { status: 409 });
     }
 
+    const hashed = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
       data: {
         name,
         email,
-        password, // (flujo original, sin hash)
+        password: hashed, // ahora se guarda hasheada
         role,
         isApproved: false, // queda pendiente hasta aprobación
       },
