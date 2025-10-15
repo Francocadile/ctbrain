@@ -381,3 +381,16 @@ model ScoutingPlayer {
   @@index([estado])
   @@index([fullName])
 }
+model Team {
+  id        String     @id @default(cuid())
+  name      String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @default(now())
+
+  sessions        Session[]
+  rivals          Rival[]
+  exercises       Exercise[]
+  rpeEntries      RPEEntry[]
+  wellnessEntries WellnessEntry[]
+  clinicalEntries ClinicalEntry[]
+}
