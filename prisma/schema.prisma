@@ -115,10 +115,8 @@ model Session {
   createdBy   String
   user        User        @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
 
-  teamId      String
-  team        Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
-    teamId      String?
-    team        Team?      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId      String?
+  team        Team?      @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@index([date])
   @@index([type])
@@ -145,10 +143,8 @@ model Rival {
 
   planSquad       Json?   @default("[]")
 
-  teamId    String
-  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-    teamId    String?
-    team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId    String?
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -179,10 +175,8 @@ model Exercise {
   userId      String
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  teamId      String
-  team        Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
-    teamId      String?
-    team        Team?      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId      String?
+  team        Team?      @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   title       String
   kindId      String?
@@ -211,10 +205,8 @@ model RPEEntry {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  teamId    String
-  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-    teamId    String?
-    team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId    String?
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   date      DateTime
   session   Int      @default(1)
@@ -241,10 +233,8 @@ model WellnessEntry {
   userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  teamId          String
-  team            Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-    teamId          String?
-    team            Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId          String?
+  team            Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   date            DateTime
 
@@ -285,10 +275,8 @@ model ClinicalEntry {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  teamId    String
-  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
-    teamId    String?
-    team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  teamId    String?
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   date      DateTime
   status    ClinicalStatus
