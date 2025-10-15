@@ -42,16 +42,11 @@ export async function GET(req: Request) {
       ? Number(searchParams.get("session"))
       : undefined;
 
-    const { getServerSession } = await import("next-auth");
-    const sessionObj = await getServerSession();
-    const teamId = (sessionObj as any)?.user?.teamId as string | undefined;
-    if (!teamId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (date) {
       const start = toUTCStart(date);
       const end = nextUTCDay(start);
       const rows = await prisma.rPEEntry.findMany({
         where: {
-          teamId,
           date: { gte: start, lt: end },
           ...(userId ? { userId } : {}),
           ...(session ? { session } : {}),
@@ -67,7 +62,6 @@ export async function GET(req: Request) {
     }
 
     const rows = await prisma.rPEEntry.findMany({
-      where: { teamId },
       include: { user: { select: { name: true, email: true } } },
       orderBy: [{ date: "desc" }, { session: "asc" }],
       take: 30,
@@ -110,14 +104,10 @@ export async function POST(req: Request) {
       b?.duration != null ? Math.max(0, Number(b.duration)) : null;
     const load = duration != null ? rpe * duration : null;
 
-    const { getServerSession } = await import("next-auth");
-    const sessionObj = await getServerSession();
-    const teamId = (sessionObj as any)?.user?.teamId as string | undefined;
-    if (!teamId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const entry = await prisma.rPEEntry.upsert({
       where: { userId_date_session: { userId, date: start, session } },
-      update: { rpe, duration, load, teamId },
-      create: { userId, date: start, session, rpe, duration, load, teamId },
+      update: { rpe, duration, load },
+      create: { userId, date: start, session, rpe, duration, load },
       include: { user: { select: { name: true, email: true } } },
     });
 
