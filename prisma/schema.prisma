@@ -36,6 +36,7 @@ enum Role {
   MEDICO
   JUGADOR
   DIRECTIVO
+  SUPERADMIN
 }
 
 enum SessionType {
