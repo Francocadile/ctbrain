@@ -117,7 +117,8 @@ function extractFromGridCell(
 export async function GET(req: Request) {
   const session = await getServerSession();
   const userId = (session as any)?.user?.id as string | undefined;
-  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const teamId = (session as any)?.user?.teamId as string | undefined;
+  if (!userId || !teamId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") || "").trim().toLowerCase();
@@ -130,6 +131,7 @@ export async function GET(req: Request) {
   // ---------- A) Traer ejercicios en DB (si existen) ----------
   const where: Prisma.ExerciseWhereInput = {
     userId,
+    teamId,
     ...(kindName
       ? { kind: { is: { name: { equals: kindName, mode: "insensitive" as Prisma.QueryMode } } } }
       : {}),
@@ -172,7 +174,7 @@ export async function GET(req: Request) {
   since.setDate(since.getDate() - 180);
 
   const sessions = await prisma.session.findMany({
-    where: { createdBy: userId, date: { gte: since } },
+    where: { createdBy: userId, teamId, date: { gte: since } },
     orderBy: { date: "desc" },
     select: { id: true, date: true, description: true, title: true },
     take: 500,

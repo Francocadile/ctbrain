@@ -35,11 +35,16 @@ export async function GET(req: Request) {
     const date = searchParams.get("date") || "";
     const userId = searchParams.get("userId") || undefined;
 
+    const { getServerSession } = await import("next-auth");
+    const sessionObj = await getServerSession();
+    const teamId = (sessionObj as any)?.user?.teamId as string | undefined;
+    if (!teamId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (date) {
       const start = toUTCStart(date);
       const end = nextUTCDay(start);
       const rows = await prisma.wellnessEntry.findMany({
         where: {
+          teamId,
           date: { gte: start, lt: end },
           ...(userId ? { userId } : {}),
         },
@@ -54,6 +59,7 @@ export async function GET(req: Request) {
     }
 
     const rows = await prisma.wellnessEntry.findMany({
+      where: { teamId },
       include: { user: { select: { name: true, email: true } } },
       orderBy: [{ date: "desc" }],
       take: 30,
@@ -93,8 +99,12 @@ export async function POST(req: Request) {
 
     const total = sleepQuality + fatigue + muscleSoreness + stress + mood;
 
+    const { getServerSession } = await import("next-auth");
+    const sessionObj = await getServerSession();
+    const teamId = (sessionObj as any)?.user?.teamId as string | undefined;
+    if (!teamId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const entry = await prisma.wellnessEntry.upsert({
-      where: { userId_date: { userId, date: start } },
+      where: { userId_date_teamId: { userId, date: start, teamId } },
       update: {
         sleepQuality,
         sleepHours,
@@ -104,6 +114,7 @@ export async function POST(req: Request) {
         mood,
         comment,
         total,
+        teamId,
       },
       create: {
         userId,
@@ -116,6 +127,7 @@ export async function POST(req: Request) {
         mood,
         comment,
         total,
+        teamId,
       },
       include: { user: { select: { name: true, email: true } } },
     });
