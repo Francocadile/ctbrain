@@ -1,23 +1,31 @@
-"use client";
+// src/components/auth/RoleGate.tsx
+import { authOptions } from "@/lib/auth";
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
 
-import React from "react";
-import { hasAnyRoleStrings } from "@/lib/role-utils";
+type Role = "ADMIN" | "CT" | "MEDICO" | "JUGADOR" | "DIRECTIVO";
 
-/**
- * RoleGate: Renderiza children solo si el usuario tiene el rol requerido.
- * Si es SUPERADMIN, renderiza siempre.
- * roles: acepta string[] (ej: "CT", "COACH", "ADMIN", "SUPERADMIN", etc.)
- */
-export default function RoleGate({
-  session,
-  roles,
+export default async function RoleGate({
+  allow,
   children,
 }: {
-  session: any;
-  roles: string[];
+  allow: Role[];
   children: React.ReactNode;
 }) {
-  if (session?.user?.role === "SUPERADMIN") return <>{children}</>;
-  if (hasAnyRoleStrings(session, roles)) return <>{children}</>;
-  return null;
+  const session = await getServerSession(authOptions);
+  const role = session?.user?.role as Role | undefined;
+
+  if (!session) redirect("/login");
+  if (!role || !allow.includes(role)) {
+    const map: Record<Role, string> = {
+      ADMIN: "/admin",
+      CT: "/ct",
+      MEDICO: "/medico",   // ← back al mapping original
+      JUGADOR: "/jugador",
+      DIRECTIVO: "/directivo",
+    };
+    redirect(role ? map[role] : "/login");
+  }
+
+  return <>{children}</>;
 }
