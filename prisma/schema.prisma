@@ -117,6 +117,8 @@ model Session {
 
   teamId      String
   team        Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+    teamId      String?
+    team        Team?      @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@index([date])
   @@index([type])
@@ -145,6 +147,8 @@ model Rival {
 
   teamId    String
   team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+    teamId    String?
+    team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -177,6 +181,8 @@ model Exercise {
 
   teamId      String
   team        Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+    teamId      String?
+    team        Team?      @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   title       String
   kindId      String?
@@ -207,6 +213,8 @@ model RPEEntry {
 
   teamId    String
   team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+    teamId    String?
+    team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   date      DateTime
   session   Int      @default(1)
@@ -235,6 +243,8 @@ model WellnessEntry {
 
   teamId          String
   team            Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+    teamId          String?
+    team            Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   date            DateTime
 
@@ -277,6 +287,8 @@ model ClinicalEntry {
 
   teamId    String
   team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+    teamId    String?
+    team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   date      DateTime
   status    ClinicalStatus
