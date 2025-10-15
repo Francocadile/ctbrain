@@ -115,9 +115,13 @@ model Session {
   createdBy   String
   user        User        @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
 
+  teamId      String
+  team        Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   @@index([date])
   @@index([type])
   @@index([createdBy])
+  @@index([teamId])
 }
 
 model Rival {
@@ -139,10 +143,14 @@ model Rival {
 
   planSquad       Json?   @default("[]")
 
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([nextMatchDate])
+  @@index([teamId])
 }
 
 model Place {
@@ -167,6 +175,9 @@ model Exercise {
   userId      String
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  teamId      String
+  team        Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   title       String
   kindId      String?
   kind        ExerciseKind? @relation(fields: [kindId], references: [id], onDelete: SetNull)
@@ -185,6 +196,7 @@ model Exercise {
   @@index([userId, createdAt])
   @@index([userId, title])
   @@index([kindId])
+  @@index([teamId])
 }
 
 model RPEEntry {
@@ -192,6 +204,9 @@ model RPEEntry {
 
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   date      DateTime
   session   Int      @default(1)
@@ -210,12 +225,16 @@ model RPEEntry {
   @@index([userId, date, session])
   @@index([date, session])
   @@index([sessionUid])
+  @@index([teamId])
 }
 
 model WellnessEntry {
   id              String   @id @default(cuid())
   userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  teamId          String
+  team            Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   date            DateTime
 
@@ -235,6 +254,7 @@ model WellnessEntry {
   @@unique([userId, date], name: "userId_date")
   @@index([date])
   @@index([userId, date])
+  @@index([teamId])
 }
 
 model PlannerPrefs {
@@ -254,6 +274,9 @@ model ClinicalEntry {
 
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   date      DateTime
   status    ClinicalStatus
@@ -302,6 +325,7 @@ model ClinicalEntry {
   @@index([leaveKind])
   @@index([bodyPart])
   @@index([userId, date])
+  @@index([teamId])
 }
 
 // ========= Scouting =========
