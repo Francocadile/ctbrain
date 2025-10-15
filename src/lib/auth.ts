@@ -21,13 +21,16 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(creds) {
         const email = (creds?.email || "").trim().toLowerCase();
-        if (!email) return null;
+        const password = (creds?.password || "").trim();
+        if (!email || !password) return null;
 
         const user = await prisma.user.findUnique({ where: { email } });
-        if (!user) return null;
+        if (!user || !user.password) return null;
 
-        // FASE 1: NO verifica password. Solo existencia de email.
-        // (Tus pantallas y seed actuales siguen andando.)
+        const bcrypt = await import("bcryptjs");
+        const isValid = await bcrypt.compare(password, user.password);
+        if (!isValid) return null;
+
         return {
           id: user.id,
           email: user.email,
