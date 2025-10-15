@@ -14,12 +14,7 @@ if (process.env.NODE_ENV !== "production") {
 // GET /api/ct/rivales  -> lista de rivales (ordenada)
 export async function GET() {
   try {
-    const { getServerSession } = await import("next-auth");
-    const session = await getServerSession();
-    const teamId = (session as any)?.user?.teamId as string | undefined;
-    if (!teamId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const items: RivalRow[] = await prisma.rival.findMany({
-      where: { teamId },
       orderBy: [{ name: "asc" }],
     });
 
@@ -42,10 +37,6 @@ export async function GET() {
 // POST /api/ct/rivales  -> crear (upsert por nombre para evitar duplicados)
 export async function POST(req: Request) {
   try {
-    const { getServerSession } = await import("next-auth");
-    const session = await getServerSession();
-    const teamId = (session as any)?.user?.teamId as string | undefined;
-    if (!teamId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const body = await req.json();
     const name = String(body?.name || "").trim();
     if (!name) return new NextResponse("name requerido", { status: 400 });
@@ -57,7 +48,7 @@ export async function POST(req: Request) {
     const nextMatchCompetition = body?.nextMatchCompetition ?? null;
 
     const row = await prisma.rival.upsert({
-      where: { name, teamId },
+      where: { name },
       update: {
         logoUrl,
         coach,
@@ -67,7 +58,6 @@ export async function POST(req: Request) {
       },
       create: {
         name,
-        teamId,
         logoUrl,
         coach,
         baseSystem,

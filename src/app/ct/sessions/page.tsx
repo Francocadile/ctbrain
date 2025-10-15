@@ -61,24 +61,6 @@ export default function CTSessionsPage() {
   const [weekEnd, setWeekEnd] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [dateFilter, setDateFilter] = useState<string>(""); // YYYY-MM-DD
-  const [teamId, setTeamId] = useState<string | null>(null);
-  useEffect(() => {
-    (async () => {
-      // Obtener teamId desde la sesión
-      const res = await fetch("/api/auth/me", { cache: "no-store" });
-      if (!res.ok) {
-        window.location.href = "/select-team";
-        return;
-      }
-      const json = await res.json();
-      const tid = json?.user?.teamId;
-      if (!tid) {
-        window.location.href = "/select-team";
-        return;
-      }
-      setTeamId(tid);
-    })();
-  }, []);
 
   // helpers de navegación semanal (para el pill)
   const goPrevWeek = () =>
@@ -108,15 +90,11 @@ export default function CTSessionsPage() {
   async function loadWeek(d: Date) {
     setLoading(true);
     try {
-      if (!teamId) return;
       const start = toYYYYMMDDUTC(getMonday(d));
-      // Llamada a API con filtro por teamId
-      const res = await fetch(`/api/sessions?start=${encodeURIComponent(start)}&teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" });
-      if (!res.ok) throw new Error("No se pudieron cargar las sesiones.");
-      const json = await res.json();
-      setDaysMap(json.days);
-      setWeekStart(json.weekStart);
-      setWeekEnd(json.weekEnd);
+      const res = await getSessionsWeek({ start });
+      setDaysMap(res.days);
+      setWeekStart(res.weekStart);
+      setWeekEnd(res.weekEnd);
     } catch (e) {
       console.error(e);
       alert("No se pudieron cargar las sesiones.");
@@ -126,7 +104,7 @@ export default function CTSessionsPage() {
   }
 
   useEffect(() => {
-  if (teamId) loadWeek(base);
+    loadWeek(base);
   }, [base]);
 
   // Construimos la lista SÓLO con la fila "NOMBRE SESIÓN" de cada día/turno
@@ -248,9 +226,7 @@ export default function CTSessionsPage() {
         </div>
       </header>
 
-      {!teamId ? (
-        <div className="text-sm text-gray-500">Redirigiendo a selección de equipo…</div>
-      ) : loading ? (
+      {loading ? (
         <div className="text-sm text-gray-500">Cargando sesiones…</div>
       ) : visible.length === 0 ? (
         <div className="rounded-lg border p-6 text-sm text-gray-600">
