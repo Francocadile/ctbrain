@@ -1,3 +1,11 @@
+// Rutas públicas (acceso libre)
+const PUBLIC_ROUTES = [
+  /^\/$/, /^\/login(?:\/|$)/, /^\/about(?:\/|$)/, /^\/contact(?:\/|$)/,
+];
+// Rutas protegidas (requieren rol)
+const PROTECTED_ROUTES = [
+  /^\/dashboard(?:\/|$)/, /^\/sessions(?:\/|$)/,
+];
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
@@ -51,6 +59,34 @@ function roleHome(role?: string) {
 }
 
 export async function middleware(req: NextRequest) {
+  // Protección multi-equipo y rol
+  const { pathname } = req.nextUrl;
+
+  // Permitir acceso libre a rutas públicas
+  if (matchAny(pathname, PUBLIC_ROUTES)) {
+    return NextResponse.next();
+  }
+
+  // Obtener token y datos del usuario
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  const teamId = (token as any)?.teamId;
+  const role = (token as any)?.role;
+
+  // Si no hay teamId, redirigir al selector de equipo
+  if (!teamId) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/select-team";
+    return NextResponse.redirect(url);
+  }
+
+  // Si la ruta es protegida y el rol no es ADMIN o COACH, bloquear acceso
+  if (matchAny(pathname, PROTECTED_ROUTES)) {
+    if (role !== "ADMIN" && role !== "COACH") {
+      const url = req.nextUrl.clone();
+      url.pathname = "/unauthorized";
+      return NextResponse.redirect(url);
+    }
+  }
   const { pathname } = req.nextUrl;
   const isAPI = pathname.startsWith("/api");
 
