@@ -47,26 +47,37 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user }) {
       if (user) {
         // @ts-ignore
-        token.role = (user as any).role;
-        // @ts-ignore
         token.isApproved = (user as any).isApproved;
 
         // Buscar teamId del modelo UserTeam donde el usuario esté aprobado
         const prisma = new PrismaClient();
         const userTeams = await prisma.userTeam.findMany({
           where: { userId: user.id },
-          select: { teamId: true, user: { select: { isApproved: true } } },
+          select: { teamId: true, role: true, user: { select: { isApproved: true } } },
         });
         const approvedTeams = userTeams.filter(ut => ut.user.isApproved);
         if (approvedTeams.length === 1) {
           // Un solo equipo aprobado: usar ese
           // @ts-ignore
           token.teamId = approvedTeams[0].teamId;
+          // @ts-ignore
+          token.role = approvedTeams[0].role;
         } else {
           // Varios equipos aprobados o ninguno: dejar vacío para que el frontend elija
           // @ts-ignore
           token.teamId = null;
+          // @ts-ignore
+          token.role = null;
         }
+      } else if (token.teamId) {
+        // Si ya hay teamId en el token, buscar el role correspondiente
+        const prisma = new PrismaClient();
+        const userTeam = await prisma.userTeam.findFirst({
+          where: { userId: token.sub, teamId: token.teamId },
+          select: { role: true },
+        });
+        // @ts-ignore
+        token.role = userTeam?.role ?? null;
       }
       return token;
     },
