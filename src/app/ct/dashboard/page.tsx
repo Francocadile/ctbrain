@@ -131,6 +131,25 @@ function DashboardSemanaInner() {
   const [daysMap, setDaysMap] = useState<Record<string, SessionDTO[]>>({});
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
+  const [teamId, setTeamId] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      // Obtener teamId desde la sesión
+      const res = await fetch("/api/auth/me", { cache: "no-store" });
+      if (!res.ok) {
+        window.location.href = "/select-team";
+        return;
+      }
+      const json = await res.json();
+      const tid = json?.user?.teamId;
+      if (!tid) {
+        window.location.href = "/select-team";
+        return;
+      }
+      setTeamId(tid);
+    })();
+  }, []);
 
   // ===== Row labels (mismos que el Editor) =====
   const [rowLabels, setRowLabels] = useState<Record<string, string>>({});
@@ -156,19 +175,28 @@ function DashboardSemanaInner() {
   async function loadWeek(d: Date) {
     setLoadingWeek(true);
     try {
+      if (!teamId) return;
       const monday = getMonday(d);
       const startYYYYMMDD = toYYYYMMDDUTC(monday);
-      const res = await getSessionsWeek({ start: startYYYYMMDD });
-      setDaysMap(res.days);
-      setWeekStart(res.weekStart);
-      setWeekEnd(res.weekEnd);
+      // Llamada a API con filtro por teamId
+      const res = await fetch(`/api/sessions?start=${encodeURIComponent(startYYYYMMDD)}&teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("No se pudieron cargar las sesiones.");
+      const json = await res.json();
+      setDaysMap(json.days);
+      setWeekStart(json.weekStart);
+      setWeekEnd(json.weekEnd);
+    } catch (e) {
+      setDaysMap({});
+      setWeekStart("");
+      setWeekEnd("");
     } finally {
       setLoadingWeek(false);
     }
   }
   useEffect(() => {
+    if (!teamId) return;
     loadWeek(base); // eslint-disable-line react-hooks/exhaustive-deps
-  }, [base]);
+  }, [base, teamId]);
 
   const orderedDays = useMemo(() => {
     if (!weekStart) return [];
