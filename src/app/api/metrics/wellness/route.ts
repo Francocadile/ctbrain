@@ -104,7 +104,7 @@ export async function POST(req: Request) {
     const teamId = (sessionObj as any)?.user?.teamId as string | undefined;
     if (!teamId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const entry = await prisma.wellnessEntry.upsert({
-      where: { userId_date_teamId: { userId, date: start, teamId } },
+      where: { userId_date: { userId, date: start } },
       update: {
         sleepQuality,
         sleepHours,
