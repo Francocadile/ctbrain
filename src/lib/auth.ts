@@ -43,18 +43,35 @@ export const authOptions: NextAuthOptions = {
   ],
   pages: { signIn: "/login" },
   callbacks: {
-    // Guarda role/isApproved en el token JWT
+    // Guarda role/isApproved/teamId en el token JWT
     async jwt({ token, user }) {
       if (user) {
         // @ts-ignore
         token.role = (user as any).role;
         // @ts-ignore
         token.isApproved = (user as any).isApproved;
+
+        // Buscar teamId del modelo UserTeam donde el usuario esté aprobado
+        const prisma = new PrismaClient();
+        const userTeams = await prisma.userTeam.findMany({
+          where: { userId: user.id },
+          select: { teamId: true, user: { select: { isApproved: true } } },
+        });
+        const approvedTeams = userTeams.filter(ut => ut.user.isApproved);
+        if (approvedTeams.length === 1) {
+          // Un solo equipo aprobado: usar ese
+          // @ts-ignore
+          token.teamId = approvedTeams[0].teamId;
+        } else {
+          // Varios equipos aprobados o ninguno: dejar vacío para que el frontend elija
+          // @ts-ignore
+          token.teamId = null;
+        }
       }
       return token;
     },
 
-    // Restaura id/role/isApproved en session.user para tu app
+    // Restaura id/role/isApproved/teamId en session.user para tu app
     async session({ session, token }) {
       // @ts-ignore
       session.user = session.user || {};
@@ -64,6 +81,8 @@ export const authOptions: NextAuthOptions = {
       session.user.role = (token as any).role;
       // @ts-ignore
       session.user.isApproved = (token as any).isApproved;
+      // @ts-ignore
+      session.user.teamId = (token as any).teamId ?? null;
       return session;
     },
   },
