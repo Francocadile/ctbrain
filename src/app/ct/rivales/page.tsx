@@ -9,20 +9,40 @@ export default function RivalesGridPage() {
   const [loading, setLoading] = useState(true);
   const [list, setList] = useState<Rival[]>([]);
   const [q, setQ] = useState("");
-
-  async function load() {
-    setLoading(true);
-    try {
-      const rows = await getRivales();
-      setList(rows);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [teamId, setTeamId] = useState<string | null>(null);
 
   useEffect(() => {
-    load();
+    (async () => {
+      // Obtener teamId desde la sesión
+      const res = await fetch("/api/auth/me", { cache: "no-store" });
+      if (!res.ok) {
+        window.location.href = "/select-team";
+        return;
+      }
+      const json = await res.json();
+      const tid = json?.user?.teamId;
+      if (!tid) {
+        window.location.href = "/select-team";
+        return;
+      }
+      setTeamId(tid);
+    })();
   }, []);
+
+  useEffect(() => {
+    if (!teamId) return;
+    (async () => {
+      setLoading(true);
+      try {
+        // Llamada a API con filtro por teamId
+        const api = await fetch(`/api/ct/rivales?teamId=${encodeURIComponent(teamId)}`, { cache: "no-store" });
+        const json = await api.json();
+        setList(json.data || []);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [teamId]);
 
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -58,7 +78,9 @@ export default function RivalesGridPage() {
       </header>
 
       {/* Grid */}
-      {loading ? (
+      {!teamId ? (
+        <div className="p-4 text-gray-500">Redirigiendo a selección de equipo…</div>
+      ) : loading ? (
         <div className="p-4 text-gray-500">Cargando…</div>
       ) : filtered.length === 0 ? (
         <div className="p-8 text-gray-500 italic border rounded-2xl bg-white">
