@@ -59,53 +59,30 @@ function roleHome(role?: string) {
 }
 
 export async function middleware(req: NextRequest) {
-  // Protección multi-equipo y rol
-  const { pathname } = req.nextUrl;
-
-  // Permitir acceso libre a rutas públicas
-  if (matchAny(pathname, PUBLIC_ROUTES)) {
-    return NextResponse.next();
-  }
-
-  // Obtener token y datos del usuario
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-  const teamId = (token as any)?.teamId;
-  const role = (token as any)?.role;
-
-  // Si no hay teamId, redirigir al selector de equipo
-  if (!teamId) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/select-team";
-    return NextResponse.redirect(url);
-  }
-
-  // Si la ruta es protegida y el rol no es ADMIN o COACH, bloquear acceso
-  if (matchAny(pathname, PROTECTED_ROUTES)) {
-    if (role !== "ADMIN" && role !== "COACH") {
-      const url = req.nextUrl.clone();
-      url.pathname = "/unauthorized";
-      return NextResponse.redirect(url);
-    }
-  }
   const { pathname } = req.nextUrl;
   const isAPI = pathname.startsWith("/api");
 
   // Públicos -> dejar pasar
-  if (matchAny(pathname, PUBLIC)) {
+  if (matchAny(pathname, PUBLIC) || matchAny(pathname, PUBLIC_ROUTES)) {
     return NextResponse.next();
   }
 
   // ¿Qué guard aplica?
   const needsCT = matchAny(pathname, CT_PATHS);
   const needsMED = matchAny(pathname, MED_PATHS);
+  const needsProtected = matchAny(pathname, PROTECTED_ROUTES);
 
   // Si no matchea nada, dejar pasar
-  if (!needsCT && !needsMED) {
+  if (!needsCT && !needsMED && !needsProtected) {
     return NextResponse.next();
   }
 
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  const teamId = (token as any)?.teamId;
+  const role = (token as any)?.role;
+  const isApproved = (token as any)?.isApproved;
 
+  // Si no hay token, login
   if (!token) {
     if (isAPI) {
       return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
@@ -119,8 +96,12 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  const role = (token as any).role as string | undefined;
-  const isApproved = (token as any).isApproved as boolean | undefined;
+  // Si no hay teamId, redirigir al selector de equipo
+  if (!teamId) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/select-team";
+    return NextResponse.redirect(url);
+  }
 
   // Gate global: si no está aprobado y NO es admin → pending
   if (role !== "ADMIN" && isApproved === false) {
@@ -133,6 +114,15 @@ export async function middleware(req: NextRequest) {
     const url = req.nextUrl.clone();
     url.pathname = "/pending-approval";
     return NextResponse.redirect(url);
+  }
+
+  // Si la ruta es protegida y el rol no es ADMIN o COACH, bloquear acceso
+  if (needsProtected) {
+    if (role !== "ADMIN" && role !== "COACH") {
+      const url = req.nextUrl.clone();
+      url.pathname = "/unauthorized";
+      return NextResponse.redirect(url);
+    }
   }
 
   // Guard CT
