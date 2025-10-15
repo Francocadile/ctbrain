@@ -1,6 +1,8 @@
 // src/app/jugador/layout.tsx
 "use client";
 
+
+import QuickActions from "@/components/jugador/QuickActions";
 import Link from "next/link";
 
 export default function JugadorLayout({ children }: { children: React.ReactNode }) {
@@ -19,7 +21,10 @@ export default function JugadorLayout({ children }: { children: React.ReactNode 
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl p-4">{children}</main>
+      <main className="mx-auto max-w-5xl p-4">
+        <QuickActions />
+        {children}
+      </main>
     </div>
   );
 }
