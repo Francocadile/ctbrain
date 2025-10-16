@@ -2,10 +2,11 @@
 "use client";
 
 import Link from "next/link";
+import QuickActions from "@/components/jugador/QuickActions";
 
-export default function JugadorHome() {
   return (
     <div className="space-y-6">
+      <QuickActions />
       <div className="grid md:grid-cols-2 gap-4">
         <Link
           href="/jugador/wellness"
