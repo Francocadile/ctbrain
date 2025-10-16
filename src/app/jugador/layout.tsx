@@ -1,8 +1,18 @@
+"use client";
+
+import Link from "next/link";
+
+export default function JugadorLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <main className="mx-auto max-w-5xl p-4">{children}</main>
+    </div>
+  );
+}
 // src/app/jugador/layout.tsx
 "use client";
 
 
-import QuickActions from "@/components/jugador/QuickActions";
 import Link from "next/link";
 
 export default function JugadorLayout({ children }: { children: React.ReactNode }) {
@@ -21,10 +31,7 @@ export default function JugadorLayout({ children }: { children: React.ReactNode 
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl p-4">
-        <QuickActions />
-        {children}
-      </main>
+      <main className="mx-auto max-w-5xl p-4">{children}</main>
     </div>
   );
 }
