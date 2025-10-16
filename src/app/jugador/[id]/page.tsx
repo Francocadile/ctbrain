@@ -44,6 +44,14 @@ type PlayerPayload = {
 
 export default function JugadorRivalPage() {
   const { id } = useParams<{ id: string }>();
+  // Reserva slugs estáticos del jugador
+  const RESERVED = new Set(["plan-semanal", "wellness", "rpe"]);
+  if (typeof id === "string" && RESERVED.has(id)) {
+    // No renderizar acá para evitar captura del slug estático
+    // Mostrar nada y dejar que la ruta estática responda
+    // (en RSC esto devuelve null; si es client, devolvé null también)
+    return null as any;
+  }
   const [data, setData] = useState<PlayerPayload | null>(null);
   const [loading, setLoading] = useState(true);
 
