@@ -1,8 +1,7 @@
-"use client";
+// src/app/jugador/layout.tsx
+import type { ReactNode } from "react";
 
-import Link from "next/link";
-
-export default function JugadorLayout({ children }: { children: React.ReactNode }) {
+export default function JugadorLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="mx-auto max-w-5xl p-4">{children}</main>
