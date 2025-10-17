@@ -9,6 +9,11 @@ const nextConfig = {
     config.plugins.push(
       new webpack.IgnorePlugin({ resourceRegExp: /pdfjs-dist/ })
     );
+    // Alias @ -> src
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      "@": require("path").resolve(process.cwd(), "src"),
+    };
     return config;
   },
 
