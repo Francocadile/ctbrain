@@ -10,6 +10,7 @@ import {
   type SessionDTO,
 } from "@/lib/api/sessions";
 import PlannerMatchLink from "@/components/PlannerMatchLink";
+import CTModalsHUD from "@/components/CTModalsHUD";
 
 /* =========================================================
    Tipos / filas
@@ -143,6 +144,8 @@ function DashboardSemanaInner() {
       setRowLabels(j?.rowLabels || {});
     } catch {
       setRowLabels({});
+      {/* HUD de modales CT */}
+      <CTModalsHUD />
     }
   }
 
