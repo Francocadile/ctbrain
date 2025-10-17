@@ -23,24 +23,12 @@ const sessionSelect = {
   user: { select: { id: true, name: true, email: true, role: true } },
 } as const;
 
+import { SessionType } from "@prisma/client";
 const updateSchema = z.object({
-  title: z.string().optional().nullable(),
+  title: z.string().transform((s: string) => (s ?? "").trim()).min(1, "Título obligatorio").optional(),
   description: z.string().optional().nullable(),
-  date: z.string().optional(), // ISO
-  type: z.enum(["GENERAL", "FUERZA", "TACTICA", "AEROBICO", "RECUPERACION"]).optional(),
-}).superRefine((data, ctx) => {
-  if (!isDayFlagDescription(data.description)) {
-    if (data.title !== undefined) {
-      const len = (data.title || "").trim().length;
-      if (len > 0 && len < 2) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Título muy corto",
-          path: ["title"],
-        });
-      }
-    }
-  }
+  date: z.string().optional(),
+  type: z.nativeEnum(SessionType).optional(),
 });
 
 function parseISOAsUTC(iso: string): Date {
@@ -91,11 +79,12 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       );
     }
     const teamId = await getUserTeamIdOrNull(session.user.id);
-    const data: any = {};
-    if (parsed.data.title !== undefined) data.title = (parsed.data.title ?? "").trim();
-    if (parsed.data.description !== undefined) data.description = parsed.data.description ?? null;
-    if (parsed.data.type !== undefined) data.type = parsed.data.type;
-    if (parsed.data.date !== undefined) data.date = parseISOAsUTC(parsed.data.date);
+
+  const data: any = {};
+  if (parsed.data.title !== undefined) data.title = parsed.data.title;
+  if (parsed.data.description !== undefined) data.description = parsed.data.description ?? null;
+  if (parsed.data.type !== undefined) data.type = parsed.data.type;
+  if (parsed.data.date !== undefined) data.date = parseISOAsUTC(parsed.data.date);
 
     const updated = await prisma.session.update({
       where: teamId ? { id, teamId } : { id },
