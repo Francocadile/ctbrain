@@ -91,3 +91,23 @@ export async function getSessionById(id: string) {
   if (!res.ok) throw new Error(json?.error || "Sesión no encontrada");
   return json as { data: SessionDTO };
 }
+
+import type { SessionExerciseLink } from "@/lib/exercises-serialization";
+
+export async function getSessionExercises(sessionId: string): Promise<SessionExerciseLink[]> {
+  const res = await fetch(`/api/sessions/${sessionId}/exercises`, { cache: "no-store" });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || "No se pudieron cargar ejercicios");
+  return (json.items ?? []) as SessionExerciseLink[];
+}
+
+export async function saveSessionExercises(sessionId: string, items: SessionExerciseLink[]) {
+  const res = await fetch(`/api/sessions/${sessionId}/exercises`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || "No se pudieron guardar ejercicios");
+  return json as { ok: true; count: number };
+}
