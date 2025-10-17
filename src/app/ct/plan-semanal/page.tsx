@@ -272,11 +272,15 @@ function PlanSemanalInner() {
     const existing = findDayFlagSession(dayYmd, turn);
     const iso = computeISOForSlot(dayYmd, turn);
     const desc = `${dayFlagMarker(turn)} | ${dayYmd}`;
-    const title = buildDayFlagTitle(df);
+    const title = (buildDayFlagTitle(df) ?? "").trim();
     try {
       if (df.kind === "NONE") {
         if (existing) await deleteSession(existing.id);
         await loadWeek(base);
+        return;
+      }
+      if (!title) {
+        alert("El título es obligatorio.");
         return;
       }
       if (!existing) await createSession({ title, description: desc, date: iso, type: "GENERAL" });
@@ -300,11 +304,15 @@ function PlanSemanalInner() {
     const existing = findMicroSession(dayYmd, turn);
     const iso = computeISOForSlot(dayYmd, turn);
     const desc = `${microMarker(turn)} | ${dayYmd}`;
-    const title = value || "";
+    const title = (value ?? "").trim();
     try {
       if (!value) {
         if (existing) await deleteSession(existing.id);
         await loadWeek(base);
+        return;
+      }
+      if (!title) {
+        alert("El título es obligatorio.");
         return;
       }
       if (!existing) await createSession({ title, description: desc, date: iso, type: "GENERAL" });
@@ -346,6 +354,10 @@ function PlanSemanalInner() {
 
         if (!text) {
           if (existing) await deleteSession(existing.id);
+          continue;
+        }
+        if (!text) {
+          alert("El título es obligatorio.");
           continue;
         }
         if (!existing) {
