@@ -39,11 +39,15 @@ function isRow(s: SessionDTO, turn: TurnKey, row: string) {
 }
 
 function formatHumanDate(ymd: string) {
-  const d = new Date(`${ymd}T00:00:00.000Z`);
-  return d.toLocaleDateString(undefined, {
+  // Formatea YYYY-MM-DD en local sin que el TZ lo corra un día
+  const [y, m, d] = ymd.split("-").map(Number);
+  // Usa toLocaleDateString con timeZone UTC para evitar shift
+  const dt = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
+  return dt.toLocaleDateString(undefined, {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
+    timeZone: "UTC",
   });
 }
 
