@@ -96,10 +96,10 @@ const createSchema = z
    Sin start -> listado de últimas 50 sesiones (para /ct/sessions). */
 export async function GET(req: Request) {
   try {
-    const user = await requireAuth();
-    const url = new URL(req.url);
-    const start = url.searchParams.get("start");
-    const teamId = await getUserTeamIdOrNull(user.id);
+  const auth = await requireAuth();
+  const url = new URL(req.url);
+  const start = url.searchParams.get("start");
+  const teamId = await getUserTeamIdOrNull(auth.user.id);
 
     if (start) {
       // Semana para el editor
