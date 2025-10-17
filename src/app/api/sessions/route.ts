@@ -1,22 +1,3 @@
-function parseISOAsUTC(iso: string): Date {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) throw new Error("Invalid date");
-  // Si el ISO no trae 'Z', interpretamos la hora como UTC para evitar corrimientos por TZ
-  if (iso.endsWith("Z") || iso.toUpperCase().includes("UTC")) return d;
-  return new Date(Date.UTC(
-    d.getFullYear(), d.getMonth(), d.getDate(),
-    d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds()
-  ));
-}
-
-async function getUserTeamIdOrNull(userId: string): Promise<string | null> {
-  const ut = await prisma.userTeam.findFirst({
-    where: { userId },
-    select: { teamId: true },
-    orderBy: { createdAt: "asc" },
-  });
-  return ut?.teamId ?? null;
-}
 // src/app/api/sessions/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -65,16 +46,30 @@ const sessionSelect = {
 } as const;
 
 /* ---------- Validación POST ---------- */
-import { SessionType } from "@prisma/client";
-const createSchema = z.object({
-  title: z
-    .string()
-    .transform((s: string) => (s ?? "").trim())
-    .refine((s: string) => s.length > 0, { message: "Título obligatorio" }),
-  description: z.string().nullable().optional(),
-  date: z.string().min(1, "Fecha requerida"),
-  type: z.nativeEnum(SessionType).optional(),
-});
+const createSchema = z
+  .object({
+    title: z.string().optional().nullable(), // "" permitido si es DAYFLAG
+    description: z.string().optional().nullable(),
+    date: z
+      .string()
+      .datetime({ message: "Fecha inválida (usar ISO, ej: 2025-08-27T12:00:00Z)" }),
+    type: z
+      .enum(["GENERAL", "FUERZA", "TACTICA", "AEROBICO", "RECUPERACION"])
+      .optional(),
+  })
+  .superRefine((data, ctx) => {
+    // Si NO es un DAYFLAG, exigir mínimo 2 caracteres de título
+    if (!isDayFlagDescription(data.description)) {
+      const len = (data.title || "").trim().length;
+      if (len < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Título muy corto",
+          path: ["title"],
+        });
+      }
+    }
+  });
 
 /* ---------- GET /api/sessions ---------- */
 /* ?start=YYYY-MM-DD  -> devuelve mapa de la semana (Lun..Dom),
@@ -82,10 +77,10 @@ const createSchema = z.object({
    Sin start -> listado de últimas 50 sesiones (para /ct/sessions). */
 export async function GET(req: Request) {
   try {
-  const auth = await requireAuth();
-  const url = new URL(req.url);
-  const start = url.searchParams.get("start");
-  const teamId = await getUserTeamIdOrNull(auth.user.id);
+    await requireAuth();
+
+    const url = new URL(req.url);
+    const start = url.searchParams.get("start");
 
     if (start) {
       // Semana para el editor
@@ -101,10 +96,7 @@ export async function GET(req: Request) {
       const nextMonday = addDaysUTC(monday, 7); // ✅ FIN EXCLUSIVO
 
       const items = await prisma.session.findMany({
-        where: {
-          date: { gte: monday, lt: nextMonday },
-          ...(teamId ? { teamId } : {}),
-        },
+        where: { date: { gte: monday, lt: nextMonday } }, // ✅ lt para incluir DOMINGO entero
         orderBy: [{ date: "asc" }, { createdAt: "asc" }],
         select: sessionSelect,
       });
@@ -130,9 +122,6 @@ export async function GET(req: Request) {
 
     // Listado para /ct/sessions (no tocar, así como te funciona)
     const sessions = await prisma.session.findMany({
-      where: {
-        ...(teamId ? { teamId } : {}),
-      },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       select: sessionSelect,
       take: 50,
@@ -163,18 +152,18 @@ export async function POST(req: Request) {
     }
 
     const { title, description, date, type } = parsed.data;
-    const teamId = await getUserTeamIdOrNull(session.user.id);
+
     const created = await prisma.session.create({
       data: {
-        title, // ya viene trimmed y validado
+        title: (title ?? "").trim(), // "" permitido si es DAYFLAG
         description: description ?? null,
-        date: parseISOAsUTC(date),
+        date: new Date(date),
         type: type ?? "GENERAL",
         createdBy: session.user.id,
-        ...(teamId ? { teamId } : {}),
       },
       select: sessionSelect,
     });
+
     return NextResponse.json({ data: created }, { status: 201 });
   } catch (err: any) {
     if (err instanceof Response) return err;

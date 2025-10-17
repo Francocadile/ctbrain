@@ -1,6 +1,5 @@
 // src/lib/api/sessions.ts
 
-/** ---------- Tipos ---------- **/
 export type SessionDTO = {
   id: string;
   title: string | null;
@@ -37,8 +36,7 @@ export function getMonday(base: Date) {
 }
 
 /** ---------- Llamadas a API ---------- **/
-
-// Lista de la semana (GET /api/sessions?start=YYYY-MM-DD)
+// Lista de la semana (nuestro GET /api/sessions?start=YYYY-MM-DD)
 export async function getSessionsWeek({ start }: { start: string }): Promise<WeekResponse> {
   const res = await fetch(`/api/sessions?start=${encodeURIComponent(start)}`, { cache: "no-store" });
   const json = await res.json();
@@ -83,26 +81,13 @@ export async function deleteSession(id: string) {
   const res = await fetch(`/api/sessions/${id}`, { method: "DELETE" });
   const json = await res.json();
   if (!res.ok) throw new Error(json?.error || "Error al borrar la sesión");
-  return json as { ok: true };
+  return json as { ok: boolean };
 }
 
-/** ---------- ejercicios por sesión ---------- **/
-export type SessionExerciseLink = { id: string; order: number; note?: string };
-
-export async function getSessionExercises(sessionId: string): Promise<SessionExerciseLink[]> {
-  const res = await fetch(`/api/sessions/${sessionId}/exercises`, { cache: "no-store" });
+// Detalle (GET /api/sessions/[id]) -> { data: SessionDTO }
+export async function getSessionById(id: string) {
+  const res = await fetch(`/api/sessions/${id}`, { cache: "no-store" });
   const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || "No se pudieron cargar ejercicios");
-  return (json.items ?? []) as SessionExerciseLink[];
-}
-
-export async function saveSessionExercises(sessionId: string, items: SessionExerciseLink[]) {
-  const res = await fetch(`/api/sessions/${sessionId}/exercises`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ items }),
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || "No se pudieron guardar ejercicios");
-  return json as { ok: true; count: number };
+  if (!res.ok) throw new Error(json?.error || "Sesión no encontrada");
+  return json as { data: SessionDTO };
 }

@@ -23,37 +23,27 @@ const sessionSelect = {
   user: { select: { id: true, name: true, email: true, role: true } },
 } as const;
 
-import { SessionType } from "@prisma/client";
-const updateSchema = z.object({
-  // Si viene title: trim y validar non-empty; si no viene, se ignora (optional)
-  title: z
-    .string()
-    .transform((s: string) => (s ?? "").trim())
-    .refine((s: string) => s.length > 0, { message: "Título obligatorio" })
-    .optional(),
-  description: z.string().optional().nullable(),
-  date: z.string().optional(), // ISO
-  type: z.nativeEnum(SessionType).optional(),
-});
-
-function parseISOAsUTC(iso: string): Date {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) throw new Error("Invalid date");
-  if (iso.endsWith("Z") || iso.toUpperCase().includes("UTC")) return d;
-  return new Date(Date.UTC(
-    d.getFullYear(), d.getMonth(), d.getDate(),
-    d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds()
-  ));
-}
-
-async function getUserTeamIdOrNull(userId: string): Promise<string | null> {
-  const ut = await prisma.userTeam.findFirst({
-    where: { userId },
-    select: { teamId: true },
-    orderBy: { createdAt: "asc" },
+const updateSchema = z
+  .object({
+    title: z.string().optional().nullable(),
+    description: z.string().optional().nullable(),
+    date: z.string().datetime().optional(),
+    type: z.enum(["GENERAL", "FUERZA", "TACTICA", "AEROBICO", "RECUPERACION"]).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (!isDayFlagDescription(data.description)) {
+      if (data.title !== undefined) {
+        const len = (data.title || "").trim().length;
+        if (len > 0 && len < 2) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Título muy corto",
+            path: ["title"],
+          });
+        }
+      }
+    }
   });
-  return ut?.teamId ?? null;
-}
 
 export async function GET(_: Request, { params }: { params: { id: string } }) {
   try {
@@ -73,8 +63,8 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {
-    const session = await requireSessionWithRoles([Role.CT, Role.ADMIN]);
-    const id = params.id;
+    await requireSessionWithRoles([Role.CT, Role.ADMIN]);
+
     const body = await req.json();
     const parsed = updateSchema.safeParse(body);
     if (!parsed.success) {
@@ -83,46 +73,35 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
         { status: 400 }
       );
     }
-    const teamId = await getUserTeamIdOrNull(session.user.id);
 
-  const data: any = {};
-  if (parsed.data.title !== undefined) data.title = parsed.data.title;
-  if (parsed.data.description !== undefined) data.description = parsed.data.description ?? null;
-  if (parsed.data.type !== undefined) data.type = parsed.data.type;
-  if (parsed.data.date !== undefined) data.date = parseISOAsUTC(parsed.data.date);
-
+    const data = parsed.data;
     const updated = await prisma.session.update({
-      where: teamId ? { id, teamId } : { id },
-      data,
+      where: { id: params.id },
+      data: {
+        ...(data.title !== undefined ? { title: (data.title ?? "").trim() } : {}),
+        ...(data.description !== undefined ? { description: data.description } : {}),
+        ...(data.date ? { date: new Date(data.date) } : {}),
+        ...(data.type ? { type: data.type } : {}),
+      },
       select: sessionSelect,
     });
 
     return NextResponse.json({ data: updated });
-  } catch (err: any) {
-    if (err?.code === "P2025") {
-      return NextResponse.json({ error: "Sesión no encontrada" }, { status: 404 });
-    }
-    console.error("PUT /api/sessions/[id] error:", err);
-    return NextResponse.json({ error: "Error al actualizar la sesión" }, { status: 500 });
+  } catch (e: any) {
+    if (e instanceof Response) return e;
+    console.error("PUT /api/sessions/[id] error:", e);
+    return NextResponse.json({ error: "Error al actualizar sesión" }, { status: 500 });
   }
 }
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(_: Request, { params }: { params: { id: string } }) {
   try {
-    const session = await requireSessionWithRoles([Role.CT, Role.ADMIN]);
-    const id = params.id;
-    const teamId = await getUserTeamIdOrNull(session.user.id);
-
-    await prisma.session.delete({
-      where: teamId ? { id, teamId } : { id },
-    });
-
+    await requireSessionWithRoles([Role.CT, Role.ADMIN]);
+    await prisma.session.delete({ where: { id: params.id } });
     return NextResponse.json({ ok: true });
-  } catch (err: any) {
-    if (err?.code === "P2025") {
-      return NextResponse.json({ error: "Sesión no encontrada" }, { status: 404 });
-    }
-    console.error("DELETE /api/sessions/[id] error:", err);
-    return NextResponse.json({ error: "Error al eliminar la sesión" }, { status: 500 });
+  } catch (e: any) {
+    if (e instanceof Response) return e;
+    console.error("DELETE /api/sessions/[id] error:", e);
+    return NextResponse.json({ error: "Error al borrar sesión" }, { status: 500 });
   }
 }

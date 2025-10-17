@@ -1,56 +1,41 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
+import clsx from "clsx";
 
 type RivalMini = { id: string; name: string; logoUrl?: string | null };
 
-type BaseProps = {
-  /** Texto del botón/enlace (si no hay children) */
+type Props = {
+  /** Si viene el id, enlazamos directo a /ct/rivales/:id */
+  rivalId?: string | null;
+  /** Si no hay id, intentamos resolver por nombre (search API) */
+  rivalName?: string | null;
+  /** Texto del botón/enlace */
   label?: string;
   className?: string;
-  children?: ReactNode;
-};
-
-// Modo directo: usar href tal cual
-type DirectProps = BaseProps & {
-  href: string;
-};
-
-// Modo “rival”: resuelve link al plan del rival (por id o por nombre)
-type RivalProps = BaseProps & {
-  rivalId?: string | null;
-  rivalName?: string | null;
+  /** URL de fallback si no hay id y tampoco se resolvió por nombre */
   fallbackHref?: string;
+  /** Pestaña destino del rival (por defecto: "plan") */
   tab?: string;
 };
 
-type Props = DirectProps | RivalProps;
-
-export default function PlannerMatchLink(props: Props) {
-  // Si viene href directo, renderizamos ese enlace y listo
-  if ("href" in props) {
-    const { href, className, label = "Ver", children } = props;
-    return (
-      <Link href={href} className={className}>
-        {children ?? label}
-      </Link>
-    );
-  }
-
-  // Modo rival (ID o búsqueda por nombre)
-  const {
-    rivalId,
-    rivalName,
-    label = "Plan de partido",
-    className,
-    fallbackHref,
-    tab = "plan",
-    children,
-  } = props;
-
+/**
+ * Enlaza al plan del rival:
+ * - Si hay rivalId: /ct/rivales/:id?tab=<tab>
+ * - Si no hay id pero hay nombre: resuelve via /api/ct/rivales/search y usa el mejor match
+ * - Si no encuentra, usa fallbackHref si viene; si no, cae a /ct/rivales?search=... o /ct/rivales
+ */
+export default function PlannerMatchLink({
+  rivalId,
+  rivalName,
+  label = "Plan de partido",
+  className,
+  fallbackHref,
+  tab = "plan",
+}: Props) {
   const [resolved, setResolved] = useState<RivalMini | null>(null);
   const [loading, setLoading] = useState(false);
+
   const cleanName = (rivalName || "").trim();
 
   const directHref = useMemo(() => {
@@ -75,7 +60,7 @@ export default function PlannerMatchLink(props: Props) {
           { cache: "no-store" }
         );
         if (!r.ok) return;
-        const j = (await r.json().catch(() => ({}))) as any;
+        const j = await r.json().catch(() => ({} as any));
         const list: RivalMini[] = Array.isArray(j?.data) ? j.data : [];
 
         // match exacto (case-insensitive) o primer resultado
@@ -109,15 +94,16 @@ export default function PlannerMatchLink(props: Props) {
   }, [directHref, resolved, fallbackHref, cleanName, tab]);
 
   return (
-    <Link
+    <a
       href={href}
-      className={
-        "inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] hover:bg-gray-100 whitespace-nowrap " +
-        (className || "")
-      }
+      className={clsx(
+        "inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] hover:bg-gray-100 whitespace-nowrap",
+        className
+      )}
+      title={resolved?.name || cleanName || "Plan de partido"}
       aria-busy={loading}
     >
-      {children ?? label}
-    </Link>
+      {label}
+    </a>
   );
 }

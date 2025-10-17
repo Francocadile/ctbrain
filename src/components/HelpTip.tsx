@@ -1,6 +1,7 @@
+// src/components/HelpTip.tsx
 "use client";
 
-import { useId } from "react";
+import * as React from "react";
 
 type HelpTipProps = {
   /** Texto del tooltip (explicación corta y clara) */
@@ -26,7 +27,7 @@ export default function HelpTip({
   className = "",
   sizePx = 16,
 }: HelpTipProps) {
-  const id = useId();
+  const id = React.useId();
 
   const posClass = (() => {
     switch (side) {
@@ -42,15 +43,18 @@ export default function HelpTip({
     }
   })();
 
+  // Tailwind classes comunes
   const bubble =
     "pointer-events-none absolute z-50 hidden max-w-xs rounded-md border bg-white px-2 py-1 text-xs text-gray-700 shadow-lg";
-  const caretBase = "absolute w-0 h-0 border-transparent";
+  const caretBase =
+    "absolute w-0 h-0 border-transparent";
   const iconPx = Math.max(12, Math.min(22, sizePx));
   const iconClass =
     "inline-flex items-center justify-center rounded-full border text-[10px] leading-none select-none cursor-help " +
     "text-gray-700 border-gray-300 bg-white hover:bg-gray-50 " +
     "focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-black";
 
+  // Triangulito (caret) según lado
   const caret = (() => {
     switch (side) {
       case "bottom":
@@ -58,7 +62,7 @@ export default function HelpTip({
           <span
             aria-hidden
             className={`${caretBase} left-1/2 -translate-x-1/2 -top-[6px] border-b-white border-[6px]`}
-            style={{ borderTopWidth: 0 }}
+            style={{ borderTopWidth: 0, borderLeftColor: "transparent", borderRightColor: "transparent" }}
           />
         );
       case "left":
@@ -66,7 +70,7 @@ export default function HelpTip({
           <span
             aria-hidden
             className={`${caretBase} -right-[6px] top-1/2 -translate-y-1/2 border-l-white border-[6px]`}
-            style={{ borderRightWidth: 0 }}
+            style={{ borderTopColor: "transparent", borderBottomColor: "transparent", borderRightWidth: 0 }}
           />
         );
       case "right":
@@ -74,7 +78,7 @@ export default function HelpTip({
           <span
             aria-hidden
             className={`${caretBase} -left-[6px] top-1/2 -translate-y-1/2 border-r-white border-[6px]`}
-            style={{ borderLeftWidth: 0 }}
+            style={{ borderTopColor: "transparent", borderBottomColor: "transparent", borderLeftWidth: 0 }}
           />
         );
       case "top":
@@ -83,7 +87,7 @@ export default function HelpTip({
           <span
             aria-hidden
             className={`${caretBase} left-1/2 -translate-x-1/2 -bottom-[6px] border-t-white border-[6px]`}
-            style={{ borderBottomWidth: 0 }}
+            style={{ borderLeftColor: "transparent", borderRightColor: "transparent", borderBottomWidth: 0 }}
           />
         );
     }
