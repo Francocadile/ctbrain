@@ -1,4 +1,20 @@
 "use client";
+import Link, { LinkProps } from "next/link";
+import * as React from "react";
+
+type Props = LinkProps & {
+  children?: React.ReactNode;
+  className?: string;
+};
+
+export default function PlannerMatchLink({ href, children, className, ...rest }: Props) {
+  return (
+    <Link href={href} className={className} {...rest}>
+      {children ?? "Ver"}
+    </Link>
+  );
+}
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";

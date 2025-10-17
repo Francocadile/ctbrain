@@ -1,3 +1,11 @@
+"use client";
+import * as React from "react";
+
+type Props = { text?: string; className?: string };
+
+export default function HelpTip({ text = "Ayuda", className }: Props) {
+  return <span className={className} title={text}>ⓘ</span>;
+}
 // src/components/HelpTip.tsx
 "use client";
 

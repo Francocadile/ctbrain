@@ -2,6 +2,108 @@
 
 export type SessionDTO = {
   id: string;
+  title: string;
+  description: string | null;
+  date: string; // ISO string
+  type: string; // e.g., "GENERAL"
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  user?: { id: string; name?: string | null; email?: string | null; image?: string | null };
+};
+
+export type WeekResponse = {
+  days: Record<string, SessionDTO[]>;
+  weekStart: string;
+  weekEnd: string;
+};
+
+// ---------- utils de fecha (usados por CT dashboard/editor) ----------
+export function toYYYYMMDDUTC(d: Date) {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+// Lunes de la semana en UTC (Lun=1..Dom=7)
+export function getMonday(base: Date) {
+  const d = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate()));
+  const dow = d.getUTCDay() || 7;
+  if (dow !== 1) d.setUTCDate(d.getUTCDate() - (dow - 1));
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
+
+// ---------- fetchers de sesiones ----------
+export async function getSessionsWeek({ start }: { start: string }): Promise<WeekResponse> {
+  const res = await fetch(`/api/sessions?start=${encodeURIComponent(start)}`, { cache: "no-store" });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || "No se pudo cargar la semana");
+  return json as WeekResponse;
+}
+
+export async function createSession(payload: {
+  title: string;
+  description: string | null;
+  date: string; // ISO
+  type?: SessionDTO["type"];
+}) {
+  const res = await fetch(`/api/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || "Error al crear la sesión");
+  return json as { data: SessionDTO };
+}
+
+export async function updateSession(
+  id: string,
+  payload: Partial<{ title: string; description: string | null; date: string; type: SessionDTO["type"] }>
+) {
+  const res = await fetch(`/api/sessions/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || "Error al actualizar la sesión");
+  return json as { data: SessionDTO };
+}
+
+export async function deleteSession(id: string) {
+  const res = await fetch(`/api/sessions/${id}`, { method: "DELETE" });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || "Error al borrar la sesión");
+  return json as { ok: true };
+}
+
+// ---------- ejercicios por sesión (endpoints nuevos) ----------
+export type SessionExerciseLink = { id: string; order: number; note?: string };
+
+export async function getSessionExercises(sessionId: string): Promise<SessionExerciseLink[]> {
+  const res = await fetch(`/api/sessions/${sessionId}/exercises`, { cache: "no-store" });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || "No se pudieron cargar ejercicios");
+  return (json.items ?? []) as SessionExerciseLink[];
+}
+
+export async function saveSessionExercises(sessionId: string, items: SessionExerciseLink[]) {
+  const res = await fetch(`/api/sessions/${sessionId}/exercises`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json?.error || "No se pudieron guardar ejercicios");
+  return json as { ok: true; count: number };
+}
+// src/lib/api/sessions.ts
+
+export type SessionDTO = {
+  id: string;
   title: string | null;
   description: string | null;
   date: string; // ISO
