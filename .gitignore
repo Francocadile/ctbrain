@@ -1,0 +1,17 @@
+# deps
+node_modules/
+# next
+.next/
+out/
+# builds
+dist/
+coverage/
+# vercel local
+.vercel/
+# logs
+npm-debug.log*
+yarn-debug.log*
+pnm-debug.log*
+# env
+.env
+.env.*

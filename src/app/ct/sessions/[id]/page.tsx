@@ -2,6 +2,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+// Lazy load para evitar problemas SSR/CSR
+const SessionExercisesList = dynamic(() => import("@/components/SessionExercisesList"), { ssr: false });
 import { useParams } from "next/navigation";
 import { getSessionById, updateSession, type SessionDTO } from "@/lib/api/sessions";
 import { listKinds, addKind as apiAddKind, replaceKinds } from "@/lib/settings";
@@ -254,6 +257,11 @@ export default function SesionDetailEditorPage() {
     <div id="print-root" className="p-4 md:p-6 space-y-4 print:!p-2">
       {/* Header */}
       <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between print:hidden">
+      {/* QA: Lista de ejercicios guardados (solo lectura, para verificar persistencia) */}
+      <div className="my-4">
+        <h2 className="text-base font-semibold mb-2">Ejercicios guardados (QA)</h2>
+        {id ? <SessionExercisesList sessionId={id} /> : null}
+      </div>
         <div>
           <h1 className="text-lg md:text-xl font-bold">
             Editor de ejercicio(s) — {marker.row || "Bloque"} ·{" "}

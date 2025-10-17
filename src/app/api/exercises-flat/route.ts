@@ -32,11 +32,13 @@ export async function GET(req: Request) {
   const dir = (url.searchParams.get("dir") || "desc") as "asc" | "desc";
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
   const pageSize = Math.min(50, Math.max(5, parseInt(url.searchParams.get("pageSize") || "20", 10)));
+  const sessionIdQ = url.searchParams.get('sessionId');
 
-  // Traemos sesiones del equipo o del usuario
+  // Traemos sesiones del equipo o del usuario, y filtramos por sessionId si viene
   const sessions = await prisma.session.findMany({
     where: {
       ...(teamId ? { teamId } : { createdBy: auth.user.id }),
+      ...(sessionIdQ ? { id: sessionIdQ } : {}),
     },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     take: 500,
@@ -93,10 +95,12 @@ export async function GET(req: Request) {
       imageUrl: ex.imageUrl || "",
       createdAt: s.date,
       sessionId: s.id,
+      sessionTitle: s.title ?? null,
       turn: marker.turn,
       row: marker.row,
       ymd: marker.ymd,
       idx,
+      exIndex: idx,
       sessionType: s.type,
     }));
   });
@@ -152,6 +156,7 @@ export async function GET(req: Request) {
         row: null,
         ymd: toYYYYMMDDUTC(new Date(s.date)),
         idx: link.order,
+        exIndex: link.order,
         sessionType: s.type,
       });
     }
