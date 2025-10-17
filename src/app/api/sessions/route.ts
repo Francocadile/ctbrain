@@ -65,30 +65,13 @@ const sessionSelect = {
 } as const;
 
 /* ---------- Validación POST ---------- */
-const createSchema = z
-  .object({
-    title: z.string().optional().nullable(), // "" permitido si es DAYFLAG
-    description: z.string().optional().nullable(),
-    date: z
-      .string()
-      .datetime({ message: "Fecha inválida (usar ISO, ej: 2025-08-27T12:00:00Z)" }),
-    type: z
-      .enum(["GENERAL", "FUERZA", "TACTICA", "AEROBICO", "RECUPERACION"])
-      .optional(),
-  })
-  .superRefine((data, ctx) => {
-    // Si NO es un DAYFLAG, exigir mínimo 2 caracteres de título
-    if (!isDayFlagDescription(data.description)) {
-      const len = (data.title || "").trim().length;
-      if (len < 2) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Título muy corto",
-          path: ["title"],
-        });
-      }
-    }
-  });
+import { SessionType } from "@prisma/client";
+const createSchema = z.object({
+  title: z.string().transform(s => (s ?? "").trim()).min(1, "Título obligatorio"),
+  description: z.string().nullable().optional(),
+  date: z.string().min(1, "Fecha requerida"),
+  type: z.nativeEnum(SessionType).optional(),
+});
 
 /* ---------- GET /api/sessions ---------- */
 /* ?start=YYYY-MM-DD  -> devuelve mapa de la semana (Lun..Dom),
@@ -177,11 +160,10 @@ export async function POST(req: Request) {
     }
 
     const { title, description, date, type } = parsed.data;
-
     const teamId = await getUserTeamIdOrNull(session.user.id);
     const created = await prisma.session.create({
       data: {
-        title: (title ?? "").trim(),
+        title, // ya viene trimmed y validado
         description: description ?? null,
         date: parseISOAsUTC(date),
         type: type ?? "GENERAL",
