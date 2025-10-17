@@ -67,7 +67,10 @@ const sessionSelect = {
 /* ---------- Validación POST ---------- */
 import { SessionType } from "@prisma/client";
 const createSchema = z.object({
-  title: z.string().transform(s => (s ?? "").trim()).min(1, "Título obligatorio"),
+  title: z
+    .string()
+    .transform((s: string) => (s ?? "").trim())
+    .refine((s: string) => s.length > 0, { message: "Título obligatorio" }),
   description: z.string().nullable().optional(),
   date: z.string().min(1, "Fecha requerida"),
   type: z.nativeEnum(SessionType).optional(),

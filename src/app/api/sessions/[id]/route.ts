@@ -25,9 +25,14 @@ const sessionSelect = {
 
 import { SessionType } from "@prisma/client";
 const updateSchema = z.object({
-  title: z.string().transform((s: string) => (s ?? "").trim()).min(1, "Título obligatorio").optional(),
+  // Si viene title: trim y validar non-empty; si no viene, se ignora (optional)
+  title: z
+    .string()
+    .transform((s: string) => (s ?? "").trim())
+    .refine((s: string) => s.length > 0, { message: "Título obligatorio" })
+    .optional(),
   description: z.string().optional().nullable(),
-  date: z.string().optional(),
+  date: z.string().optional(), // ISO
   type: z.nativeEnum(SessionType).optional(),
 });
 
