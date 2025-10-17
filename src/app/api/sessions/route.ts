@@ -84,7 +84,6 @@ export async function GET(req: Request) {
 
     if (start) {
       // Semana para el editor
-      const { user } = await requireAuth();
       const startDate = new Date(`${start}T00:00:00.000Z`);
       if (Number.isNaN(startDate.valueOf())) {
         return NextResponse.json(
@@ -97,10 +96,7 @@ export async function GET(req: Request) {
       const nextMonday = addDaysUTC(monday, 7); // ✅ FIN EXCLUSIVO
 
       const items = await prisma.session.findMany({
-        where: {
-          date: { gte: monday, lt: nextMonday },
-          ...(user?.teamId ? { teamId: user.teamId } : {}),
-        },
+        where: { date: { gte: monday, lt: nextMonday } }, // ✅ lt para incluir DOMINGO entero
         orderBy: [{ date: "asc" }, { createdAt: "asc" }],
         select: sessionSelect,
       });
@@ -124,12 +120,8 @@ export async function GET(req: Request) {
       });
     }
 
-    // Listado para /ct/sessions (filtra por equipo si existe)
-    const { user } = await requireAuth();
+    // Listado para /ct/sessions (no tocar, así como te funciona)
     const sessions = await prisma.session.findMany({
-      where: {
-        ...(user?.teamId ? { teamId: user.teamId } : {}),
-      },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       select: sessionSelect,
       take: 50,
