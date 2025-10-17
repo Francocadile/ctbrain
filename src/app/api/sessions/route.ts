@@ -1,3 +1,22 @@
+function parseISOAsUTC(iso: string): Date {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) throw new Error("Invalid date");
+  // Si el ISO no trae 'Z', interpretamos la hora como UTC para evitar corrimientos por TZ
+  if (iso.endsWith("Z") || iso.toUpperCase().includes("UTC")) return d;
+  return new Date(Date.UTC(
+    d.getFullYear(), d.getMonth(), d.getDate(),
+    d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds()
+  ));
+}
+
+async function getUserTeamIdOrNull(userId: string): Promise<string | null> {
+  const ut = await prisma.userTeam.findFirst({
+    where: { userId },
+    select: { teamId: true },
+    orderBy: { createdAt: "asc" },
+  });
+  return ut?.teamId ?? null;
+}
 // src/app/api/sessions/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -77,10 +96,10 @@ const createSchema = z
    Sin start -> listado de últimas 50 sesiones (para /ct/sessions). */
 export async function GET(req: Request) {
   try {
-    await requireAuth();
-
+    const user = await requireAuth();
     const url = new URL(req.url);
     const start = url.searchParams.get("start");
+    const teamId = await getUserTeamIdOrNull(user.id);
 
     if (start) {
       // Semana para el editor
@@ -96,7 +115,10 @@ export async function GET(req: Request) {
       const nextMonday = addDaysUTC(monday, 7); // ✅ FIN EXCLUSIVO
 
       const items = await prisma.session.findMany({
-        where: { date: { gte: monday, lt: nextMonday } }, // ✅ lt para incluir DOMINGO entero
+        where: {
+          date: { gte: monday, lt: nextMonday },
+          ...(teamId ? { teamId } : {}),
+        },
         orderBy: [{ date: "asc" }, { createdAt: "asc" }],
         select: sessionSelect,
       });
@@ -122,6 +144,9 @@ export async function GET(req: Request) {
 
     // Listado para /ct/sessions (no tocar, así como te funciona)
     const sessions = await prisma.session.findMany({
+      where: {
+        ...(teamId ? { teamId } : {}),
+      },
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       select: sessionSelect,
       take: 50,
@@ -153,17 +178,18 @@ export async function POST(req: Request) {
 
     const { title, description, date, type } = parsed.data;
 
+    const teamId = await getUserTeamIdOrNull(session.user.id);
     const created = await prisma.session.create({
       data: {
-        title: (title ?? "").trim(), // "" permitido si es DAYFLAG
+        title: (title ?? "").trim(),
         description: description ?? null,
-        date: new Date(date),
+        date: parseISOAsUTC(date),
         type: type ?? "GENERAL",
         createdBy: session.user.id,
+        ...(teamId ? { teamId } : {}),
       },
       select: sessionSelect,
     });
-
     return NextResponse.json({ data: created }, { status: 201 });
   } catch (err: any) {
     if (err instanceof Response) return err;
