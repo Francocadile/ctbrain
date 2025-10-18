@@ -8,11 +8,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/**
- * =========================================
- * BASE CTBrain (una sola vez — sin duplicados)
- * =========================================
- */
+// =========================================
+// BASE CTBrain (una sola vez — sin duplicados)
+// =========================================
 
 model User {
   id         String  @id @default(cuid())
@@ -45,7 +43,7 @@ model Team {
   name String
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 
   userTeams UserTeam[]
   invites   Invite[]
@@ -58,9 +56,10 @@ model Team {
   clinicalEntries ClinicalEntry[]
 }
 
-/**
- * Membresía por equipo con rol contextual (usa Role global)
- */
+// =========================================
+// Membresía por equipo con rol contextual
+// =========================================
+
 model UserTeam {
   id     String @id @default(cuid())
   userId String
@@ -73,9 +72,10 @@ model UserTeam {
   @@unique([userId, teamId])
 }
 
-/**
- * Invitaciones administradas por (Super)Admin
- */
+// =========================================
+// Invitaciones administradas por (Super)Admin
+// =========================================
+
 model Invite {
   id          String    @id @default(cuid())
   token       String    @unique
@@ -97,9 +97,10 @@ model Invite {
   @@index([token])
 }
 
-/**
- * Auditoría simple
- */
+// =========================================
+// Auditoría simple
+// =========================================
+
 model AuditLog {
   id         String   @id @default(cuid())
   actorId    String?
@@ -115,11 +116,9 @@ model AuditLog {
   @@index([createdAt])
 }
 
-/**
- * =========================================
- * MODELOS DE DOMINIO (tus módulos existentes)
- * =========================================
- */
+// =========================================
+// MODELOS DE DOMINIO (tus módulos existentes)
+// =========================================
 
 model Session {
   id          String      @id @default(cuid())
@@ -129,7 +128,7 @@ model Session {
   type        SessionType @default(GENERAL)
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 
   createdBy String
   user      User   @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
@@ -285,9 +284,7 @@ model PlannerPrefs {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-/**
- * ======= Clínico =======
- */
+// ======= Clínico =======
 
 model ClinicalEntry {
   id String @id @default(cuid())
@@ -320,7 +317,7 @@ model ClinicalEntry {
   startDate            DateTime?
   daysPlanned          Int?
   expectedReturn       DateTime?
-  expectedReturnManual Boolean?  @default(false)
+  expectedReturnManual Boolean   @default(false)
 
   capMinutes          Int?
   noSprint            Boolean @default(false)
@@ -348,9 +345,7 @@ model ClinicalEntry {
   @@index([teamId])
 }
 
-/**
- * ======= Scouting =======
- */
+// ======= Scouting =======
 
 enum ScoutingStatus {
   ACTIVO
@@ -405,11 +400,9 @@ model ScoutingPlayer {
   @@index([fullName])
 }
 
-/**
- * =========================================
- * ENUMS
- * =========================================
- */
+// =========================================
+// ENUMS
+// =========================================
 
 enum Role {
   SUPERADMIN
@@ -420,9 +413,6 @@ enum Role {
   DIRECTIVO
 }
 
-/**
- * Unimos ambos sets que tenías
- */
 enum SessionType {
   GENERAL
   PARTIDO
@@ -435,9 +425,7 @@ enum SessionType {
   OTRO
 }
 
-/**
- * Clínico
- */
+// Clínico
 enum ClinicalStatus {
   BAJA
   REINTEGRO

@@ -1,10 +1,9 @@
 // src/lib/auth.ts
 import type { NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { PrismaClient } from "@prisma/client";
 
-// Prisma: una sola instancia global
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
+import { compare } from "bcryptjs";
 
 /**
  * CTB-BASE-12 | FASE 1
@@ -22,46 +21,51 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" }, // mostrado pero NO validado en Fase 1
       },
       async authorize(creds) {
-        const email = creds?.email?.toString().trim().toLowerCase();
+        const email = creds?.email?.toLowerCase().trim();
+        const password = creds?.password || "";
         if (!email) return null;
 
-        // FASE 1: login simple por existencia de email (sin validar password)
-        const user = await prisma.user.findUnique({
-          where: { email },
-          select: { id: true, email: true, name: true, role: true, isApproved: true },
-        });
+        const user = await prisma.user.findUnique({ where: { email } });
         if (!user) return null;
+
+        // Si hay password hasheada en DB, verificamos
+        if (user.password) {
+          const ok = await compare(password, user.password);
+          if (!ok) return null;
+        } else {
+          // Si no hay password seteada, admitimos login solo si password viene vacío
+          if (password) return null;
+        }
 
         return {
           id: user.id,
+          name: user.name,
           email: user.email,
-          name: user.name ?? user.email,
           role: user.role,
           isApproved: user.isApproved,
-        } as any;
+        };
       },
     }),
   ],
   pages: { signIn: "/login" },
   callbacks: {
     async jwt({ token, user }) {
-      // En el primer login, copiamos campos desde "user" (lo que retorna authorize)
+      // user solo existe en el primer login
       if (user) {
         const u = user as any;
+        (token as any).id = u.id;
         (token as any).role = u.role;
         (token as any).isApproved = u.isApproved;
 
-        // teamId por defecto: si el usuario aprobado pertenece a 1 solo equipo
         try {
-          const userId = u.id as string;
           const memberships = await prisma.userTeam.findMany({
-            where: { userId },
+            where: { userId: u.id as string },
             select: { teamId: true },
           });
           if (u.isApproved === true && memberships.length === 1) {
             (token as any).teamId = memberships[0].teamId;
           } else {
-            (token as any).teamId = undefined; // el front deberá elegir (selector de equipo)
+            (token as any).teamId = undefined;
           }
         } catch {
           (token as any).teamId = undefined;
@@ -70,11 +74,8 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
-      if (session.user && token) {
-        // id (NextAuth guarda el id en token.sub)
-        (session.user as any).id = (token.sub as string) ?? (session.user as any).id;
-
-        // role, isApproved, teamId desde el token
+      if (session.user) {
+        (session.user as any).id = (token as any).id;
         (session.user as any).role = (token as any).role;
         (session.user as any).isApproved = (token as any).isApproved;
         (session.user as any).teamId = (token as any).teamId;
