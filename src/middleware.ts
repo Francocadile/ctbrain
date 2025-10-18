@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
 
 // Rutas públicas (no pedir sesión)
 const PUBLIC = [
@@ -17,6 +20,8 @@ const PUBLIC = [
 
 // Guard CT / API CT
 const CT_PATHS = [
+    /^\/api\/admin(?:\/|$)/,     // ← API de admin PROTEGIDA
+    /^\/admin(?:\/|$)/,
   /^\/ct(?:\/|$)/,
   /^\/api\/ct(?:\/|$)/,
   /^\/api\/sessions(?:\/|$)/,
@@ -25,6 +30,7 @@ const CT_PATHS = [
 
 // Guard Médico / API Médico
 const MED_PATHS = [
+    /^\/api\/admin(?:\/|$)/,
   /^\/medico(?:\/|$)/,
   /^\/api\/medico(?:\/|$)/,
 ];
@@ -66,6 +72,7 @@ export async function middleware(req: NextRequest) {
   // Si no matchea nada, dejar pasar
   if (!needsCT && !needsMED) {
     return NextResponse.next();
+    const needsADM = matchAny(pathname, ADMIN_PATHS);
   }
 
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
@@ -124,6 +131,15 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
+    // Guard Admin
+    if (needsADM) {
+      const allowed = role === "ADMIN" || role === "SUPERADMIN"; // SUPERADMIN futuro
+      if (!allowed) {
+        const url = req.nextUrl.clone();
+        url.pathname = roleHome(role);
+        return NextResponse.redirect(url);
+      }
+    }
   matcher: [
     // Home y login quedan públicos; protegemos resto
     "/ct/:path*",

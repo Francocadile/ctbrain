@@ -3,12 +3,14 @@ import type { NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaClient } from "@prisma/client";
 
+// Prisma: una sola instancia global
 const prisma = new PrismaClient();
 
 /**
  * CTB-BASE-12 | FASE 1
- * - authorize simple: solo valida que el email exista (sin hash)
- * - callbacks jwt/session: inyectan id, role, isApproved en la sesión
+ * - authorize simple: valida que el email exista (sin hash)
+ * - callbacks jwt/session: inyectan id, role, isApproved y teamId (si único equipo)
+ * - no se crean nuevos PrismaClient dentro de callbacks
  */
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
@@ -17,19 +19,18 @@ export const authOptions: NextAuthOptions = {
       name: "credentials",
       credentials: {
         email: { label: "Email", type: "text" },
-        password: { label: "Password", type: "password" },
+        password: { label: "Password", type: "password" }, // mostrado pero NO validado en Fase 1
       },
       async authorize(creds) {
-        const email = (creds?.email || "").trim().toLowerCase();
-        const password = (creds?.password || "").trim();
-        if (!email || !password) return null;
+        const email = creds?.email?.toString().trim().toLowerCase();
+        if (!email) return null;
 
-        const user = await prisma.user.findUnique({ where: { email } });
-        if (!user || !user.password) return null;
-
-        const bcrypt = await import("bcryptjs");
-        const isValid = await bcrypt.compare(password, user.password);
-        if (!isValid) return null;
+        // FASE 1: login simple por existencia de email (sin validar password)
+        const user = await prisma.user.findUnique({
+          where: { email },
+          select: { id: true, email: true, name: true, role: true, isApproved: true },
+        });
+        if (!user) return null;
 
         return {
           id: user.id,
@@ -43,46 +44,41 @@ export const authOptions: NextAuthOptions = {
   ],
   pages: { signIn: "/login" },
   callbacks: {
-    // Guarda role/isApproved/teamId en el token JWT
     async jwt({ token, user }) {
+      // En el primer login, copiamos campos desde "user" (lo que retorna authorize)
       if (user) {
-        // @ts-ignore
-        token.role = (user as any).role;
-        // @ts-ignore
-        token.isApproved = (user as any).isApproved;
+        const u = user as any;
+        (token as any).role = u.role;
+        (token as any).isApproved = u.isApproved;
 
-        // Buscar teamId del modelo UserTeam donde el usuario esté aprobado
-        const prisma = new PrismaClient();
-        const userTeams = await prisma.userTeam.findMany({
-          where: { userId: user.id },
-          select: { teamId: true, user: { select: { isApproved: true } } },
-        });
-        const approvedTeams = userTeams.filter(ut => ut.user.isApproved);
-        if (approvedTeams.length === 1) {
-          // Un solo equipo aprobado: usar ese
-          // @ts-ignore
-          token.teamId = approvedTeams[0].teamId;
-        } else {
-          // Varios equipos aprobados o ninguno: dejar vacío para que el frontend elija
-          // @ts-ignore
-          token.teamId = null;
+        // teamId por defecto: si el usuario aprobado pertenece a 1 solo equipo
+        try {
+          const userId = u.id as string;
+          const memberships = await prisma.userTeam.findMany({
+            where: { userId },
+            select: { teamId: true },
+          });
+          if (u.isApproved === true && memberships.length === 1) {
+            (token as any).teamId = memberships[0].teamId;
+          } else {
+            (token as any).teamId = undefined; // el front deberá elegir (selector de equipo)
+          }
+        } catch {
+          (token as any).teamId = undefined;
         }
       }
       return token;
     },
-
-    // Restaura id/role/isApproved/teamId en session.user para tu app
     async session({ session, token }) {
-      // @ts-ignore
-      session.user = session.user || {};
-      // @ts-ignore
-      session.user.id = token.sub as string;
-      // @ts-ignore
-      session.user.role = (token as any).role;
-      // @ts-ignore
-      session.user.isApproved = (token as any).isApproved;
-      // @ts-ignore
-      session.user.teamId = (token as any).teamId ?? null;
+      if (session.user && token) {
+        // id (NextAuth guarda el id en token.sub)
+        (session.user as any).id = (token.sub as string) ?? (session.user as any).id;
+
+        // role, isApproved, teamId desde el token
+        (session.user as any).role = (token as any).role;
+        (session.user as any).isApproved = (token as any).isApproved;
+        (session.user as any).teamId = (token as any).teamId;
+      }
       return session;
     },
   },
