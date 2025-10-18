@@ -1,4 +1,202 @@
 // src/middleware.ts
+import { getToken } from "next-auth/jwt";
+
+/**
+ * CTB-BASE-12 — Middleware de seguridad por grupos de rutas.
+ */
+
+const PUBLIC = [
+  /^\/$/,
+  /^\/login(?:\/|$)/,
+  /^\/signup(?:\/|$)/,
+  /^\/pending-approval(?:\/|$)/,
+  /^\/redirect(?:\/|$)/,
+  /^\/api\/auth(?:\/|$)/,
+  /^\/api\/users(?:\/|$)/, // solo POST
+  /^\/_next\/static(?:\/|$)/,
+  /^\/favicon\.ico$/,
+];
+
+const CT_PATHS = [
+  /^\/ct(?:\/|$)/,
+  /^\/api\/ct(?:\/|$)/,
+  /^\/api\/sessions(?:\/|$)/,
+  /^\/api\/planner(?:\/|$)/,
+  /^\/api\/exercises-flat(?:\/|$)/,
+  /^\/api\/metrics(?:\/|$)/,
+  /^\/api\/export(?:\/|$)/,
+  /^\/api\/players(?:\/|$)/,
+  /^\/api\/search(?:\/|$)/,
+];
+
+const MED_PATHS = [/^\/medico(?:\/|$)/, /^\/api\/medico(?:\/|$)/];
+const DIRECTIVO_PATHS = [/^\/directivo(?:\/|$)/, /^\/api\/directivo(?:\/|$)/];
+const ADMIN_PATHS = [/^\/admin(?:\/|$)/, /^\/api\/admin(?:\/|$)/];
+
+function matchAny(pathname: string, patterns: RegExp[]) {
+  return patterns.some((r) => r.test(pathname));
+}
+function isApi(pathname: string) {
+  return pathname.startsWith("/api/");
+}
+function roleHome(role?: string) {
+  switch (role) {
+    case "ADMIN":
+      return "/admin";
+    case "CT":
+      return "/ct";
+    case "MEDICO":
+      return "/medico";
+    case "JUGADOR":
+      return "/jugador";
+    case "DIRECTIVO":
+      return "/directivo";
+    default:
+      return "/login";
+  }
+}
+function isClinicalReadForCT(pathname: string, method: string) {
+  return method === "GET" && /^\/api\/medico\/clinical(?:\/|$)/.test(pathname);
+}
+
+export async function middleware(req: any) {
+  // ⬇️ importamos NextResponse aquí para evitar duplicados de identificadores
+  const { NextResponse } = await import("next/server");
+
+  const url = new URL(req.url);
+  const pathname = url.pathname;
+  const api = isApi(pathname);
+
+  // Rutas públicas (con control de método en /api/users)
+  if (matchAny(pathname, PUBLIC)) {
+    if (/^\/api\/users(?:\/|$)/.test(pathname) && req.method !== "POST") {
+      return new NextResponse(JSON.stringify({ error: "Method Not Allowed" }), {
+        status: 405,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    return NextResponse.next();
+  }
+
+  // ¿Qué grupo aplica?
+  const needsCT = matchAny(pathname, CT_PATHS);
+  const needsMED = matchAny(pathname, MED_PATHS);
+  const needsDIR = matchAny(pathname, DIRECTIVO_PATHS);
+  const needsADM = matchAny(pathname, ADMIN_PATHS);
+
+  if (!needsCT && !needsMED && !needsDIR && !needsADM) {
+    return NextResponse.next();
+  }
+
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+
+  if (!token) {
+    if (api) {
+      return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    const login = new URL("/login", url.origin);
+    login.searchParams.set("callbackUrl", pathname);
+    return NextResponse.redirect(login);
+  }
+
+  const role = (token as any).role as string | undefined;
+  const isApproved = (token as any).isApproved as boolean | undefined;
+
+  // Gate global: pendiente de aprobación (no admin)
+  if (role !== "ADMIN" && isApproved === false) {
+    if (api) {
+      return new NextResponse(
+        JSON.stringify({ error: "Forbidden", pendingApproval: true }),
+        { status: 403, headers: { "content-type": "application/json" } }
+      );
+    }
+    return NextResponse.redirect(new URL("/pending-approval", url.origin));
+  }
+
+  // ADMIN
+  if (needsADM) {
+    const allowed = role === "ADMIN" || role === "SUPERADMIN";
+    if (!allowed) {
+      if (api) {
+        return new NextResponse(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return NextResponse.redirect(new URL(roleHome(role), url.origin));
+    }
+  }
+
+  // CT
+  if (needsCT) {
+    const allowed = role === "CT" || role === "ADMIN";
+    if (!allowed) {
+      if (api) {
+        return new NextResponse(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return NextResponse.redirect(new URL(roleHome(role), url.origin));
+    }
+  }
+
+  // MÉDICO (+ excepción lectura para CT)
+  if (needsMED) {
+    const allowCTReadOnly = role === "CT" && isClinicalReadForCT(pathname, req.method);
+    const allowed = role === "MEDICO" || role === "ADMIN" || allowCTReadOnly;
+    if (!allowed) {
+      if (api) {
+        return new NextResponse(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return NextResponse.redirect(new URL(roleHome(role), url.origin));
+    }
+  }
+
+  // DIRECTIVO
+  if (needsDIR) {
+    const allowed = role === "DIRECTIVO" || role === "ADMIN";
+    if (!allowed) {
+      if (api) {
+        return new NextResponse(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return NextResponse.redirect(new URL(roleHome(role), url.origin));
+    }
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: [
+    "/api/users/:path*",
+    "/ct/:path*",
+    "/api/ct/:path*",
+    "/api/sessions/:path*",
+    "/api/planner/:path*",
+    "/api/exercises-flat/:path*",
+    "/api/metrics/:path*",
+    "/api/export/:path*",
+    "/api/players/:path*",
+    "/api/search/:path*",
+    "/medico/:path*",
+    "/api/medico/:path*",
+    "/directivo/:path*",
+    "/api/directivo/:path*",
+    "/admin/:path*",
+    "/api/admin/:path*",
+  ],
+};
+// src/middleware.ts
 import { getToken as getNextAuthToken } from "next-auth/jwt";
 
 /**
