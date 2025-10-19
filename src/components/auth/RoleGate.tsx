@@ -3,7 +3,7 @@ import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 
-type Role = "SUPERADMIN" | "ADMIN" | "CT" | "MEDICO" | "JUGADOR" | "DIRECTIVO";
+export type Role = "SUPERADMIN" | "ADMIN" | "CT" | "MEDICO" | "JUGADOR" | "DIRECTIVO";
 
 export default async function RoleGate({
   allow,
@@ -13,10 +13,12 @@ export default async function RoleGate({
   children: React.ReactNode;
 }) {
   const session = await getServerSession(authOptions);
-  const role = session?.user?.role as Role | undefined;
+  const role = (session?.user as any)?.role as Role | undefined;
 
   if (!session) redirect("/login");
-  if (!role || !allow.includes(role)) {
+  if (!role) redirect("/login");
+
+  if (!allow.includes(role)) {
     const map: Record<Role, string> = {
       SUPERADMIN: "/admin/superadmin",
       ADMIN: "/admin",
@@ -25,7 +27,7 @@ export default async function RoleGate({
       JUGADOR: "/jugador",
       DIRECTIVO: "/directivo",
     };
-    redirect(role ? map[role] : "/login");
+    redirect(map[role]);
   }
 
   return <>{children}</>;
