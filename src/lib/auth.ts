@@ -14,8 +14,8 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(creds) {
-        const email = creds?.email?.toLowerCase().trim();
-        const password = creds?.password ?? "";
+        const email = creds.email?.toLowerCase().trim();
+        const password = creds.password || "";
         if (!email || !password) return null;
 
         const user = await prisma.user.findUnique({ where: { email } });
@@ -24,12 +24,9 @@ export const authOptions: NextAuthOptions = {
         const ok = await compare(password, user.password);
         if (!ok) return null;
 
-        // Opcional: si quisieras bloquear no aprobados (excepto superadmin)
-        // if (!user.isApproved && user.role !== "SUPERADMIN") return null;
-
         return {
           id: user.id,
-          name: user.name ?? undefined,
+          name: user.name,
           email: user.email,
           role: user.role,
           isApproved: user.isApproved,
@@ -44,7 +41,6 @@ export const authOptions: NextAuthOptions = {
         const u = user as any;
         (token as any).role = u.role;
         (token as any).isApproved = u.isApproved;
-
         try {
           const memberships = await prisma.userTeam.findMany({
             where: { userId: u.id as string },
@@ -61,7 +57,7 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
-      if (session.user) {
+      if (session.user && token) {
         (session.user as any).role = (token as any).role;
         (session.user as any).isApproved = (token as any).isApproved;
         (session.user as any).teamId = (token as any).teamId;

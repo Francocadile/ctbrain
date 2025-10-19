@@ -55,9 +55,9 @@ export async function middleware(req: NextRequest) {
   const isAPI = pathname.startsWith("/api");
 
   // Públicos -> dejar pasar
-  if (matchAny(pathname, PUBLIC)) {
-    return NextResponse.next();
-  }
+    if (pathname.startsWith("/login") || pathname.startsWith("/api/auth") || matchAny(pathname, PUBLIC)) {
+      return NextResponse.next();
+    }
 
   // ¿Qué guard aplica?
   const needsCT = matchAny(pathname, CT_PATHS);
