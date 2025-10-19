@@ -4,8 +4,8 @@ import RoleGate from "@/components/auth/RoleGate";
 export default async function AdminPage() {
   return (
     <RoleGate allow={["ADMIN", "SUPERADMIN"]}>
-      <main className="min-h-[60vh] px-6 py-10">
-        <h1 className="text-2xl font-bold">Panel — Admin</h1>
+      <main className="min-h-[60vh] p-6">
+        <h1 className="text-2xl font-bold mb-4">Panel de administración</h1>
         <p className="mt-2 text-sm text-gray-600">
           Solo usuarios con rol <b>ADMIN</b> o <b>SUPERADMIN</b> pueden ver esta
           página.

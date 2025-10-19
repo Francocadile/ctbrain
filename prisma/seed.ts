@@ -1,22 +1,24 @@
 // prisma/seed.ts
-import { prisma } from "@/lib/prisma"; // si preferís, reemplazá por new PrismaClient() sólo en el seed
-import { Role } from "@prisma/client";
+import { PrismaClient, Role } from "@prisma/client";
 import { hash } from "bcryptjs";
 
-// Si preferís evitar path alias en el seed, usá:
-// import { PrismaClient, Role } from "@prisma/client";
-// const prisma = new PrismaClient();
+const prisma = new PrismaClient();
 
 async function seedSuperAdmin() {
   const name = process.env.SEED_SUPERADMIN_NAME || "Super Admin";
-  const email = process.env.SEED_SUPERADMIN_EMAIL || "superadmin@ctbrain.local";
-  const password = process.env.SEED_SUPERADMIN_PASSWORD || "superadmin123";
+  const email = process.env.SEED_SUPERADMIN_EMAIL || "superadmin@ctbrain.app";
+  const password = process.env.SEED_SUPERADMIN_PASSWORD || "ChangeMeNow!2025";
 
   const passwordHash = await hash(password, 10);
 
   const superadmin = await prisma.user.upsert({
     where: { email },
-    update: { role: Role.SUPERADMIN, isApproved: true },
+    update: {
+      role: Role.SUPERADMIN,
+      isApproved: true,
+      password: passwordHash,
+      name,
+    },
     create: {
       name,
       email,
@@ -26,7 +28,10 @@ async function seedSuperAdmin() {
     },
   });
 
-  console.log("✅ SUPERADMIN listo:", { email: superadmin.email, role: superadmin.role });
+  console.log("✅ SUPERADMIN listo:", {
+    email: superadmin.email,
+    role: superadmin.role,
+  });
 }
 
 async function main() {
@@ -35,7 +40,9 @@ async function main() {
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error("❌ Seed error:", e);
     process.exit(1);
   })
-  .finally(async () => prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

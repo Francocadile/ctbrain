@@ -1,15 +1,9 @@
 // src/lib/auth.ts
 import type { NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { compare } from "bcryptjs";
 
-const prisma = new PrismaClient();
-
-/**
- * CTB-BASE-12 | FASE 1
- * - authorize simple: solo valida que el email exista (sin hash)
- * - callbacks jwt/session: inyectan id, role, isApproved en la sesión
- */
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
   providers: [
@@ -20,71 +14,58 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(creds) {
-        const email = (creds?.email || "").trim().toLowerCase();
-        const password = (creds?.password || "").trim();
+        const email = creds?.email?.toLowerCase().trim();
+        const password = creds?.password ?? "";
         if (!email || !password) return null;
 
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user || !user.password) return null;
 
-        const bcrypt = await import("bcryptjs");
-        const isValid = await bcrypt.compare(password, user.password);
-        if (!isValid) return null;
+        const ok = await compare(password, user.password);
+        if (!ok) return null;
+
+        // Opcional: si quisieras bloquear no aprobados (excepto superadmin)
+        // if (!user.isApproved && user.role !== "SUPERADMIN") return null;
 
         return {
           id: user.id,
+          name: user.name ?? undefined,
           email: user.email,
-          name: user.name ?? user.email,
           role: user.role,
           isApproved: user.isApproved,
-        } as any;
+        };
       },
     }),
   ],
   pages: { signIn: "/login" },
   callbacks: {
-    // Guarda role/isApproved/teamId en el token JWT
-      async jwt({ token, user }) {
-        if (user) {
-          // @ts-ignore
-          token.role = (user as any).role;
-          // @ts-ignore
-          token.isApproved = (user as any).isApproved;
+    async jwt({ token, user }) {
+      if (user) {
+        const u = user as any;
+        (token as any).role = u.role;
+        (token as any).isApproved = u.isApproved;
 
-          // Buscar teamId del modelo UserTeam donde el usuario esté aprobado
-          try {
-            const userId = (user as any).id as string;
-            const memberships = await prisma.userTeam.findMany({
-              where: { userId },
-              select: { teamId: true },
-            });
-            if ((user as any).isApproved === true && memberships.length === 1) {
-              // @ts-ignore
-              token.teamId = memberships[0].teamId;
-            } else {
-              // @ts-ignore
-              token.teamId = undefined;
-            }
-          } catch {
-            // @ts-ignore
-            token.teamId = undefined;
-          }
+        try {
+          const memberships = await prisma.userTeam.findMany({
+            where: { userId: u.id as string },
+            select: { teamId: true },
+          });
+          (token as any).teamId =
+            u.isApproved === true && memberships.length === 1
+              ? memberships[0].teamId
+              : undefined;
+        } catch {
+          (token as any).teamId = undefined;
         }
-        return token;
+      }
+      return token;
     },
-
-    // Restaura id/role/isApproved/teamId en session.user para tu app
     async session({ session, token }) {
-      // @ts-ignore
-      session.user = session.user || {};
-      // @ts-ignore
-      session.user.id = token.sub as string;
-      // @ts-ignore
-      session.user.role = (token as any).role;
-      // @ts-ignore
-      session.user.isApproved = (token as any).isApproved;
-      // @ts-ignore
-      session.user.teamId = (token as any).teamId ?? null;
+      if (session.user) {
+        (session.user as any).role = (token as any).role;
+        (session.user as any).isApproved = (token as any).isApproved;
+        (session.user as any).teamId = (token as any).teamId;
+      }
       return session;
     },
   },
