@@ -1,3 +1,38 @@
+"use client";
+
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+
+export default function RoleGate({
+  allow,
+  children,
+}: {
+  allow: string[] | string;
+  children: React.ReactNode;
+}) {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const allowed = Array.isArray(allow) ? allow : [allow];
+
+  useEffect(() => {
+    if (status === "loading") return;
+    const role = (session?.user as any)?.role;
+
+    if (!role) {
+      router.push("/login");
+      return;
+    }
+    // SUPERADMIN siempre pasa
+    if (role === "SUPERADMIN") return;
+
+    if (!allowed.includes(role)) {
+      router.push("/");
+    }
+  }, [status, session, router]);
+
+  return <>{children}</>;
+}
 // src/components/auth/RoleGate.tsx
 import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
