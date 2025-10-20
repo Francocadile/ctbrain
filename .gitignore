@@ -1,0 +1,15 @@
+# deps
+node_modules/
+# Next/Vercel
+.next/
+out/
+.vercel/
+# env
+.env
+.env.*
+!.env.example
+# SO / caches / logs
+.DS_Store
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
