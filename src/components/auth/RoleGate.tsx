@@ -3,7 +3,7 @@ import { authOptions } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 
-type Role = "SUPERADMIN" | "ADMIN" | "CT" | "MEDICO" | "JUGADOR" | "DIRECTIVO";
+type Role = "ADMIN" | "CT" | "MEDICO" | "JUGADOR" | "DIRECTIVO";
 
 export default async function RoleGate({
   allow,
@@ -17,14 +17,13 @@ export default async function RoleGate({
 
   if (!session) redirect("/login");
   if (!role || !allow.includes(role)) {
-    const map: Record<Exclude<Role, "SUPERADMIN">, string> = {
+    const map: Record<Role, string> = {
       ADMIN: "/admin",
       CT: "/ct",
-      MEDICO: "/medico",
+      MEDICO: "/medico",   // ← back al mapping original
       JUGADOR: "/jugador",
       DIRECTIVO: "/directivo",
     };
-    if (role === "SUPERADMIN") redirect("/admin/superadmin");
     redirect(role ? map[role] : "/login");
   }
 

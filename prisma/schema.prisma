@@ -1,3 +1,24 @@
+// ========= User-Team vinculación =========
+
+enum UserTeamRole {
+  ADMIN
+  COACH
+  ATHLETE
+}
+
+model UserTeam {
+  id        String        @id @default(cuid())
+  userId    String
+  teamId    String
+  role      UserTeamRole
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @default(now())
+
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team      Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+}
 // prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
@@ -8,404 +29,8 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// =========================================
-// BASE CTBrain (una sola vez — sin duplicados)
-// =========================================
-
-model User {
-  id         String  @id @default(cuid())
-  email      String  @unique
-  name       String?
-  password   String?
-  role       Role    @default(JUGADOR)
-  isApproved Boolean @default(false)
-  teamId     String? // compat (multi-team real via UserTeam)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // relaciones que ya usás
-  sessions        Session[]       @relation("UserSessions")
-  rpeEntries      RPEEntry[]
-  wellnessEntries WellnessEntry[]
-  plannerPrefs    PlannerPrefs?
-  exercises       Exercise[]
-  clinicalEntries ClinicalEntry[]
-  userTeams       UserTeam[]
-
-  // pack superadmin
-  invites   Invite[]   @relation("InviteCreatedBy")
-  auditLogs AuditLog[] @relation("AuditActor")
-}
-
-model Team {
-  id   String @id @default(cuid())
-  name String
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-
-  userTeams UserTeam[]
-  invites   Invite[]
-
-  sessions        Session[]
-  rivals          Rival[]
-  exercises       Exercise[]
-  rpeEntries      RPEEntry[]
-  wellnessEntries WellnessEntry[]
-  clinicalEntries ClinicalEntry[]
-}
-
-// =========================================
-// Membresía por equipo con rol contextual
-// =========================================
-
-model UserTeam {
-  id     String @id @default(cuid())
-  userId String
-  teamId String
-  role   Role
-
-  user User @relation(fields: [userId], references: [id])
-  team Team @relation(fields: [teamId], references: [id])
-
-  @@unique([userId, teamId])
-}
-
-// =========================================
-// Invitaciones administradas por (Super)Admin
-// =========================================
-
-model Invite {
-  id          String    @id @default(cuid())
-  token       String    @unique
-  createdById String
-  teamId      String?
-  role        Role?
-  autoApprove Boolean   @default(true)
-  maxUses     Int       @default(1)
-  uses        Int       @default(0)
-  expiresAt   DateTime?
-  revoked     Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-
-  createdBy User  @relation("InviteCreatedBy", fields: [createdById], references: [id])
-  team      Team? @relation(fields: [teamId], references: [id])
-
-  @@index([teamId])
-  @@index([createdById])
-  @@index([token])
-}
-
-// =========================================
-// Auditoría simple
-// =========================================
-
-model AuditLog {
-  id         String   @id @default(cuid())
-  actorId    String?
-  action     String
-  entityType String?
-  entityId   String?
-  meta       Json?
-  createdAt  DateTime @default(now())
-
-  actor User? @relation("AuditActor", fields: [actorId], references: [id])
-
-  @@index([actorId])
-  @@index([createdAt])
-}
-
-// =========================================
-// MODELOS DE DOMINIO (tus módulos existentes)
-// =========================================
-
-model Session {
-  id          String      @id @default(cuid())
-  title       String
-  description String?
-  date        DateTime
-  type        SessionType @default(GENERAL)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-
-  createdBy String
-  user      User   @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
-
-  teamId String?
-  team   Team?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
-
-  @@index([date])
-  @@index([type])
-  @@index([createdBy])
-  @@index([teamId])
-}
-
-model Rival {
-  id      String  @id @default(cuid())
-  name    String  @unique
-  logoUrl String?
-
-  coach                String?
-  baseSystem           String?
-  nextMatchDate        DateTime?
-  nextMatchCompetition String?
-
-  planCharlaUrl  String?
-  planReport     Json?   @default("{}")
-  planVideos     Json?   @default("[]")
-  planStats      Json?   @default("{}")
-  planNotes      Json?   @default("{}")
-  planVisibility Json?   @default("{}")
-  planSquad      Json?   @default("[]")
-
-  teamId String?
-  team   Team?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-
-  @@index([nextMatchDate])
-  @@index([teamId])
-}
-
-model Place {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-}
-
-model ExerciseKind {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-
-  exercises Exercise[]
-}
-
-model Exercise {
-  id String @id @default(cuid())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  teamId String?
-  team   Team?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
-
-  title  String
-  kindId String?
-  kind   ExerciseKind? @relation(fields: [kindId], references: [id], onDelete: SetNull)
-
-  space       String?
-  players     String?
-  duration    String?
-  description String?
-  imageUrl    String?
-
-  tags String[] @default([])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-
-  @@index([userId, createdAt])
-  @@index([userId, title])
-  @@index([kindId])
-  @@index([teamId])
-}
-
-model RPEEntry {
-  id String @id @default(cuid())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  teamId String?
-  team   Team?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
-
-  date         DateTime
-  session      Int      @default(1)
-  sessionLabel String?
-  sessionUid   String?
-
-  rpe      Int
-  duration Int?
-  load     Int?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-
-  @@unique([userId, date, session], name: "userId_date_session")
-  @@index([date])
-  @@index([userId, date, session])
-  @@index([date, session])
-  @@index([sessionUid])
-  @@index([teamId])
-}
-
-model WellnessEntry {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  teamId String?
-  team   Team?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
-
-  date DateTime
-
-  sleepQuality   Int
-  sleepHours     Float?
-  fatigue        Int
-  muscleSoreness Int
-  stress         Int
-  mood           Int
-  comment        String?
-  total          Int?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-
-  @@unique([userId, date], name: "userId_date")
-  @@index([date])
-  @@index([userId, date])
-  @@index([teamId])
-}
-
-model PlannerPrefs {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  rowLabels Json     @default("{}")
-  places    Json     @default("[]")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-// ======= Clínico =======
-
-model ClinicalEntry {
-  id String @id @default(cuid())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  teamId String?
-  team   Team?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
-
-  date   DateTime
-  status ClinicalStatus
-
-  leaveStage LeaveStage?
-  leaveKind  LeaveKind?
-
-  diagnosis  String?
-  bodyPart   String?
-  laterality Laterality?
-  mechanism  Mechanism?
-  severity   Severity?
-
-  illSystem        SystemAffected?
-  illSymptoms      String?
-  illContagious    Boolean?
-  illIsolationDays Int?
-  illAptitude      IllAptitude?
-  feverMax         Float?
-
-  startDate            DateTime?
-  daysPlanned          Int?
-  expectedReturn       DateTime?
-  expectedReturnManual Boolean   @default(false)
-
-  capMinutes          Int?
-  noSprint            Boolean @default(false)
-  noChangeOfDirection Boolean @default(false)
-  gymOnly             Boolean @default(false)
-  noContact           Boolean @default(false)
-
-  notes        String?
-  medSignature String?
-
-  protocolObjectives String?
-  protocolTasks      String?
-  protocolControls   String?
-  protocolCriteria   String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-
-  @@unique([userId, date], name: "userId_date")
-  @@index([date])
-  @@index([status, date])
-  @@index([leaveKind])
-  @@index([bodyPart])
-  @@index([userId, date])
-  @@index([teamId])
-}
-
-// ======= Scouting =======
-
-enum ScoutingStatus {
-  ACTIVO
-  WATCHLIST
-  DESCARTADO
-}
-
-model ScoutingCategory {
-  id     String  @id @default(cuid())
-  nombre String
-  slug   String  @unique
-  orden  Int     @default(0)
-  color  String?
-  activa Boolean @default(true)
-
-  players ScoutingPlayer[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-
-  @@unique([nombre])
-  @@index([orden])
-}
-
-model ScoutingPlayer {
-  id        String         @id @default(cuid())
-  fullName  String
-  positions String[]       @default([])
-  club      String?
-  estado    ScoutingStatus @default(ACTIVO)
-
-  categoriaId String?
-  categoria   ScoutingCategory? @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
-
-  agentName   String?
-  agentPhone  String?
-  agentEmail  String?
-  playerPhone String?
-  playerEmail String?
-  instagram   String?
-
-  videos String[] @default([])
-  notes  String?
-  rating Int?
-  tags   String[] @default([])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now())
-
-  @@index([categoriaId])
-  @@index([estado])
-  @@index([fullName])
-}
-
-// =========================================
-// ENUMS
-// =========================================
-
+// ========= Enums base =========
 enum Role {
-  SUPERADMIN
   ADMIN
   CT
   MEDICO
@@ -415,17 +40,13 @@ enum Role {
 
 enum SessionType {
   GENERAL
-  PARTIDO
-  ENTRENAMIENTO
-  REUNION
   FUERZA
   TACTICA
   AEROBICO
   RECUPERACION
-  OTRO
 }
 
-// Clínico
+// ========= Enums clínicos =========
 enum ClinicalStatus {
   BAJA
   REINTEGRO
@@ -480,4 +101,321 @@ enum IllAptitude {
   AEROBICO_SUAVE
   CHARLAS_TACTICO
   NINGUNO
+}
+
+// ========= Modelos existentes =========
+model User {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  name       String?
+  password   String?
+  role       Role     @default(JUGADOR)
+
+  isApproved Boolean  @default(false)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  sessions        Session[]      @relation("UserSessions")
+  rpeEntries      RPEEntry[]
+  wellnessEntries WellnessEntry[]
+  plannerPrefs    PlannerPrefs?
+  exercises       Exercise[]
+  clinicalEntries ClinicalEntry[]
+  userTeams       UserTeam[]
+}
+
+model Session {
+  id          String      @id @default(cuid())
+  title       String
+  description String?
+  date        DateTime
+  type        SessionType @default(GENERAL)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  createdBy   String
+  user        User        @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
+
+  teamId      String?
+  team        Team?      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([date])
+  @@index([type])
+  @@index([createdBy])
+  @@index([teamId])
+}
+
+model Rival {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  logoUrl  String?
+
+  coach                 String?
+  baseSystem            String?
+  nextMatchDate         DateTime?
+  nextMatchCompetition  String?
+
+  planCharlaUrl   String?
+  planReport      Json?   @default("{}")
+  planVideos      Json?   @default("[]")
+  planStats       Json?   @default("{}")
+  planNotes       Json?   @default("{}")
+  planVisibility  Json?   @default("{}")
+
+  planSquad       Json?   @default("[]")
+
+  teamId    String?
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([nextMatchDate])
+  @@index([teamId])
+}
+
+model Place {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ExerciseKind {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  exercises  Exercise[]
+}
+
+model Exercise {
+  id          String        @id @default(cuid())
+
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  teamId      String?
+  team        Team?      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  title       String
+  kindId      String?
+  kind        ExerciseKind? @relation(fields: [kindId], references: [id], onDelete: SetNull)
+
+  space       String?
+  players     String?
+  duration    String?
+  description String?
+  imageUrl    String?
+
+  tags        String[]      @default([])
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([userId, title])
+  @@index([kindId])
+  @@index([teamId])
+}
+
+model RPEEntry {
+  id        String   @id @default(cuid())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  teamId    String?
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  date      DateTime
+  session   Int      @default(1)
+  sessionLabel String?
+  sessionUid   String?
+
+  rpe       Int
+  duration  Int?
+  load      Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date, session], name: "userId_date_session")
+  @@index([date])
+  @@index([userId, date, session])
+  @@index([date, session])
+  @@index([sessionUid])
+  @@index([teamId])
+}
+
+model WellnessEntry {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  teamId          String?
+  team            Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  date            DateTime
+
+  sleepQuality    Int
+  sleepHours      Float?
+  fatigue         Int
+  muscleSoreness  Int
+  stress          Int
+  mood            Int
+  comment         String?
+
+  total           Int?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, date], name: "userId_date")
+  @@index([date])
+  @@index([userId, date])
+  @@index([teamId])
+}
+
+model PlannerPrefs {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  rowLabels Json     @default("{}")
+  places    Json     @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ========= Clínico =========
+model ClinicalEntry {
+  id        String   @id @default(cuid())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  teamId    String?
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  date      DateTime
+  status    ClinicalStatus
+
+  leaveStage LeaveStage?
+  leaveKind  LeaveKind?
+
+  diagnosis  String?
+  bodyPart   String?
+  laterality Laterality?
+  mechanism  Mechanism?
+  severity   Severity?
+
+  illSystem        SystemAffected?
+  illSymptoms      String?
+  illContagious    Boolean?
+  illIsolationDays Int?
+  illAptitude      IllAptitude?
+  feverMax         Float?
+
+  startDate            DateTime?
+  daysPlanned          Int?
+  expectedReturn       DateTime?
+  expectedReturnManual Boolean? @default(false)
+
+  capMinutes          Int?
+  noSprint            Boolean  @default(false)
+  noChangeOfDirection Boolean  @default(false)
+  gymOnly             Boolean  @default(false)
+  noContact           Boolean  @default(false)
+
+  notes        String?
+  medSignature String?
+
+  protocolObjectives String?
+  protocolTasks      String?
+  protocolControls   String?
+  protocolCriteria   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date], name: "userId_date")
+  @@index([date])
+  @@index([status, date])
+  @@index([leaveKind])
+  @@index([bodyPart])
+  @@index([userId, date])
+  @@index([teamId])
+}
+
+// ========= Scouting =========
+enum ScoutingStatus {
+  ACTIVO
+  WATCHLIST
+  DESCARTADO
+}
+
+model ScoutingCategory {
+  id        String   @id @default(cuid())
+  nombre    String
+  slug      String   @unique
+  orden     Int      @default(0)
+  color     String?
+  activa    Boolean  @default(true)
+
+  players   ScoutingPlayer[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orden])
+  @@unique([nombre])
+}
+
+model ScoutingPlayer {
+  id           String            @id @default(cuid())
+  fullName     String
+  positions    String[]          @default([])
+  club         String?
+  estado       ScoutingStatus    @default(ACTIVO)
+
+  categoriaId  String?
+  categoria    ScoutingCategory? @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
+
+  agentName    String?
+  agentPhone   String?
+  agentEmail   String?
+  playerPhone  String?
+  playerEmail  String?
+  instagram    String?
+
+  videos       String[]          @default([])
+  notes        String?
+  rating       Int?
+  tags         String[]          @default([])
+
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([categoriaId])
+  @@index([estado])
+  @@index([fullName])
+}
+
+// ========= Multi-tenancy =========
+model Team {
+  id            String           @id @default(cuid())
+  name          String
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @default(now())
+
+  sessions        Session[]
+  rivals          Rival[]
+  exercises       Exercise[]
+  rpeEntries      RPEEntry[]
+  wellnessEntries WellnessEntry[]
+  clinicalEntries ClinicalEntry[]
+  userTeams       UserTeam[]
 }

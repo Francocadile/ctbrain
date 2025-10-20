@@ -1,37 +1,19 @@
 // src/app/api/users/route.ts
-
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { Role } from "@prisma/client";
+import { PrismaClient, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { logAudit } from "@/lib/audit";
 
-function toBool(v: any) {
-  if (typeof v === "boolean") return v;
-  if (typeof v === "string") return v === "true";
-  return false;
-}
+const prisma = new PrismaClient();
 
-async function readBody(req: Request) {
-  const ct = req.headers.get("content-type") || "";
-  if (ct.includes("application/json")) return await req.json();
-  if (ct.includes("application/x-www-form-urlencoded")) {
-    const form = await req.formData();
-    const obj: any = {};
-    form.forEach((v, k) => (obj[k] = String(v)));
-    return obj;
-  }
-  return {};
-}
-
+// POST /api/users  -> alta simple (usado en /login)
+// Por defecto: JUGADOR con isApproved = false (pendiente)
 export async function POST(req: Request) {
   try {
-    const body = await readBody(req);
+    const body = await req.json().catch(() => ({}));
     const name = (body?.name || "").trim();
     const email = (body?.email || "").trim().toLowerCase();
     const password = (body?.password || "").trim();
-    const requestedRole: Role | undefined = body?.role && Role[body.role as keyof typeof Role] ? (body.role as Role) : undefined;
-    const token = (body?.token || "").trim();
+    const role: Role = (body?.role as Role) || "JUGADOR";
 
     if (!name || !email || !password) {
       return NextResponse.json({ error: "Faltan campos" }, { status: 400 });
@@ -43,57 +25,15 @@ export async function POST(req: Request) {
     }
 
     const hashed = await bcrypt.hash(password, 10);
-
-    // Defaults
-    let finalRole: Role = requestedRole ?? Role.JUGADOR;
-    let finalApproved = false;
-    let teamIdForMembership: string | null = null;
-
-    // Si viene invitación, validarla
-    if (token) {
-      const inv = await prisma.invite.findUnique({ where: { token } });
-      const now = new Date();
-
-      if (!inv || inv.revoked || (inv.expiresAt && inv.expiresAt < now) || inv.uses >= inv.maxUses) {
-        return NextResponse.json({ error: "Invitación inválida o expirada" }, { status: 400 });
-      }
-
-      if (inv.role) finalRole = inv.role;
-      if (inv.teamId) teamIdForMembership = inv.teamId;
-      if (toBool(inv.autoApprove)) finalApproved = true;
-    }
-
     const user = await prisma.user.create({
       data: {
         name,
         email,
-        password: hashed,
-        role: finalRole,
-        isApproved: finalApproved,
+        password: hashed, // ahora se guarda hasheada
+        role,
+        isApproved: false, // queda pendiente hasta aprobación
       },
     });
-
-    // Si la invitación apuntaba a un equipo, crear UserTeam
-    if (teamIdForMembership) {
-      await prisma.userTeam.create({
-        data: { userId: user.id, teamId: teamIdForMembership, role: finalRole },
-      });
-    }
-
-    // Si se usó token, incrementar usos y auditar
-    if (token) {
-      await prisma.invite.update({
-        where: { token },
-        data: { uses: { increment: 1 } },
-      });
-      await logAudit({
-        actorId: null,
-        action: "INVITE_REDEEMED",
-        entityType: "Invite",
-        entityId: token,
-        meta: { email: user.email, userId: user.id, role: user.role, teamId: teamIdForMembership },
-      });
-    }
 
     return NextResponse.json({
       ok: true,

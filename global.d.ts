@@ -1,17 +1,3 @@
-import "next-auth";
-
-declare module "next-auth" {
-  interface Session {
-    user: {
-      id?: string;
-      name?: string | null;
-      email?: string | null;
-      role?: "SUPERADMIN" | "ADMIN" | "CT" | "MEDICO" | "JUGADOR" | "DIRECTIVO";
-      isApproved?: boolean;
-      teamId?: string | null;
-    };
-  }
-}
 // global.d.ts
 declare module 'pdf-parse' {
   export interface PDFInfo {
