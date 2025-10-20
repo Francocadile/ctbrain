@@ -1,55 +1,43 @@
+
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-// Rutas públicas (no pedir sesión)
-const PUBLIC = [
-  /^\/$/,                      // home
-  /^\/login(?:\/|$)/,
-  /^\/signup(?:\/|$)/,         // página de alta pública
-  /^\/pending-approval(?:\/|$)/,
-  /^\/redirect(?:\/|$)/,
-  /^\/api\/auth(?:\/|$)/,
-  /^\/api\/users(?:\/|$)/,     // ← API de signup PÚBLICA
-  /^\/_next\/static(?:\/|$)/,
-  /^\/favicon\.ico$/,
-];
+const PUBLIC = ["/", "/login", "/signup", "/api/auth", "/api/health"];
 
-// Guard CT / API CT
-const CT_PATHS = [
-  /^\/ct(?:\/|$)/,
-  /^\/api\/ct(?:\/|$)/,
-  /^\/api\/sessions(?:\/|$)/,
-  // ⚠️ /api/users ya NO va acá (es público)
-];
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
 
-// Guard Médico / API Médico
-const MED_PATHS = [
-  /^\/medico(?:\/|$)/,
-  /^\/api\/medico(?:\/|$)/,
-];
-
-// Excepción: CT puede LEER endpoints clínicos
-function isClinicalReadForCT(pathname: string, method: string) {
-  if (method !== "GET") return false;
-  return /^\/api\/medico\/clinical(?:\/|$)/.test(pathname);
-}
-
-function matchAny(pathname: string, patterns: RegExp[]) {
-  return patterns.some((r) => r.test(pathname));
-}
-
-function roleHome(role?: string) {
-  switch (role) {
-    case "ADMIN": return "/admin";
-    case "CT": return "/ct";
-    case "MEDICO": return "/medico";
-    case "JUGADOR": return "/jugador";
-    case "DIRECTIVO": return "/directivo";
-    default: return "/login";
+  // públicos
+  if (PUBLIC.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
+    return NextResponse.next();
   }
+
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  if (!token) {
+    const url = new URL("/login", req.url);
+    url.searchParams.set("next", pathname);
+    return NextResponse.redirect(url);
+  }
+
+  const role = (token as any).role;
+
+  // bypass total para SUPERADMIN
+  if (role === "SUPERADMIN") {
+    return NextResponse.next();
+  }
+
+  // bloquear /admin/superadmin a no-superadmin
+  if (pathname.startsWith("/admin/superadmin")) {
+    return NextResponse.redirect(new URL("/admin", req.url));
+  }
+
+  return NextResponse.next();
 }
 
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|images|assets).*)"],
+};
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isAPI = pathname.startsWith("/api");
