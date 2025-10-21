@@ -38,26 +38,6 @@ export async function middleware(req: NextRequest) {
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|images|assets).*)"],
 };
-export async function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
-  const isAPI = pathname.startsWith("/api");
-
-  // Públicos -> dejar pasar
-  if (matchAny(pathname, PUBLIC)) {
-    return NextResponse.next();
-  }
-
-  // ¿Qué guard aplica?
-  const needsCT = matchAny(pathname, CT_PATHS);
-  const needsMED = matchAny(pathname, MED_PATHS);
-
-  // Si no matchea nada, dejar pasar
-  if (!needsCT && !needsMED) {
-    return NextResponse.next();
-  }
-
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-
   if (!token) {
     if (isAPI) {
       return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
