@@ -27,7 +27,7 @@ export const authOptions: NextAuthOptions = {
         const user: any = await prisma.user.findUnique({ where: { email } });
         if (!user) return null;
 
-        const stored: string | null = user.passwordHash ?? user.password ?? null;
+  const stored: string | null = user.password ?? null;
         if (!stored) return null;
 
         let ok = false;
@@ -39,12 +39,7 @@ export const authOptions: NextAuthOptions = {
 
         if (!ok && password === stored) {
           const newHash = await bcrypt.hash(password, 10);
-          if ("passwordHash" in user) {
-            await prisma.user.update({
-              where: { id: user.id },
-              data: { passwordHash: newHash },
-            });
-          } else if ("password" in user) {
+          if ("password" in user) {
             await prisma.user.update({
               where: { id: user.id },
               data: { password: newHash },
