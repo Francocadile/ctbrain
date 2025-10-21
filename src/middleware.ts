@@ -34,10 +34,6 @@ export async function middleware(req: NextRequest) {
 
   return NextResponse.next();
 }
-
-export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|images|assets).*)"],
-};
   if (!token) {
     if (isAPI) {
       return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
