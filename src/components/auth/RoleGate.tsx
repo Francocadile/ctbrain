@@ -1,40 +1,31 @@
-"use client";
+// src/components/auth/RoleGate.tsx
+import { authOptions } from "@/lib/auth";
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
 
-import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+type Role = "ADMIN" | "CT" | "MEDICO" | "JUGADOR" | "DIRECTIVO";
 
-type Role = "SUPERADMIN" | "ADMIN" | "CT" | "MEDICO" | "JUGADOR" | "DIRECTIVO";
-
-export default function RoleGate({
+export default async function RoleGate({
   allow,
   children,
 }: {
-  allow: Role[] | Role;
+  allow: Role[];
   children: React.ReactNode;
 }) {
-  const { data: session, status } = useSession();
-  const router = useRouter();
-  const allowed = Array.isArray(allow) ? allow : [allow];
+  const session = await getServerSession(authOptions);
+  const role = session?.user?.role as Role | undefined;
 
-  useEffect(() => {
-    if (status === "loading") return;
-
-    const role = (session?.user as any)?.role as Role | undefined;
-
-    if (!role) {
-      router.replace("/login");
-      return;
-    }
-
-    if (role === "SUPERADMIN") return;
-
-    if (!allowed.includes(role)) {
-      router.replace("/");
-    }
-  }, [status, session, router, allowed]);
-
-  if (status !== "authenticated") return null;
+  if (!session) redirect("/login");
+  if (!role || !allow.includes(role)) {
+    const map: Record<Role, string> = {
+      ADMIN: "/admin",
+      CT: "/ct",
+      MEDICO: "/medico",   // ← back al mapping original
+      JUGADOR: "/jugador",
+      DIRECTIVO: "/directivo",
+    };
+    redirect(role ? map[role] : "/login");
+  }
 
   return <>{children}</>;
 }

@@ -1,17 +1,17 @@
+// src/lib/auth.ts
 import type { NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { prisma } from "@/lib/prisma";
-import bcrypt from "bcryptjs";
-import { z } from "zod";
+import { PrismaClient } from "@prisma/client";
 
-const credsSchema = z.object({
-  email: z.string().trim().toLowerCase().email(),
-  password: z.string().min(6).max(128),
-});
+const prisma = new PrismaClient();
 
+/**
+ * CTB-BASE-12 | FASE 1
+ * - authorize simple: solo valida que el email exista (sin hash)
+ * - callbacks jwt/session: inyectan id, role, isApproved en la sesión
+ */
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
-
   providers: [
     Credentials({
       name: "credentials",
@@ -20,69 +20,48 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(creds) {
-        const parsed = credsSchema.safeParse(creds);
-        if (!parsed.success) return null;
-        const { email, password } = parsed.data;
+        const email = (creds?.email || "").trim().toLowerCase();
+        if (!email) return null;
 
-        const user: any = await prisma.user.findUnique({ where: { email } });
+        const user = await prisma.user.findUnique({ where: { email } });
         if (!user) return null;
 
-  const stored: string | null = user.password ?? null;
-        if (!stored) return null;
-
-        let ok = false;
-        try {
-          ok = await bcrypt.compare(password, stored);
-        } catch {
-          ok = false;
-        }
-
-        if (!ok && password === stored) {
-          const newHash = await bcrypt.hash(password, 10);
-          if ("password" in user) {
-            await prisma.user.update({
-              where: { id: user.id },
-              data: { password: newHash },
-            });
-          }
-          ok = true;
-        }
-
-        if (!ok) return null;
-        if (user.isApproved === false) throw new Error("NOT_APPROVED");
-
+        // FASE 1: NO verifica password. Solo existencia de email.
+        // (Tus pantallas y seed actuales siguen andando.)
         return {
           id: user.id,
           email: user.email,
-          name: user.name ?? null,
-          role: user.role ?? "JUGADOR",
-          isApproved: user.isApproved ?? true,
-          teamId: user.teamId ?? null,
+          name: user.name ?? user.email,
+          role: user.role,
+          isApproved: user.isApproved,
         } as any;
       },
     }),
   ],
-
+  pages: { signIn: "/login" },
   callbacks: {
+    // Guarda role/isApproved en el token JWT
     async jwt({ token, user }) {
       if (user) {
-        const u: any = user;
         // @ts-ignore
-        token.role = u.role;
+        token.role = (user as any).role;
         // @ts-ignore
-        token.isApproved = u.isApproved;
-        // @ts-ignore
-        token.teamId = u.teamId ?? null;
+        token.isApproved = (user as any).isApproved;
       }
       return token;
     },
+
+    // Restaura id/role/isApproved en session.user para tu app
     async session({ session, token }) {
-      (session.user as any).role = (token as any).role;
-      (session.user as any).isApproved = (token as any).isApproved;
-      (session.user as any).teamId = (token as any).teamId ?? null;
+      // @ts-ignore
+      session.user = session.user || {};
+      // @ts-ignore
+      session.user.id = token.sub as string;
+      // @ts-ignore
+      session.user.role = (token as any).role;
+      // @ts-ignore
+      session.user.isApproved = (token as any).isApproved;
       return session;
     },
   },
-
-  pages: { signIn: "/login" },
 };

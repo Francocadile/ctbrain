@@ -1,9 +1,9 @@
-
+// src/components/HelpTip.tsx
 "use client";
 
 import * as React from "react";
 
-interface HelpTipProps {
+type HelpTipProps = {
   /** Texto del tooltip (explicación corta y clara) */
   text: string;
   /** Posición preferida del tooltip respecto al icono */
@@ -12,7 +12,7 @@ interface HelpTipProps {
   className?: string;
   /** Tamaño del icono (px). Default: 16 */
   sizePx?: number;
-}
+};
 
 /**
  * HelpTip
@@ -119,4 +119,3 @@ export default function HelpTip({
     </span>
   );
 }
-
