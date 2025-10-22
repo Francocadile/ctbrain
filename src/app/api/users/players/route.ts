@@ -2,7 +2,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
-import { getServerSession } from "next-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,10 +20,6 @@ function toLabel(r: PlayerRow) {
  * - 3° intento: SQL crudo tolerante (lower/ilike por si está mal grabado)
  */
 export async function GET() {
-  const session = await getServerSession();
-  if (!session?.user) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
   try {
     // 1) Prisma (enum)
     const viaEnum = await prisma.user.findMany({
