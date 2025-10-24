@@ -1,16 +1,35 @@
 // src/app/api/users/[id]/route.ts
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
-import { z } from "zod";
 import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+type Params = { params: { id: string } };
 
-type RouteParams = { params: { id: string } };
+export async function GET(_req: Request, { params }: Params) {
+  const session = await getServerSession(authOptions);
+  const role = session?.user?.role;
+  const userId = session?.user?.id;
 
-async function getSessionSafe() {
-  try {
-    return (await getServerSession()) as any;
-  } catch {
-    return null;
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (userId !== params.id && role !== "ADMIN" && role !== "SUPERADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: params.id },
+    select: { id: true, name: true, email: true, role: true, teamId: true, createdAt: true }
+  });
+
+  if (!user) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
+  return NextResponse.json(user);
+}
   }
 }
 

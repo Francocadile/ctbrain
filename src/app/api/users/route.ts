@@ -1,48 +1,72 @@
 // src/app/api/users/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient, Role } from "@prisma/client";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import bcrypt from "bcryptjs";
 
-const prisma = new PrismaClient();
+/**
+ * GET /api/users
+ * Solo ADMIN o SUPERADMIN pueden listar usuarios.
+ */
+export async function GET() {
+  const session = await getServerSession(authOptions);
+  const role = session?.user?.role;
 
-// POST /api/users  -> alta simple (usado en /login)
-// Por defecto: JUGADOR con isApproved = false (pendiente)
+  if (!session || (role !== "ADMIN" && role !== "SUPERADMIN")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const users = await prisma.user.findMany({
+    select: { id: true, name: true, email: true, role: true, teamId: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+  });
+  return NextResponse.json(users);
+}
+
+/**
+ * POST /api/users
+ * Alta con sanitización + password hasheado (coherente con authorize/bcrypt).
+ * Campo role es string (schema actual). Default: "JUGADOR".
+ */
 export async function POST(req: Request) {
   try {
-    const body = await req.json().catch(() => ({}));
-    const name = (body?.name || "").trim();
-    const email = (body?.email || "").trim().toLowerCase();
-    const password = (body?.password || "").trim();
-    const role: Role = (body?.role as Role) || "JUGADOR";
+    const body = await req.json().catch(() => ({} as any));
+
+    const name = (body?.name ?? "").toString().trim();
+    const email = (body?.email ?? "").toString().trim().toLowerCase();
+    const password = (body?.password ?? "").toString().trim();
+    const roleInput = (body?.role ?? "").toString().trim().toUpperCase();
+    const teamId = body?.teamId ? String(body.teamId) : undefined;
 
     if (!name || !email || !password) {
-      return NextResponse.json({ error: "Faltan campos" }, { status: 400 });
+      return NextResponse.json({ error: "Faltan campos obligatorios" }, { status: 400 });
     }
+
+    // Normalizar role (sin enum aún)
+    const allowedRoles = new Set(["SUPERADMIN","ADMIN","CT","MEDICO","JUGADOR","DIRECTIVO","USER","user"]);
+    const role = allowedRoles.has(roleInput) ? roleInput : "JUGADOR";
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       return NextResponse.json({ error: "El email ya está registrado" }, { status: 409 });
     }
 
+    const hashed = await bcrypt.hash(password, 10);
+
     const user = await prisma.user.create({
       data: {
         name,
         email,
-        password, // (flujo original, sin hash)
+        password: hashed,
         role,
-        isApproved: false, // queda pendiente hasta aprobación
+        ...(teamId ? { teamId } : {}),
       },
+      select: { id: true, email: true, role: true, teamId: true, createdAt: true },
     });
 
-    return NextResponse.json({
-      ok: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        isApproved: user.isApproved,
-      },
-    });
+    return NextResponse.json({ ok: true, user });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Error" }, { status: 500 });
+    return NextResponse.json({ error: e?.message ?? "Error" }, { status: 500 });
   }
 }
