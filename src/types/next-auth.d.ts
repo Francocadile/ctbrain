@@ -18,6 +18,7 @@ declare module "next-auth" {
       id: string;
       role: AppRole;
       teamId?: string | null;
+      approved?: boolean;
     } & DefaultSession["user"];
   }
 
@@ -25,6 +26,7 @@ declare module "next-auth" {
     id: string;
     role: AppRole;
     teamId?: string | null;
+    approved?: boolean;
   }
 }
 
@@ -34,5 +36,6 @@ declare module "next-auth/jwt" {
     id: string;
     role: AppRole;
     teamId?: string | null;
+    approved?: boolean;
   }
 }

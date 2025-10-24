@@ -18,11 +18,12 @@ enum Role {
 }
 
 enum SessionType {
-  GENERAL
+  PARTIDO
+  TACTICO
   FUERZA
-  TACTICA
-  AEROBICO
   RECUPERACION
+  EVALUACION
+  LIBRE
 }
 
 // ========= Enums clínicos =========
@@ -88,9 +89,17 @@ model User {
   email      String   @unique
   name       String?
   password   String?
-  role       Role     @default(JUGADOR)
+  // Mantengo role como String para no romper nada; luego migraremos a enum
+  role           String   @default("user")
 
-  isApproved Boolean  @default(false)
+  // Nuevo: aprobación de cuenta
+  approved       Boolean  @default(false)
+
+  // Compat: referencia directa (opcional) a Team
+  teamId         String?
+  team           Team?    @relation(fields: [teamId], references: [id])
+  // Multi-tenant real N:N
+  userTeams      UserTeam[]
 
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -356,4 +365,59 @@ model ScoutingPlayer {
   @@index([categoriaId])
   @@index([estado])
   @@index([fullName])
+}
+
+// --- Multi-tenant ---
+model Team {
+  id        String     @id @default(cuid())
+  name      String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  members   UserTeam[]
+  users     User[]     // compat via teamId
+}
+
+model UserTeam {
+  userId    String
+  teamId    String
+  // rol contextual por equipo (string por ahora)
+  role      String     @default("CT")
+  createdAt DateTime   @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team      Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@id([userId, teamId])
+}
+
+// --- Núcleo deportivo (sin colisionar con NextAuth.Session) ---
+enum SessionType {
+  PARTIDO
+  TACTICO
+  FUERZA
+  RECUPERACION
+  EVALUACION
+  LIBRE
+}
+
+model TrainingSession {
+  id           String      @id @default(cuid())
+  date         DateTime
+  start        DateTime?
+  end          DateTime?
+  title        String
+  type         SessionType
+  notes        String?
+  rpe          Int?
+  load         Int?
+  microcycle   Int?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  createdById  String
+  createdBy    User        @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([date])
+  @@index([type])
+  @@index([createdById])
 }

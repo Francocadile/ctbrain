@@ -18,22 +18,26 @@ const DEMO_NAMES = (process.env.SEED_DEMO_NAMES || "Juan Pérez,Carlos Díaz,Mar
   .filter(Boolean);
 
 async function seedAdmin() {
-  const name = process.env.SEED_ADMIN_NAME || "Super Admin";
-  const email = process.env.SEED_ADMIN_EMAIL || "admin@ctbrain.local";
-  const password = process.env.SEED_ADMIN_PASSWORD || "admin123";
+  const email = (process.env.SEED_SUPERADMIN_EMAIL || 'owner@example.com').toLowerCase();
+  const password = process.env.SEED_SUPERADMIN_PASSWORD || 'change-me';
+  const name = process.env.SEED_SUPERADMIN_NAME || 'Owner';
 
   // 🔒 bcrypt hash solo para seed (el login real no lo usa aún)
   const passwordHash = await hash(password, 10);
 
   const admin = await prisma.user.upsert({
     where: { email },
-    update: {},
+    update: {
+      role: 'SUPERADMIN',
+      approved: true,
+      password: passwordHash,
+    },
     create: {
       name,
       email,
       password: passwordHash,
-      role: Role.ADMIN,
-      isApproved: true,
+      role: 'SUPERADMIN',
+      approved: true,
     },
   });
 

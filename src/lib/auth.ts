@@ -1,18 +1,18 @@
 // src/lib/auth.ts
-import type { NextAuthOptions } from "next-auth";
-import Credentials from "next-auth/providers/credentials";
-import { PrismaClient } from "@prisma/client";
+import NextAuth, { type NextAuthOptions } from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
+import { PrismaAdapter } from "@next-auth/prisma-adapter";
+import { prisma } from "./prisma";
+import bcrypt from "bcryptjs";
 
-const prisma = new PrismaClient();
-
-/**
- * CTB-BASE-12 | FASE 1
- * - authorize simple: solo valida que el email exista (sin hash)
- * - callbacks jwt/session: inyectan id, role, isApproved en la sesión
- */
 export const authOptions: NextAuthOptions = {
-  session: { strategy: "jwt" },
+  adapter: PrismaAdapter(prisma),
   providers: [
+    CredentialsProvider({
+      name: "Credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
     Credentials({
       name: "credentials",
       credentials: {
