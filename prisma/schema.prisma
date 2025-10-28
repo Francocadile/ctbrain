@@ -100,7 +100,7 @@ model User {
 
   // Compat: referencia directa (opcional) a Team
   teamId         String?
-  team           Team?    @relation(fields: [teamId], references: [id])
+  team           Team?    @relation("TeamToUser", fields: [teamId], references: [id])
   // Multi-tenant real N:N
   userTeams      UserTeam[]
 
@@ -373,27 +373,29 @@ model ScoutingPlayer {
 }
 
 // --- Multi-tenant ---
-model Team {
-  id        String     @id @default(cuid())
-  name      String
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+// ...existing code...
 
-  members   UserTeam[]
-  users     User[]     // compat via teamId
+// --- Multi-tenant ---
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String
+  clubName  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  users     UserTeam[]
+  legacyUsers User[] @relation("TeamToUser")
 }
 
 model UserTeam {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
   userId    String
+  team      Team     @relation(fields: [teamId], references: [id])
   teamId    String
-  // rol contextual por equipo (string por ahora)
-  role      String     @default("CT")
-  createdAt DateTime   @default(now())
-
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  team      Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
-
-  @@id([userId, teamId])
+  role      String   // CT, JUGADOR, MEDICO, etc.
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // --- Núcleo deportivo (sin colisionar con NextAuth.Session) ---
