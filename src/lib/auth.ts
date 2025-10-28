@@ -1,4 +1,5 @@
 import NextAuth, { type NextAuthOptions } from 'next-auth'
+import type { AppRole } from '../types/next-auth'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { PrismaAdapter } from '@next-auth/prisma-adapter'
 import { prisma } from './prisma'
@@ -21,9 +22,19 @@ export const authOptions: NextAuthOptions = {
         if (!user || !user.password) return null
         const isValid = await bcrypt.compare(credentials.password, user.password)
         if (!isValid) return null
-        return user
-      },
-    }),
+        // Devuelve solo los campos esperados por NextAuth, con role tipado correctamente y sin password
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role as AppRole,
+          approved: user.approved,
+          teamId: user.teamId ?? null,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+        }
+      }
+    })
   ],
   session: { strategy: 'jwt' },
   callbacks: {
