@@ -1,14 +1,15 @@
 // prisma/seed.ts
 import { PrismaClient, Role } from "@prisma/client";
-import { hash } from "bcryptjs";
+import bcryptjs from "bcryptjs";
+const { hash } = bcryptjs;
 
 const prisma = new PrismaClient();
 
 /* ===== Utils ===== */
-function toYMD(d: Date) { return d.toISOString().slice(0, 10); }
-function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
-function clamp(n: number, min: number, max: number) { return Math.max(min, Math.min(max, n)); }
-const rndInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+function toYMD(d) { return d.toISOString().slice(0, 10); }
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
+const rndInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 
 /* ===== Config ===== */
 const DO_DEMO = process.env.SEED_DEMO === "1" || process.env.SEED_DEMO === "true";
@@ -41,7 +42,6 @@ async function seedAdmin() {
 }
 
   // --- SEED CT ---
-  async function seedCT() {
     const email = 'prueba@ct.app';
     const password = '123456';
     const name = 'Cuerpo Técnico Demo';
@@ -61,8 +61,6 @@ async function seedAdmin() {
         approved: true,
       },
     });
-    console.log("✅ CT creado/actualizado:", { email: ct.email, role: ct.role });
-  }
 
 async function seedCT() {
   const email = 'prueba@ct.app';
@@ -93,7 +91,7 @@ async function ensurePlayers() {
     await prisma.user.upsert({
       where: { email },
       update: {},
-  create: { name, email, role: Role.JUGADOR, approved: true },
+      create: { name, email, role: 'JUGADOR', approved: true },
     });
   }
   const users = await prisma.user.findMany({ where: { email: { endsWith: "@ctbrain.dev" } } });
@@ -101,7 +99,7 @@ async function ensurePlayers() {
   return users;
 }
 
-async function seedWellnessAndRPE(users: { id: string }[]) {
+async function seedWellnessAndRPE(users) {
   const today = new Date();
   const start = addDays(today, -27);
 
@@ -153,3 +151,23 @@ async function seedWellnessAndRPE(users: { id: string }[]) {
 }
 
 async function main() {
+  await seedAdmin();
+  await seedCT();
+  if (DO_DEMO) {
+    const players = await ensurePlayers();
+    if (players.length) await seedWellnessAndRPE(players);
+  } else {
+    console.log("ℹ️ SEED_DEMO no activo. Solo se creó el admin y CT.");
+  }
+}
+
+(async () => {
+  try {
+    await main();
+  } catch (e) {
+    console.error(e);
+    process.exit(1);
+  } finally {
+    await prisma.$disconnect();
+  }
+})();
