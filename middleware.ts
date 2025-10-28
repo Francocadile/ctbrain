@@ -75,7 +75,7 @@ export default withAuth(
 // ✅ Sacamos '/api/users/:path*' del matcher
 export const config = {
   matcher: [
-    // Incluye API salvo /api/auth**
-    "/((?!_next/static|_next/image|favicon.ico).*)",
+    // Incluye API salvo /api/auth** y rutas públicas de auth
+    "/((?!_next/static|_next/image|favicon.ico|login|signup|pending-approval).*)",
   ],
 };
