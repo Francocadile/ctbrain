@@ -1,67 +1,68 @@
-// src/lib/auth.ts
-import NextAuth, { type NextAuthOptions } from "next-auth";
-import CredentialsProvider from "next-auth/providers/credentials";
-import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import { prisma } from "./prisma";
-import bcrypt from "bcryptjs";
+import NextAuth, { type NextAuthOptions } from 'next-auth'
+import CredentialsProvider from 'next-auth/providers/credentials'
+import { PrismaAdapter } from '@next-auth/prisma-adapter'
+import { prisma } from './prisma'
+import bcrypt from 'bcryptjs'
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
     CredentialsProvider({
-      name: "Credentials",
+      name: 'Credentials',
       credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-    Credentials({
-      name: "credentials",
-      credentials: {
-        email: { label: "Email", type: "text" },
-        password: { label: "Password", type: "password" },
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
       },
-      async authorize(creds) {
-        const email = (creds?.email || "").trim().toLowerCase();
-        if (!email) return null;
-
-        const user = await prisma.user.findUnique({ where: { email } });
-        if (!user) return null;
-
-        // FASE 1: NO verifica password. Solo existencia de email.
-        // (Tus pantallas y seed actuales siguen andando.)
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name ?? user.email,
-          role: user.role,
-          isApproved: user.isApproved,
-        } as any;
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials.password) return null
+        const user = await prisma.user.findUnique({
+          where: { email: credentials.email.toLowerCase() },
+        })
+        if (!user || !user.password) return null
+        const isValid = await bcrypt.compare(credentials.password, user.password)
+        if (!isValid) return null
+        return user
       },
     }),
   ],
-  pages: { signIn: "/login" },
+  session: { strategy: 'jwt' },
   callbacks: {
-    // Guarda role/isApproved en el token JWT
+    async signIn({ user }) {
+      // SUPERADMIN siempre entra
+      // @ts-ignore
+      if ((user as any)?.role === 'SUPERADMIN') return true
+      // @ts-ignore
+      const approved = !!(user as any)?.approved
+      if (!approved) return '/pending-approval'
+      return true
+    },
     async jwt({ token, user }) {
       if (user) {
         // @ts-ignore
-        token.role = (user as any).role;
+        token.id = (user as any).id
         // @ts-ignore
-        token.isApproved = (user as any).isApproved;
+        token.role = (user as any).role
+        // @ts-ignore
+        token.teamId = (user as any).teamId
+        // @ts-ignore
+        token.approved = !!(user as any).approved
       }
-      return token;
+      return token
     },
-
-    // Restaura id/role/isApproved en session.user para tu app
     async session({ session, token }) {
       // @ts-ignore
-      session.user = session.user || {};
+      session.user.id = token.id as string
       // @ts-ignore
-      session.user.id = token.sub as string;
+      session.user.role = token.role as string
       // @ts-ignore
-      session.user.role = (token as any).role;
+      session.user.teamId = (token as any).teamId as string
       // @ts-ignore
-      session.user.isApproved = (token as any).isApproved;
-      return session;
+      session.user.approved = !!(token as any).approved
+      return session
     },
   },
-};
+  pages: { signIn: '/login' },
+  secret: process.env.NEXTAUTH_SECRET,
+}
+
+export default NextAuth(authOptions)
