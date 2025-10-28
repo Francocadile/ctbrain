@@ -13,7 +13,7 @@ import bcrypt from "bcryptjs";
 ========================= */
 async function getUsers() {
   return prisma.user.findMany({
-    orderBy: [{ isApproved: "asc" }, { createdAt: "desc" }],
+    orderBy: [{ approved: "asc" }, { createdAt: "desc" }],
     select: {
       id: true,
       name: true,
