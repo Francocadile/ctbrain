@@ -17,7 +17,7 @@ export default function LoginClient() {
       email,
       password,
       redirect: true,
-      callbackUrl: "/redirect",
+      callbackUrl: "/", // la redirección se maneja por el callback de NextAuth
     });
 
     setLoadingLogin(false);

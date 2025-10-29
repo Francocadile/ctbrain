@@ -39,13 +39,23 @@ export const authOptions: NextAuthOptions = {
   session: { strategy: 'jwt' },
   callbacks: {
     async signIn({ user }) {
-      // SUPERADMIN siempre entra
+      // SUPERADMIN: panel global
       // @ts-ignore
-      if ((user as any)?.role === 'SUPERADMIN') return true
+      if ((user as any)?.role === 'SUPERADMIN') return '/admin'
+      // @ts-ignore
+      if ((user as any)?.role === 'ADMIN') return '/admin'
+      // @ts-ignore
+      if ((user as any)?.role === 'CT') return '/ct'
+      // @ts-ignore
+      if ((user as any)?.role === 'MEDICO') return '/medico'
+      // @ts-ignore
+      if ((user as any)?.role === 'JUGADOR') return '/jugador'
+      // @ts-ignore
+      if ((user as any)?.role === 'DIRECTIVO') return '/directivo'
       // @ts-ignore
       const approved = !!(user as any)?.approved
       if (!approved) return '/pending-approval'
-      return true
+      return '/'
     },
     async jwt({ token, user }) {
       if (user) {
