@@ -396,6 +396,8 @@ model UserTeam {
   role      String   // CT, JUGADOR, MEDICO, etc.
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+    @@unique([userId, teamId], name: "userId_teamId")
 }
 
 // --- Núcleo deportivo (sin colisionar con NextAuth.Session) ---
