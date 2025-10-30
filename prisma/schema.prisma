@@ -4,8 +4,6 @@ model Team {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   // Relación con usuarios/equipos se agregará en la siguiente fase
-  sessions  Session[] @relation("SessionTeam")
-  users     User[] @relation("UserTeam")
 }
 // prisma/schema.prisma
 generator client {
@@ -105,12 +103,11 @@ model User {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  teamId    String?
-  team      Team?    @relation("UserTeam", fields: [teamId], references: [id])
   sessions        Session[]      @relation("UserSessions")
   rpeEntries      RPEEntry[]
   wellnessEntries WellnessEntry[]
   plannerPrefs    PlannerPrefs?
+  exercises       Exercise[]
   clinicalEntries ClinicalEntry[]
 }
 
@@ -121,8 +118,6 @@ model Session {
   date        DateTime
   type        SessionType @default(GENERAL)
   createdAt   DateTime    @default(now())
-  teamId    String?
-  team      Team?    @relation("SessionTeam", fields: [teamId], references: [id])
   updatedAt   DateTime    @updatedAt
 
   createdBy   String
@@ -140,26 +135,49 @@ model Rival {
 
   coach                 String?
   baseSystem            String?
+  nextMatchDate         DateTime?
+  nextMatchCompetition  String?
 
   planCharlaUrl   String?
+  planReport      Json?   @default("{}")
+  planVideos      Json?   @default("[]")
+  planStats       Json?   @default("{}")
+  planNotes       Json?   @default("{}")
+  planVisibility  Json?   @default("{}")
+
+  planSquad       Json?   @default("[]")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([nextMatchDate])
 }
 
 model Place {
-  id         String   @id @default(cuid())
-  email      String   @unique
-  name       String?
-  password   String?
-  role       Role     @default(JUGADOR)
-  isApproved Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ExerciseKind {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  exercises  Exercise[]
+}
+
+model Exercise {
+  id          String        @id @default(cuid())
+
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   title       String
   kindId      String?
+  kind        ExerciseKind? @relation(fields: [kindId], references: [id], onDelete: SetNull)
 
   space       String?
   players     String?
@@ -169,7 +187,11 @@ model Place {
 
   tags        String[]      @default([])
 
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
+  @@index([userId, createdAt])
+  @@index([userId, title])
   @@index([kindId])
 }
 
@@ -305,6 +327,7 @@ model ScoutingCategory {
   color     String?
   activa    Boolean  @default(true)
 
+  players   ScoutingPlayer[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -320,6 +343,8 @@ model ScoutingPlayer {
   club         String?
   estado       ScoutingStatus    @default(ACTIVO)
 
+  categoriaId  String?
+  categoria    ScoutingCategory? @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
 
   agentName    String?
   agentPhone   String?
@@ -336,6 +361,7 @@ model ScoutingPlayer {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
+  @@index([categoriaId])
   @@index([estado])
   @@index([fullName])
 }
