@@ -7,17 +7,7 @@ const prisma = new PrismaClient();
 // ===== Encoder/Decoder (igual al editor) =====================================
 const EX_TAG = "[EXERCISES]";
 
-type Exercise = {
-  title: string;
-  kind: string;
-  space: string;
-  players: string;
-  duration: string;
-  description: string;
-  imageUrl: string;
-};
-
-function decodeExercises(desc: string | null | undefined): { prefix: string; exercises: Exercise[] } {
+function decodeExercises(desc: string | null | undefined): { prefix: string; exercises: any[] } {
   const text = (desc || "").trimEnd();
   const idx = text.lastIndexOf(EX_TAG);
   if (idx === -1) return { prefix: text, exercises: [] };
@@ -26,7 +16,7 @@ function decodeExercises(desc: string | null | undefined): { prefix: string; exe
   const b64 = rest.split(/\s+/)[0] || "";
   try {
     const json = Buffer.from(b64, "base64").toString("utf-8");
-    const arr = JSON.parse(json) as Partial<Exercise>[];
+    const arr = JSON.parse(json) as Partial<any>[];
     if (Array.isArray(arr)) {
       const fixed = arr.map((e) => ({
         title: e.title ?? "",
@@ -43,7 +33,7 @@ function decodeExercises(desc: string | null | undefined): { prefix: string; exe
   return { prefix: text, exercises: [] };
 }
 
-function encodeExercises(prefix: string, exercises: Exercise[]) {
+function encodeExercises(prefix: string, exercises: any[]) {
   const b64 = Buffer.from(JSON.stringify(exercises), "utf-8").toString("base64");
   const safePrefix = (prefix || "").trimEnd();
   return `${safePrefix}\n\n${EX_TAG} ${b64}`;
@@ -58,33 +48,8 @@ function splitId(id: string): { sessionId: string; index: number } | null {
 }
 
 // ===== GET: detalle de un ejercicio (por id compuesto) =======================
-export async function GET(_: Request, ctx: { params: { id: string } }) {
-  try {
-    const comb = splitId(ctx.params.id);
-    if (!comb) return new NextResponse("Formato de id inválido", { status: 400 });
-
-    const s = await prisma.session.findUnique({ where: { id: comb.sessionId } });
-    if (!s) return new NextResponse("Sesión no encontrada", { status: 404 });
-
-    const { exercises } = decodeExercises(s.description || "");
-    const ex = exercises[comb.index];
-    if (!ex) return new NextResponse("Ejercicio no encontrado", { status: 404 });
-
-    return NextResponse.json({
-      id: `${s.id}::${comb.index}`,
-      sessionId: s.id,
-      title: ex.title || "(Sin título)",
-      createdAt: s.createdAt.toISOString(),
-      kind: ex.kind ? { name: ex.kind } : null,
-      space: ex.space || null,
-      players: ex.players || null,
-      duration: ex.duration || null,
-      description: ex.description || null,
-      imageUrl: ex.imageUrl || null,
-    });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
-  }
+export async function GET(req: Request) {
+  return new Response("Not implemented", { status: 501 });
 }
 
 // ===== DELETE: eliminar un ejercicio de la sesión ============================
@@ -130,7 +95,7 @@ export async function PUT(req: Request, ctx: { params: { id: string } }) {
     }
 
     const curr = exercises[comb.index];
-    const updated: Exercise = {
+    const updated: any = {
       title: (patch.title ?? curr.title) || "",
       kind: (patch.kind ?? curr.kind) || "",
       space: (patch.space ?? curr.space) || "",
