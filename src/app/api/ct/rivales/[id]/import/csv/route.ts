@@ -145,15 +145,10 @@ export async function POST(
       recent,
     };
 
-    const row = await prisma.rival.update({
+    const row = await prisma.rival.findUnique({
       where: { id },
-      data: { planStats: merged as any },
-      select: { planStats: true },
     });
-
-    return NextResponse.json({
-      data: asObj<RivalStats>(row.planStats),
-    });
+    return NextResponse.json({ data: row });
   } catch (e: any) {
     return new NextResponse(e?.message || "Error", { status: 500 });
   }
