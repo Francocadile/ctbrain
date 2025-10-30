@@ -107,13 +107,15 @@ async function seedWellnessAndRPE(users: { id: string }[]) {
 
 async function main() {
   await seedAdmin();
+  await seedCoreUsers();
   if (DO_DEMO) {
     const players = await ensurePlayers();
     if (players.length) await seedWellnessAndRPE(players);
   } else {
-    console.log("ℹ️ SEED_DEMO no activo. Solo se creó el admin.");
+    console.log("ℹ️ SEED_DEMO no activo. Solo se creó el admin y los usuarios principales.");
   }
 }
+
 
 main()
   .catch((e) => {
@@ -121,3 +123,28 @@ main()
     process.exit(1);
   })
   .finally(async () => prisma.$disconnect());
+
+// Crea los 4 usuarios principales
+async function seedCoreUsers() {
+  const users = [
+    { email: "jugador@jugador.com", password: "123456", role: Role.JUGADOR, name: "Jugador" },
+    { email: "ct@ct.com", password: "123456", role: Role.CT, name: "Cuerpo Técnico" },
+    { email: "medico@medico.com", password: "123456", role: Role.MEDICO, name: "Médico" },
+    { email: "admin@admin.com", password: "123456", role: Role.ADMIN, name: "Administrador" },
+  ];
+  for (const u of users) {
+    const passwordHash = await hash(u.password, 10);
+    await prisma.user.upsert({
+      where: { email: u.email },
+      update: {},
+      create: {
+        name: u.name,
+        email: u.email,
+        password: passwordHash,
+        role: u.role,
+        isApproved: true,
+      },
+    });
+    console.log(`✅ Usuario creado/actualizado: ${u.email} (${u.role})`);
+  }
+}
