@@ -127,6 +127,7 @@ main()
 // Crea los 4 usuarios principales
 async function seedCoreUsers() {
   const users = [
+    { email: "superadmin@superadmin.com", password: "123456", role: Role.SUPERADMIN, name: "Superadmin" },
     { email: "jugador@jugador.com", password: "123456", role: Role.JUGADOR, name: "Jugador" },
     { email: "ct@ct.com", password: "123456", role: Role.CT, name: "Cuerpo Técnico" },
     { email: "medico@medico.com", password: "123456", role: Role.MEDICO, name: "Médico" },
