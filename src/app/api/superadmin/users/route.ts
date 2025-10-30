@@ -37,9 +37,7 @@ export async function POST(req: Request) {
       password: passwordHash,
       role: data.role,
       isApproved: true,
-      teamId: data.teamId || null,
     },
-    include: { team: true },
   });
   return NextResponse.json(user);
 }
@@ -49,17 +47,15 @@ export async function PUT(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   const data = await req.json();
   if (!data.id) return NextResponse.json({ error: "Missing user id" }, { status: 400 });
-  // Permite actualizar nombre, email, rol, teamId, isApproved
+  // Permite actualizar nombre, email, rol, isApproved
   const user = await prisma.user.update({
     where: { id: data.id },
     data: {
       name: data.name,
       email: data.email,
       role: data.role,
-      teamId: data.teamId || null,
       isApproved: data.isApproved,
     },
-    include: { team: true },
   });
   return NextResponse.json(user);
 }
