@@ -1,5 +1,3 @@
-
-
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -19,7 +17,7 @@ async function requireSuperAdmin() {
 export async function GET() {
   const session = await requireSuperAdmin();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-  const users = await prisma.user.findMany({ include: { team: true } });
+  const users = await prisma.user.findMany();
   return NextResponse.json(users);
 }
 
