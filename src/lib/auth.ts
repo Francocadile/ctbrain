@@ -39,6 +39,7 @@ export const authOptions: NextAuthOptions = {
   session: { strategy: 'jwt' },
   callbacks: {
     async signIn({ user }) {
+      console.log('NextAuth signIn callback user:', user);
       // SUPERADMIN: panel global
       // @ts-ignore
       if ((user as any)?.role === 'SUPERADMIN') return '/admin'
@@ -59,6 +60,7 @@ export const authOptions: NextAuthOptions = {
     },
     async jwt({ token, user }) {
       if (user) {
+        console.log('NextAuth jwt callback user:', user);
         // @ts-ignore
         token.id = (user as any).id
         // @ts-ignore
@@ -68,6 +70,7 @@ export const authOptions: NextAuthOptions = {
         // @ts-ignore
         token.approved = !!(user as any).approved
       }
+      console.log('NextAuth jwt callback token:', token);
       return token
     },
     async session({ session, token }) {
@@ -79,6 +82,7 @@ export const authOptions: NextAuthOptions = {
       session.user.teamId = (token as any).teamId as string
       // @ts-ignore
       session.user.approved = !!(token as any).approved
+      console.log('NextAuth session callback session:', session);
       return session
     },
   },
