@@ -11,18 +11,18 @@ export default async function SuperAdminPage() {
           </p>
         </header>
         <section className="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
+          <a href="/superadmin/teams" className="rounded-xl border bg-white p-5 shadow-sm hover:bg-gray-50 transition cursor-pointer block">
             <h3 className="font-semibold">Equipos</h3>
             <p className="text-sm text-gray-500">Ver, crear, editar y eliminar equipos.</p>
-          </div>
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
+          </a>
+          <a href="/superadmin/users" className="rounded-xl border bg-white p-5 shadow-sm hover:bg-gray-50 transition cursor-pointer block">
             <h3 className="font-semibold">Usuarios</h3>
             <p className="text-sm text-gray-500">Gestión global de usuarios y roles.</p>
-          </div>
-          <div className="rounded-xl border bg-white p-5 shadow-sm">
+          </a>
+          <a href="/superadmin/config" className="rounded-xl border bg-white p-5 shadow-sm hover:bg-gray-50 transition cursor-pointer block">
             <h3 className="font-semibold">Configuración</h3>
             <p className="text-sm text-gray-500">Toggles de módulos, auditoría y soporte.</p>
-          </div>
+          </a>
         </section>
       </main>
     </RoleGate>
