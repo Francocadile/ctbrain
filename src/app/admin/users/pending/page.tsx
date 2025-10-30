@@ -11,7 +11,7 @@ export default async function PendingUsersPage() {
   if (session?.user?.role !== "ADMIN") redirect("/login");
 
   const users = await prisma.user.findMany({
-    where: { approved: false },
+    where: { isApproved: false },
     orderBy: { createdAt: "asc" },
     select: { id: true, name: true, email: true, role: true, createdAt: true },
   });

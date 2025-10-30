@@ -14,15 +14,15 @@ export async function PATCH(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { approved } = await req.json().catch(() => ({}));
-  if (typeof approved !== "boolean") {
-    return NextResponse.json({ error: "approved (boolean) requerido" }, { status: 400 });
+  const { isApproved } = await req.json().catch(() => ({}));
+  if (typeof isApproved !== "boolean") {
+    return NextResponse.json({ error: "isApproved (boolean) requerido" }, { status: 400 });
   }
 
   const user = await prisma.user.update({
     where: { id: params.id },
-    data: { approved },
-    select: { id: true, email: true, name: true, role: true, approved: true },
+    data: { isApproved },
+    select: { id: true, email: true, name: true, role: true, isApproved: true },
   });
 
   return NextResponse.json({ ok: true, data: user });

@@ -13,13 +13,13 @@ import bcrypt from "bcryptjs";
 ========================= */
 async function getUsers() {
   return prisma.user.findMany({
-    orderBy: [{ approved: "asc" }, { createdAt: "desc" }],
+    orderBy: [{ isApproved: "asc" }, { createdAt: "desc" }],
     select: {
       id: true,
       name: true,
       email: true,
       role: true,
-      approved: true,
+      isApproved: true,
       createdAt: true,
     },
   });
@@ -46,7 +46,7 @@ async function createUser(formData: FormData) {
 
   // Los usuarios creados por Admin se crean APROBADOS
   await prisma.user.create({
-    data: { name, email, password: hashed, role, approved: true },
+    data: { name, email, password: hashed, role, isApproved: true },
   });
 
   revalidatePath("/admin/users");
@@ -78,7 +78,7 @@ async function setApproval(formData: FormData) {
   const approved = String(formData.get("approved") ?? "") === "true";
   if (!id) throw new Error("ID requerido.");
 
-  await prisma.user.update({ where: { id }, data: { approved } });
+  await prisma.user.update({ where: { id }, data: { isApproved: approved } });
   revalidatePath("/admin/users");
 }
 
@@ -202,7 +202,7 @@ export default async function AdminUsersPage() {
                         </form>
                       </td>
                       <td className="px-3 py-2">
-                        {u.approved ? (
+                        {u.isApproved ? (
                           <span className="rounded bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
                             Aprobado
                           </span>
@@ -223,17 +223,17 @@ export default async function AdminUsersPage() {
                             <input
                               type="hidden"
                               name="approved"
-                              value={u.approved ? "false" : "true"}
+                              value={u.isApproved ? "false" : "true"}
                             />
                             <button
                               type="submit"
                               className={`rounded border px-3 py-1.5 text-xs font-medium ${
-                                u.approved
+                                u.isApproved
                                   ? "text-amber-700 hover:bg-amber-50"
                                   : "text-emerald-700 hover:bg-emerald-50"
                               }`}
                             >
-                              {u.approved ? "Suspender" : "Aprobar"}
+                              {u.isApproved ? "Suspender" : "Aprobar"}
                             </button>
                           </form>
 

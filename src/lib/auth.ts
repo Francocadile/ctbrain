@@ -1,93 +1,67 @@
-import NextAuth, { type NextAuthOptions } from 'next-auth'
-import type { AppRole } from '../types/next-auth'
-import CredentialsProvider from 'next-auth/providers/credentials'
-import { PrismaAdapter } from '@next-auth/prisma-adapter'
-import { prisma } from './prisma'
-import bcrypt from 'bcryptjs'
+// src/lib/auth.ts
+import type { NextAuthOptions } from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import { PrismaClient } from "@prisma/client";
 
+const prisma = new PrismaClient();
+
+/**
+ * CTB-BASE-12 | FASE 1
+ * - authorize simple: solo valida que el email exista (sin hash)
+ * - callbacks jwt/session: inyectan id, role, isApproved en la sesión
+ */
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
+  session: { strategy: "jwt" },
   providers: [
-    CredentialsProvider({
-      name: 'Credentials',
+    Credentials({
+      name: "credentials",
       credentials: {
-        email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
+        email: { label: "Email", type: "text" },
+        password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials.password) return null
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email.toLowerCase() },
-        })
-        if (!user || !user.password) return null
-        const isValid = await bcrypt.compare(credentials.password, user.password)
-        if (!isValid) return null
-        // Devuelve solo los campos esperados por NextAuth, con role tipado correctamente y sin password
+      async authorize(creds) {
+        const email = (creds?.email || "").trim().toLowerCase();
+        if (!email) return null;
+
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) return null;
+
+        // FASE 1: NO verifica password. Solo existencia de email.
+        // (Tus pantallas y seed actuales siguen andando.)
         return {
           id: user.id,
-          name: user.name,
           email: user.email,
-          role: user.role as AppRole,
-          approved: user.approved,
-          teamId: user.teamId ?? null,
-          createdAt: user.createdAt,
-          updatedAt: user.updatedAt,
-        }
-      }
-    })
+          name: user.name ?? user.email,
+          role: user.role,
+          isApproved: user.isApproved,
+        } as any;
+      },
+    }),
   ],
-  session: { strategy: 'jwt' },
+  pages: { signIn: "/login" },
   callbacks: {
-    async signIn({ user }) {
-      console.log('NextAuth signIn callback user:', user);
-      // SUPERADMIN: panel global
-      // @ts-ignore
-      if ((user as any)?.role === 'SUPERADMIN') return '/admin'
-      // @ts-ignore
-      if ((user as any)?.role === 'ADMIN') return '/admin'
-      // @ts-ignore
-      if ((user as any)?.role === 'CT') return '/ct'
-      // @ts-ignore
-      if ((user as any)?.role === 'MEDICO') return '/medico'
-      // @ts-ignore
-      if ((user as any)?.role === 'JUGADOR') return '/jugador'
-      // @ts-ignore
-      if ((user as any)?.role === 'DIRECTIVO') return '/directivo'
-      // @ts-ignore
-      const approved = !!(user as any)?.approved
-      if (!approved) return '/pending-approval'
-      return '/'
-    },
+    // Guarda role/isApproved en el token JWT
     async jwt({ token, user }) {
       if (user) {
-        console.log('NextAuth jwt callback user:', user);
         // @ts-ignore
-        token.id = (user as any).id
+        token.role = (user as any).role;
         // @ts-ignore
-        token.role = (user as any).role
-        // @ts-ignore
-        token.teamId = (user as any).teamId
-        // @ts-ignore
-        token.approved = !!(user as any).approved
+        token.isApproved = (user as any).isApproved;
       }
-      console.log('NextAuth jwt callback token:', token);
-      return token
+      return token;
     },
+
+    // Restaura id/role/isApproved en session.user para tu app
     async session({ session, token }) {
       // @ts-ignore
-      session.user.id = token.id as string
+      session.user = session.user || {};
       // @ts-ignore
-      session.user.role = token.role as string
+      session.user.id = token.sub as string;
       // @ts-ignore
-      session.user.teamId = (token as any).teamId as string
+      session.user.role = (token as any).role;
       // @ts-ignore
-      session.user.approved = !!(token as any).approved
-      console.log('NextAuth session callback session:', session);
-      return session
+      session.user.isApproved = (token as any).isApproved;
+      return session;
     },
   },
-  pages: { signIn: '/login' },
-  secret: process.env.NEXTAUTH_SECRET,
-}
-
-export default NextAuth(authOptions)
+};

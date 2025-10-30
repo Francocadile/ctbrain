@@ -18,70 +18,26 @@ const DEMO_NAMES = (process.env.SEED_DEMO_NAMES || "Juan Pérez,Carlos Díaz,Mar
   .filter(Boolean);
 
 async function seedAdmin() {
-  const email = (process.env.SEED_SUPERADMIN_EMAIL || 'owner@example.com').toLowerCase();
-  const password = process.env.SEED_SUPERADMIN_PASSWORD || 'change-me';
-  const name = process.env.SEED_SUPERADMIN_NAME || 'Owner';
+  const name = process.env.SEED_ADMIN_NAME || "Super Admin";
+  const email = process.env.SEED_ADMIN_EMAIL || "admin@ctbrain.local";
+  const password = process.env.SEED_ADMIN_PASSWORD || "admin123";
+
+  // 🔒 bcrypt hash solo para seed (el login real no lo usa aún)
   const passwordHash = await hash(password, 10);
+
   const admin = await prisma.user.upsert({
     where: { email },
-    update: {
-      role: 'SUPERADMIN',
-      approved: true,
-      password: passwordHash,
-    },
+    update: {},
     create: {
       name,
       email,
       password: passwordHash,
-      role: 'SUPERADMIN',
-      approved: true,
+      role: Role.ADMIN,
+      isApproved: true,
     },
   });
+
   console.log("✅ Admin creado/actualizado:", { email: admin.email, role: admin.role });
-}
-
-  // --- SEED CT ---
-    const email = 'prueba@ct.app';
-    const password = '123456';
-    const name = 'Cuerpo Técnico Demo';
-    const passwordHash = await hash(password, 10);
-    const ct = await prisma.user.upsert({
-      where: { email },
-      update: {
-        role: 'CT',
-        approved: true,
-        password: passwordHash,
-      },
-      create: {
-        name,
-        email,
-        password: passwordHash,
-        role: 'CT',
-        approved: true,
-      },
-    });
-
-async function seedCT() {
-  const email = 'prueba@ct.app';
-  const password = '123456';
-  const name = 'Cuerpo Técnico Demo';
-  const passwordHash = await hash(password, 10);
-  const ct = await prisma.user.upsert({
-    where: { email },
-    update: {
-      role: 'CT',
-      approved: true,
-      password: passwordHash,
-    },
-    create: {
-      name,
-      email,
-      password: passwordHash,
-      role: 'CT',
-      approved: true,
-    },
-  });
-  console.log("✅ CT creado/actualizado:", { email: ct.email, role: ct.role });
 }
 
 async function ensurePlayers() {
@@ -90,7 +46,7 @@ async function ensurePlayers() {
     await prisma.user.upsert({
       where: { email },
       update: {},
-  create: { name, email, role: Role.JUGADOR, approved: true },
+      create: { name, email, role: Role.JUGADOR, isApproved: true },
     });
   }
   const users = await prisma.user.findMany({ where: { email: { endsWith: "@ctbrain.dev" } } });
@@ -151,22 +107,17 @@ async function seedWellnessAndRPE(users: { id: string }[]) {
 
 async function main() {
   await seedAdmin();
-  await seedCT();
   if (DO_DEMO) {
     const players = await ensurePlayers();
     if (players.length) await seedWellnessAndRPE(players);
   } else {
-    console.log("ℹ️ SEED_DEMO no activo. Solo se creó el admin y CT.");
+    console.log("ℹ️ SEED_DEMO no activo. Solo se creó el admin.");
   }
 }
 
-(async () => {
-  try {
-    await main();
-  } catch (e) {
+main()
+  .catch((e) => {
     console.error(e);
     process.exit(1);
-  } finally {
-    await prisma.$disconnect();
-  }
-})();
+  })
+  .finally(async () => prisma.$disconnect());
