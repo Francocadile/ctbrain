@@ -163,28 +163,24 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     const current = await prisma.rival.findUnique({
       where: { id },
-      select: { coach: true, baseSystem: true, planReport: true }
+      select: { coach: true, baseSystem: true }
     });
     if (!current) return NextResponse.json({ error: "Rival no encontrado" }, { status: 404 });
 
-    const savedReport = asObj<any>(current.planReport);
-    const savedSP = asObj<any>(savedReport.setPieces);
-    const patchSP = asObj<any>(reportPatch.setPieces);
-
     const mergedSetPieces = {
-      ...asObj(savedSP),
-      ...asObj(patchSP),
-      ...(patchSP.for ? { for: asStrArray(patchSP.for) } : savedSP.for ? { for: asStrArray(savedSP.for) } : {}),
-      ...(patchSP.against ? { against: asStrArray(patchSP.against) } : savedSP.against ? { against: asStrArray(savedSP.against) } : {})
+      ...asObj(current.setPieces),
+      ...asObj(reportPatch.setPieces),
+      ...(reportPatch.setPieces.for ? { for: asStrArray(reportPatch.setPieces.for) } : current.setPieces.for ? { for: asStrArray(current.setPieces.for) } : {}),
+      ...(reportPatch.setPieces.against ? { against: asStrArray(reportPatch.setPieces.against) } : current.setPieces.against ? { against: asStrArray(current.setPieces.against) } : {})
     };
 
     const mergedTotals = {
-      ...asObj(savedReport.totals),
+      ...asObj(current.totals),
       ...asObj(reportPatch.totals),
     };
 
     const mergedReport = {
-      ...asObj(savedReport),
+      ...asObj(current),
       ...asObj(reportPatch),
       setPieces: mergedSetPieces,
       totals: Object.keys(mergedTotals).length ? mergedTotals : undefined,
@@ -197,11 +193,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const row = await prisma.rival.update({
       where: { id },
       data: dataPatch,
-      select: { coach: true, baseSystem: true, planReport: true }
+      select: { coach: true, baseSystem: true }
     });
 
     return NextResponse.json({
-      data: { coach: row.coach, baseSystem: row.baseSystem, planReport: asObj(row.planReport) },
+      data: { coach: row.coach, baseSystem: row.baseSystem },
       message: "PDF procesado: se actualizaron plan y estadísticas."
     });
   } catch (e: any) {
