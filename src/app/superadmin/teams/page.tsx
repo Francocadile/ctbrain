@@ -26,7 +26,6 @@ export default async function SuperAdminTeamsPage() {
           <div className="mt-4 text-red-600">{error}</div>
         )}
         <section className="mt-8">
-          <CreateTeamForm />
           <table className="min-w-full border rounded-xl bg-white">
             <thead>
               <tr className="bg-gray-100">
@@ -39,7 +38,6 @@ export default async function SuperAdminTeamsPage() {
                 <tr><td colSpan={3} className="px-4 py-4 text-gray-400">No hay equipos registrados.</td></tr>
               ) : (
                 teams.map((team) => (
-                  // @ts-expect-error Server Component importing Client Component
                   <TeamRow key={team.id} team={team} />
                 ))
               )}

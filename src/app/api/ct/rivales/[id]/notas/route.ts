@@ -31,10 +31,10 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
     const r = await prisma.rival.findUnique({
       where: { id },
+      select: { planNotes: true },
     });
     if (!r) return new NextResponse("No encontrado", { status: 404 });
-
-    return NextResponse.json({ data: null });
+    return NextResponse.json({ data: r.planNotes || {} });
   } catch (e: any) {
     return new NextResponse(e?.message || "Error", { status: 500 });
   }
@@ -50,11 +50,10 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
     const row = await prisma.rival.update({
       where: { id },
-      data: { planNotes: clean as any },
+      data: { planNotes: clean },
       select: { planNotes: true },
     });
-
-    return NextResponse.json({ data: (row.planNotes as RivalNotes) || {} });
+    return NextResponse.json({ data: row.planNotes || {} });
   } catch (e: any) {
     return new NextResponse(e?.message || "Error", { status: 500 });
   }
