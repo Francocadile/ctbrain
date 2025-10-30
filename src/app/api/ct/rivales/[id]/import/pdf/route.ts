@@ -168,14 +168,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     if (!current) return NextResponse.json({ error: "Rival no encontrado" }, { status: 404 });
 
     const mergedSetPieces = {
-      ...asObj(current.setPieces),
       ...asObj(reportPatch.setPieces),
-      ...(reportPatch.setPieces.for ? { for: asStrArray(reportPatch.setPieces.for) } : current.setPieces.for ? { for: asStrArray(current.setPieces.for) } : {}),
-      ...(reportPatch.setPieces.against ? { against: asStrArray(reportPatch.setPieces.against) } : current.setPieces.against ? { against: asStrArray(current.setPieces.against) } : {})
+      ...(reportPatch.setPieces?.for ? { for: asStrArray(reportPatch.setPieces.for) } : {}),
+      ...(reportPatch.setPieces?.against ? { against: asStrArray(reportPatch.setPieces.against) } : {})
     };
 
     const mergedTotals = {
-      ...asObj(current.totals),
       ...asObj(reportPatch.totals),
     };
 
