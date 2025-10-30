@@ -31,12 +31,10 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
     const r = await prisma.rival.findUnique({
       where: { id },
-      select: { planNotes: true },
     });
     if (!r) return new NextResponse("No encontrado", { status: 404 });
 
-    const data = (r.planNotes as RivalNotes) || {};
-    return NextResponse.json({ data });
+    return NextResponse.json({ data: null });
   } catch (e: any) {
     return new NextResponse(e?.message || "Error", { status: 500 });
   }
