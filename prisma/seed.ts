@@ -148,3 +148,6 @@ async function seedCoreUsers() {
     console.log(`✅ Usuario creado/actualizado: ${u.email} (${u.role})`);
   }
 }
+
+// package.json scripts
+// "db:seed": "tsx prisma/seed.ts"
