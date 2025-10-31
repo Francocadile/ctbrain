@@ -12,7 +12,7 @@ export default async function SuperAdminTeamsPage() {
   let teams: any[] = [];
   let error = null;
   try {
-    const res = await fetch("/superadmin/api/teams", { next: { revalidate: 0 } });
+  const res = await fetch("/api/superadmin/teams", { next: { revalidate: 0 } });
     if (!res.ok) throw new Error("No se pudo cargar la lista de equipos");
     teams = await res.json();
   } catch (e: any) {
