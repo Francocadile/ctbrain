@@ -1,20 +1,19 @@
 // src/app/superadmin/teams/page.tsx
+
 import RoleGate from "@/components/auth/RoleGate";
 import dynamic from "next/dynamic";
 import TeamRow from "./TeamRow";
 import TopRightLogout from "@/components/auth/TopRightLogout";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import prisma from "@/lib/prisma";
 
 const CreateTeamForm = dynamic(() => import("./CreateTeamForm"), { ssr: false });
 
 export default async function SuperAdminTeamsPage() {
-  // Fetch equipos desde el endpoint API
   let teams: any[] = [];
   let error = null;
   try {
-  const res = await fetch("/api/superadmin/teams", { next: { revalidate: 0 } });
-    if (!res.ok) throw new Error("No se pudo cargar la lista de equipos");
-    teams = await res.json();
+    teams = await prisma.team.findMany();
   } catch (e: any) {
     error = e.message || "Error desconocido";
   }
