@@ -26,7 +26,8 @@ export default async function SuperAdminTeamsPage() {
           <div className="mt-4 text-red-600">{error}</div>
         )}
         <section className="mt-8">
-          <table className="min-w-full border rounded-xl bg-white">
+          <CreateTeamForm />
+          <table className="min-w-full border rounded-xl bg-white mt-6">
             <thead>
               <tr className="bg-gray-100">
                 <th className="px-4 py-2 text-left">Nombre</th>
