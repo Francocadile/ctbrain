@@ -1,15 +1,24 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 export default function CreateUserForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("JUGADOR");
+  const [teamId, setTeamId] = useState("");
+  const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string|null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    fetch("/superadmin/api/teams")
+      .then(res => res.json())
+      .then(data => setTeams(data));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,14 +27,15 @@ export default function CreateUserForm() {
     const res = await fetch("/superadmin/api/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password, role }),
+      body: JSON.stringify({ name, email, password, role, teamId }),
     });
     if (res.ok) {
       setMsg("Usuario creado correctamente");
       setName("");
       setEmail("");
       setPassword("");
-      setRole("JUGADOR");
+  setRole("JUGADOR");
+  setTeamId("");
       router.refresh();
     } else {
       const data = await res.json();
@@ -59,7 +69,16 @@ export default function CreateUserForm() {
           <option value="DIRECTIVO">DIRECTIVO</option>
         </select>
       </div>
-      <button type="submit" disabled={loading || !name || !email || !password} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+      <div>
+        <label className="block text-sm font-medium mb-1">Equipo</label>
+        <select value={teamId} onChange={e => setTeamId(e.target.value)} required className="border rounded px-2 py-1">
+          <option value="">Selecciona equipo</option>
+          {teams.map(team => (
+            <option key={team.id} value={team.id}>{team.name}</option>
+          ))}
+        </select>
+      </div>
+      <button type="submit" disabled={loading || !name || !email || !password || !teamId} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
         {loading ? "Creando..." : "Crear usuario"}
       </button>
       {msg && <span className="ml-4 text-sm text-gray-600">{msg}</span>}
