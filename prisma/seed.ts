@@ -38,7 +38,24 @@ async function seedAdmin() {
   });
 
   console.log("✅ Admin creado/actualizado:", { email: admin.email, role: admin.role });
-}
+  async function seedSuperAdmin() {
+    const name = "Superadmin";
+    const email = "superadmin@admin.com";
+    const password = "123456";
+    const passwordHash = await hash(password, 10);
+    const superadmin = await prisma.user.upsert({
+      where: { email },
+      update: {},
+      create: {
+        name,
+        email,
+        password: passwordHash,
+        role: Role.SUPERADMIN,
+        isApproved: true,
+      },
+    });
+    console.log("✅ SUPERADMIN creado/actualizado:", { email: superadmin.email, role: superadmin.role });
+  }
 
 async function ensurePlayers() {
   for (const name of DEMO_NAMES) {
@@ -114,7 +131,9 @@ async function main() {
   } else {
     console.log("ℹ️ SEED_DEMO no activo. Solo se creó el admin y los usuarios principales.");
   }
-}
+  }
+    await seedSuperAdmin();
+    console.log("ℹ️ SEED_DEMO no activo. Solo se creó el superadmin y los usuarios principales.");
 
 
 main()
