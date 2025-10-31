@@ -13,7 +13,7 @@ export default function TeamRow({ team }: { team: { id: string; name: string } }
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const res = await fetch("/superadmin/api/teams", {
+  const res = await fetch("/api/superadmin/teams", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: team.id, name }),
@@ -32,7 +32,7 @@ export default function TeamRow({ team }: { team: { id: string; name: string } }
     if (!confirm("¿Seguro que deseas eliminar este equipo?")) return;
     setLoading(true);
     setError(null);
-    const res = await fetch("/superadmin/api/teams", {
+  const res = await fetch("/api/superadmin/teams", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: team.id }),
