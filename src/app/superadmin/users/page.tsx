@@ -10,7 +10,7 @@ export default async function SuperAdminUsersPage() {
   let users: any[] = [];
   let error = null;
   try {
-    const res = await fetch("/superadmin/api/users", { next: { revalidate: 0 } });
+    const res = await fetch("/api/superadmin/users", { next: { revalidate: 0 } });
     if (!res.ok) throw new Error("No se pudo cargar la lista de usuarios");
     users = await res.json();
   } catch (e: any) {
