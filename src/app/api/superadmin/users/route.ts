@@ -37,6 +37,7 @@ export async function POST(req: Request) {
       password: passwordHash,
       role: data.role,
       isApproved: true,
+      teamId: data.teamId,
     },
   });
   return NextResponse.json(user);
