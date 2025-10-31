@@ -1,5 +1,7 @@
 import RoleGate from "@/components/auth/RoleGate";
 import dynamic from "next/dynamic";
+import TopRightLogout from "@/components/auth/TopRightLogout";
+import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 
 const CreateUserForm = dynamic(() => import("./CreateUserForm"), { ssr: false });
 const UserRow = dynamic(() => import("./UserRow"), { ssr: false });
@@ -17,7 +19,11 @@ export default async function SuperAdminUsersPage() {
 
   return (
     <RoleGate allow={["SUPERADMIN"]}>
-      <main className="min-h-[60vh] px-6 py-10">
+      <main className="min-h-[60vh] px-6 py-10 relative">
+        <TopRightLogout />
+        <button onClick={() => window.history.back()} className="absolute left-6 top-8 flex items-center text-gray-600 hover:text-blue-600">
+          <ArrowLeftIcon className="h-5 w-5 mr-1" /> Volver
+        </button>
         <h1 className="text-2xl font-bold">Usuarios · SUPERADMIN</h1>
         <p className="mt-2 text-sm text-gray-600">Gestiona todos los usuarios y roles de la plataforma.</p>
         {error && (
@@ -30,9 +36,6 @@ export default async function SuperAdminUsersPage() {
               <tr className="bg-gray-100">
                 <th className="px-4 py-2 text-left">Nombre</th>
                 <th className="px-4 py-2 text-left">Email</th>
-                <th className="px-4 py-2 text-left">Rol</th>
-                <th className="px-4 py-2 text-left">Aprobado</th>
-                <th className="px-4 py-2 text-left">Acciones</th>
               </tr>
             </thead>
             <tbody>
