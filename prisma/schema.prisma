@@ -3,7 +3,7 @@ model Team {
   name      String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  // Relación con usuarios/equipos se agregará en la siguiente fase
+  users     User[]
 }
 // prisma/schema.prisma
 generator client {
@@ -99,6 +99,9 @@ model User {
   role       Role     @default(JUGADOR)
 
   isApproved Boolean  @default(false)
+
+  teamId     String?
+  team       Team?    @relation(fields: [teamId], references: [id])
 
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
