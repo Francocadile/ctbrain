@@ -12,7 +12,7 @@ export default function CreateTeamForm() {
     e.preventDefault();
     setLoading(true);
     setMsg(null);
-    const res = await fetch("/superadmin/api/teams", {
+  const res = await fetch("/api/superadmin/teams", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
