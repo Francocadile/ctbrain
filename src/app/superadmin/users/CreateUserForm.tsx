@@ -15,7 +15,7 @@ export default function CreateUserForm() {
   const router = useRouter();
 
   useEffect(() => {
-    fetch("/superadmin/api/teams")
+    fetch("/api/superadmin/teams")
       .then(res => res.json())
       .then(data => setTeams(data));
   }, []);
@@ -24,7 +24,7 @@ export default function CreateUserForm() {
     e.preventDefault();
     setLoading(true);
     setMsg(null);
-    const res = await fetch("/superadmin/api/users", {
+    const res = await fetch("/api/superadmin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, email, password, role, teamId }),
