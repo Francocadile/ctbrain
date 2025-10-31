@@ -20,6 +20,7 @@ export default function CreateTeamForm() {
     if (res.ok) {
       setMsg("Equipo creado correctamente");
       setName("");
+      setTimeout(() => setMsg(null), 2000);
       router.refresh();
     } else {
       const data = await res.json();
