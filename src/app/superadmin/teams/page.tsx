@@ -4,7 +4,7 @@ import RoleGate from "@/components/auth/RoleGate";
 import dynamic from "next/dynamic";
 import TeamRow from "./TeamRow";
 import TopRightLogout from "@/components/auth/TopRightLogout";
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import BackButton from "@/components/ui/BackButton";
 import prisma from "@/lib/prisma";
 
 const CreateTeamForm = dynamic(() => import("./CreateTeamForm"), { ssr: false });
@@ -22,9 +22,7 @@ export default async function SuperAdminTeamsPage() {
     <RoleGate allow={["SUPERADMIN"]}>
       <main className="min-h-[60vh] px-6 py-10 relative">
         <TopRightLogout />
-        <button onClick={() => window.history.back()} className="absolute left-6 top-8 flex items-center text-gray-600 hover:text-blue-600">
-          <ArrowLeftIcon className="h-5 w-5 mr-1" /> Volver
-        </button>
+        <BackButton />
         <h1 className="text-2xl font-bold">Equipos · SUPERADMIN</h1>
         <p className="mt-2 text-sm text-gray-600">Gestiona todos los equipos de la plataforma.</p>
         {error && (
