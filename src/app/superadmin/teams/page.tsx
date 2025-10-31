@@ -31,6 +31,7 @@ export default async function SuperAdminTeamsPage() {
               <tr className="bg-gray-100">
                 <th className="px-4 py-2 text-left">Nombre</th>
                 <th className="px-4 py-2 text-left">ID</th>
+                <th className="px-4 py-2 text-left">Acciones</th>
               </tr>
             </thead>
             <tbody>
