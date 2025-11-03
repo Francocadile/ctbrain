@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 
 export default function CreateTeamForm() {
   const [name, setName] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string|null>(null);
   const router = useRouter();
@@ -12,14 +13,15 @@ export default function CreateTeamForm() {
     e.preventDefault();
     setLoading(true);
     setMsg(null);
-  const res = await fetch("/api/superadmin/teams", {
+    const res = await fetch("/api/superadmin/teams", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, adminEmail }),
     });
     if (res.ok) {
-      setMsg("Equipo creado correctamente");
+      setMsg("Equipo y ADMIN creados correctamente");
       setName("");
+      setAdminEmail("");
       setTimeout(() => setMsg(null), 2000);
       router.refresh();
     } else {
@@ -30,13 +32,17 @@ export default function CreateTeamForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="mb-6 flex gap-2 items-end">
+    <form onSubmit={handleSubmit} className="mb-6 flex gap-2 items-end flex-wrap">
       <div>
         <label className="block text-sm font-medium mb-1">Nombre del equipo</label>
         <input type="text" value={name} onChange={e => setName(e.target.value)} required className="border rounded px-2 py-1" placeholder="Ej: Club Atlético Demo" />
       </div>
-      <button type="submit" disabled={loading || !name} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
-        {loading ? "Creando..." : "Crear equipo"}
+      <div>
+        <label className="block text-sm font-medium mb-1">Email del ADMIN responsable</label>
+        <input type="email" value={adminEmail} onChange={e => setAdminEmail(e.target.value)} required className="border rounded px-2 py-1" placeholder="admin@club.com" />
+      </div>
+      <button type="submit" disabled={loading || !name || !adminEmail} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+        {loading ? "Creando..." : "Crear equipo y ADMIN"}
       </button>
       {msg && <span className="ml-4 text-sm text-gray-600">{msg}</span>}
     </form>

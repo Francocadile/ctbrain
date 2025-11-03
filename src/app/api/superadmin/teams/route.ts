@@ -25,8 +25,24 @@ export async function POST(req: Request) {
   const session = await requireSuperAdmin();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   const data = await req.json();
-  const team = await prisma.team.create({ data });
-  return NextResponse.json(team);
+  // data: { name, adminEmail }
+  if (!data.name || !data.adminEmail) {
+    return NextResponse.json({ error: "Faltan campos obligatorios" }, { status: 400 });
+  }
+  // Crear el equipo
+  const team = await prisma.team.create({ data: { name: data.name } });
+  // Crear el usuario ADMIN vinculado
+  const adminUser = await prisma.user.create({
+    data: {
+      name: "ADMIN de " + data.name,
+      email: data.adminEmail,
+      password: await require("bcryptjs").hash("admin123", 10), // password temporal
+      role: "ADMIN",
+      isApproved: true,
+      teamId: team.id,
+    },
+  });
+  return NextResponse.json({ team, adminUser });
 }
 
 export async function PUT(req: Request) {
