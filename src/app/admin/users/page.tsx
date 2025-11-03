@@ -49,9 +49,14 @@ async function createUser(formData: FormData) {
 
   const hashed = await bcrypt.hash(password, 10);
 
-  // Los usuarios creados por Admin se crean APROBADOS
+  // Obtener el teamId del admin autenticado
+  const { getServerSession } = await import("next-auth");
+  const { authOptions } = await import("@/lib/auth");
+  const session = await getServerSession(authOptions);
+  const teamId = (session?.user as any)?.teamId ?? null;
+  // Los usuarios creados por Admin se crean APROBADOS y vinculados al equipo
   await prisma.user.create({
-    data: { name, email, password: hashed, role, isApproved: true },
+    data: { name, email, password: hashed, role, isApproved: true, teamId },
   });
 
   revalidatePath("/admin/users");
