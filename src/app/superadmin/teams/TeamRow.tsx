@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function TeamRow({ team }: { team: { id: string; name: string } }) {
+export default function TeamRow({ team, adminEmail }: { team: { id: string; name: string }, adminEmail?: string }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(team.name);
   const [loading, setLoading] = useState(false);
@@ -70,7 +70,8 @@ export default function TeamRow({ team }: { team: { id: string; name: string } }
         {error && <div className="text-xs text-red-600 mt-1 font-semibold">{error}</div>}
         {success && <div className="text-xs text-green-600 mt-1 font-semibold">{success}</div>}
       </td>
-      <td className="px-4 py-2 text-xs text-gray-500 font-mono">{team.id}</td>
+  <td className="px-4 py-2 text-xs text-gray-500 font-mono">{team.id}</td>
+  <td className="px-4 py-2 text-xs text-gray-700">{adminEmail || "-"}</td>
       <td className="px-4 py-2">
         {!editing && (
           <div className="flex gap-2">

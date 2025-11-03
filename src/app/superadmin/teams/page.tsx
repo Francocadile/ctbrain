@@ -13,7 +13,17 @@ export default async function SuperAdminTeamsPage() {
   let teams: any[] = [];
   let error = null;
   try {
-    teams = await prisma.team.findMany();
+    // Obtener equipos y el usuario ADMIN vinculado (y su contraseña si existe)
+    teams = await prisma.team.findMany({
+      include: {
+        users: {
+          where: { role: "ADMIN" },
+          select: { email: true, id: true }
+        }
+      }
+    });
+    // Buscar si hay una contraseña generada en la sesión (opcional, si se guarda en la DB)
+    // Si quieres persistir la contraseña, deberías guardarla en la DB (campo adminPassword en Team)
   } catch (e: any) {
     error = e.message || "Error desconocido";
   }
@@ -38,15 +48,16 @@ export default async function SuperAdminTeamsPage() {
                   <tr className="bg-gray-100">
                     <th className="px-4 py-2 text-left">Nombre</th>
                     <th className="px-4 py-2 text-left">ID</th>
+                    <th className="px-4 py-2 text-left">ADMIN Email</th>
                     <th className="px-4 py-2 text-left">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {teams.length === 0 ? (
-                    <tr><td colSpan={3} className="px-4 py-4 text-gray-400 text-center">No hay equipos registrados.</td></tr>
+                    <tr><td colSpan={4} className="px-4 py-4 text-gray-400 text-center">No hay equipos registrados.</td></tr>
                   ) : (
                     teams.map((team) => (
-                      <TeamRow key={team.id} team={team} />
+                      <TeamRow key={team.id} team={team} adminEmail={team.users[0]?.email || "-"} />
                     ))
                   )}
                 </tbody>
