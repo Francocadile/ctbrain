@@ -16,7 +16,7 @@ export default function UserRow({ user }: { user: any }) {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const res = await fetch("/superadmin/api/users", {
+  const res = await fetch("/api/superadmin/users", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: user.id, name, email, role, isApproved }),
@@ -35,7 +35,7 @@ export default function UserRow({ user }: { user: any }) {
     if (!confirm("¿Seguro que deseas eliminar este usuario?")) return;
     setLoading(true);
     setError(null);
-    const res = await fetch("/superadmin/api/users", {
+  const res = await fetch("/api/superadmin/users", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: user.id }),
