@@ -31,18 +31,29 @@ export async function POST(req: Request) {
   }
   // Crear el equipo
   const team = await prisma.team.create({ data: { name: data.name } });
+  // Generar contraseña aleatoria segura
+  function generatePassword(length = 12) {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*";
+    let pass = "";
+    for (let i = 0; i < length; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return pass;
+  }
+  const adminPassword = generatePassword();
   // Crear el usuario ADMIN vinculado
+  const bcryptjs = require("bcryptjs");
   const adminUser = await prisma.user.create({
     data: {
       name: "ADMIN de " + data.name,
       email: data.adminEmail,
-      password: await require("bcryptjs").hash("admin123", 10), // password temporal
+      password: await bcryptjs.hash(adminPassword, 10),
       role: "ADMIN",
       isApproved: true,
       teamId: team.id,
     },
   });
-  return NextResponse.json({ team, adminUser });
+  return NextResponse.json({ team, adminUser, adminPassword });
 }
 
 export async function PUT(req: Request) {

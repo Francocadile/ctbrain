@@ -19,10 +19,11 @@ export default function CreateTeamForm() {
       body: JSON.stringify({ name, adminEmail }),
     });
     if (res.ok) {
-      setMsg("Equipo y ADMIN creados correctamente");
+      const data = await res.json();
+      setMsg(`Equipo y ADMIN creados correctamente.\nEmail: ${adminEmail}\nContraseña: ${data.adminPassword}`);
       setName("");
       setAdminEmail("");
-      setTimeout(() => setMsg(null), 2000);
+      // No ocultar el mensaje automáticamente para que el SUPERADMIN pueda copiar la contraseña
       router.refresh();
     } else {
       const data = await res.json();
@@ -44,7 +45,9 @@ export default function CreateTeamForm() {
       <button type="submit" disabled={loading || !name || !adminEmail} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
         {loading ? "Creando..." : "Crear equipo y ADMIN"}
       </button>
-      {msg && <span className="ml-4 text-sm text-gray-600">{msg}</span>}
+      {msg && (
+        <pre className="ml-4 text-sm text-green-700 whitespace-pre-line bg-green-50 p-2 rounded border border-green-200 max-w-xl">{msg}</pre>
+      )}
     </form>
   );
 }
