@@ -12,7 +12,12 @@ import bcrypt from "bcryptjs";
    DATA
 ========================= */
 async function getUsers() {
+  const { getServerSession } = await import("next-auth");
+  const { authOptions } = await import("@/lib/auth");
+  const session = await getServerSession(authOptions);
+  const teamId = (session?.user as any)?.teamId ?? null;
   return prisma.user.findMany({
+    where: teamId ? { teamId } : {},
     orderBy: [{ isApproved: "asc" }, { createdAt: "desc" }],
     select: {
       id: true,
