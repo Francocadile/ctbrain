@@ -15,9 +15,14 @@ async function requireSuperAdmin() {
 }
 
 export async function GET() {
-  const session = await requireSuperAdmin();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-  const users = await prisma.user.findMany();
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.role) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  let users: any[] = [];
+  if (session.user.role === "SUPERADMIN") {
+    users = await prisma.user.findMany();
+  } else if (session.user.role === "ADMIN" && (session.user as any).teamId) {
+    users = await prisma.user.findMany({ where: { teamId: (session.user as any).teamId } });
+  }
   return NextResponse.json(users);
 }
 
@@ -37,7 +42,7 @@ export async function POST(req: Request) {
       password: passwordHash,
       role: data.role,
       isApproved: true,
-      teamId: data.teamId,
+      teamId: data.teamId === "" ? null : data.teamId,
     },
   });
   return NextResponse.json(user);

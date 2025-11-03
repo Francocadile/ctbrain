@@ -34,6 +34,7 @@ export const authOptions: NextAuthOptions = {
           name: user.name ?? user.email,
           role: user.role,
           isApproved: user.isApproved,
+          teamId: user.teamId ?? null,
         } as any;
       },
     }),
@@ -47,21 +48,25 @@ export const authOptions: NextAuthOptions = {
         token.role = (user as any).role;
         // @ts-ignore
         token.isApproved = (user as any).isApproved;
+        // @ts-ignore
+        token.teamId = (user as any).teamId ?? null;
       }
       return token;
     },
 
     // Restaura id/role/isApproved en session.user para tu app
     async session({ session, token }) {
-      // @ts-ignore
-      session.user = session.user || {};
-      // @ts-ignore
-      session.user.id = token.sub as string;
-      // @ts-ignore
-      session.user.role = (token as any).role;
-      // @ts-ignore
-      session.user.isApproved = (token as any).isApproved;
-      return session;
+  // @ts-ignore
+  session.user = session.user || {};
+  // @ts-ignore
+  session.user.id = token.sub as string;
+  // @ts-ignore
+  session.user.role = (token as any).role;
+  // @ts-ignore
+  session.user.isApproved = (token as any).isApproved;
+  // @ts-ignore
+  session.user.teamId = (token as any).teamId ?? null;
+  return session;
     },
   },
 };
