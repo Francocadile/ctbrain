@@ -6,7 +6,6 @@ import BackButton from "@/components/ui/BackButton";
 
 import CreateUserForm from "./CreateUserForm";
 import UserRow from "./UserRow";
-import EditUserModal from "./EditUserModal";
 
 export default async function SuperAdminUsersPage() {
   let users: any[] = [];
