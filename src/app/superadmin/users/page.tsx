@@ -37,11 +37,12 @@ export default async function SuperAdminUsersPage() {
                   <tr className="bg-gray-100">
                     <th className="px-4 py-2 text-left">Nombre</th>
                     <th className="px-4 py-2 text-left">Email</th>
+                    <th className="px-4 py-2 text-left">Equipo</th>
                   </tr>
                 </thead>
                 <tbody>
                   {users.length === 0 ? (
-                    <tr><td colSpan={5} className="px-4 py-4 text-gray-400 text-center">No hay usuarios registrados.</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-4 text-gray-400 text-center">No hay usuarios registrados.</td></tr>
                   ) : (
                     users.map((user) => (
                       <UserRow key={user.id} user={user} />

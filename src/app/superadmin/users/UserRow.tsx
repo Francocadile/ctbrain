@@ -76,6 +76,7 @@ export default function UserRow({ user }: { user: any }) {
         {error && <div className="text-xs text-red-600 mt-1">{error}</div>}
       </td>
       <td className="px-4 py-2 text-xs text-gray-500">{user.email}</td>
+      <td className="px-4 py-2 text-xs text-gray-500">{user.teamId ? user.teamId : "Sin equipo"}</td>
       <td className="px-4 py-2 text-xs text-gray-500">{user.role}</td>
       <td className="px-4 py-2 text-xs text-gray-500">{user.isApproved ? "✔️" : "❌"}</td>
       <td className="px-4 py-2">
