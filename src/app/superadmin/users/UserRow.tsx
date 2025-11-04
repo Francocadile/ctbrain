@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function UserRow({ user }: { user: any }) {
+export default function UserRow({ user, teams }: { user: any, teams: any[] }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(user.name);
   const [email, setEmail] = useState(user.email);
