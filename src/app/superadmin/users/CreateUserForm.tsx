@@ -3,22 +3,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-export default function CreateUserForm() {
+
+export default function CreateUserForm({ teams }: { teams: any[] }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("JUGADOR");
   const [teamId, setTeamId] = useState("");
-  const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string|null>(null);
   const router = useRouter();
-
-  useEffect(() => {
-    fetch("/api/superadmin/teams")
-      .then(res => res.json())
-      .then(data => setTeams(data));
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,8 +65,8 @@ export default function CreateUserForm() {
       </div>
       <div>
         <label className="block text-sm font-medium mb-1">Equipo</label>
-        <select value={teamId} onChange={e => setTeamId(e.target.value)} required className="border rounded px-2 py-1">
-          <option value="">Selecciona equipo</option>
+        <select value={teamId} onChange={e => setTeamId(e.target.value)} className="border rounded px-2 py-1">
+          <option value="">Sin equipo</option>
           {teams.map(team => (
             <option key={team.id} value={team.id}>{team.name}</option>
           ))}
