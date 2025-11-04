@@ -70,6 +70,9 @@ export async function DELETE(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   const { id } = await req.json();
   if (!id) return NextResponse.json({ error: "Missing team id" }, { status: 400 });
+  // Eliminar todos los usuarios asociados al equipo
+  await prisma.user.deleteMany({ where: { teamId: id } });
+  // Eliminar el equipo
   await prisma.team.delete({ where: { id } });
   return NextResponse.json({ success: true });
 }
