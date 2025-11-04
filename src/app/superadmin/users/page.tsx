@@ -1,11 +1,11 @@
 
+
 import RoleGate from "@/components/auth/RoleGate";
 import TopRightLogout from "@/components/auth/TopRightLogout";
 import BackButton from "@/components/ui/BackButton";
-import dynamic from "next/dynamic";
 
-const CreateUserForm = dynamic(() => import("./CreateUserForm"), { ssr: false });
-const EditUserModal = dynamic(() => import("./EditUserModal"), { ssr: false });
+import CreateUserForm from "./CreateUserForm";
+import EditUserModal from "./EditUserModal";
 
 export default async function SuperAdminUsersPage() {
   let users: any[] = [];
@@ -32,7 +32,7 @@ export default async function SuperAdminUsersPage() {
           <TopRightLogout />
           <BackButton />
           <h1 className="text-2xl font-bold">Usuarios registrados</h1>
-          <p className="mt-2 text-sm text-gray-600">Gestiona todos los usuarios, roles y equipos. Puedes editar, reasignar y eliminar usuarios.</p>
+          <p className="mt-2 text-sm text-gray-600">Gestiona todos los usuarios, roles y equipos. Puedes editar, reasignar y eliminar usuarios. Los usuarios sin equipo se resaltan en amarillo.</p>
           {error && (
             <div className="mt-4 text-red-600 font-semibold">{error}</div>
           )}
@@ -56,14 +56,14 @@ export default async function SuperAdminUsersPage() {
                     users.map((user) => {
                       const team = teams.find((t: any) => t.id === user.teamId);
                       return (
-                        <tr key={user.id} className={!user.teamId ? "bg-yellow-100" : ""}>
+                        <tr key={user.id} className={!user.teamId ? "bg-yellow-100" : "hover:bg-blue-50 transition"}>
                           <td className="px-4 py-2 font-medium">{user.name || "-"}</td>
                           <td className="px-4 py-2 text-xs text-gray-700">{user.email}</td>
                           <td className="px-4 py-2 text-xs text-gray-700">{team ? team.name : <span className="text-red-600 font-semibold">Sin equipo</span>}</td>
                           <td className="px-4 py-2 text-xs text-gray-700">{user.role}</td>
-                          <td className="px-4 py-2">
+                          <td className="px-4 py-2 flex gap-2">
                             <EditUserModal user={user} teams={teams} />
-                            <button className="ml-2 text-red-600 hover:underline" onClick={async () => {
+                            <button className="text-red-600 hover:underline" onClick={async () => {
                               if (!confirm("¿Seguro que deseas eliminar este usuario?")) return;
                               await fetch("/api/superadmin/users", {
                                 method: "DELETE",
