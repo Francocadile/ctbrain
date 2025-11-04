@@ -25,64 +25,17 @@ export default async function SuperAdminUsersPage() {
   }
 
   const Container = (await import("@/components/ui/container")).default;
-  return (
-    <RoleGate allow={["SUPERADMIN"]}>
-      <main className="min-h-[60vh] bg-gray-50 py-10 relative">
-        <Container>
-          <TopRightLogout />
-          <BackButton />
-          <h1 className="text-2xl font-bold">Usuarios registrados</h1>
-          <p className="mt-2 text-sm text-gray-600">Gestiona todos los usuarios, roles y equipos. Puedes editar, reasignar y eliminar usuarios. Los usuarios sin equipo se resaltan en amarillo.</p>
-          {error && (
-            <div className="mt-4 text-red-600 font-semibold">{error}</div>
-          )}
-          <section className="mt-8">
-            <CreateUserForm teams={teams} />
-            <div className="overflow-x-auto">
-              <table className="min-w-full border rounded-xl bg-white mt-6 shadow-sm">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="px-4 py-2 text-left">Nombre</th>
-                    <th className="px-4 py-2 text-left">Email</th>
-                    <th className="px-4 py-2 text-left">Equipo</th>
-                    <th className="px-4 py-2 text-left">Rol</th>
-                    <th className="px-4 py-2 text-left">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.length === 0 ? (
-                    <tr><td colSpan={5} className="px-4 py-4 text-gray-400 text-center">No hay usuarios registrados.</td></tr>
-                  ) : (
-                    users.map((user) => {
-                      const team = teams.find((t: any) => t.id === user.teamId);
-                      return (
-                        <tr key={user.id} className={!user.teamId ? "bg-yellow-100" : "hover:bg-blue-50 transition"}>
-                          <td className="px-4 py-2 font-medium">{user.name || "-"}</td>
-                          <td className="px-4 py-2 text-xs text-gray-700">{user.email}</td>
-                          <td className="px-4 py-2 text-xs text-gray-700">{team ? team.name : <span className="text-red-600 font-semibold">Sin equipo</span>}</td>
-                          <td className="px-4 py-2 text-xs text-gray-700">{user.role}</td>
-                          <td className="px-4 py-2 flex gap-2">
-                            <EditUserModal user={user} teams={teams} />
-                            <button className="text-red-600 hover:underline" onClick={async () => {
-                              if (!confirm("¿Seguro que deseas eliminar este usuario?")) return;
-                              await fetch("/api/superadmin/users", {
-                                method: "DELETE",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ id: user.id })
-                              });
-                              window.location.reload();
-                            }}>Eliminar</button>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </Container>
-      </main>
-    </RoleGate>
-  );
+    return (
+      <RoleGate allow={["SUPERADMIN"]}>
+        <main className="min-h-[60vh] bg-gray-50 py-10 relative">
+          <Container>
+            <TopRightLogout />
+            <BackButton />
+            <h1 className="text-2xl font-bold">Configuración de equipos</h1>
+            <p className="mt-2 text-sm text-gray-600">Gestiona los equipos y la configuración global de la plataforma.</p>
+            {/* Aquí puedes agregar componentes de equipos y configuración global */}
+          </Container>
+        </main>
+      </RoleGate>
+    );
 }
