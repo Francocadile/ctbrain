@@ -56,11 +56,11 @@ export default async function SuperAdminUsersPage() {
                     users.map((user) => {
                       const team = teams.find((t: any) => t.id === user.teamId);
                       return (
-                        <tr key={user.id} className={user.teamId ? "" : "bg-yellow-50"}>
-                          <td className="px-4 py-2">{user.name || "-"}</td>
-                          <td className="px-4 py-2 text-xs text-gray-500">{user.email}</td>
-                          <td className="px-4 py-2 text-xs text-gray-500">{team ? team.name : <span className="text-red-600 font-semibold">Sin equipo</span>}</td>
-                          <td className="px-4 py-2 text-xs text-gray-500">{user.role}</td>
+                        <tr key={user.id} className={!user.teamId ? "bg-yellow-100" : ""}>
+                          <td className="px-4 py-2 font-medium">{user.name || "-"}</td>
+                          <td className="px-4 py-2 text-xs text-gray-700">{user.email}</td>
+                          <td className="px-4 py-2 text-xs text-gray-700">{team ? team.name : <span className="text-red-600 font-semibold">Sin equipo</span>}</td>
+                          <td className="px-4 py-2 text-xs text-gray-700">{user.role}</td>
                           <td className="px-4 py-2">
                             <EditUserModal user={user} teams={teams} />
                             <button className="ml-2 text-red-600 hover:underline" onClick={async () => {

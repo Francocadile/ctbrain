@@ -70,9 +70,11 @@ export async function DELETE(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   const { id } = await req.json();
   if (!id) return NextResponse.json({ error: "Missing team id" }, { status: 400 });
-  // Eliminar todos los usuarios asociados al equipo
+  // Eliminar todos los usuarios asociados al equipo (teamId igual al id)
   await prisma.user.deleteMany({ where: { teamId: id } });
   // Eliminar el equipo
   await prisma.team.delete({ where: { id } });
+  // Opcional: eliminar usuarios huérfanos (sin equipo y rol ADMIN/CT/JUGADOR)
+  // await prisma.user.deleteMany({ where: { teamId: null, role: { in: ["ADMIN", "CT", "JUGADOR"] } } });
   return NextResponse.json({ success: true });
 }
