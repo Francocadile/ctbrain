@@ -1,3 +1,4 @@
+"use client";
 // src/app/ct/layout.tsx
 import * as React from "react";
 import Link from "next/link";
