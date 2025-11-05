@@ -76,7 +76,7 @@ export default function UserRow({ user, teams }: { user: any, teams: any[] }) {
         {error && <div className="text-xs text-red-600 mt-1">{error}</div>}
       </td>
       <td className="px-4 py-2 text-xs text-gray-500">{user.email}</td>
-      <td className="px-4 py-2 text-xs text-gray-500">{user.teamId ? user.teamId : "Sin equipo"}</td>
+  <td className="px-4 py-2 text-xs text-gray-500">{user.teamId ? (teams.find((t: any) => t.id === user.teamId)?.name || user.teamId) : <span className="text-red-600 font-semibold">Sin equipo</span>}</td>
       <td className="px-4 py-2 text-xs text-gray-500">{user.role}</td>
       <td className="px-4 py-2 text-xs text-gray-500">{user.isApproved ? "✔️" : "❌"}</td>
       <td className="px-4 py-2">
