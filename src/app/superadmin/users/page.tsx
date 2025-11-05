@@ -6,21 +6,15 @@ import BackButton from "@/components/ui/BackButton";
 
 import CreateUserForm from "./CreateUserForm";
 import UserRow from "./UserRow";
+import prisma from "@/lib/prisma";
 
 export default async function SuperAdminUsersPage() {
   let users: any[] = [];
   let teams: any[] = [];
   let error = null;
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
-    const [usersRes, teamsRes] = await Promise.all([
-      fetch(`${baseUrl}/api/superadmin/users`, { next: { revalidate: 0 } }),
-      fetch(`${baseUrl}/api/superadmin/teams`, { next: { revalidate: 0 } })
-    ]);
-    if (!usersRes.ok) throw new Error("No se pudo cargar la lista de usuarios");
-    if (!teamsRes.ok) throw new Error("No se pudo cargar la lista de equipos");
-    users = await usersRes.json();
-    teams = await teamsRes.json();
+    users = await prisma.user.findMany();
+    teams = await prisma.team.findMany();
   } catch (e: any) {
     error = e.message || "Error desconocido";
   }
