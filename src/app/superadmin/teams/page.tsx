@@ -16,10 +16,7 @@ export default async function SuperAdminTeamsPage() {
     // Obtener equipos y el usuario ADMIN vinculado (y su contraseña si existe)
     teams = await prisma.team.findMany({
       include: {
-        users: {
-          where: { role: "ADMIN" },
-          select: { email: true, id: true }
-        }
+        users: true // incluir todos los usuarios
       }
     });
     // Buscar si hay una contraseña generada en la sesión (opcional, si se guarda en la DB)
@@ -49,16 +46,22 @@ export default async function SuperAdminTeamsPage() {
                     <th className="px-4 py-2 text-left">Nombre</th>
                     <th className="px-4 py-2 text-left">ID</th>
                     <th className="px-4 py-2 text-left">ADMIN Email</th>
+                    <th className="px-4 py-2 text-left">CTs asignados</th>
                     <th className="px-4 py-2 text-left">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {teams.length === 0 ? (
-                    <tr><td colSpan={4} className="px-4 py-4 text-gray-400 text-center">No hay equipos registrados.</td></tr>
+                    <tr><td colSpan={5} className="px-4 py-4 text-gray-400 text-center">No hay equipos registrados.</td></tr>
                   ) : (
-                    teams.map((team) => (
-                      <TeamRow key={team.id} team={team} adminEmail={team.users[0]?.email || "-"} />
-                    ))
+                    teams.map((team) => {
+                      // Obtener usuarios CT asignados a este equipo
+                      const cts = (team.users || []).filter((u: any) => u.role === "CT");
+                      const admin = (team.users || []).find((u: any) => u.role === "ADMIN");
+                      return (
+                        <TeamRow key={team.id} team={{ id: team.id, name: team.name, cts: cts.map((ct: any) => ({ id: ct.id, email: ct.email })) }} adminEmail={admin?.email || "-"} />
+                      );
+                    })
                   )}
                 </tbody>
               </table>
