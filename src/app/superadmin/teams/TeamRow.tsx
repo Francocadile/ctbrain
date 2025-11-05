@@ -156,16 +156,18 @@ export default function TeamRow({ team, adminEmail }: TeamRowProps) {
                       ))
                     )}
                   </div>
-                  {/* Botón para guardar la asignación (lógica a implementar) */}
+                  {/* Feedback visual */}
+                  {success && <div className="text-green-600 text-sm font-semibold mt-2">{success}</div>}
                   <div className="flex gap-2 mt-4">
                     <button type="button" onClick={() => setShowAssignModal(false)} className="px-4 py-1 rounded bg-gray-200 hover:bg-gray-300">Cerrar</button>
                     <button
                       type="button"
-                      className="px-4 py-1 rounded bg-green-600 text-white hover:bg-green-700"
-                      disabled={modalLoading}
+                      className={`px-4 py-1 rounded bg-green-600 text-white hover:bg-green-700 flex items-center ${modalLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      disabled={modalLoading || JSON.stringify(selectedCtIds) === JSON.stringify(cts.map(ct => ct.id))}
                       onClick={async () => {
                         setModalLoading(true);
                         setModalError(null);
+                        setSuccess(null);
                         try {
                           const res = await fetch("/api/superadmin/teams", {
                             method: "PATCH",
@@ -173,15 +175,22 @@ export default function TeamRow({ team, adminEmail }: TeamRowProps) {
                             body: JSON.stringify({ teamId: team.id, ctUserIds: selectedCtIds }),
                           });
                           if (!res.ok) throw new Error("Error al asignar CTs");
-                          setShowAssignModal(false);
-                          router.refresh();
+                          setSuccess("CTs asignados correctamente");
+                          setTimeout(() => {
+                            setShowAssignModal(false);
+                            setSuccess(null);
+                            router.refresh();
+                          }, 1200);
                         } catch (e: any) {
                           setModalError(e.message || "Error al asignar CTs");
                         } finally {
                           setModalLoading(false);
                         }
                       }}
-                    >Guardar</button>
+                    >
+                      {modalLoading ? <span className="loader mr-2" /> : null}
+                      Guardar
+                    </button>
                   </div>
                 </form>
               )}
