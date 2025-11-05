@@ -46,7 +46,7 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     async function fetchColors() {
       const session = await getSession();
-      const teamId = session?.user?.teamId;
+  const teamId = (session?.user as any)?.teamId;
       if (teamId) {
         // Fetch team colors from API
         const res = await fetch(`/api/team/${teamId}`);
