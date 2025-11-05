@@ -6,9 +6,11 @@ type CTUser = { id: string; email: string };
 type TeamRowProps = {
   team: { id: string; name: string; cts?: CTUser[] };
   adminEmail?: string;
+  rowProps?: Record<string, any>;
 };
 
 export default function TeamRow({ team, adminEmail }: TeamRowProps) {
+  const { rowProps } = arguments[0];
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(team.name);
   const [loading, setLoading] = useState(false);
@@ -83,7 +85,7 @@ export default function TeamRow({ team, adminEmail }: TeamRowProps) {
   }, [showAssignModal]);
 
   return (
-    <tr className="border-t group hover:bg-blue-50 transition">
+    <tr className="border-t group hover:bg-blue-50 transition" {...(rowProps || {})}>
       <td className="px-4 py-2 min-w-[180px]">
         {editing ? (
           <form onSubmit={handleEdit} className="flex gap-2 items-center">

@@ -26,6 +26,13 @@ export default async function SuperAdminTeamsPage() {
   }
 
   const Container = (await import("@/components/ui/container")).default;
+  // Filtro de equipos (client component)
+  // ...existing code...
+  // El filtro se implementa en un componente aparte para mantener la estética y funcionalidad
+  // El siguiente bloque debe ir antes de la tabla:
+  // <TeamFilter teams={teams} onSelect={...} />
+
+  // ...existing code...
   return (
     <RoleGate allow={["SUPERADMIN"]}>
       <main className="min-h-[60vh] bg-gray-50 py-10 relative">
@@ -39,6 +46,22 @@ export default async function SuperAdminTeamsPage() {
           )}
           <section className="mt-8">
             <CreateTeamForm />
+            {/* Filtro de equipos */}
+            <div className="mb-4 flex items-center gap-2">
+              <label className="text-sm font-semibold text-gray-700">Filtrar por equipo:</label>
+              <select className="border border-gray-300 rounded-md px-3 py-2 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-black" id="teamFilter" onChange={(e) => {
+                const val = e.target.value;
+                document.querySelectorAll('.team-row').forEach(row => {
+                  if (val === "") row.classList.remove('hidden');
+                  else row.classList.toggle('hidden', row.getAttribute('data-team-id') !== val);
+                });
+              }}>
+                <option value="">Todos</option>
+                {teams.map(team => (
+                  <option key={team.id} value={team.id}>{team.name}</option>
+                ))}
+              </select>
+            </div>
             <div className="overflow-x-auto">
               <table className="min-w-full border rounded-xl bg-white mt-6 shadow-sm">
                 <thead>
@@ -59,7 +82,7 @@ export default async function SuperAdminTeamsPage() {
                       const cts = (team.users || []).filter((u: any) => u.role === "CT");
                       const admin = (team.users || []).find((u: any) => u.role === "ADMIN");
                       return (
-                        <TeamRow key={team.id} team={{ id: team.id, name: team.name, cts: cts.map((ct: any) => ({ id: ct.id, email: ct.email })) }} adminEmail={admin?.email || "-"} />
+                        <TeamRow key={team.id} team={{ id: team.id, name: team.name, cts: cts.map((ct: any) => ({ id: ct.id, email: ct.email })) }} adminEmail={admin?.email || "-"} rowProps={{ className: 'team-row', 'data-team-id': team.id }} />
                       );
                     })
                   )}
