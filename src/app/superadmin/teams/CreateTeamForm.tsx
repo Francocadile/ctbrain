@@ -42,7 +42,7 @@ export default function CreateTeamForm() {
         <label className="block text-sm font-medium mb-1">Email del ADMIN responsable</label>
         <input type="email" value={adminEmail} onChange={e => setAdminEmail(e.target.value)} required className="border rounded px-2 py-1" placeholder="admin@club.com" />
       </div>
-      <button type="submit" disabled={loading || !name || !adminEmail} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
+      <button type="submit" disabled={loading || !name || !adminEmail} className="bg-black text-white px-4 py-2 rounded-md shadow hover:bg-gray-800 transition font-semibold">
         {loading ? "Creando..." : "Crear equipo y ADMIN"}
       </button>
       {msg && (
