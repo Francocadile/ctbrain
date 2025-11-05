@@ -54,9 +54,9 @@ export default function UserRow({ user, teams }: { user: any, teams: any[] }) {
       <td className="px-4 py-2">
         {editing ? (
           <form onSubmit={handleEdit} className="flex gap-2 items-center">
-            <input type="text" value={name} onChange={e => setName(e.target.value)} className="border rounded px-2 py-1" />
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="border rounded px-2 py-1" />
-            <select value={role} onChange={e => setRole(e.target.value)} className="border rounded px-2 py-1">
+            <input type="text" value={name} onChange={e => setName(e.target.value)} className="border border-gray-300 rounded-md px-3 py-2 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-black" />
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="border border-gray-300 rounded-md px-3 py-2 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-black" />
+            <select value={role} onChange={e => setRole(e.target.value)} className="border border-gray-300 rounded-md px-3 py-2 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-black">
               <option value="SUPERADMIN">SUPERADMIN</option>
               <option value="ADMIN">ADMIN</option>
               <option value="CT">CT</option>
@@ -64,11 +64,11 @@ export default function UserRow({ user, teams }: { user: any, teams: any[] }) {
               <option value="JUGADOR">JUGADOR</option>
               <option value="DIRECTIVO">DIRECTIVO</option>
             </select>
-            <label className="ml-2">
-              <input type="checkbox" checked={isApproved} onChange={e => setIsApproved(e.target.checked)} /> Aprobado
+            <label className="ml-2 text-sm font-semibold">
+              <input type="checkbox" checked={isApproved} onChange={e => setIsApproved(e.target.checked)} className="mr-1" /> Aprobado
             </label>
-            <button type="submit" disabled={loading || !name || !email} className="bg-green-600 text-white px-2 py-1 rounded">Guardar</button>
-            <button type="button" onClick={() => setEditing(false)} className="text-gray-500 px-2 py-1">Cancelar</button>
+            <button type="submit" disabled={loading || !name || !email} className="bg-black text-white px-3 py-2 rounded-md shadow hover:bg-gray-800 transition font-semibold">Guardar</button>
+            <button type="button" onClick={() => setEditing(false)} className="text-gray-500 px-3 py-2 font-semibold">Cancelar</button>
           </form>
         ) : (
           <span>{user.name}</span>
@@ -82,8 +82,8 @@ export default function UserRow({ user, teams }: { user: any, teams: any[] }) {
       <td className="px-4 py-2">
         {!editing && (
           <>
-            <button onClick={() => setEditing(true)} className="text-blue-600 hover:underline mr-2">Editar</button>
-            <button onClick={handleDelete} className="text-red-600 hover:underline">Eliminar</button>
+            <button onClick={() => setEditing(true)} className="bg-black text-white px-3 py-1 rounded-md shadow hover:bg-gray-800 transition font-semibold mr-2">Editar</button>
+            <button onClick={handleDelete} className="bg-red-600 text-white px-3 py-1 rounded-md shadow hover:bg-red-700 transition font-semibold">Eliminar</button>
           </>
         )}
       </td>

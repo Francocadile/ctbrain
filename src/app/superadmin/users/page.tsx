@@ -1,9 +1,9 @@
 
 
-import RoleGate from "@/components/auth/RoleGate";
-import TopRightLogout from "@/components/auth/TopRightLogout";
-import BackButton from "@/components/ui/BackButton";
 
+import RoleGate from "@/components/auth/RoleGate";
+import Link from "next/link";
+import { signOut } from "next-auth/react";
 import CreateUserForm from "./CreateUserForm";
 import UserRow from "./UserRow";
 import prisma from "@/lib/prisma";
@@ -19,13 +19,33 @@ export default async function SuperAdminUsersPage() {
     error = e.message || "Error desconocido";
   }
 
-  const Container = (await import("@/components/ui/container")).default;
   return (
     <RoleGate allow={["SUPERADMIN"]}>
-      <main className="min-h-[60vh] bg-gray-50 py-10 relative">
-        <Container>
-          <TopRightLogout />
-          <BackButton />
+      <div className="min-h-screen flex bg-gray-50">
+        {/* Sidebar */}
+        <aside className="w-64 shrink-0 border-r bg-white p-3 space-y-3">
+          <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">SUPERADMIN</div>
+          <ul className="space-y-0.5 mb-2">
+            <li>
+              <Link href="/superadmin/users" className="block rounded-md px-2 py-1.5 text-sm transition bg-black text-white">Usuarios</Link>
+            </li>
+            <li>
+              <Link href="/superadmin/teams" className="block rounded-md px-2 py-1.5 text-sm transition hover:bg-gray-100">Equipos</Link>
+            </li>
+          </ul>
+          <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">SALIR</div>
+          <ul className="space-y-0.5">
+            <li>
+              <button
+                aria-label="Cerrar sesión"
+                onClick={() => signOut({ callbackUrl: "/login" })}
+                className="block w-full text-left rounded-md px-2 py-1.5 text-sm transition hover:bg-gray-100"
+              >Cerrar sesión</button>
+            </li>
+          </ul>
+        </aside>
+        {/* Contenido */}
+        <main className="flex-1 p-3 md:p-4">
           <h1 className="text-2xl font-bold">Gestión de usuarios</h1>
           <p className="mt-2 text-sm text-gray-600">Administra todos los usuarios, roles y equipos. Puedes crear, editar, eliminar, aprobar y reasignar usuarios.</p>
           {error && (
@@ -59,8 +79,8 @@ export default async function SuperAdminUsersPage() {
               </table>
             </div>
           </section>
-        </Container>
-      </main>
+        </main>
+      </div>
     </RoleGate>
   );
 }
