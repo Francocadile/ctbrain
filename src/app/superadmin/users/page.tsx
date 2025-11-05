@@ -3,6 +3,7 @@
 
 import RoleGate from "@/components/auth/RoleGate";
 import SuperAdminSidebar from "./SuperAdminSidebar";
+import BackButton from "@/components/ui/BackButton";
 import CreateUserForm from "./CreateUserForm";
 import UserRow from "./UserRow";
 import prisma from "@/lib/prisma";
@@ -23,6 +24,7 @@ export default async function SuperAdminUsersPage() {
       <div className="min-h-screen flex bg-gray-50">
         <SuperAdminSidebar />
         <main className="flex-1 p-3 md:p-4">
+          <BackButton label="Volver al panel" />
           <h1 className="text-2xl font-bold">Gestión de usuarios</h1>
           <p className="mt-2 text-sm text-gray-600">Administra todos los usuarios, roles y equipos. Puedes crear, editar, eliminar, aprobar y reasignar usuarios.</p>
           {error && (

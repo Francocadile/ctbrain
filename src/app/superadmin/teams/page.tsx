@@ -34,7 +34,7 @@ export default async function SuperAdminTeamsPage() {
       <main className="min-h-[60vh] bg-gray-50 py-10 relative">
         <Container>
           <TopRightLogout />
-          <BackButton />
+          <BackButton label="Volver al panel" />
           <h1 className="text-2xl font-bold">Equipos · SUPERADMIN</h1>
           <p className="mt-2 text-sm text-gray-600">Gestiona todos los equipos de la plataforma. Puedes crear, editar y eliminar equipos. Pronto podrás asignar CTs.</p>
           {error && (
