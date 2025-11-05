@@ -1,6 +1,9 @@
 model Team {
   id        String   @id @default(cuid())
   name      String   @unique
+  logoUrl   String?  // URL del escudo/logo
+  primaryColor String? // Color principal (hex)
+  secondaryColor String? // Color secundario (hex)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   users     User[]

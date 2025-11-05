@@ -29,8 +29,15 @@ export async function POST(req: Request) {
   if (!data.name || !data.adminEmail) {
     return NextResponse.json({ error: "Faltan campos obligatorios" }, { status: 400 });
   }
-  // Crear el equipo
-  const team = await prisma.team.create({ data: { name: data.name } });
+  // Crear el equipo con logo y colores
+  const team = await prisma.team.create({
+    data: {
+      name: data.name,
+      logoUrl: data.logoUrl ?? null,
+      primaryColor: data.primaryColor ?? null,
+      secondaryColor: data.secondaryColor ?? null,
+    }
+  });
   // Generar contraseña aleatoria segura
   function generatePassword(length = 12) {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%&*";
