@@ -1,3 +1,17 @@
+export async function PATCH(req: Request) {
+  const session = await requireSuperAdmin();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  const data = await req.json();
+  const { teamId, ctUserIds } = data;
+  if (!teamId || !Array.isArray(ctUserIds)) {
+    return NextResponse.json({ error: "Faltan datos" }, { status: 400 });
+  }
+  // Desasignar todos los CTs actuales del equipo
+  await prisma.user.updateMany({ where: { role: "CT", teamId }, data: { teamId: null } });
+  // Asignar los nuevos CTs al equipo
+  await prisma.user.updateMany({ where: { id: { in: ctUserIds }, role: "CT" }, data: { teamId } });
+  return NextResponse.json({ success: true });
+}
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -33,9 +47,10 @@ export async function POST(req: Request) {
   const team = await prisma.team.create({
     data: {
       name: data.name,
-      logoUrl: data.logoUrl ?? null,
-      primaryColor: data.primaryColor ?? null,
-      secondaryColor: data.secondaryColor ?? null,
+      // Si el modelo Team tiene estos campos, mantenerlos. Si no, comentar:
+      // logoUrl: data.logoUrl ?? undefined,
+      // primaryColor: data.primaryColor ?? undefined,
+      // secondaryColor: data.secondaryColor ?? undefined,
     }
   });
   // Generar contraseña aleatoria segura

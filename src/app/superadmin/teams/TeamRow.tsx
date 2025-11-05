@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 
 type CTUser = { id: string; email: string };
@@ -62,6 +62,25 @@ export default function TeamRow({ team, adminEmail }: TeamRowProps) {
   // Mostrar CTs asignados
   const cts = team.cts || [];
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [ctUsers, setCtUsers] = useState<CTUser[]>([]);
+  const [selectedCtIds, setSelectedCtIds] = useState<string[]>(cts.map(ct => ct.id));
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalError, setModalError] = useState<string|null>(null);
+
+  // Cargar usuarios CT al abrir el modal
+  React.useEffect(() => {
+    if (showAssignModal) {
+      setModalLoading(true);
+      setModalError(null);
+      fetch("/api/superadmin/users?role=CT")
+        .then(r => r.ok ? r.json() : Promise.reject("Error al cargar CTs"))
+        .then(data => {
+          setCtUsers(data.users || []);
+        })
+        .catch(() => setModalError("No se pudieron cargar los usuarios CT"))
+        .finally(() => setModalLoading(false));
+    }
+  }, [showAssignModal]);
 
   return (
     <tr className="border-t group hover:bg-blue-50 transition">
@@ -104,10 +123,66 @@ export default function TeamRow({ team, adminEmail }: TeamRowProps) {
         {/* Modal de asignación CT (placeholder) */}
         {showAssignModal && (
           <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 shadow-xl min-w-[320px]">
+            <div className="bg-white rounded-lg p-6 shadow-xl min-w-[340px]">
               <h2 className="text-lg font-bold mb-2">Asignar CT a equipo</h2>
-              <p className="text-sm text-gray-600 mb-4">(Próximamente: selector de usuarios CT)</p>
-              <button onClick={() => setShowAssignModal(false)} className="mt-2 px-4 py-1 rounded bg-gray-200 hover:bg-gray-300">Cerrar</button>
+              {modalLoading ? (
+                <div className="text-gray-500">Cargando usuarios CT…</div>
+              ) : modalError ? (
+                <div className="text-red-600">{modalError}</div>
+              ) : (
+                <form className="space-y-3">
+                  <div className="mb-2 text-sm text-gray-600">Selecciona los usuarios CT que estarán asignados a este equipo:</div>
+                  <div className="max-h-48 overflow-y-auto border rounded p-2 bg-gray-50">
+                    {ctUsers.length === 0 ? (
+                      <div className="text-gray-400">No hay usuarios CT disponibles.</div>
+                    ) : (
+                      ctUsers.map(ct => (
+                        <label key={ct.id} className="flex items-center gap-2 py-1">
+                          <input
+                            type="checkbox"
+                            checked={selectedCtIds.includes(ct.id)}
+                            onChange={e => {
+                              if (e.target.checked) {
+                                setSelectedCtIds(ids => [...ids, ct.id]);
+                              } else {
+                                setSelectedCtIds(ids => ids.filter(id => id !== ct.id));
+                              }
+                            }}
+                          />
+                          <span className="text-blue-700 font-medium">{ct.email}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                  {/* Botón para guardar la asignación (lógica a implementar) */}
+                  <div className="flex gap-2 mt-4">
+                    <button type="button" onClick={() => setShowAssignModal(false)} className="px-4 py-1 rounded bg-gray-200 hover:bg-gray-300">Cerrar</button>
+                    <button
+                      type="button"
+                      className="px-4 py-1 rounded bg-green-600 text-white hover:bg-green-700"
+                      disabled={modalLoading}
+                      onClick={async () => {
+                        setModalLoading(true);
+                        setModalError(null);
+                        try {
+                          const res = await fetch("/api/superadmin/teams", {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ teamId: team.id, ctUserIds: selectedCtIds }),
+                          });
+                          if (!res.ok) throw new Error("Error al asignar CTs");
+                          setShowAssignModal(false);
+                          router.refresh();
+                        } catch (e: any) {
+                          setModalError(e.message || "Error al asignar CTs");
+                        } finally {
+                          setModalLoading(false);
+                        }
+                      }}
+                    >Guardar</button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         )}
