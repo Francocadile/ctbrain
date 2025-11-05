@@ -1,11 +1,12 @@
 // src/app/ct/layout.tsx
-"use client";
-
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Route } from "next";
 import { signOut } from "next-auth/react";
+import { useEffect, useState } from "react";
+import { getSession } from "next-auth/react";
+import prisma from "@/lib/prisma";
 
 function NavItem({
   href,
@@ -39,8 +40,29 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
   const isActive = (prefix: string) =>
     pathname === prefix || pathname?.startsWith(prefix + "/");
 
+  const [colors, setColors] = useState<{ primary: string; secondary: string }>({ primary: "#000000", secondary: "#ffffff" });
+
+  useEffect(() => {
+    async function fetchColors() {
+      const session = await getSession();
+      const teamId = session?.user?.teamId;
+      if (teamId) {
+        // Fetch team colors from API
+        const res = await fetch(`/api/team/${teamId}`);
+        if (res.ok) {
+          const team = await res.json();
+          setColors({
+            primary: team.primaryColor || "#000000",
+            secondary: team.secondaryColor || "#ffffff",
+          });
+        }
+      }
+    }
+    fetchColors();
+  }, []);
+
   return (
-    <div className="min-h-screen flex bg-gray-50">
+    <div className="min-h-screen flex" style={{ backgroundColor: colors.secondary }}>
       {/* Sidebar */}
       <aside className="w-64 shrink-0 border-r bg-white p-3 space-y-3">
         <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
@@ -53,75 +75,7 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
             </NavItem>
           </li>
         </ul>
-
-        <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
-          MONITOREO
-        </div>
-        <ul className="space-y-0.5 mb-2">
-          <li>
-            <NavItem
-              href={"/ct/metrics/wellness" satisfies Route}
-              active={isActive("/ct/metrics/wellness")}
-            >
-              Wellness
-            </NavItem>
-          </li>
-          <li>
-            <NavItem
-              href={"/ct/metrics/rpe" satisfies Route}
-              active={isActive("/ct/metrics/rpe")}
-            >
-              Rpe
-            </NavItem>
-          </li>
-          <li>
-            <NavItem href={"/ct/injuries" as Route} active={isActive("/ct/injuries")}>
-              Lesionados
-            </NavItem>
-          </li>
-        </ul>
-
-        <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
-          PLANIFICACIÓN
-        </div>
-        <ul className="space-y-0.5 mb-2">
-          <li>
-            <NavItem
-              href={"/ct/plan-semanal" satisfies Route}
-              active={isActive("/ct/plan-semanal")}
-            >
-              Plan semanal (Editor)
-            </NavItem>
-          </li>
-          <li>
-            <NavItem href={"/ct/sessions" satisfies Route} active={isActive("/ct/sessions")}>
-              Sesiones
-            </NavItem>
-          </li>
-          <li>
-            <NavItem href={"/ct/exercises" as Route} active={isActive("/ct/exercises")}>
-              Ejercicios
-            </NavItem>
-          </li>
-        </ul>
-
-        <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
-          TÉCNICA
-        </div>
-        <ul className="space-y-0.5 mb-2">
-          <li>
-            <NavItem href={"/ct/rivales" as Route} active={isActive("/ct/rivales")}>
-              Rivales / Plan de partido
-            </NavItem>
-          </li>
-          <li>
-            <NavItem href={"/ct/scouting" as Route} active={isActive("/ct/scouting")}>
-              Scouting
-            </NavItem>
-          </li>
-        </ul>
-
-        {/* SALIR */}
+        {/* ...existing code... */}
         <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
           SALIR
         </div>
@@ -130,14 +84,14 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
             <button
               aria-label="Cerrar sesión"
               onClick={() => signOut({ callbackUrl: "/login" })}
-              className="block w-full text-left rounded-md px-2 py-1.5 text-sm transition hover:bg-gray-100"
+              className="block w-full text-left rounded-md px-2 py-1.5 text-sm transition"
+              style={{ backgroundColor: colors.primary, color: colors.secondary }}
             >
               Cerrar sesión
             </button>
           </li>
         </ul>
       </aside>
-
       {/* Contenido */}
       <main className="flex-1 p-3 md:p-4">{children}</main>
     </div>
