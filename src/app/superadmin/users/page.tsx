@@ -12,9 +12,10 @@ export default async function SuperAdminUsersPage() {
   let teams: any[] = [];
   let error = null;
   try {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
     const [usersRes, teamsRes] = await Promise.all([
-      fetch("/api/superadmin/users", { next: { revalidate: 0 } }),
-      fetch("/api/superadmin/teams", { next: { revalidate: 0 } })
+      fetch(`${baseUrl}/api/superadmin/users`, { next: { revalidate: 0 } }),
+      fetch(`${baseUrl}/api/superadmin/teams`, { next: { revalidate: 0 } })
     ]);
     if (!usersRes.ok) throw new Error("No se pudo cargar la lista de usuarios");
     if (!teamsRes.ok) throw new Error("No se pudo cargar la lista de equipos");
