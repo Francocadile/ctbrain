@@ -13,24 +13,17 @@ export default async function SuperAdminTeamsPage() {
   let teams: any[] = [];
   let error = null;
   try {
-    // Obtener equipos y el usuario ADMIN vinculado (y su contraseña si existe)
+    // Consulta simplificada: solo id y name
     const rawTeams = await prisma.team.findMany({
-      include: {
-        users: true // incluir todos los usuarios
+      select: {
+        id: true,
+        name: true
       }
     });
-    // Sanitizar datos para evitar errores de serialización
     teams = rawTeams.map(team => ({
       id: team.id,
       name: team.name,
-      users: (team.users || []).map(u => ({
-        id: u.id,
-        email: u.email,
-        name: u.name,
-        role: u.role,
-        teamId: u.teamId ?? null,
-        isApproved: u.isApproved ?? false
-      }))
+      users: [] // temporal, para mantener la estructura
     }));
   } catch (e: any) {
     console.error("[SuperAdminTeamsPage] Error:", e);
