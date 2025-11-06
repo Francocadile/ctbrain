@@ -19,13 +19,36 @@ async function main() {
     update: {
       name: ADMIN_NAME,
       role: "ADMIN",
-      passwordHash: adminHash,
+      password: adminHash,
     },
     create: {
       email: ADMIN_EMAIL,
       name: ADMIN_NAME,
       role: "ADMIN",
-      passwordHash: adminHash,
+      password: adminHash,
+    },
+  });
+
+
+  // SUPERADMIN
+  const SUPERADMIN_EMAIL = "superadmin@superadmin.com";
+  const SUPERADMIN_PASS = "123456";
+  const SUPERADMIN_NAME = "Superadmin";
+  const superadminHash = await bcrypt.hash(SUPERADMIN_PASS, 10);
+  await prisma.user.upsert({
+    where: { email: SUPERADMIN_EMAIL },
+    update: {
+      name: SUPERADMIN_NAME,
+      role: "SUPERADMIN",
+      password: superadminHash,
+      isApproved: true,
+    },
+    create: {
+      email: SUPERADMIN_EMAIL,
+      name: SUPERADMIN_NAME,
+      role: "SUPERADMIN",
+      password: superadminHash,
+      isApproved: true,
     },
   });
 
@@ -44,13 +67,13 @@ async function main() {
       update: {
         name: u.name,
         role: u.role,
-        passwordHash: hash,
+        password: hash,
       },
       create: {
         email: u.email,
         name: u.name,
         role: u.role,
-        passwordHash: hash,
+        password: hash,
       },
     });
   }
