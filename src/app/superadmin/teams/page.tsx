@@ -33,7 +33,8 @@ export default async function SuperAdminTeamsPage() {
       }))
     }));
   } catch (e: any) {
-    error = e.message || "Error desconocido";
+    console.error("[SuperAdminTeamsPage] Error:", e);
+    error = (e && e.stack) ? e.stack : (e.message || "Error desconocido");
   }
 
   const Container = (await import("@/components/ui/container")).default;
