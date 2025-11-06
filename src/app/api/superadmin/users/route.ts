@@ -23,7 +23,7 @@ export async function GET() {
   } else if (session.user.role === "ADMIN" && (session.user as any).teamId) {
     users = await prisma.user.findMany({ where: { teamId: (session.user as any).teamId } });
   }
-  return NextResponse.json(users);
+  return NextResponse.json({ users });
 }
 
 export async function POST(req: Request) {
