@@ -14,7 +14,12 @@ export default async function SuperAdminTeamsPage() {
   let teams: any[] = [];
   let error = null;
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "https://ctbrain.francocadile.com"}/api/superadmin/teams`, { next: { revalidate: 0 } });
+    const baseUrl = typeof window === "undefined"
+      ? process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : "http://localhost:3000"
+      : "";
+    const res = await fetch(`${baseUrl}/api/superadmin/teams`, { next: { revalidate: 0 } });
     if (!res.ok) throw new Error("No se pudo cargar la lista de equipos");
     teams = await res.json();
   } catch (e: any) {
