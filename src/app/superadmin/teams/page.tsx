@@ -14,13 +14,24 @@ export default async function SuperAdminTeamsPage() {
   let error = null;
   try {
     // Obtener equipos y el usuario ADMIN vinculado (y su contraseña si existe)
-    teams = await prisma.team.findMany({
+    const rawTeams = await prisma.team.findMany({
       include: {
         users: true // incluir todos los usuarios
       }
     });
-    // Buscar si hay una contraseña generada en la sesión (opcional, si se guarda en la DB)
-    // Si quieres persistir la contraseña, deberías guardarla en la DB (campo adminPassword en Team)
+    // Sanitizar datos para evitar errores de serialización
+    teams = rawTeams.map(team => ({
+      id: team.id,
+      name: team.name,
+      users: (team.users || []).map(u => ({
+        id: u.id,
+        email: u.email,
+        name: u.name,
+        role: u.role,
+        teamId: u.teamId ?? null,
+        isApproved: u.isApproved ?? false
+      }))
+    }));
   } catch (e: any) {
     error = e.message || "Error desconocido";
   }
