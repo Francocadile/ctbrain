@@ -28,7 +28,15 @@ export default async function SuperAdminTeamsPage() {
     }
     // Enriquecer equipos con adminEmail y CTs
     const usersRes = await fetch(`${baseUrl}/api/superadmin/users`, { next: { revalidate: 0 } });
-    const users = usersRes.ok ? await usersRes.json() : [];
+    let users = [];
+    if (usersRes.ok) {
+      const usersData = await usersRes.json();
+      if (Array.isArray(usersData)) {
+        users = usersData;
+      } else if (Array.isArray(usersData.users)) {
+        users = usersData.users;
+      }
+    }
     teams = teams.map((team: any) => {
       const admin = users.find((u: any) => u.role === "ADMIN" && u.teamId === team.id);
       const cts = users.filter((u: any) => u.role === "CT" && u.teamId === team.id);
