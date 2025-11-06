@@ -17,7 +17,8 @@ export default async function SuperAdminTeamsPage() {
         : "http://localhost:3000"
       : "";
     const res = await fetch(`${baseUrl}/api/superadmin/teams`, { next: { revalidate: 0 } });
-    if (!res.ok) throw new Error("No se pudo cargar la lista de equipos");
+  if (res.status === 403) throw new Error("No tienes permisos para ver los equipos. Verifica tu sesión SUPERADMIN.");
+  if (!res.ok) throw new Error("No se pudo cargar la lista de equipos");
     const data = await res.json();
     if (Array.isArray(data)) {
       teams = data;
