@@ -3,9 +3,6 @@
 import RoleGate from "@/components/auth/RoleGate";
 import dynamic from "next/dynamic";
 import TeamRow from "./TeamRow";
-import TopRightLogout from "@/components/auth/TopRightLogout";
-import BackButton from "@/components/ui/BackButton";
-import prisma from "@/lib/prisma";
 
 const CreateTeamForm = dynamic(() => import("./CreateTeamForm"), { ssr: false });
 
@@ -37,12 +34,6 @@ export default async function SuperAdminTeamsPage() {
   } catch (e: any) {
     error = e.message || "Error desconocido";
   }
-
-  const Container = (await import("@/components/ui/container")).default;
-  // Filtro visual de equipos (client component)
-  // El filtro se implementa en un componente aparte para mantener la estética y funcionalidad
-  // El siguiente bloque va antes de la tabla:
-  // <TeamFilter teams={teams} onSelect={setFilteredTeams} />
 
   // Client component wrapper for filter state
   const TeamFilterWrapper = dynamic(() => import("./TeamFilter"), { ssr: false });
