@@ -18,7 +18,14 @@ export default async function SuperAdminTeamsPage() {
       : "";
     const res = await fetch(`${baseUrl}/api/superadmin/teams`, { next: { revalidate: 0 } });
     if (!res.ok) throw new Error("No se pudo cargar la lista de equipos");
-    teams = await res.json();
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      teams = data;
+    } else if (data.teams && Array.isArray(data.teams)) {
+      teams = data.teams;
+    } else {
+      throw new Error("No se pudo cargar la lista de equipos");
+    }
     // Enriquecer equipos con adminEmail y CTs
     const usersRes = await fetch(`${baseUrl}/api/superadmin/users`, { next: { revalidate: 0 } });
     const users = usersRes.ok ? await usersRes.json() : [];
