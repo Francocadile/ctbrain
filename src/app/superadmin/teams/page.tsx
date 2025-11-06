@@ -82,14 +82,14 @@ export default async function SuperAdminTeamsPage() {
                   {teams.length === 0 ? (
                     <tr><td colSpan={5} className="px-4 py-4 text-gray-400 text-center">No hay equipos registrados.</td></tr>
                   ) : (
-                    teams.map((team) => {
-                      // Obtener usuarios CT asignados a este equipo
-                      const cts = (team.users || []).filter((u: any) => u.role === "CT");
-                      const admin = (team.users || []).find((u: any) => u.role === "ADMIN");
-                      return (
-                        <TeamRow key={team.id} team={{ id: team.id, name: team.name, cts: cts.map((ct: any) => ({ id: ct.id, email: ct.email })) }} adminEmail={admin?.email || "-"} rowProps={{ className: 'team-row', 'data-team-id': team.id }} />
-                      );
-                    })
+                    teams.map((team) => (
+                      <TeamRow
+                        key={team.id}
+                        team={{ id: team.id, name: team.name, cts: [] }}
+                        adminEmail={"-"}
+                        rowProps={{ className: 'team-row', 'data-team-id': team.id }}
+                      />
+                    ))
                   )}
                 </tbody>
               </table>
