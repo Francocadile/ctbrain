@@ -31,8 +31,8 @@ async function main() {
 
 
   // SUPERADMIN
-  const SUPERADMIN_EMAIL = "superadmin@superadmin.com";
-  const SUPERADMIN_PASS = "123456";
+  const SUPERADMIN_EMAIL = "superadmin@ct.com";
+  const SUPERADMIN_PASS = "123123";
   const SUPERADMIN_NAME = "Superadmin";
   const superadminHash = await bcrypt.hash(SUPERADMIN_PASS, 10);
   await prisma.user.upsert({
