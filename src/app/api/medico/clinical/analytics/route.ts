@@ -36,14 +36,12 @@ export async function GET(req: NextRequest) {
 
   // Traemos entradas del rango, filtrando por teamId
   const rows = await prisma.clinicalEntry.findMany({
-    where: { date: { gte: startDate, lte: endDate }, teamId },
-    select: {
-      id: true, userId: true, date: true, status: true, leaveKind: true,
-      bodyPart: true, mechanism: true, severity: true, startDate: true, expectedReturn: true,
-      teamId: true,
-      user: { select: { name: true, email: true } },
+    where: {
+      date: { gte: startDate, lte: endDate },
+      ...(teamId ? { teamId } : {}),
     },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    include: { user: true },
   });
 
   const totalEpisodes = rows.length;

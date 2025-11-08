@@ -33,6 +33,7 @@ export async function GET() {
 // POST -> guarda rowLabels (usuario) y/o reemplaza places (global)
 export async function POST(req: NextRequest) {
   const userId = await resolveUserId();
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { teamId: true } });
   const body = (await req.json().catch(() => ({}))) as {
     rowLabels?: Record<string, string>;
     places?: string[];
@@ -63,8 +64,9 @@ export async function POST(req: NextRequest) {
 
       // insertar nuevos
       const toInsert = clean.filter((n) => !existingNames.has(n)).map((name) => ({ name }));
-      if (toInsert.length) {
-        await tx.place.createMany({ data: toInsert, skipDuplicates: true });
+      if (toInsert.length && user?.teamId) {
+  const toInsertWithTeam = toInsert.map((p) => ({ ...p, teamId: user.teamId! })).filter((p) => !!p.teamId);
+  await tx.place.createMany({ data: toInsertWithTeam, skipDuplicates: true });
       }
     }
   });

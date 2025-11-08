@@ -188,7 +188,7 @@ export async function POST(req: NextRequest) {
     const userId: string | undefined = body.userId;
     if (!userId) return NextResponse.json({ error: "Falta userId (jugador)" }, { status: 400 });
 
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, teamId: true } });
     if (!user) return NextResponse.json({ error: "userId inválido (no existe el usuario)" }, { status: 400 });
 
     const dateYMD = typeof body.date === "string" ? body.date : undefined;
@@ -214,6 +214,7 @@ export async function POST(req: NextRequest) {
 
     const createData: Prisma.ClinicalEntryUncheckedCreateInput = {
       userId: user.id,
+      teamId: user.teamId!,
       date: day,
       status: body.status as ClinicalStatus,
       leaveStage: (body.leaveStage as LeaveStage) ?? null,

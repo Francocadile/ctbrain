@@ -172,6 +172,7 @@ model Team {
   exercises Exercise[]
   places    Place[]
   scoutingCategories ScoutingCategory[]
+  clinicalEntries ClinicalEntry[]
 }
 
 model Place {
@@ -291,6 +292,9 @@ model ClinicalEntry {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id])
+
   date      DateTime
   status    ClinicalStatus
 
@@ -338,6 +342,7 @@ model ClinicalEntry {
   @@index([leaveKind])
   @@index([bodyPart])
   @@index([userId, date])
+  @@index([teamId])
 }
 
 model ScoutingCategory {
