@@ -52,12 +52,19 @@ async function main() {
     },
   });
 
+  // Crear equipo demo si no existe
+  const demoTeam = await prisma.team.upsert({
+    where: { name: "Equipo Demo" },
+    update: {},
+    create: { name: "Equipo Demo" },
+  });
+
   // Usuarios de ejemplo (idempotentes)
   const samples = [
-    { email: "ct@ctbrain.com",       name: "Cuerpo Técnico", role: "CT",       pass: "Ct12345!" },
-    { email: "medico@ctbrain.com",   name: "Cuerpo Médico",  role: "MEDICO",   pass: "Med12345!" },
-    { email: "jugador@ctbrain.com",  name: "Jugador Demo",   role: "JUGADOR",  pass: "Jug12345!" },
-    { email: "directivo@ctbrain.com",name: "Directivo Demo", role: "DIRECTIVO",pass: "Dir12345!" },
+    { email: "ct@ctbrain.com",       name: "Cuerpo Técnico", role: "CT",       pass: "Ct12345!", teamId: demoTeam.id },
+    { email: "medico@ctbrain.com",   name: "Cuerpo Médico",  role: "MEDICO",   pass: "Med12345!", teamId: demoTeam.id },
+    { email: "jugador@ctbrain.com",  name: "Jugador Demo",   role: "JUGADOR",  pass: "Jug12345!", teamId: demoTeam.id },
+    { email: "directivo@ctbrain.com",name: "Directivo Demo", role: "DIRECTIVO",pass: "Dir12345!", teamId: demoTeam.id },
   ];
 
   for (const u of samples) {
@@ -68,12 +75,14 @@ async function main() {
         name: u.name,
         role: u.role,
         password: hash,
+        teamId: u.teamId,
       },
       create: {
         email: u.email,
         name: u.name,
         role: u.role,
         password: hash,
+        teamId: u.teamId,
       },
     });
   }
