@@ -7,6 +7,8 @@ model Team {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   users     User[]
+  sessions  Session[]
+  exercises Exercise[]
 }
 // prisma/schema.prisma
 generator client {
@@ -129,9 +131,13 @@ model Session {
   createdBy   String
   user        User        @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
 
+  teamId      String
+  team        Team        @relation(fields: [teamId], references: [id])
+
   @@index([date])
   @@index([type])
   @@index([createdBy])
+  @@index([teamId])
 }
 
 model Rival {
@@ -181,6 +187,9 @@ model Exercise {
   userId      String
   user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  teamId      String
+  team        Team          @relation(fields: [teamId], references: [id])
+
   title       String
   kindId      String?
   kind        ExerciseKind? @relation(fields: [kindId], references: [id], onDelete: SetNull)
@@ -199,6 +208,7 @@ model Exercise {
   @@index([userId, createdAt])
   @@index([userId, title])
   @@index([kindId])
+  @@index([teamId])
 }
 
 model RPEEntry {

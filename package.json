@@ -38,6 +38,7 @@
     "@types/bcryptjs": "^3.0.0",
     "@types/papaparse": "5.3.14",
     "prisma": "5.19.1",
+    "ts-node": "^10.9.2",
     "tsx": "4.19.2"
   }
 }
