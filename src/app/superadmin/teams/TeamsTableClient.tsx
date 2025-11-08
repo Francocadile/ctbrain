@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import TeamRow from "./TeamRow";
 import TeamFilterWrapper from "./TeamFilter";
 import CreateTeamForm from "./CreateTeamForm";
-import RoleGate from "@/components/auth/RoleGate";
+import RoleGateClient from "@/components/auth/RoleGateClient";
 
 export default function TeamsTableClient() {
   const [teams, setTeams] = useState<any[]>([]);
@@ -20,12 +20,14 @@ export default function TeamsTableClient() {
         if (res.status === 403) throw new Error("No tienes permisos para ver los equipos. Verifica tu sesión SUPERADMIN.");
         if (!res.ok) throw new Error("No se pudo cargar la lista de equipos");
         const data = await res.json();
+        console.log("[DEBUG] Equipos recibidos:", data);
         let teamsArr = Array.isArray(data) ? data : (data.teams || []);
         // Enriquecer equipos con adminEmail y CTs
         const usersRes = await fetch("/api/superadmin/users");
         let users = [];
         if (usersRes.ok) {
           const usersData = await usersRes.json();
+          console.log("[DEBUG] Usuarios recibidos:", usersData);
           users = Array.isArray(usersData) ? usersData : (usersData.users || []);
         }
         teamsArr = teamsArr.map((team: any) => {
@@ -37,6 +39,7 @@ export default function TeamsTableClient() {
             cts: cts.map((ct: any) => ({ id: ct.id, email: ct.email })),
           };
         });
+        console.log("[DEBUG] Equipos procesados:", teamsArr);
         setTeams(teamsArr);
         setFilteredTeams(teamsArr);
       } catch (e: any) {
@@ -48,7 +51,7 @@ export default function TeamsTableClient() {
   }, []);
 
   return (
-    <RoleGate allow={["SUPERADMIN"]}>
+    <RoleGateClient allow={["SUPERADMIN"]}>
       <main className="min-h-[60vh] px-6 py-10">
         <h1 className="text-2xl font-bold">Equipos · SUPERADMIN</h1>
         <p className="mt-2 text-sm text-gray-600">Gestiona todos los equipos de la plataforma.</p>
@@ -85,6 +88,6 @@ export default function TeamsTableClient() {
           </table>
         </section>
       </main>
-    </RoleGate>
+    </RoleGateClient>
   );
 }
