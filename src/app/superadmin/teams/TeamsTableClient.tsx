@@ -63,23 +63,23 @@ export default function TeamsTableClient() {
         )}
         <section className="mt-8">
           <TeamFilterWrapper teams={teams} onSelect={setFilteredTeams} />
-          <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
-            <table className="min-w-full text-sm">
+          <div className="overflow-x-auto">
+            <table className="min-w-full border rounded-xl bg-white mt-6 shadow-sm">
               <thead>
                 <tr className="bg-gray-100">
-                  <th className="px-4 py-2 text-left font-semibold text-gray-700">Logo</th>
-                  <th className="px-4 py-2 text-left font-semibold text-gray-700">Nombre</th>
-                  <th className="px-4 py-2 text-left font-semibold text-gray-700">ID</th>
-                  <th className="px-4 py-2 text-left font-semibold text-gray-700">Email ADMIN</th>
-                  <th className="px-4 py-2 text-left font-semibold text-gray-700">CTs</th>
-                  <th className="px-4 py-2 text-left font-semibold text-gray-700">Acciones</th>
+                  <th className="px-4 py-2 text-left">Logo</th>
+                  <th className="px-4 py-2 text-left">Nombre</th>
+                  <th className="px-4 py-2 text-left">ID</th>
+                  <th className="px-4 py-2 text-left">Email ADMIN</th>
+                  <th className="px-4 py-2 text-left">CTs</th>
+                  <th className="px-4 py-2 text-left">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={6} className="px-4 py-4 text-gray-400">Cargando equipos...</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-4 text-gray-400 text-center">Cargando equipos...</td></tr>
                 ) : filteredTeams.length === 0 ? (
-                  <tr><td colSpan={6} className="px-4 py-4 text-gray-400">No hay equipos registrados.</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-4 text-gray-400 text-center">No hay equipos registrados.</td></tr>
                 ) : (
                   filteredTeams.map((team: any) => (
                     <TeamRow key={team.id} team={team} adminEmail={team.adminEmail} />
