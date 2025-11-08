@@ -56,6 +56,7 @@ const createSchema = z
     type: z
       .enum(["GENERAL", "FUERZA", "TACTICA", "AEROBICO", "RECUPERACION"])
       .optional(),
+    teamId: z.string().min(1, "Falta teamId"),
   })
   .superRefine((data, ctx) => {
     // Si NO es un DAYFLAG, exigir mínimo 2 caracteres de título
@@ -79,8 +80,9 @@ export async function GET(req: Request) {
   try {
     await requireAuth();
 
-    const url = new URL(req.url);
-    const start = url.searchParams.get("start");
+  const url = new URL(req.url);
+  const start = url.searchParams.get("start");
+  const teamId = url.searchParams.get("teamId");
 
     if (start) {
       // Semana para el editor
@@ -95,8 +97,10 @@ export async function GET(req: Request) {
       const monday = getMondayUTC(startDate);
       const nextMonday = addDaysUTC(monday, 7); // ✅ FIN EXCLUSIVO
 
+      const where: any = { date: { gte: monday, lt: nextMonday } };
+      if (teamId) where.teamId = teamId;
       const items = await prisma.session.findMany({
-        where: { date: { gte: monday, lt: nextMonday } }, // ✅ lt para incluir DOMINGO entero
+        where,
         orderBy: [{ date: "asc" }, { createdAt: "asc" }],
         select: sessionSelect,
       });
@@ -121,7 +125,10 @@ export async function GET(req: Request) {
     }
 
     // Listado para /ct/sessions (no tocar, así como te funciona)
+    const where: any = {};
+    if (teamId) where.teamId = teamId;
     const sessions = await prisma.session.findMany({
+      where,
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       select: sessionSelect,
       take: 50,
@@ -151,19 +158,21 @@ export async function POST(req: Request) {
       );
     }
 
-    const { title, description, date, type } = parsed.data;
-
+    const { title, description, date, type, teamId } = parsed.data;
+    if (!teamId) {
+      return NextResponse.json({ error: "Falta teamId" }, { status: 400 });
+    }
     const created = await prisma.session.create({
       data: {
-        title: (title ?? "").trim(), // "" permitido si es DAYFLAG
+        title: (title ?? "").trim(),
         description: description ?? null,
         date: new Date(date),
         type: type ?? "GENERAL",
         createdBy: session.user.id,
+        teamId,
       },
       select: sessionSelect,
     });
-
     return NextResponse.json({ data: created }, { status: 201 });
   } catch (err: any) {
     if (err instanceof Response) return err;

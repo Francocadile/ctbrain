@@ -23,5 +23,11 @@ function decodeB64Json<T = any>(b64: string): T | null {
 }
 
 export async function GET(req: Request) {
-  return new Response("Not implemented", { status: 501 });
+  const { searchParams } = new URL(req.url);
+  const teamId = searchParams.get("teamId");
+  if (!teamId) {
+    return NextResponse.json({ error: "Falta teamId" }, { status: 400 });
+  }
+  const exercises = await prisma.exercise.findMany({ where: { teamId } });
+  return NextResponse.json(exercises);
 }
