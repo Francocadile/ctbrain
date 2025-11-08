@@ -55,6 +55,7 @@ export async function POST(req: Request) {
           date: iso,
           type: s.type ?? null,
           createdBy: s.createdBy ?? fallbackCreatedBy,
+          teamId: s.teamId,
         },
       });
       created.push(row.id);
@@ -90,6 +91,7 @@ export async function POST(req: Request) {
         date: newDate,
         type: s.type ?? null,
         createdBy: s.createdBy ?? fallbackCreatedBy,
+        teamId: s.teamId,
       },
     });
     created.push(row.id);
