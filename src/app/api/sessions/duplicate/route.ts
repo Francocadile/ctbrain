@@ -60,6 +60,17 @@ export async function POST(req: Request) {
   const rows = await prisma.session.findMany({
     where: { date: { gte: srcMonday, lt: srcNext } },
     orderBy: { date: "asc" },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      date: true,
+      type: true,
+      createdAt: true,
+      updatedAt: true,
+      createdBy: true,
+      teamId: true,
+    },
   });
 
   // Insertar en destino con corrimiento
@@ -73,6 +84,7 @@ export async function POST(req: Request) {
         date: newDate,
         type: r.type as any,
         createdBy: createdBy ?? r.createdBy ?? null,
+        teamId: r.teamId,
       },
     });
     created++;
