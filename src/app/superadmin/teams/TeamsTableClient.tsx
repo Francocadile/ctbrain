@@ -52,40 +52,42 @@ export default function TeamsTableClient() {
 
   return (
     <RoleGateClient allow={["SUPERADMIN"]}>
-      <main className="min-h-[60vh] px-6 py-10">
-        <h1 className="text-2xl font-bold">Equipos · SUPERADMIN</h1>
-        <p className="mt-2 text-sm text-gray-600">Gestiona todos los equipos de la plataforma.</p>
+      <main className="min-h-[60vh] px-6 py-10 bg-gray-50">
+        <h1 className="text-3xl font-bold text-black">Equipos · SUPERADMIN</h1>
+        <p className="mt-2 text-gray-600 text-base">Gestiona todos los equipos de la plataforma.</p>
         <div className="mt-6">
           <CreateTeamForm />
         </div>
         {error && (
-          <div className="mt-4 text-red-600">{error}</div>
+          <div className="mt-4 text-red-600 font-semibold text-base">{error}</div>
         )}
         <section className="mt-8">
           <TeamFilterWrapper teams={teams} onSelect={setFilteredTeams} />
-          <table className="min-w-full border rounded-xl bg-white">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="px-4 py-2 text-left">Logo</th>
-                <th className="px-4 py-2 text-left">Nombre</th>
-                <th className="px-4 py-2 text-left">ID</th>
-                <th className="px-4 py-2 text-left">Email ADMIN</th>
-                <th className="px-4 py-2 text-left">CTs</th>
-                <th className="px-4 py-2 text-left">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={6} className="px-4 py-4 text-gray-400">Cargando equipos...</td></tr>
-              ) : filteredTeams.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-4 text-gray-400">No hay equipos registrados.</td></tr>
-              ) : (
-                filteredTeams.map((team: any) => (
-                  <TeamRow key={team.id} team={team} adminEmail={team.adminEmail} />
-                ))
-              )}
-            </tbody>
-          </table>
+          <div className="rounded-xl border bg-white shadow-sm overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="px-4 py-2 text-left font-semibold text-gray-700">Logo</th>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-700">Nombre</th>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-700">ID</th>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-700">Email ADMIN</th>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-700">CTs</th>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-700">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr><td colSpan={6} className="px-4 py-4 text-gray-400">Cargando equipos...</td></tr>
+                ) : filteredTeams.length === 0 ? (
+                  <tr><td colSpan={6} className="px-4 py-4 text-gray-400">No hay equipos registrados.</td></tr>
+                ) : (
+                  filteredTeams.map((team: any) => (
+                    <TeamRow key={team.id} team={team} adminEmail={team.adminEmail} />
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </section>
       </main>
     </RoleGateClient>
