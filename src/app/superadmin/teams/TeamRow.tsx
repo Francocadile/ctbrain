@@ -4,7 +4,14 @@ import { useRouter } from "next/navigation";
 
 type CTUser = { id: string; email: string };
 type TeamRowProps = {
-  team: { id: string; name: string; cts?: CTUser[] };
+  team: {
+    id: string;
+    name: string;
+    logoUrl?: string;
+    primaryColor?: string;
+    secondaryColor?: string;
+    cts?: CTUser[];
+  };
   adminEmail?: string;
   rowProps?: Record<string, any>;
 };

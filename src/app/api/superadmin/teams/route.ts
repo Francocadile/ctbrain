@@ -31,7 +31,16 @@ async function requireSuperAdmin() {
 export async function GET() {
   const session = await requireSuperAdmin();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-  const teams = await prisma.team.findMany();
+  const teams = await prisma.team.findMany({
+    select: {
+      id: true,
+      name: true,
+      logoUrl: true,
+      primaryColor: true,
+      secondaryColor: true,
+      // Si tienes otros campos visuales, agrégalos aquí
+    },
+  });
   return NextResponse.json(teams);
 }
 
