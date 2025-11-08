@@ -86,6 +86,17 @@ export default function TeamRow({ team, adminEmail }: TeamRowProps) {
 
   return (
     <tr className="border-t group hover:bg-blue-50 transition" {...(rowProps || {})}>
+      {/* Logo y colores */}
+      <td className="px-4 py-2">
+        {team.logoUrl ? (
+          <img src={team.logoUrl} alt="Logo" className="h-10 w-10 rounded-full border shadow" style={{ background: team.primaryColor || '#f3f4f6' }} />
+        ) : (
+          <div className="h-10 w-10 rounded-full flex items-center justify-center border bg-gray-100 text-gray-400 font-bold" style={{ background: team.primaryColor || '#f3f4f6', color: team.secondaryColor || '#888' }}>
+            {team.name?.charAt(0) || "?"}
+          </div>
+        )}
+      </td>
+      {/* Nombre editable */}
       <td className="px-4 py-2 min-w-[180px]">
         {editing ? (
           <form onSubmit={handleEdit} className="flex gap-2 items-center">
