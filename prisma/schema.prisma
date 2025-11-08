@@ -1,15 +1,3 @@
-model Team {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  logoUrl   String?  // URL del escudo/logo
-  primaryColor String? // Color principal (hex)
-  secondaryColor String? // Color secundario (hex)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  users     User[]
-  sessions  Session[]
-  exercises Exercise[]
-}
 // prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
@@ -95,6 +83,12 @@ enum IllAptitude {
   NINGUNO
 }
 
+enum ScoutingStatus {
+  ACTIVO
+  WATCHLIST
+  DESCARTADO
+}
+
 // ========= Modelos existentes =========
 model User {
   id         String   @id @default(cuid())
@@ -165,11 +159,29 @@ model Rival {
   @@index([nextMatchDate])
 }
 
-model Place {
+model Team {
   id        String   @id @default(cuid())
   name      String   @unique
+  logoUrl   String?  // URL del escudo/logo
+  primaryColor String? // Color principal (hex)
+  secondaryColor String? // Color secundario (hex)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  users     User[]
+  sessions  Session[]
+  exercises Exercise[]
+  places    Place[]
+  scoutingCategories ScoutingCategory[]
+}
+
+model Place {
+  id        String   @id @default(cuid())
+  name      String
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([name, teamId])
 }
 
 model ExerciseKind {
@@ -328,13 +340,6 @@ model ClinicalEntry {
   @@index([userId, date])
 }
 
-// ========= Scouting =========
-enum ScoutingStatus {
-  ACTIVO
-  WATCHLIST
-  DESCARTADO
-}
-
 model ScoutingCategory {
   id        String   @id @default(cuid())
   nombre    String
@@ -342,14 +347,13 @@ model ScoutingCategory {
   orden     Int      @default(0)
   color     String?
   activa    Boolean  @default(true)
-
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id])
   players   ScoutingPlayer[]
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
   @@index([orden])
-  @@unique([nombre])
+  @@unique([nombre, teamId])
 }
 
 model ScoutingPlayer {
@@ -358,26 +362,20 @@ model ScoutingPlayer {
   positions    String[]          @default([])
   club         String?
   estado       ScoutingStatus    @default(ACTIVO)
-
   categoriaId  String?
   categoria    ScoutingCategory? @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
-
   agentName    String?
   agentPhone   String?
   agentEmail   String?
   playerPhone  String?
   playerEmail  String?
   instagram    String?
-
   videos       String[]          @default([])
   notes        String?
   rating       Int?
   tags         String[]          @default([])
-
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
-
   @@index([categoriaId])
-  @@index([estado])
   @@index([fullName])
 }

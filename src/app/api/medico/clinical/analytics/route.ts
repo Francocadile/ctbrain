@@ -30,12 +30,17 @@ export async function GET(req: NextRequest) {
   const startDate = start ? startOfDay(parseYMD(start)) : startOfDay(defStart);
   const endDate = end ? endOfDay(parseYMD(end)) : endOfDay(defEnd);
 
-  // Traemos entradas del rango
+  // Obtener teamId del usuario actual
+  const user = token?.sub ? await prisma.user.findUnique({ where: { id: token.sub } }) : null;
+  const teamId = user?.teamId;
+
+  // Traemos entradas del rango, filtrando por teamId
   const rows = await prisma.clinicalEntry.findMany({
-    where: { date: { gte: startDate, lte: endDate } },
+    where: { date: { gte: startDate, lte: endDate }, teamId },
     select: {
       id: true, userId: true, date: true, status: true, leaveKind: true,
       bodyPart: true, mechanism: true, severity: true, startDate: true, expectedReturn: true,
+      teamId: true,
       user: { select: { name: true, email: true } },
     },
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
