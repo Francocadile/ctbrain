@@ -19,8 +19,18 @@ function getModel(...names: string[]): any | null {
  * - Si existe modelo (e.g. ExerciseKind / exerciseKind), lee de DB.
  * - Si no, devuelve DEFAULT_KINDS (front cachea en LS).
  */
-export async function GET(req: Request) {
-  return new Response("Not implemented", { status: 501 });
+export async function GET() {
+  try {
+    const model = getModel("exerciseKind", "ExerciseKind", "kind", "Kind");
+    if (!model) {
+      return NextResponse.json([...DEFAULT_KINDS]);
+    }
+    const rows = await model.findMany({ orderBy: { name: "asc" } });
+    const list = (rows || []).map((r: any) => String(r.name)).filter(Boolean);
+    return NextResponse.json(list);
+  } catch (e: any) {
+    return new NextResponse(e?.message || "Error", { status: 500 });
+  }
 }
 
 /**

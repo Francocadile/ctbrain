@@ -75,7 +75,7 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
             </NavItem>
           </li>
           <li>
-            <NavItem href={"/ct/injuries" as Route} active={isActive("/ct/injuries")}> 
+            <NavItem href={"/ct/injuries" as Route} active={isActive("/ct/injuries")}>
               Lesionados
             </NavItem>
           </li>
@@ -94,12 +94,12 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
             </NavItem>
           </li>
           <li>
-            <NavItem href={"/ct/sessions" satisfies Route} active={isActive("/ct/sessions")}> 
+            <NavItem href={"/ct/sessions" satisfies Route} active={isActive("/ct/sessions")}>
               Sesiones
             </NavItem>
           </li>
           <li>
-            <NavItem href={"/ct/exercises" as Route} active={isActive("/ct/exercises")}> 
+            <NavItem href={"/ct/exercises" as Route} active={isActive("/ct/exercises")}>
               Ejercicios
             </NavItem>
           </li>
@@ -110,12 +110,12 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
         </div>
         <ul className="space-y-0.5 mb-2">
           <li>
-            <NavItem href={"/ct/rivales" as Route} active={isActive("/ct/rivales")}> 
+            <NavItem href={"/ct/rivales" as Route} active={isActive("/ct/rivales")}>
               Rivales / Plan de partido
             </NavItem>
           </li>
           <li>
-            <NavItem href={"/ct/scouting" as Route} active={isActive("/ct/scouting")}> 
+            <NavItem href={"/ct/scouting" as Route} active={isActive("/ct/scouting")}>
               Scouting
             </NavItem>
           </li>

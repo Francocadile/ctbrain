@@ -40,25 +40,6 @@ async function seedAdmin() {
   console.log("✅ Admin creado/actualizado:", { email: admin.email, role: admin.role });
 }
 
-async function seedSuperAdmin() {
-  const name = "Superadmin";
-  const email = "superadmin@admin.com";
-  const password = "123456";
-  const passwordHash = await hash(password, 10);
-  const superadmin = await prisma.user.upsert({
-    where: { email },
-    update: {},
-    create: {
-      name,
-      email,
-      password: passwordHash,
-      role: Role.SUPERADMIN,
-      isApproved: true,
-    },
-  });
-  console.log("✅ SUPERADMIN creado/actualizado:", { email: superadmin.email, role: superadmin.role });
-}
-
 async function ensurePlayers() {
   for (const name of DEMO_NAMES) {
     const email = `${name.replace(/\s+/g, ".").toLowerCase()}@ctbrain.dev`;
@@ -124,6 +105,26 @@ async function seedWellnessAndRPE(users: { id: string }[]) {
   console.log("📊 Seed demo: wellness (28d) + rpe (ayer/hoy) cargados.");
 }
 
+async function main() {
+  await seedAdmin();
+  await seedCoreUsers();
+  if (DO_DEMO) {
+    const players = await ensurePlayers();
+    if (players.length) await seedWellnessAndRPE(players);
+  } else {
+    console.log("ℹ️ SEED_DEMO no activo. Solo se creó el admin y los usuarios principales.");
+  }
+}
+
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => prisma.$disconnect());
+
+// Crea los 4 usuarios principales
 async function seedCoreUsers() {
   const users = [
     { email: "superadmin@superadmin.com", password: "123456", role: Role.SUPERADMIN, name: "Superadmin" },
@@ -149,27 +150,5 @@ async function seedCoreUsers() {
   }
 }
 
-async function main() {
-  await seedSuperAdmin();
-  await seedAdmin();
-  await seedCoreUsers();
-  if (DO_DEMO) {
-    const players = await ensurePlayers();
-    if (players.length) await seedWellnessAndRPE(players);
-  } else {
-    console.log("ℹ️ SEED_DEMO no activo. Solo se creó el superadmin, admin y los usuarios principales.");
-  }
-}
-
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
-
-
-
-
+// package.json scripts
+// "db:seed": "tsx prisma/seed.ts"

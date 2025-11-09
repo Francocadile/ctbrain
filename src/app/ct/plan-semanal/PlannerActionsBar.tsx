@@ -87,14 +87,6 @@ export default function PlannerActionsBar({ onAfterChange }: Props) {
   }
 
   async function handleSavePlaces() {
-    const clean = placesText
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (clean.length === 0) {
-      alert("Debes ingresar al menos un lugar antes de guardar.");
-      return;
-    }
     setLoading(true);
     try {
       const saved = await savePlacesFromTextarea(placesText);

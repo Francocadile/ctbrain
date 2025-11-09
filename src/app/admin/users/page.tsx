@@ -12,12 +12,7 @@ import bcrypt from "bcryptjs";
    DATA
 ========================= */
 async function getUsers() {
-  const { getServerSession } = await import("next-auth");
-  const { authOptions } = await import("@/lib/auth");
-  const session = await getServerSession(authOptions);
-  const teamId = (session?.user as any)?.teamId ?? null;
   return prisma.user.findMany({
-    where: teamId ? { teamId } : {},
     orderBy: [{ isApproved: "asc" }, { createdAt: "desc" }],
     select: {
       id: true,
@@ -49,14 +44,9 @@ async function createUser(formData: FormData) {
 
   const hashed = await bcrypt.hash(password, 10);
 
-  // Obtener el teamId del admin autenticado
-  const { getServerSession } = await import("next-auth");
-  const { authOptions } = await import("@/lib/auth");
-  const session = await getServerSession(authOptions);
-  const teamId = (session?.user as any)?.teamId ?? null;
-  // Los usuarios creados por Admin se crean APROBADOS y vinculados al equipo
+  // Los usuarios creados por Admin se crean APROBADOS
   await prisma.user.create({
-    data: { name, email, password: hashed, role, isApproved: true, teamId },
+    data: { name, email, password: hashed, role, isApproved: true },
   });
 
   revalidatePath("/admin/users");

@@ -2,8 +2,6 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { DEFAULT_PLACES } from "@/lib/settings";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 
 const prisma = new PrismaClient();
 
@@ -27,13 +25,7 @@ export async function GET() {
     if (!model) {
       return NextResponse.json([...DEFAULT_PLACES]);
     }
-    // Obtener teamId del usuario autenticado
-    // Reemplaza esto por tu método de sesión real
-    const session = await getServerSession(authOptions);
-    const user = session?.user?.id ? await prisma.user.findUnique({ where: { id: session.user.id } }) : null;
-    const teamId = user?.teamId;
-    if (!teamId) return NextResponse.json([], { status: 200 });
-    const rows = await model.findMany({ where: { teamId }, orderBy: { name: "asc" } });
+    const rows = await model.findMany({ orderBy: { name: "asc" } });
     const list = (rows || []).map((r: any) => String(r.name)).filter(Boolean);
     return NextResponse.json(list);
   } catch (e: any) {
@@ -59,17 +51,13 @@ export async function POST(req: Request) {
     if (!n) return new NextResponse("name requerido", { status: 400 });
 
     // upsert por nombre
-    // Obtener teamId del usuario autenticado
-    const session = await getServerSession(authOptions);
-    const user = session?.user?.id ? await prisma.user.findUnique({ where: { id: session.user.id } }) : null;
-    const teamId = user?.teamId;
-    if (!teamId) return NextResponse.json([], { status: 200 });
     await model.upsert({
-      where: { name_teamId: { name: n, teamId } },
+      where: { name: n },
       update: {},
-      create: { name: n, teamId },
+      create: { name: n },
     });
-    const rows = await model.findMany({ where: { teamId }, orderBy: { name: "asc" } });
+
+    const rows = await model.findMany({ orderBy: { name: "asc" } });
     const list = (rows || []).map((r: any) => String(r.name)).filter(Boolean);
     return NextResponse.json(list);
   } catch (e: any) {

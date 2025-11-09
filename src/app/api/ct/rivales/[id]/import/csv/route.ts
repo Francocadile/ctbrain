@@ -133,11 +133,17 @@ export async function POST(
     // Traemos el estado actual para mergear sin romper otras llaves
     const current = await prisma.rival.findUnique({
       where: { id },
+      select: { planStats: true },
     });
     if (!current) return new NextResponse("No encontrado", { status: 404 });
 
+    const saved = asObj<any>(current.planStats);
+    const savedTotals = asObj<any>(saved.totals);
+
     const merged: RivalStats = {
+      ...asObj(saved),
       totals: {
+        ...asObj(savedTotals),
         ...(Number.isFinite(gfSum) ? { gf: gfSum } : {}),
         ...(Number.isFinite(gaSum) ? { ga: gaSum } : {}),
         ...(typeof possAvg === "number" ? { possession: possAvg } : {}),
@@ -145,10 +151,15 @@ export async function POST(
       recent,
     };
 
-    const row = await prisma.rival.findUnique({
+    const row = await prisma.rival.update({
       where: { id },
+      data: { planStats: merged as any },
+      select: { planStats: true },
     });
-    return NextResponse.json({ data: row });
+
+    return NextResponse.json({
+      data: asObj<RivalStats>(row.planStats),
+    });
   } catch (e: any) {
     return new NextResponse(e?.message || "Error", { status: 500 });
   }

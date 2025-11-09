@@ -19,52 +19,22 @@ async function main() {
     update: {
       name: ADMIN_NAME,
       role: "ADMIN",
-      password: adminHash,
+      passwordHash: adminHash,
     },
     create: {
       email: ADMIN_EMAIL,
       name: ADMIN_NAME,
       role: "ADMIN",
-      password: adminHash,
+      passwordHash: adminHash,
     },
-  });
-
-
-  // SUPERADMIN
-  const SUPERADMIN_EMAIL = "superadmin@ct.com";
-  const SUPERADMIN_PASS = "123123";
-  const SUPERADMIN_NAME = "Superadmin";
-  const superadminHash = await bcrypt.hash(SUPERADMIN_PASS, 10);
-  await prisma.user.upsert({
-    where: { email: SUPERADMIN_EMAIL },
-    update: {
-      name: SUPERADMIN_NAME,
-      role: "SUPERADMIN",
-      password: superadminHash,
-      isApproved: true,
-    },
-    create: {
-      email: SUPERADMIN_EMAIL,
-      name: SUPERADMIN_NAME,
-      role: "SUPERADMIN",
-      password: superadminHash,
-      isApproved: true,
-    },
-  });
-
-  // Crear equipo demo si no existe
-  const demoTeam = await prisma.team.upsert({
-    where: { name: "Equipo Demo" },
-    update: {},
-    create: { name: "Equipo Demo" },
   });
 
   // Usuarios de ejemplo (idempotentes)
   const samples = [
-    { email: "ct@ctbrain.com",       name: "Cuerpo Técnico", role: "CT",       pass: "Ct12345!", teamId: demoTeam.id },
-    { email: "medico@ctbrain.com",   name: "Cuerpo Médico",  role: "MEDICO",   pass: "Med12345!", teamId: demoTeam.id },
-    { email: "jugador@ctbrain.com",  name: "Jugador Demo",   role: "JUGADOR",  pass: "Jug12345!", teamId: demoTeam.id },
-    { email: "directivo@ctbrain.com",name: "Directivo Demo", role: "DIRECTIVO",pass: "Dir12345!", teamId: demoTeam.id },
+    { email: "ct@ctbrain.com",       name: "Cuerpo Técnico", role: "CT",       pass: "Ct12345!" },
+    { email: "medico@ctbrain.com",   name: "Cuerpo Médico",  role: "MEDICO",   pass: "Med12345!" },
+    { email: "jugador@ctbrain.com",  name: "Jugador Demo",   role: "JUGADOR",  pass: "Jug12345!" },
+    { email: "directivo@ctbrain.com",name: "Directivo Demo", role: "DIRECTIVO",pass: "Dir12345!" },
   ];
 
   for (const u of samples) {
@@ -74,15 +44,13 @@ async function main() {
       update: {
         name: u.name,
         role: u.role,
-        password: hash,
-        teamId: u.teamId,
+        passwordHash: hash,
       },
       create: {
         email: u.email,
         name: u.name,
         role: u.role,
-        password: hash,
-        teamId: u.teamId,
+        passwordHash: hash,
       },
     });
   }
