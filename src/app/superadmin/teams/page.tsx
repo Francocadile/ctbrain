@@ -1,6 +1,7 @@
 // src/app/superadmin/teams/page.tsx
 import RoleGate from "@/components/auth/RoleGate";
 import dynamic from "next/dynamic";
+import TeamRow from "./TeamRow";
 
 const CreateTeamForm = dynamic(() => import("./CreateTeamForm"), { ssr: false });
 
@@ -25,7 +26,6 @@ export default async function SuperAdminTeamsPage() {
           <div className="mt-4 text-red-600">{error}</div>
         )}
         <section className="mt-8">
-          <CreateTeamForm />
           <table className="min-w-full border rounded-xl bg-white">
             <thead>
               <tr className="bg-gray-100">
@@ -35,13 +35,10 @@ export default async function SuperAdminTeamsPage() {
             </thead>
             <tbody>
               {teams.length === 0 ? (
-                <tr><td colSpan={2} className="px-4 py-4 text-gray-400">No hay equipos registrados.</td></tr>
+                <tr><td colSpan={3} className="px-4 py-4 text-gray-400">No hay equipos registrados.</td></tr>
               ) : (
                 teams.map((team) => (
-                  <tr key={team.id} className="border-t">
-                    <td className="px-4 py-2">{team.name}</td>
-                    <td className="px-4 py-2 text-xs text-gray-500">{team.id}</td>
-                  </tr>
+                  <TeamRow key={team.id} team={team} />
                 ))
               )}
             </tbody>
