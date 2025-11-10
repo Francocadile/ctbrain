@@ -167,9 +167,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ data: created }, { status: 201 });
   } catch (err: any) {
     if (err instanceof Response) return err;
-    console.error("POST /api/sessions error:", err);
+    // Log detallado para diagnóstico
+    console.error("POST /api/sessions error:", {
+      message: err?.message,
+      stack: err?.stack,
+      error: err,
+    });
     return NextResponse.json(
-      { error: "Error al crear la sesión" },
+      { error: "Error al crear la sesión", details: err?.message || err },
       { status: 500 }
     );
   }
