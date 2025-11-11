@@ -27,3 +27,21 @@ export async function PATCH(
 
   return NextResponse.json({ ok: true, data: user });
 }
+
+// Soporte para formulario HTML que usa POST desde la UI server component
+export async function POST(req: Request, { params }: { params: { id: string } }) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id || (session.user as any).role !== "ADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Para el formulario de /admin/users/pending no enviamos body; asumimos aprobar.
+  const user = await prisma.user.update({
+    where: { id: params.id },
+    data: { isApproved: true },
+    select: { id: true, email: true, name: true, role: true, isApproved: true },
+  });
+
+  // Redirigimos de vuelta a la lista de pendientes
+  return NextResponse.redirect(new URL("/admin/users/pending", req.url));
+}
