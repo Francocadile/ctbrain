@@ -21,7 +21,7 @@ export default function ApproveToggle({
     const next = !approved;
 
     try {
-      const r = await fetch(`/api/users/${id}/approve`, {
+      const r = await fetch(`/api/admin/users/${id}/approve`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isApproved: next }),
