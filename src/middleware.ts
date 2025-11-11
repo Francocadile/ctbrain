@@ -82,8 +82,14 @@ export async function middleware(req: NextRequest) {
     url.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(url);
   }
-
+  // Bypass global para SUPERADMIN: tiene control global y no necesita los guards por equipo.
+  // Esto permite que el SUPERADMIN navegue/llame APIs protegidas sin necesidad de estar
+  // asignado a un equipo concreto. (Control más fino por teamId llegará con UserTeam.)
   const role = (token as any).role as string | undefined;
+  if (role === "SUPERADMIN") {
+    return NextResponse.next();
+  }
+
   const isApproved = (token as any).isApproved as boolean | undefined;
 
   // Gate global: si no está aprobado y NO es admin → pending

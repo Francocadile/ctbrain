@@ -7,6 +7,9 @@ declare module "next-auth" {
     user: {
       id: string;
       role: Role | "SUPERADMIN";
+      // Multi-team support (opcional)
+      teamIds?: string[];
+      currentTeamId?: string | null;
     } & DefaultSession["user"];
   }
 
@@ -18,6 +21,9 @@ declare module "next-auth" {
 
 declare module "next-auth/jwt" {
   interface JWT {
-    role?: Role;
+    role?: Role | "SUPERADMIN";
+    // arrays opcionales con los equipos a los que pertenece el usuario
+    teamIds?: string[];
+    currentTeamId?: string | null;
   }
 }
