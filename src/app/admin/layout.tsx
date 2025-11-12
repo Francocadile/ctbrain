@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import TeamSwitcher from "@/components/nav/TeamSwitcher";
 
 export default async function AdminLayout({
   children,
@@ -25,6 +26,7 @@ export default async function AdminLayout({
           </div>
 
           <div className="flex items-center gap-4 text-sm">
+            <TeamSwitcher className="hidden min-w-[160px] md:flex" />
             <div className="hidden sm:block text-gray-600">
               <span className="font-medium">{name}</span>{" "}
               <span className="text-gray-400">·</span>{" "}

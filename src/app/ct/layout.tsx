@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Route } from "next";
 import { signOut } from "next-auth/react";
+import TeamSwitcher from "@/components/nav/TeamSwitcher";
 
 function NavItem({
   href,
@@ -43,6 +44,7 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex bg-gray-50">
       {/* Sidebar */}
       <aside className="w-64 shrink-0 border-r bg-white p-3 space-y-3">
+        <TeamSwitcher className="w-full" />
         <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
           INICIO
         </div>
