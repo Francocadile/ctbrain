@@ -45,8 +45,13 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const teamIds: string[] = [];
-        const currentTeamId: string | null = null;
+        // Buscar equipos del usuario
+        const userTeams = await prisma.userTeam.findMany({
+          where: { userId: user.id },
+          select: { teamId: true },
+        });
+        const teamIds = userTeams.map((ut) => ut.teamId);
+        const currentTeamId = teamIds.length > 0 ? teamIds[0] : null;
 
         return {
           id: user.id,
@@ -74,7 +79,8 @@ export const authOptions: NextAuthOptions = {
         token.role = role;
         token.isApproved = isApproved;
         token.teamIds = teamIds;
-        token.currentTeamId = currentTeamId;
+        // Si no hay currentTeamId pero hay teamIds, asignar el primero
+        token.currentTeamId = currentTeamId ?? (teamIds.length > 0 ? teamIds[0] : null);
       } else {
         token.teamIds = (token.teamIds as string[] | undefined) ?? [];
         token.currentTeamId =
