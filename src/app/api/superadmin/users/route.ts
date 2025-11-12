@@ -34,7 +34,7 @@ export async function POST(req: Request) {
     data: {
       name: data.name,
       email: data.email,
-      password: passwordHash,
+      passwordHash,
       role: data.role,
       isApproved: true,
     },

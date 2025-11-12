@@ -30,7 +30,7 @@ export async function POST(req: Request) {
       data: {
         name,
         email,
-        password: passwordHash,
+        passwordHash,
         role,
         isApproved: false, // queda pendiente hasta aprobación
       },

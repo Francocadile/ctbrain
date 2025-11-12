@@ -27,11 +27,16 @@ async function seedAdmin() {
 
   const admin = await prisma.user.upsert({
     where: { email },
-    update: {},
+    update: {
+      name,
+      role: Role.ADMIN,
+      isApproved: true,
+      passwordHash,
+    },
     create: {
       name,
       email,
-      password: passwordHash,
+      passwordHash,
       role: Role.ADMIN,
       isApproved: true,
     },
@@ -137,11 +142,16 @@ async function seedCoreUsers() {
     const passwordHash = await hash(u.password, 10);
     await prisma.user.upsert({
       where: { email: u.email },
-      update: {},
+      update: {
+        name: u.name,
+        role: u.role,
+        isApproved: true,
+        passwordHash,
+      },
       create: {
         name: u.name,
         email: u.email,
-        password: passwordHash,
+        passwordHash,
         role: u.role,
         isApproved: true,
       },

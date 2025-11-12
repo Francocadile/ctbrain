@@ -46,7 +46,7 @@ async function createUser(formData: FormData) {
 
   // Los usuarios creados por Admin se crean APROBADOS
   await prisma.user.create({
-    data: { name, email, password: hashed, role, isApproved: true },
+    data: { name, email, passwordHash: hashed, role, isApproved: true },
   });
 
   revalidatePath("/admin/users");

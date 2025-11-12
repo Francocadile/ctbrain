@@ -92,11 +92,11 @@ enum IllAptitude {
 
 // ========= Modelos existentes =========
 model User {
-  id         String   @id @default(cuid())
-  email      String   @unique
-  name       String?
-  password   String?
-  role       Role     @default(JUGADOR)
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String?
+  role         Role     @default(JUGADOR)
 
   isApproved Boolean  @default(false)
 
