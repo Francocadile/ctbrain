@@ -1,10 +1,11 @@
 type WhereInput = Record<string, unknown>;
+type ScopedArgs = { where?: WhereInput } & Record<string, unknown>;
 
 export function scopedWhere<T extends WhereInput | undefined>(teamId: string, where: T): WhereInput {
   return { ...(where ?? {}), teamId };
 }
 
-export function scopedFindManyArgs<T extends { where?: WhereInput }>(teamId: string, args: T = {} as T): T {
+export function scopedFindManyArgs<T extends ScopedArgs>(teamId: string, args: T = {} as T): T {
   return { ...args, where: scopedWhere(teamId, args?.where) };
 }
 
