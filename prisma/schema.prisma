@@ -1,10 +1,12 @@
 model Team {
-  id        String     @id @default(cuid())
-  name      String     @unique
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id        String           @id @default(cuid())
+  name      String           @unique
+  logoUrl   String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
   members   UserTeam[]
   rivals    Rival[]
+  feedback  PlayerFeedback[]
 }
 // prisma/schema.prisma
 generator client {
@@ -181,6 +183,22 @@ model Rival {
   @@index([teamId])
   @@unique([teamId, name])
   @@index([nextMatchDate])
+}
+
+model PlayerFeedback {
+  id        String   @id @default(cuid())
+  teamId    String
+  playerId  String
+  subject   String?  @db.VarChar(120)
+  text      String
+  rating    Int?
+  createdBy String
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, playerId])
+  @@index([teamId, createdAt])
 }
 
 model Place {
