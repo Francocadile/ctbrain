@@ -4,6 +4,7 @@ model Team {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
   members   UserTeam[]
+  rivals    Rival[]
 }
 // prisma/schema.prisma
 generator client {
@@ -153,9 +154,10 @@ model Session {
 }
 
 model Rival {
-  id       String  @id @default(cuid())
-  name     String  @unique
-  logoUrl  String?
+  id      String @id @default(cuid())
+  teamId  String
+  name    String
+  logoUrl String?
 
   coach                 String?
   baseSystem            String?
@@ -174,6 +176,10 @@ model Rival {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@unique([teamId, name])
   @@index([nextMatchDate])
 }
 

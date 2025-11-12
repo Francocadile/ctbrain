@@ -1,6 +1,8 @@
 // src/app/api/ct/rivales/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient, type Rival as RivalRow } from "@prisma/client";
+import { requireTeamIdFromRequest } from "@/lib/teamContext";
+import { scopedFindManyArgs } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +14,14 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 // GET /api/ct/rivales  -> lista de rivales (ordenada)
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const items: RivalRow[] = await prisma.rival.findMany({
-      orderBy: [{ name: "asc" }],
-    });
+    const teamId = await requireTeamIdFromRequest(req);
+    const items: RivalRow[] = await prisma.rival.findMany(
+      scopedFindManyArgs(teamId, {
+        orderBy: [{ name: "asc" }],
+      }) as any,
+    );
 
     const data = items.map((r: RivalRow) => ({
       id: r.id,
@@ -37,6 +42,7 @@ export async function GET() {
 // POST /api/ct/rivales  -> crear (upsert por nombre para evitar duplicados)
 export async function POST(req: Request) {
   try {
+    const teamId = await requireTeamIdFromRequest(req);
     const body = await req.json();
     const name = String(body?.name || "").trim();
     if (!name) return new NextResponse("name requerido", { status: 400 });
@@ -48,7 +54,7 @@ export async function POST(req: Request) {
     const nextMatchCompetition = body?.nextMatchCompetition ?? null;
 
     const row = await prisma.rival.upsert({
-      where: { name },
+      where: { teamId_name: { teamId, name } },
       update: {
         logoUrl,
         coach,
@@ -57,6 +63,7 @@ export async function POST(req: Request) {
         nextMatchCompetition,
       },
       create: {
+        teamId,
         name,
         logoUrl,
         coach,

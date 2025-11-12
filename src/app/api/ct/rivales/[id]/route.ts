@@ -1,6 +1,8 @@
 // src/app/api/ct/rivales/[id]/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient, type Rival as RivalRow } from "@prisma/client";
+import { requireTeamIdFromRequest } from "@/lib/teamContext";
+import { scopedWhere } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
 
@@ -24,14 +26,15 @@ function toDTO(r: RivalRow) {
 
 // GET /api/ct/rivales/:id
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: { id: string } }
 ) {
   try {
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
-    const row = await prisma.rival.findUnique({ where: { id } });
+    const teamId = await requireTeamIdFromRequest(req);
+    const row = await prisma.rival.findFirst({ where: scopedWhere(teamId, { id }) as any });
     if (!row) return new NextResponse("No encontrado", { status: 404 });
 
     return NextResponse.json({ data: toDTO(row) });
@@ -53,6 +56,10 @@ export async function PUT(
     const name = String(body?.name || "").trim();
     if (!name) return new NextResponse("name requerido", { status: 400 });
 
+    const teamId = await requireTeamIdFromRequest(req);
+    const current = await prisma.rival.findFirst({ where: scopedWhere(teamId, { id }) as any, select: { id: true } });
+    if (!current) return new NextResponse("No encontrado", { status: 404 });
+
     const row = await prisma.rival.update({
       where: { id },
       data: {
@@ -73,12 +80,16 @@ export async function PUT(
 
 // DELETE /api/ct/rivales/:id
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: { id: string } }
 ) {
   try {
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
+
+    const teamId = await requireTeamIdFromRequest(req);
+    const current = await prisma.rival.findFirst({ where: scopedWhere(teamId, { id }) as any, select: { id: true } });
+    if (!current) return new NextResponse("No encontrado", { status: 404 });
 
     await prisma.rival.delete({ where: { id } });
     return NextResponse.json({ ok: true });

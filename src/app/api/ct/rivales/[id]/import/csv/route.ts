@@ -1,6 +1,8 @@
 // src/app/api/ct/rivales/[id]/import/csv/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { requireTeamIdFromRequest } from "@/lib/teamContext";
+import { scopedWhere } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
 const prisma = new PrismaClient();
@@ -45,6 +47,8 @@ export async function POST(
   try {
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
+
+    const teamId = await requireTeamIdFromRequest(req);
 
     const form = await req.formData();
     const file = form.get("file");
@@ -131,8 +135,8 @@ export async function POST(
         : undefined;
 
     // Traemos el estado actual para mergear sin romper otras llaves
-    const current = await prisma.rival.findUnique({
-      where: { id },
+    const current = await prisma.rival.findFirst({
+      where: scopedWhere(teamId, { id }) as any,
     });
     if (!current) return new NextResponse("No encontrado", { status: 404 });
 
@@ -145,8 +149,8 @@ export async function POST(
       recent,
     };
 
-    const row = await prisma.rival.findUnique({
-      where: { id },
+    const row = await prisma.rival.findFirst({
+      where: scopedWhere(teamId, { id }) as any,
     });
     return NextResponse.json({ data: row });
   } catch (e: any) {

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import { createRequire } from "node:module";
+import { requireTeamIdFromRequest } from "@/lib/teamContext";
+import { scopedWhere } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -125,6 +127,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const id = String(params?.id || "");
     if (!id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
 
+    const teamId = await requireTeamIdFromRequest(req);
+
     const form = await req.formData();
     const fileEntry = (form.get("file") ?? form.get("pdf")) as unknown;
 
@@ -161,8 +165,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       }
     };
 
-    const current = await prisma.rival.findUnique({
-      where: { id },
+    const current = await prisma.rival.findFirst({
+      where: scopedWhere(teamId, { id }) as any,
       select: { coach: true, baseSystem: true }
     });
     if (!current) return NextResponse.json({ error: "Rival no encontrado" }, { status: 404 });

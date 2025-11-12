@@ -1,6 +1,8 @@
 // src/app/api/ct/rivales/resolve/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { requireTeamIdFromRequest } from "@/lib/teamContext";
+import { scopedWhere } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
 
@@ -28,16 +30,22 @@ export async function GET(req: Request) {
     const candidate = extractCandidate(q);
     if (!candidate) return new NextResponse("query vacío", { status: 400 });
 
+    const teamId = await requireTeamIdFromRequest(req);
+
     // 1) Intento exacto (insensible a mayúsculas)
     let rival = await prisma.rival.findFirst({
-      where: { name: { equals: candidate, mode: "insensitive" } },
+      where: scopedWhere(teamId, {
+        name: { equals: candidate, mode: "insensitive" },
+      }) as any,
       select: { id: true, name: true },
     });
 
     // 2) Si no, por 'contains'
     if (!rival) {
       rival = await prisma.rival.findFirst({
-        where: { name: { contains: candidate, mode: "insensitive" } },
+        where: scopedWhere(teamId, {
+          name: { contains: candidate, mode: "insensitive" },
+        }) as any,
         select: { id: true, name: true },
       });
     }

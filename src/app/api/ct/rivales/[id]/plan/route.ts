@@ -1,6 +1,8 @@
 // src/app/api/ct/rivales/[id]/plan/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { requireTeamIdFromRequest } from "@/lib/teamContext";
+import { scopedWhere } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
 const prisma = new PrismaClient();
@@ -39,15 +41,16 @@ function cleanStringArray(v: unknown): string[] {
 
 // ---- GET: devuelve plan (charla + reporte) del rival ----
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: { id: string } }
 ) {
   try {
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
-    const r = await prisma.rival.findUnique({
-      where: { id },
+    const teamId = await requireTeamIdFromRequest(req);
+    const r = await prisma.rival.findFirst({
+      where: scopedWhere(teamId, { id }) as any,
       select: {
         planCharlaUrl: true,
         planReport: true,
@@ -75,6 +78,10 @@ export async function PUT(
   try {
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
+
+    const teamId = await requireTeamIdFromRequest(req);
+    const current = await prisma.rival.findFirst({ where: scopedWhere(teamId, { id }) as any, select: { id: true } });
+    if (!current) return new NextResponse("No encontrado", { status: 404 });
 
     const body = (await req.json()) as RivalPlan | undefined;
     if (!body) return new NextResponse("body requerido", { status: 400 });

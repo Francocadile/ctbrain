@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { requireTeamIdFromRequest } from "@/lib/teamContext";
+import { scopedWhere } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
 
@@ -23,13 +25,14 @@ function toCleanJson<T>(v: T): T {
 }
 
 // GET /api/ct/rivales/:id/squad
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
-    const row = await prisma.rival.findUnique({
-      where: { id },
+    const teamId = await requireTeamIdFromRequest(req);
+    const row = await prisma.rival.findFirst({
+      where: scopedWhere(teamId, { id }) as any,
       select: { planSquad: true },
     });
     if (!row) return new NextResponse("No encontrado", { status: 404 });
@@ -46,6 +49,10 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   try {
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
+
+    const teamId = await requireTeamIdFromRequest(req);
+    const current = await prisma.rival.findFirst({ where: scopedWhere(teamId, { id }) as any, select: { id: true } });
+    if (!current) return new NextResponse("No encontrado", { status: 404 });
 
     const body = await req.json().catch(() => ({}));
 

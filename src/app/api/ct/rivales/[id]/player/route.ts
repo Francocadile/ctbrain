@@ -1,6 +1,8 @@
 // src/app/api/ct/rivales/[id]/player/route.ts
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { requireTeamIdFromRequest } from "@/lib/teamContext";
+import { scopedWhere } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
 
@@ -125,13 +127,14 @@ function mergeVisibility(saved: any): Visibility {
   return out;
 }
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
-    const r = await prisma.rival.findUnique({
-      where: { id },
+    const teamId = await requireTeamIdFromRequest(req);
+    const r = await prisma.rival.findFirst({
+      where: scopedWhere(teamId, { id }) as any,
       select: {
         id: true,
         name: true,

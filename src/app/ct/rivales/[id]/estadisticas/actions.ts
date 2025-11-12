@@ -2,6 +2,10 @@
 
 import { PrismaClient } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { ensureTeamId } from '@/lib/sessionScope';
+import { scopedWhere } from '@/lib/dbScope';
 
 const prisma = new PrismaClient();
 
@@ -24,9 +28,12 @@ export async function guardarEstadisticas(rivalId: string, formData: FormData) {
   const shots = toNum(formData.get('shots'));
   const shotsOnTarget = toNum(formData.get('shotsOnTarget'));
 
+  const session = await getServerSession(authOptions);
+  const teamId = ensureTeamId(session);
+
   // Traer lo que hay hoy
-  const current = await prisma.rival.findUnique({
-    where: { id: rivalId },
+  const current = await prisma.rival.findFirst({
+    where: scopedWhere(teamId, { id: rivalId }) as any,
     select: { planReport: true },
   });
   if (!current) {
