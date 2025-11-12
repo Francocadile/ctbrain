@@ -82,9 +82,7 @@ export async function middleware(req: NextRequest) {
     url.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(url);
   }
-  // Bypass global para SUPERADMIN: tiene control global y no necesita los guards por equipo.
-  // Esto permite que el SUPERADMIN navegue/llame APIs protegidas sin necesidad de estar
-  // asignado a un equipo concreto. (Control más fino por teamId llegará con UserTeam.)
+  // Bypass global para SUPERADMIN: controla todo sin restricciones de equipo.
   const role = (token as any).role as string | undefined;
   if (role === "SUPERADMIN") {
     return NextResponse.next();
@@ -109,6 +107,13 @@ export async function middleware(req: NextRequest) {
   if (needsCT) {
     const allowed = role === "CT" || role === "ADMIN";
     if (!allowed) {
+      console.info("[middleware] deny", {
+        reason: "role-mismatch",
+        pathname,
+        guard: "CT",
+        role,
+        userId: token.sub,
+      });
       const url = req.nextUrl.clone();
       url.pathname = roleHome(role);
       return NextResponse.redirect(url);
@@ -120,10 +125,56 @@ export async function middleware(req: NextRequest) {
     const allowCTReadOnly = role === "CT" && isClinicalReadForCT(pathname, req.method);
     const allowed = role === "MEDICO" || role === "ADMIN" || allowCTReadOnly;
     if (!allowed) {
+      console.info("[middleware] deny", {
+        reason: "role-mismatch",
+        pathname,
+        guard: "MEDICO",
+        role,
+        userId: token.sub,
+      });
       const url = req.nextUrl.clone();
       url.pathname = roleHome(role);
       return NextResponse.redirect(url);
     }
+  }
+
+  const requiresTeam = needsCT || needsMED;
+  if (requiresTeam) {
+    const cookieTeam = req.cookies.get("ctb_team")?.value?.trim();
+    const tokenTeam =
+      typeof (token as any).currentTeamId === "string"
+        ? ((token as any).currentTeamId as string)
+        : undefined;
+    const teamId = (cookieTeam || tokenTeam || "").trim();
+
+    if (!teamId) {
+      console.info("[middleware] deny", {
+        reason: "missing-team",
+        pathname,
+        role,
+        requiresTeam,
+        userId: token.sub,
+      });
+      if (isAPI) {
+        return new NextResponse(JSON.stringify({ error: "Team selection required" }), {
+          status: 428,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      const url = req.nextUrl.clone();
+      url.pathname = "/redirect";
+      url.searchParams.set("team", "select");
+      return NextResponse.redirect(url);
+    }
+
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set("x-team", teamId);
+
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
   }
 
   return NextResponse.next();
