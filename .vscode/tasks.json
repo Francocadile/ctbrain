@@ -1,0 +1,18 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run Backfill Team",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "set -a && source .env && set +a && node --import tsx scripts/backfill-team.ts"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ]
+}
