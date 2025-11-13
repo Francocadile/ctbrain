@@ -47,7 +47,7 @@ export async function POST(req: Request) {
       passwordHash,
       isApproved: true,
       teams: data.teamId ? {
-        create: [{ teamId: data.teamId, role: data.role as Role }],
+        create: [{ team: { connect: { id: data.teamId } }, role: data.role as Role }],
       } : undefined,
     },
   });
