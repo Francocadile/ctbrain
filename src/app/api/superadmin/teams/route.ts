@@ -1,48 +1,49 @@
+
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getToken } from "next-auth/jwt";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
+const secret = process.env.NEXTAUTH_SECRET;
 
-// Utilidad para chequear rol SUPERADMIN
-async function requireSuperAdmin() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.role || session.user.role !== "SUPERADMIN") {
-    return null;
-  }
-  return session;
+async function requireSuperAdminToken(req: Request) {
+  const token = await getToken({ req, secret });
+  if (!token || !token.sub) return { error: "No autorizado", status: 401 };
+  if (token.role !== "SUPERADMIN") return { error: "Prohibido", status: 403 };
+  return { token };
 }
 
-export async function GET() {
-  const session = await requireSuperAdmin();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-  const teams = await prisma.team.findMany();
-  return NextResponse.json(teams);
+export async function GET(req: Request) {
+  try {
+    const auth = await requireSuperAdminToken(req);
+    if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
+    const teams = await prisma.team.findMany({
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true },
+    });
+    return NextResponse.json(teams);
+  } catch (err) {
+    console.error("[superadmin/teams] GET error", err);
+    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
-  const session = await requireSuperAdmin();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-  const data = await req.json();
-  const team = await prisma.team.create({ data });
-  return NextResponse.json(team);
-}
-
-export async function PUT(req: Request) {
-  const session = await requireSuperAdmin();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-  const data = await req.json();
-  if (!data.id) return NextResponse.json({ error: "Missing team id" }, { status: 400 });
-  const team = await prisma.team.update({ where: { id: data.id }, data });
-  return NextResponse.json(team);
-}
-
-export async function DELETE(req: Request) {
-  const session = await requireSuperAdmin();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-  const { id } = await req.json();
-  if (!id) return NextResponse.json({ error: "Missing team id" }, { status: 400 });
-  await prisma.team.delete({ where: { id } });
-  return NextResponse.json({ success: true });
+  try {
+    const auth = await requireSuperAdminToken(req);
+    if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
+    const { name } = await req.json();
+    const cleanName = (name || "").trim();
+    if (!cleanName) return NextResponse.json({ error: "El nombre es requerido" }, { status: 400 });
+    const exists = await prisma.team.findFirst({
+      where: { name: { equals: cleanName, mode: "insensitive" } },
+      select: { id: true },
+    });
+    if (exists) return NextResponse.json({ error: "Ya existe un equipo con ese nombre" }, { status: 409 });
+    const team = await prisma.team.create({ data: { name: cleanName } });
+    return NextResponse.json(team, { status: 201 });
+  } catch (err) {
+    console.error("[superadmin/teams] POST error", err);
+    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+  }
 }
