@@ -1,14 +1,10 @@
 // src/app/superadmin/teams/page.tsx
-
 import RoleGate from "@/components/auth/RoleGate";
-import dynamic from "next/dynamic";
 import TeamRow from "./TeamRow";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-
-const CreateTeamForm = dynamic(() => import("./CreateTeamForm"), { ssr: false });
-
+export default async function SuperAdminTeamsPage() {
   let teams: any[] = [];
   let error: string | null = null;
   try {
@@ -26,7 +22,6 @@ const CreateTeamForm = dynamic(() => import("./CreateTeamForm"), { ssr: false })
   } catch (e: any) {
     error = e instanceof Error ? e.message : "Error al cargar equipos";
   }
-
   return (
     <RoleGate allow={["SUPERADMIN"]}>
       <main className="min-h-[60vh] px-6 py-10">
