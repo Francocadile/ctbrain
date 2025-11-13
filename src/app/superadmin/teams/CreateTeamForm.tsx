@@ -1,34 +1,30 @@
 
+
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function CreateTeamForm() {
+  const router = useRouter();
   const [name, setName] = useState("");
   const [adminName, setAdminName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState<string|null>(null);
-  const [fieldError, setFieldError] = useState<string|null>(null);
-  const router = useRouter();
 
-  const validate = () => {
-    if (!name.trim()) return "El nombre del equipo es obligatorio.";
-    if (!adminName.trim()) return "El nombre del admin es obligatorio.";
-    if (!adminEmail.trim()) return "El email del admin es obligatorio.";
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(adminEmail)) return "El email no es válido.";
-    if (!adminPassword.trim()) return "La contraseña del admin es obligatoria.";
-    return null;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setMsg(null);
-    setFieldError(null);
-    const err = validate();
-    if (err) {
-      setFieldError(err);
+    setError("");
+    setSuccess("");
+    // Validación básica
+    if (!name.trim() || !adminName.trim() || !adminEmail.trim() || !adminPassword.trim()) {
+      setError("Todos los campos son obligatorios");
+      return;
+    }
+    if (!/^\S+@\S+\.\S+$/.test(adminEmail)) {
+      setError("El email no es válido");
       return;
     }
     setLoading(true);
@@ -36,60 +32,53 @@ export default function CreateTeamForm() {
       const res = await fetch("/api/superadmin/teams", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          adminName: adminName.trim(),
-          adminEmail: adminEmail.trim().toLowerCase(),
-          adminPassword: adminPassword.trim(),
-        }),
+        body: JSON.stringify({ name, adminName, adminEmail, adminPassword }),
       });
+      const data = await res.json();
       if (res.status === 201) {
-        setMsg("Equipo y admin creados correctamente.");
+        setSuccess("Equipo y admin creados correctamente");
         setName("");
         setAdminName("");
         setAdminEmail("");
         setAdminPassword("");
         router.refresh();
       } else if (res.status === 409) {
-        const data = await res.json();
-        setMsg(data.error || "Ya existe un equipo o usuario con esos datos.");
+        setError(data.error || "Ya existe un equipo o usuario con ese nombre/email");
       } else {
-        let detail = "";
-        try {
-          const data = await res.json();
-          if (data?.error) detail = ` (${data.error})`;
-        } catch {}
-        setMsg(`Error (${res.status})${detail}`);
+        setError(data.error ? `${res.status}: ${data.error}` : `Error ${res.status}`);
       }
     } catch (err) {
-      setMsg("Error de red o inesperado.");
+      setError("Error de red o inesperado");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  };
+  }
 
   return (
-    <form onSubmit={handleSubmit} className="mb-6 flex flex-col gap-4 p-4 border rounded bg-white max-w-xl">
-      <div>
-        <label className="block text-sm font-medium mb-1">Nombre del equipo</label>
-        <input type="text" value={name} onChange={e => setName(e.target.value)} className="border rounded px-2 py-1 w-full" placeholder="Ej: Club Atlético Demo" />
+    <form className="bg-white rounded-lg shadow p-6 mb-6 flex flex-col gap-4" onSubmit={handleSubmit}>
+      <h2 className="text-lg font-bold mb-2">Crear nuevo equipo</h2>
+      {success && <div className="text-green-600 font-semibold mb-2">{success}</div>}
+      {error && <div className="text-red-600 font-semibold mb-2">{error}</div>}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium mb-1">Nombre del equipo</label>
+          <input type="text" className="input input-bordered w-full" value={name} onChange={e => setName(e.target.value)} placeholder="Nombre del equipo" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Nombre del admin</label>
+          <input type="text" className="input input-bordered w-full" value={adminName} onChange={e => setAdminName(e.target.value)} placeholder="Nombre del admin" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Email del admin</label>
+          <input type="email" className="input input-bordered w-full" value={adminEmail} onChange={e => setAdminEmail(e.target.value)} placeholder="Email del admin" />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Contraseña del admin</label>
+          <input type="password" className="input input-bordered w-full" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} placeholder="Contraseña" />
+        </div>
       </div>
-      <div>
-        <label className="block text-sm font-medium mb-1">Nombre del admin</label>
-        <input type="text" value={adminName} onChange={e => setAdminName(e.target.value)} className="border rounded px-2 py-1 w-full" placeholder="Ej: Juan Pérez" />
-      </div>
-      <div>
-        <label className="block text-sm font-medium mb-1">Email del admin</label>
-        <input type="email" value={adminEmail} onChange={e => setAdminEmail(e.target.value)} className="border rounded px-2 py-1 w-full" placeholder="admin@email.com" />
-      </div>
-      <div>
-        <label className="block text-sm font-medium mb-1">Contraseña del admin</label>
-        <input type="password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} className="border rounded px-2 py-1 w-full" placeholder="Contraseña segura" />
-      </div>
-      <button type="submit" disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition">
-        {loading ? "Creando equipo..." : "Crear equipo"}
-      </button>
-      {fieldError && <div className="text-red-600 text-sm mt-2">{fieldError}</div>}
-      {msg && <div className={msg.includes("correctamente") ? "text-green-600 text-sm mt-2" : "text-red-600 text-sm mt-2"}>{msg}</div>}
+      <button type="submit" className="btn btn-primary mt-4" disabled={loading}>{loading ? "Creando..." : "Crear equipo"}</button>
     </form>
   );
 }
+
