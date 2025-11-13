@@ -14,7 +14,13 @@ export default async function SuperAdminTeamsPage() {
   let error: string | null = null;
 
   try {
-    const res = await fetch(`${baseUrl}/api/superadmin/teams`, { cache: "no-store" });
+    const res = await fetch(`${baseUrl}/api/superadmin/teams`, {
+      cache: "no-store",
+      credentials: "include",
+      headers: {
+        cookie: heads.get("cookie") ?? ""
+      },
+    });
 
     if (!res.ok) {
       let detail = "";
