@@ -1,19 +1,19 @@
 
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 const secret = process.env.NEXTAUTH_SECRET;
 
-async function requireSuperAdminToken(req: Request) {
+async function requireSuperAdminToken(req: NextRequest) {
   const token = await getToken({ req, secret });
   if (!token || !token.sub) return { error: "No autorizado", status: 401 };
   if (token.role !== "SUPERADMIN") return { error: "Prohibido", status: 403 };
   return { token };
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
     const auth = await requireSuperAdminToken(req);
     if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
@@ -28,7 +28,7 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const auth = await requireSuperAdminToken(req);
     if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
