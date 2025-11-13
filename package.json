@@ -38,5 +38,8 @@
     "@types/papaparse": "5.3.14",
     "prisma": "5.19.1",
     "tsx": "4.19.2"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }
