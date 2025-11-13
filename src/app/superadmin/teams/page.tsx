@@ -1,23 +1,28 @@
 // src/app/superadmin/teams/page.tsx
+
 import RoleGate from "@/components/auth/RoleGate";
 import dynamic from "next/dynamic";
 import TeamRow from "./TeamRow";
-import { headers } from "next/headers";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 
 const CreateTeamForm = dynamic(() => import("./CreateTeamForm"), { ssr: false });
 
-export default async function SuperAdminTeamsPage() {
-  // Fetch equipos desde el endpoint API (server component: usar URL absoluta)
   let teams: any[] = [];
   let error: string | null = null;
   try {
-    const heads = headers();
-    const host = heads.get("host");
-    const protocol = heads.get("x-forwarded-proto") ?? "https";
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `${protocol}://${host}`;
-    const res = await fetch(`${baseUrl}/api/superadmin/teams`, { cache: "no-store" });
-    if (!res.ok) throw new Error("No se pudo cargar la lista de equipos");
-    teams = await res.json();
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
+      throw new Error("UNAUTHENTICATED");
+    }
+    if (session.user.role !== "SUPERADMIN") {
+      throw new Error("FORBIDDEN");
+    }
+    teams = await prisma.team.findMany({
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true },
+    });
   } catch (e: any) {
     error = e instanceof Error ? e.message : "Error al cargar equipos";
   }
