@@ -46,8 +46,8 @@ export async function POST(req: Request) {
       role: data.role as Role,
       passwordHash,
       isApproved: true,
-      teams: data.teamId ? {
-        create: [{ team: { connect: { id: data.teamId } }, role: data.role as Role }],
+      teams: data.teamId && data.role !== "SUPERADMIN" ? {
+        create: [{ team: { connect: { id: data.teamId } }, role: data.role as TeamRole }],
       } : undefined,
     },
   });
