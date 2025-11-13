@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { PrismaClient, Role } from "@prisma/client";
+import { PrismaClient, Role, TeamRole } from "@prisma/client";
 import { hash } from "bcryptjs";
 
 const prisma = new PrismaClient();
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
       passwordHash,
       isApproved: true,
       teams: data.teamId && data.role !== "SUPERADMIN" ? {
-        create: [{ team: { connect: { id: data.teamId } }, role: data.role as TeamRole }],
+  create: [{ team: { connect: { id: data.teamId } }, role: data.role as TeamRole }],
       } : undefined,
     },
   });
@@ -68,8 +68,8 @@ export async function PUT(req: Request) {
       teams: data.teamId ? {
         upsert: {
           where: { userId_teamId: { userId: data.id, teamId: data.teamId } },
-          update: { role: data.role as Role },
-          create: { teamId: data.teamId, role: data.role as Role },
+          update: { role: data.role as TeamRole },
+          create: { teamId: data.teamId, role: data.role as TeamRole },
         },
       } : undefined,
     },
