@@ -1,3 +1,4 @@
+"use client";
 // src/app/superadmin/teams/page.tsx
 import RoleGate from "@/components/auth/RoleGate";
 import dynamic from "next/dynamic";
