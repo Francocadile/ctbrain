@@ -12,6 +12,7 @@ import type { Session } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
+import { isRedirectError } from "next/dist/client/components/redirect";
 
 /* =========================
    HELPERS
@@ -172,10 +173,10 @@ async function createUser(formData: FormData) {
     }
 
     await prisma.user.create({ data });
-
-    revalidatePath("/admin/users");
-    return redirect("/admin/users?status=created");
   } catch (error) {
+    if (isRedirectError(error)) {
+      throw error;
+    }
     console.error("[admin/users] createUser error", error);
     let message = "No se pudo crear el usuario.";
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -186,6 +187,9 @@ async function createUser(formData: FormData) {
 
     return redirect(`/admin/users?error=${encodeURIComponent(message)}`);
   }
+
+  revalidatePath("/admin/users");
+  return redirect("/admin/users?status=created");
 }
 
 async function deleteUser(formData: FormData) {
