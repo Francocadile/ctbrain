@@ -4,12 +4,13 @@ export const dynamic = "force-dynamic";
 
 import RoleGate from "@/components/auth/RoleGate";
 import { prisma } from "@/lib/prisma";
-import { Role } from "@prisma/client";
+import { Prisma, Role, TeamRole } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { getServerSession } from "next-auth";
 import type { Session } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 
 /* =========================
@@ -22,6 +23,31 @@ const allowedPageRoles: Role[] = [
   Role.MEDICO,
   Role.DIRECTIVO,
 ];
+
+const creatableRoles: Role[] = [
+  Role.ADMIN,
+  Role.CT,
+  Role.MEDICO,
+  Role.JUGADOR,
+  Role.DIRECTIVO,
+];
+
+function roleToTeamRole(role: Role): TeamRole {
+  switch (role) {
+    case Role.ADMIN:
+      return TeamRole.ADMIN;
+    case Role.CT:
+      return TeamRole.CT;
+    case Role.MEDICO:
+      return TeamRole.MEDICO;
+    case Role.JUGADOR:
+      return TeamRole.JUGADOR;
+    case Role.DIRECTIVO:
+      return TeamRole.DIRECTIVO;
+    default:
+      throw new Error("Rol inválido.");
+  }
+}
 
 function getSessionTeamId(session: Session | null | undefined): string | null {
   const userAny = session?.user as any;
@@ -87,26 +113,79 @@ async function fetchUsers(session: Session) {
 ========================= */
 async function createUser(formData: FormData) {
   "use server";
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return redirect("/login");
+  }
+
+  const creatorRole = session.user.role as Role | undefined;
+  if (!creatorRole || !allowedPageRoles.includes(creatorRole)) {
+    return redirect("/login");
+  }
+
+  const providedTeamId = creatorRole === Role.SUPERADMIN ? String(formData.get("teamId") ?? "").trim() : null;
+  const sessionTeamId = creatorRole === Role.SUPERADMIN ? providedTeamId || null : getSessionTeamId(session);
+  if (!sessionTeamId && creatorRole !== Role.SUPERADMIN) {
+    return redirect(
+      `/admin/users?error=${encodeURIComponent("Tu sesión no tiene un equipo asignado.")}`
+    );
+  }
+
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
-  const role = String(formData.get("role") ?? "") as Role;
+  const roleValue = String(formData.get("role") ?? "").trim().toUpperCase();
+  const role = roleValue as Role;
 
-  if (!name || !email || !password) throw new Error("Completa nombre, email y contraseña.");
-  if (!["ADMIN", "CT", "MEDICO", "JUGADOR", "DIRECTIVO"].includes(role))
-    throw new Error("Rol inválido.");
+  if (!name || !email || !password) {
+    return redirect(`/admin/users?error=${encodeURIComponent("Completa nombre, email y contraseña.")}`);
+  }
 
-  const exists = await prisma.user.findUnique({ where: { email } });
-  if (exists) throw new Error("Ese email ya está registrado.");
+  if (!creatableRoles.includes(role)) {
+    return redirect(`/admin/users?error=${encodeURIComponent("Rol inválido.")}`);
+  }
 
-  const hashed = await bcrypt.hash(password, 10);
+  try {
+    const exists = await prisma.user.findUnique({ where: { email } });
+    if (exists) {
+      return redirect(`/admin/users?error=${encodeURIComponent("Ese email ya está registrado.")}`);
+    }
 
-  // Los usuarios creados por Admin se crean APROBADOS
-  await prisma.user.create({
-    data: { name, email, passwordHash: hashed, role, isApproved: true },
-  });
+    const hashed = await bcrypt.hash(password, 10);
+    const data: Prisma.UserCreateInput = {
+      name,
+      email,
+      passwordHash: hashed,
+      role,
+      isApproved: true,
+    };
 
-  revalidatePath("/admin/users");
+    if (sessionTeamId && role !== Role.SUPERADMIN) {
+      data.teams = {
+        create: [
+          {
+            role: roleToTeamRole(role),
+            team: { connect: { id: sessionTeamId } },
+          },
+        ],
+      };
+    }
+
+    await prisma.user.create({ data });
+
+    revalidatePath("/admin/users");
+    return redirect("/admin/users?status=created");
+  } catch (error) {
+    console.error("[admin/users] createUser error", error);
+    let message = "No se pudo crear el usuario.";
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      message = "Ese email ya está registrado.";
+    } else if (error instanceof Error && error.message) {
+      message = error.message;
+    }
+
+    return redirect(`/admin/users?error=${encodeURIComponent(message)}`);
+  }
 }
 
 async function deleteUser(formData: FormData) {
@@ -142,7 +221,11 @@ async function setApproval(formData: FormData) {
 /* =========================
    PAGE
 ========================= */
-export default async function AdminUsersPage() {
+export default async function AdminUsersPage({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[] | undefined>;
+}) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     throw new Error("UNAUTHENTICATED");
@@ -153,9 +236,17 @@ export default async function AdminUsersPage() {
   }
 
   const users = await fetchUsers(session);
+  const successMessage =
+    typeof searchParams?.status === "string" && searchParams.status === "created"
+      ? "Usuario creado correctamente."
+      : null;
+  const errorMessage =
+    typeof searchParams?.error === "string" && searchParams.error.length > 0
+      ? (searchParams.error as string)
+      : null;
 
   return (
-  <RoleGate allow={allowedPageRoles}>
+    <RoleGate allow={allowedPageRoles}>
       <div className="space-y-8">
         <header className="flex items-end justify-between">
           <div>
@@ -165,6 +256,33 @@ export default async function AdminUsersPage() {
             </p>
           </div>
         </header>
+
+        {(successMessage || errorMessage) && (
+          <div className="space-y-3">
+            {successMessage && (
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                <span>{successMessage}</span>
+                <a
+                  href="/admin/users"
+                  className="text-xs font-semibold uppercase tracking-wide text-emerald-900 underline"
+                >
+                  Ocultar
+                </a>
+              </div>
+            )}
+            {errorMessage && (
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <span>{errorMessage}</span>
+                <a
+                  href="/admin/users"
+                  className="text-xs font-semibold uppercase tracking-wide text-red-900 underline"
+                >
+                  Ocultar
+                </a>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Crear usuario */}
         <section className="rounded-2xl border bg-white p-5 shadow-sm">
