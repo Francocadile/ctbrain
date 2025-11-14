@@ -6,23 +6,80 @@ import RoleGate from "@/components/auth/RoleGate";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { cookies, headers } from "next/headers";
+import { getServerSession } from "next-auth";
+import type { Session } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 
 /* =========================
-   DATA
+   HELPERS
 ========================= */
-async function getUsers() {
-  return prisma.user.findMany({
-    orderBy: [{ isApproved: "asc" }, { createdAt: "desc" }],
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      isApproved: true,
-      createdAt: true,
-    },
+const allowedPageRoles: Role[] = [
+  Role.SUPERADMIN,
+  Role.ADMIN,
+  Role.CT,
+  Role.MEDICO,
+  Role.DIRECTIVO,
+];
+
+function getSessionTeamId(session: Session | null | undefined): string | null {
+  const userAny = session?.user as any;
+  if (!userAny) return null;
+  if (typeof userAny.currentTeamId === "string" && userAny.currentTeamId.trim().length > 0) {
+    return userAny.currentTeamId;
+  }
+  if (Array.isArray(userAny.teamIds) && userAny.teamIds.length > 0) {
+    return userAny.teamIds[0];
+  }
+  if (typeof userAny.teamId === "string" && userAny.teamId.trim().length > 0) {
+    return userAny.teamId;
+  }
+  return null;
+}
+
+async function fetchUsers(session: Session) {
+  const role = session.user.role as Role;
+  if (!allowedPageRoles.includes(role)) {
+    throw new Error("FORBIDDEN");
+  }
+
+  let query = "";
+  if (role !== Role.SUPERADMIN) {
+    const teamId = getSessionTeamId(session);
+    if (!teamId) {
+      throw new Error("FORBIDDEN");
+    }
+    query = `?teamId=${encodeURIComponent(teamId)}`;
+  }
+
+  const host = headers().get("host");
+  const protocol = host?.includes("localhost") ? "http" : "https";
+  const baseUrl = host ? `${protocol}://${host}` : process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const cookieStore = cookies();
+  const cookieHeader = cookieStore
+    .getAll()
+    .map((c) => `${c.name}=${c.value}`)
+    .join("; ");
+
+  const res = await fetch(`${baseUrl}/api/admin/users${query}`, {
+    headers: cookieHeader ? { Cookie: cookieHeader } : {},
+    cache: "no-store",
   });
+
+  if (!res.ok) {
+    throw new Error("Error al cargar usuarios");
+  }
+
+  const data = await res.json();
+  return data.users as Array<{
+    id: string;
+    name: string | null;
+    email: string;
+    role: Role;
+    isApproved: boolean;
+    createdAt: string;
+  }>;
 }
 
 /* =========================
@@ -86,10 +143,19 @@ async function setApproval(formData: FormData) {
    PAGE
 ========================= */
 export default async function AdminUsersPage() {
-  const users = await getUsers();
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    throw new Error("UNAUTHENTICATED");
+  }
+  const role = session.user.role as Role;
+  if (!role || !allowedPageRoles.includes(role)) {
+    throw new Error("FORBIDDEN");
+  }
+
+  const users = await fetchUsers(session);
 
   return (
-    <RoleGate allow={["ADMIN"]}>
+  <RoleGate allow={allowedPageRoles}>
       <div className="space-y-8">
         <header className="flex items-end justify-between">
           <div>
