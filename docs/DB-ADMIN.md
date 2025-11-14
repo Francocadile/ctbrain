@@ -2,6 +2,8 @@
 
 These are small utilities to help approve users and inspect the database locally.
 
+_Nota rápida_: esta documentación se tocó mínimamente para disparar un nuevo build en Vercel.
+
 Important: do NOT commit or expose your `DATABASE_URL` publicly. Run these commands in a secure shell.
 
 Open Prisma Studio (reads `.env` or env var):
