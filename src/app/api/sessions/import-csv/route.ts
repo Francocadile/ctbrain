@@ -1,7 +1,8 @@
 // src/app/api/sessions/import-csv/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { requireSessionWithRoles } from "@/lib/auth-helpers";
+import type { Prisma } from "@prisma/client";
+import { Role } from "@prisma/client";
+import { dbScope, scopedCreateArgs, scopedWhere } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
 
@@ -146,78 +147,73 @@ function rowsToActions(rows: CSVRow[]) {
 }
 
 export async function POST(req: Request) {
-  // ✅ obtenemos la sesión; necesitamos el userId para asignar owner en Session.create
-  const session: any = await requireSessionWithRoles(["CT", "ADMIN"]);
-  const userId: string | undefined =
-    session?.user?.id || session?.id || session?.userId; // tolerante a distintas formas del helper
-
-  if (!userId) {
-    return NextResponse.json({ ok: false, error: "Usuario no identificado" }, { status: 401 });
-  }
-
-  const body = await req.json().catch(() => ({}));
-  const csvText: string = body.csvText || "";
-  const targetStart: string | null = body.targetStart || null; // YYYY-MM-DD
-  const overwrite: boolean = !!body.overwrite;
-  const dryRun: boolean = !!body.dryRun;
-
-  if (!csvText.trim()) {
-    return NextResponse.json({ error: "csvText vacío" }, { status: 400 });
-  }
-
-  // Parse
-  const rowsRaw = parseCSV(csvText);
-  if (!rowsRaw.length) return NextResponse.json({ error: "CSV sin filas" }, { status: 400 });
-
-  // Header
-  const header = rowsRaw[0].map(normalizeHeader);
-  const required = ["date", "turn"];
-  for (const r of required) {
-    if (!header.includes(r)) {
-      return NextResponse.json({ error: `Falta columna requerida: ${r}` }, { status: 400 });
-    }
-  }
-
-  // Acomodo a objetos
-  const rows: CSVRow[] = rowsRaw.slice(1).map(cols => {
-    const obj: any = {};
-    header.forEach((h, i) => obj[h] = (cols[i] ?? "").trim());
-    obj.turn = (obj.turn || "").toLowerCase();
-    if (obj.day_flag) obj.day_flag = String(obj.day_flag).toUpperCase();
-    return obj as CSVRow;
-  });
-
-  const { actions, warnings, errors } = rowsToActions(rows);
-  if (errors.length) {
-    return NextResponse.json({ ok: false, errors, warnings }, { status: 400 });
-    }
-  // Alineación (opcional)
-  let diffDays = 0;
-  if (targetStart) {
-    const minDate = rows
-      .map(r => r.date)
-      .filter(Boolean)
-      .map(ymdToDateUTC)
-      .sort((a, b) => a.getTime() - b.getTime())[0] || new Date();
-
-    const sourceMonday = getMondayUTC(minDate);
-    const targetMonday = getMondayUTC(ymdToDateUTC(targetStart));
-    diffDays = Math.round((targetMonday.getTime() - sourceMonday.getTime()) / (24 * 3600 * 1000));
-  }
-
-  // Dry-run
-  if (dryRun) {
-    const counts = {
-      cell_set: actions.filter(a => a.kind === "CELL").length,
-      cell_clear: actions.filter(a => a.kind === "CLEAR_CELL").length,
-      flag_set: actions.filter(a => a.kind === "FLAG").length,
-      flag_clear: actions.filter(a => a.kind === "CLEAR_FLAG").length,
-    };
-    return NextResponse.json({ ok: true, dryRun: true, diffDays, counts, warnings });
-  }
-
-  // Aplicar cambios
   try {
+    const { prisma, team, user } = await dbScope({ req, roles: [Role.CT, Role.ADMIN] });
+    const userId = user.id;
+
+    const body = await req.json().catch(() => ({}));
+    const csvText: string = body.csvText || "";
+    const targetStart: string | null = body.targetStart || null; // YYYY-MM-DD
+    const overwrite: boolean = !!body.overwrite;
+    const dryRun: boolean = !!body.dryRun;
+
+    if (!csvText.trim()) {
+      return NextResponse.json({ error: "csvText vacío" }, { status: 400 });
+    }
+
+    // Parse
+    const rowsRaw = parseCSV(csvText);
+    if (!rowsRaw.length) return NextResponse.json({ error: "CSV sin filas" }, { status: 400 });
+
+    // Header
+    const header = rowsRaw[0].map(normalizeHeader);
+    const required = ["date", "turn"];
+    for (const r of required) {
+      if (!header.includes(r)) {
+        return NextResponse.json({ error: `Falta columna requerida: ${r}` }, { status: 400 });
+      }
+    }
+
+    // Acomodo a objetos
+    const rows: CSVRow[] = rowsRaw.slice(1).map(cols => {
+      const obj: any = {};
+      header.forEach((h, i) => obj[h] = (cols[i] ?? "").trim());
+      obj.turn = (obj.turn || "").toLowerCase();
+      if (obj.day_flag) obj.day_flag = String(obj.day_flag).toUpperCase();
+      return obj as CSVRow;
+    });
+
+    const { actions, warnings, errors } = rowsToActions(rows);
+    if (errors.length) {
+      return NextResponse.json({ ok: false, errors, warnings }, { status: 400 });
+    }
+
+    // Alineación (opcional)
+    let diffDays = 0;
+    if (targetStart) {
+      const minDate = rows
+        .map(r => r.date)
+        .filter(Boolean)
+        .map(ymdToDateUTC)
+        .sort((a, b) => a.getTime() - b.getTime())[0] || new Date();
+
+      const sourceMonday = getMondayUTC(minDate);
+      const targetMonday = getMondayUTC(ymdToDateUTC(targetStart));
+      diffDays = Math.round((targetMonday.getTime() - sourceMonday.getTime()) / (24 * 3600 * 1000));
+    }
+
+    // Dry-run
+    if (dryRun) {
+      const counts = {
+        cell_set: actions.filter(a => a.kind === "CELL").length,
+        cell_clear: actions.filter(a => a.kind === "CLEAR_CELL").length,
+        flag_set: actions.filter(a => a.kind === "FLAG").length,
+        flag_clear: actions.filter(a => a.kind === "CLEAR_FLAG").length,
+      };
+      return NextResponse.json({ ok: true, dryRun: true, diffDays, counts, warnings });
+    }
+
+    // Aplicar cambios
     const result = await prisma.$transaction(async (tx) => {
       let created = 0, updated = 0, deleted = 0;
 
@@ -226,7 +222,9 @@ export async function POST(req: Request) {
 
         if (a.kind === "CLEAR_FLAG") {
           const marker = `${dayFlagMarker(a.turn)} | ${ymd}`;
-          deleted += await tx.session.deleteMany({ where: { description: marker } }).then(r => r.count);
+          deleted += await tx.session
+            .deleteMany({ where: scopedWhere(team.id, { description: marker }) as Prisma.SessionWhereInput })
+            .then(r => r.count);
           continue;
         }
 
@@ -236,10 +234,14 @@ export async function POST(req: Request) {
           const iso = computeISOForSlot(ymd, a.turn);
 
           if (overwrite) {
-            deleted += await tx.session.deleteMany({ where: { description: marker } }).then(r => r.count);
+            deleted += await tx.session
+              .deleteMany({ where: scopedWhere(team.id, { description: marker }) as Prisma.SessionWhereInput })
+              .then(r => r.count);
           }
 
-          const existing = await tx.session.findFirst({ where: { description: marker } });
+          const existing = await tx.session.findFirst({
+            where: scopedWhere(team.id, { description: marker }) as Prisma.SessionWhereInput,
+          });
           if (!existing) {
             // ✅ asignamos owner
             const data: any = {
@@ -250,7 +252,7 @@ export async function POST(req: Request) {
               user: { connect: { id: userId } },
               createdBy: userId, // si existe en el schema, queda seteado
             };
-            await tx.session.create({ data });
+            await tx.session.create(scopedCreateArgs(team.id, { data }));
             created++;
           } else {
             await tx.session.update({ where: { id: existing.id }, data: { title, date: new Date(iso) } });
@@ -261,7 +263,9 @@ export async function POST(req: Request) {
 
         if (a.kind === "CLEAR_CELL") {
           const marker = `${cellMarker(a.turn, a.row)} | ${ymd}`;
-          deleted += await tx.session.deleteMany({ where: { description: marker } }).then(r => r.count);
+          deleted += await tx.session
+            .deleteMany({ where: scopedWhere(team.id, { description: marker }) as Prisma.SessionWhereInput })
+            .then(r => r.count);
           continue;
         }
 
@@ -270,10 +274,14 @@ export async function POST(req: Request) {
           const iso = computeISOForSlot(ymd, a.turn);
 
           if (overwrite) {
-            deleted += await tx.session.deleteMany({ where: { description: marker } }).then(r => r.count);
+            deleted += await tx.session
+              .deleteMany({ where: scopedWhere(team.id, { description: marker }) as Prisma.SessionWhereInput })
+              .then(r => r.count);
           }
 
-          const existing = await tx.session.findFirst({ where: { description: marker } });
+          const existing = await tx.session.findFirst({
+            where: scopedWhere(team.id, { description: marker }) as Prisma.SessionWhereInput,
+          });
           if (!existing) {
             // ✅ asignamos owner
             const data: any = {
@@ -284,7 +292,7 @@ export async function POST(req: Request) {
               user: { connect: { id: userId } },
               createdBy: userId, // si existe
             };
-            await tx.session.create({ data });
+            await tx.session.create(scopedCreateArgs(team.id, { data }));
             created++;
           } else {
             await tx.session.update({
@@ -302,6 +310,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, ...result, warnings, diffDays });
   } catch (e: any) {
+    if (e instanceof Response) return e;
     console.error(e);
     return NextResponse.json({ ok: false, error: e?.message || "Error aplicando CSV" }, { status: 500 });
   }

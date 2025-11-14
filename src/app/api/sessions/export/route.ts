@@ -1,7 +1,8 @@
 // src/app/api/sessions/export/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { requireSessionWithRoles } from "@/lib/auth-helpers";
+import type { Prisma } from "@prisma/client";
+import { Role } from "@prisma/client";
+import { dbScope, scopedWhere } from "@/lib/dbScope";
 
 function toYMDUTC(d: Date) {
   const y = d.getUTCFullYear();
@@ -20,35 +21,41 @@ function getMondayUTC(base: Date) {
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  await requireSessionWithRoles(["CT", "ADMIN"]);
+  try {
+    const { prisma, team } = await dbScope({ req, roles: [Role.CT, Role.ADMIN] });
 
-  const url = new URL(req.url);
-  const start = url.searchParams.get("start"); // YYYY-MM-DD opcional
+    const url = new URL(req.url);
+    const start = url.searchParams.get("start"); // YYYY-MM-DD opcional
 
-  const base = start ? new Date(`${start}T00:00:00.000Z`) : new Date();
-  const weekStart = getMondayUTC(base);
-  const nextMonday = new Date(weekStart);
-  nextMonday.setUTCDate(nextMonday.getUTCDate() + 7);
+    const base = start ? new Date(`${start}T00:00:00.000Z`) : new Date();
+    const weekStart = getMondayUTC(base);
+    const nextMonday = new Date(weekStart);
+    nextMonday.setUTCDate(nextMonday.getUTCDate() + 7);
 
-  const rows = await prisma.session.findMany({
-    where: { date: { gte: weekStart, lt: nextMonday } },
-    orderBy: { date: "asc" },
-  });
+    const rows = await prisma.session.findMany({
+      where: scopedWhere(team.id, { date: { gte: weekStart, lt: nextMonday } }) as Prisma.SessionWhereInput,
+      orderBy: { date: "asc" },
+    });
 
-  // Export “neutro”: sin ids ni timestamps (útil para importar en otra semana)
-  const sessions = rows.map((r) => ({
-    title: r.title ?? "",
-    description: r.description ?? "",
-    date: r.date.toISOString(), // conservamos ISO original por si lo querés importar tal cual
-    type: r.type as any,
-    createdBy: r.createdBy ?? null,
-  }));
+    // Export “neutro”: sin ids ni timestamps (útil para importar en otra semana)
+    const sessions = rows.map((r) => ({
+      title: r.title ?? "",
+      description: r.description ?? "",
+      date: r.date.toISOString(), // conservamos ISO original por si lo querés importar tal cual
+      type: r.type as any,
+      createdBy: r.createdBy ?? null,
+    }));
 
-  return NextResponse.json({
-    version: 1,
-    weekStart: toYMDUTC(weekStart),
-    weekEnd: toYMDUTC(new Date(nextMonday.getTime() - 24 * 3600 * 1000)), // domingo
-    count: sessions.length,
-    sessions,
-  });
+    return NextResponse.json({
+      version: 1,
+      weekStart: toYMDUTC(weekStart),
+      weekEnd: toYMDUTC(new Date(nextMonday.getTime() - 24 * 3600 * 1000)), // domingo
+      count: sessions.length,
+      sessions,
+    });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("GET /api/sessions/export error", error);
+    return NextResponse.json({ error: "No se pudo exportar sesiones" }, { status: 500 });
+  }
 }

@@ -1,9 +1,9 @@
 // src/app/api/sessions/[id]/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import prisma from "@/lib/prisma";
-import { requireAuth, requireSessionWithRoles } from "@/lib/auth-helpers";
 import { Role } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
+import { dbScope, scopedWhere } from "@/lib/dbScope";
 
 const DAYFLAG_RE = /^\[DAYFLAG:(morning|afternoon)\]/i;
 function isDayFlagDescription(desc?: string | null) {
@@ -45,11 +45,12 @@ const updateSchema = z
     }
   });
 
-export async function GET(_: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
-    await requireAuth();
-    const one = await prisma.session.findUnique({
-      where: { id: params.id },
+    const { prisma, team } = await dbScope({ req });
+
+    const one = await prisma.session.findFirst({
+      where: scopedWhere(team.id, { id: params.id }) as Prisma.SessionWhereInput,
       select: sessionSelect,
     });
     if (!one) return NextResponse.json({ error: "Sesión no encontrada" }, { status: 404 });
@@ -63,7 +64,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {
-    await requireSessionWithRoles([Role.CT, Role.ADMIN]);
+    const { prisma, team } = await dbScope({ req, roles: [Role.CT, Role.ADMIN] });
 
     const body = await req.json();
     const parsed = updateSchema.safeParse(body);
@@ -75,8 +76,16 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     }
 
     const data = parsed.data;
+    const existing = await prisma.session.findFirst({
+      where: scopedWhere(team.id, { id: params.id }) as Prisma.SessionWhereInput,
+      select: { id: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Sesión no encontrada" }, { status: 404 });
+    }
+
     const updated = await prisma.session.update({
-      where: { id: params.id },
+      where: { id: existing.id },
       data: {
         ...(data.title !== undefined ? { title: (data.title ?? "").trim() } : {}),
         ...(data.description !== undefined ? { description: data.description } : {}),
@@ -94,10 +103,19 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   }
 }
 
-export async function DELETE(_: Request, { params }: { params: { id: string } }) {
+export async function DELETE(req: Request, { params }: { params: { id: string } }) {
   try {
-    await requireSessionWithRoles([Role.CT, Role.ADMIN]);
-    await prisma.session.delete({ where: { id: params.id } });
+    const { prisma, team } = await dbScope({ req, roles: [Role.CT, Role.ADMIN] });
+
+    const existing = await prisma.session.findFirst({
+      where: scopedWhere(team.id, { id: params.id }) as Prisma.SessionWhereInput,
+      select: { id: true },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: "Sesión no encontrada" }, { status: 404 });
+    }
+
+  await prisma.session.delete({ where: { id: existing.id } });
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     if (e instanceof Response) return e;

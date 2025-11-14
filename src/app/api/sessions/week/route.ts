@@ -1,6 +1,7 @@
 // src/app/api/sessions/week/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
+import { dbScope, scopedWhere } from "@/lib/dbScope";
 
 // 👇 Clave para evitar "Dynamic server usage" (usa request.url)
 export const dynamic = "force-dynamic";
@@ -22,6 +23,8 @@ function getMondayUTC(base: Date) {
 
 export async function GET(req: Request) {
   try {
+    const { prisma, team } = await dbScope({ req });
+
     const url = new URL(req.url);
     const start = url.searchParams.get("start"); // YYYY-MM-DD (opcional)
 
@@ -38,12 +41,12 @@ export async function GET(req: Request) {
 
     // Traer TODO lo que cae dentro de [weekStart, nextMonday)
     const rows = await prisma.session.findMany({
-      where: {
+      where: scopedWhere(team.id, {
         date: {
           gte: weekStart,
           lt: nextMonday, // ✅ incluye DOMINGO completo
         },
-      },
+      }) as Prisma.SessionWhereInput,
       orderBy: { date: "asc" },
       include: {
         user: { select: { id: true, name: true, email: true, role: true } },

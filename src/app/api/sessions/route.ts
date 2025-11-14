@@ -1,11 +1,9 @@
 // src/app/api/sessions/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import prisma from "@/lib/prisma";
-import { requireAuth, requireSessionWithRoles } from "@/lib/auth-helpers";
-import { Role } from "@prisma/client";
-import { getCurrentTeamId } from "@/lib/sessionScope";
 import type { Prisma } from "@prisma/client";
+import { Role } from "@prisma/client";
+import { dbScope, scopedCreateArgs, scopedFindManyArgs, scopedWhere } from "@/lib/dbScope";
 
 /* ---------- Fecha ---------- */
 function toYYYYMMDDUTC(d: Date) {
@@ -77,17 +75,9 @@ const createSchema = z
 /* ?start=YYYY-MM-DD  -> devuelve mapa de la semana (Lun..Dom),
    usando lunes siguiente como FIN EXCLUSIVO (lt: nextMonday) para incluir DOMINGO a cualquier hora.
    Sin start -> listado de últimas 50 sesiones (para /ct/sessions). */
-const SCOPED_ROLES: Role[] = [Role.CT, Role.MEDICO, Role.DIRECTIVO, Role.JUGADOR];
-
 export async function GET(req: Request) {
   try {
-    const session = await requireAuth();
-    const role = session.user.role as Role | undefined;
-    const teamId = getCurrentTeamId(session);
-    const shouldScope = role ? SCOPED_ROLES.includes(role) : false;
-    if (shouldScope && !teamId) {
-      return NextResponse.json({ error: "Team no disponible" }, { status: 403 });
-    }
+    const { prisma, team } = await dbScope({ req });
 
     const url = new URL(req.url);
     const start = url.searchParams.get("start");
@@ -108,14 +98,10 @@ export async function GET(req: Request) {
       const where: Prisma.SessionWhereInput = {
         date: { gte: monday, lt: nextMonday },
       };
-      if (shouldScope) {
-        where.user = {
-          teams: { some: { teamId: teamId! } },
-        };
-      }
+  const scopedWhereInput = scopedWhere(team.id, where) as Prisma.SessionWhereInput;
 
       const items = await prisma.session.findMany({
-        where,
+        where: scopedWhereInput,
         orderBy: [{ date: "asc" }, { createdAt: "asc" }],
         select: sessionSelect,
       });
@@ -140,19 +126,12 @@ export async function GET(req: Request) {
     }
 
     // Listado para /ct/sessions (no tocar, así como te funciona)
-    const where: Prisma.SessionWhereInput = {};
-    if (shouldScope) {
-      where.user = {
-        teams: { some: { teamId: teamId! } },
-      };
-    }
-
-    const sessions = await prisma.session.findMany({
-      where,
+    const listArgs: Prisma.SessionFindManyArgs = {
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       select: sessionSelect,
       take: 50,
-    });
+    };
+    const sessions = await prisma.session.findMany(scopedFindManyArgs(team.id, listArgs));
     return NextResponse.json({ data: sessions });
   } catch (err: any) {
     if (err instanceof Response) return err;
@@ -167,7 +146,7 @@ export async function GET(req: Request) {
 /* ---------- POST /api/sessions ---------- */
 export async function POST(req: Request) {
   try {
-    const session = await requireSessionWithRoles([Role.CT, Role.ADMIN]);
+    const { prisma, team, user } = await dbScope({ req, roles: [Role.CT, Role.ADMIN] });
 
     const body = await req.json();
     const parsed = createSchema.safeParse(body);
@@ -180,16 +159,18 @@ export async function POST(req: Request) {
 
     const { title, description, date, type } = parsed.data;
 
-    const created = await prisma.session.create({
-      data: {
-        title: (title ?? "").trim(), // "" permitido si es DAYFLAG
-        description: description ?? null,
-        date: new Date(date),
-        type: type ?? "GENERAL",
-        createdBy: session.user.id,
-      },
-      select: sessionSelect,
-    });
+    const created = await prisma.session.create(
+      scopedCreateArgs(team.id, {
+        data: {
+          title: (title ?? "").trim(), // "" permitido si es DAYFLAG
+          description: description ?? null,
+          date: new Date(date),
+          type: type ?? "GENERAL",
+          createdBy: user.id,
+        },
+        select: sessionSelect,
+      })
+    );
 
     return NextResponse.json({ data: created }, { status: 201 });
   } catch (err: any) {

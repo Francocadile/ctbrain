@@ -43,6 +43,23 @@ async function main() {
   console.log(
     `Backfill completado. TEAM: ${team.id}. Rivales actualizados: ${rivalsUpdated.count}`
   );
+
+  const sessionsUpdated = await prisma.session.updateMany({
+    where: { teamId: { not: team.id } } as any,
+    data: { teamId: team.id } as any,
+  });
+  const placesUpdated = await prisma.place.updateMany({
+    where: { teamId: { not: team.id } } as any,
+    data: { teamId: team.id } as any,
+  });
+  const prefsUpdated = await prisma.plannerPrefs.updateMany({
+    where: { teamId: { not: team.id } } as any,
+    data: { teamId: team.id } as any,
+  });
+
+  console.log(
+    `Sessions actualizadas: ${sessionsUpdated.count}, Places: ${placesUpdated.count}, PlannerPrefs: ${prefsUpdated.count}`
+  );
 }
 
 main().finally(() => prisma.$disconnect());

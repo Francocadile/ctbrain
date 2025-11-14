@@ -1,89 +1,114 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { Role } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
+import { dbScope, scopedWhere } from "@/lib/dbScope";
 
-/** 
- * TEMP: resolvemos un userId válido sin depender de requireSession*. 
- * Cuando quieras, reemplazá por tu helper real y devolvé user.id.
- */
-async function resolveUserId(): Promise<string> {
-  const u = await prisma.user.findFirst({
-    select: { id: true },
-    orderBy: { createdAt: "asc" },
-  });
-  if (!u) throw new Error("No hay usuarios en la base");
-  return u.id;
+function cleanPlaces(input: string[] | undefined) {
+  return Array.from(new Set((input ?? []).map((s) => (s ?? "").trim()).filter(Boolean)));
 }
 
 // GET -> { rowLabels, places }
-export async function GET() {
-  const userId = await resolveUserId();
+export async function GET(req: NextRequest) {
+  try {
+    const { prisma, team, user } = await dbScope({ req });
+    const teamId = team.id;
+    const userId = user.id;
 
-  const pref = await prisma.plannerPrefs.findUnique({ where: { userId } });
-  const places = await prisma.place.findMany({
-    select: { name: true },
-    orderBy: { name: "asc" },
-  });
+    const pref = await prisma.plannerPrefs.findUnique({
+      where: { userId_teamId: { userId, teamId } },
+    });
+    const places = await prisma.place.findMany({
+      where: scopedWhere(teamId, {}) as Prisma.PlaceWhereInput,
+      select: { name: true },
+      orderBy: { name: "asc" },
+    });
 
-  return NextResponse.json({
-    rowLabels: (pref?.rowLabels as Record<string, string> | null) ?? null,
-    places: places.map((p) => p.name),
-  });
+    return NextResponse.json({
+      rowLabels: (pref?.rowLabels as Record<string, string> | null) ?? null,
+      places: places.map((p) => p.name),
+    });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("GET /api/planner/labels error", error);
+    return NextResponse.json({ error: "No se pudieron obtener labels" }, { status: 500 });
+  }
 }
 
-// POST -> guarda rowLabels (usuario) y/o reemplaza places (global)
+// POST -> guarda rowLabels (usuario) y/o reemplaza places (team)
 export async function POST(req: NextRequest) {
-  const userId = await resolveUserId();
-  const body = (await req.json().catch(() => ({}))) as {
-    rowLabels?: Record<string, string>;
-    places?: string[];
-  };
+  try {
+    const { prisma, team, user } = await dbScope({ req, roles: [Role.CT, Role.ADMIN] });
+    const teamId = team.id;
+    const userId = user.id;
+    const body = (await req.json().catch(() => ({}))) as {
+      rowLabels?: Record<string, string>;
+      places?: string[];
+    };
 
-  await prisma.$transaction(async (tx) => {
-    if (body.rowLabels) {
-      await tx.plannerPrefs.upsert({
-        where: { userId },
-        update: { rowLabels: body.rowLabels },
-        create: { userId, rowLabels: body.rowLabels },
-      });
-    }
-
-    if (Array.isArray(body.places)) {
-      const clean = Array.from(
-        new Set((body.places || []).map((s) => (s ?? "").trim()).filter(Boolean))
-      );
-
-      const existing = await tx.place.findMany({ select: { id: true, name: true } });
-      const existingNames = new Set(existing.map((e) => e.name));
-
-      // borrar los que ya no estén
-      const toDeleteIds = existing.filter((e) => !clean.includes(e.name)).map((e) => e.id);
-      if (toDeleteIds.length) {
-        await tx.place.deleteMany({ where: { id: { in: toDeleteIds } } });
+    await prisma.$transaction(async (tx) => {
+      if (body.rowLabels) {
+        await tx.plannerPrefs.upsert({
+          where: { userId_teamId: { userId, teamId } },
+          update: { rowLabels: body.rowLabels },
+          create: { userId, teamId, rowLabels: body.rowLabels },
+        });
       }
 
-      // insertar nuevos
-      const toInsert = clean.filter((n) => !existingNames.has(n)).map((name) => ({ name }));
-      if (toInsert.length) {
-        await tx.place.createMany({ data: toInsert, skipDuplicates: true });
+      if (Array.isArray(body.places)) {
+        const clean = cleanPlaces(body.places);
+
+        const existing = await tx.place.findMany({
+          where: scopedWhere(teamId, {}) as Prisma.PlaceWhereInput,
+          select: { id: true, name: true },
+        });
+        const existingNames = new Set(existing.map((e) => e.name));
+
+        const toDeleteIds = existing.filter((e) => !clean.includes(e.name)).map((e) => e.id);
+        if (toDeleteIds.length) {
+          await tx.place.deleteMany({
+            where: scopedWhere(teamId, { id: { in: toDeleteIds } }) as Prisma.PlaceWhereInput,
+          });
+        }
+
+        const toInsert = clean
+          .filter((n) => !existingNames.has(n))
+          .map((name) => ({ name, teamId }));
+        if (toInsert.length) {
+          await tx.place.createMany({ data: toInsert, skipDuplicates: true });
+        }
       }
-    }
-  });
+    });
 
-  const outPlaces = await prisma.place.findMany({
-    select: { name: true },
-    orderBy: { name: "asc" },
-  });
+    const outPlaces = await prisma.place.findMany({
+      where: scopedWhere(team.id, {}) as Prisma.PlaceWhereInput,
+      select: { name: true },
+      orderBy: { name: "asc" },
+    });
 
-  return NextResponse.json({ ok: true, places: outPlaces.map((p) => p.name) });
+    return NextResponse.json({ ok: true, places: outPlaces.map((p) => p.name) });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("POST /api/planner/labels error", error);
+    return NextResponse.json({ error: "No se pudieron guardar labels" }, { status: 500 });
+  }
 }
 
 // DELETE -> resetea rowLabels del usuario
-export async function DELETE() {
-  const userId = await resolveUserId();
-  await prisma.plannerPrefs.upsert({
-    where: { userId },
-    update: { rowLabels: {} },
-    create: { userId, rowLabels: {} },
-  });
-  return NextResponse.json({ ok: true });
+export async function DELETE(req: NextRequest) {
+  try {
+    const { prisma, team, user } = await dbScope({ req, roles: [Role.CT, Role.ADMIN] });
+    const teamId = team.id;
+    const userId = user.id;
+
+    await prisma.plannerPrefs.upsert({
+      where: { userId_teamId: { userId, teamId } },
+      update: { rowLabels: {} },
+      create: { userId, teamId, rowLabels: {} },
+    });
+    return NextResponse.json({ ok: true });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("DELETE /api/planner/labels error", error);
+    return NextResponse.json({ error: "No se pudieron resetear labels" }, { status: 500 });
+  }
 }
