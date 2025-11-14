@@ -1,10 +1,20 @@
 // src/app/api/metrics/wellness/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
+import { getServerSession } from "next-auth";
+
+import { authOptions } from "@/lib/auth";
+import { getCurrentTeamId } from "@/lib/sessionScope";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-const prisma = new PrismaClient();
+const staffRoles = new Set<Role>([
+  Role.ADMIN,
+  Role.CT,
+  Role.MEDICO,
+  Role.DIRECTIVO,
+]);
 
 function toUTCStart(ymd: string) {
   const d = new Date(`${ymd}T00:00:00.000Z`);
@@ -31,32 +41,74 @@ function asFloat(n: any): number | null {
 
 export async function GET(req: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
+    }
+
+    const role = session.user.role as Role | undefined;
+    if (!role) {
+      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+    }
+
     const { searchParams } = new URL(req.url);
     const date = searchParams.get("date") || "";
-    const userId = searchParams.get("userId") || undefined;
+    const requestedUserId = searchParams.get("userId") || undefined;
+    const requestedTeamId = searchParams.get("teamId") || undefined;
+
+    const where: Prisma.WellnessEntryWhereInput = {};
 
     if (date) {
       const start = toUTCStart(date);
       const end = nextUTCDay(start);
-      const rows = await prisma.wellnessEntry.findMany({
-        where: {
-          date: { gte: start, lt: end },
-          ...(userId ? { userId } : {}),
+      where.date = { gte: start, lt: end };
+    }
+
+    let relationFilter: Prisma.UserRelationFilter | undefined;
+
+    if (role === Role.JUGADOR) {
+      where.userId = session.user.id;
+    } else if (role === Role.SUPERADMIN) {
+      if (requestedUserId) {
+        where.userId = requestedUserId;
+      }
+      if (requestedTeamId) {
+        relationFilter = {
+          is: {
+            teams: {
+              some: { teamId: requestedTeamId },
+            },
+          },
+        };
+      }
+    } else if (staffRoles.has(role)) {
+      const teamId = getCurrentTeamId(session);
+      if (!teamId) {
+        return NextResponse.json({ error: "TEAM_REQUIRED" }, { status: 428 });
+      }
+      relationFilter = {
+        is: {
+          teams: {
+            some: { teamId },
+          },
         },
-        include: { user: { select: { name: true, email: true } } },
-        orderBy: [{ date: "desc" }],
-      });
-      const mapped = rows.map((r) => ({
-        ...r,
-        userName: r.user?.name ?? r.user?.email ?? "—",
-      }));
-      return NextResponse.json(mapped);
+      };
+      if (requestedUserId) {
+        where.userId = requestedUserId;
+      }
+    } else {
+      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+    }
+
+    if (relationFilter) {
+      where.user = relationFilter;
     }
 
     const rows = await prisma.wellnessEntry.findMany({
+      where,
       include: { user: { select: { name: true, email: true } } },
       orderBy: [{ date: "desc" }],
-      take: 30,
+      ...(date ? {} : { take: 30 }),
     });
     const mapped = rows.map((r) => ({
       ...r,
@@ -70,11 +122,33 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return new NextResponse("UNAUTHENTICATED", { status: 401 });
+    }
+
+    const role = session.user.role as Role | undefined;
+    if (role !== Role.JUGADOR) {
+      return new NextResponse("Solo jugadores pueden enviar wellness", { status: 403 });
+    }
+
+    const teamId = getCurrentTeamId(session);
+    if (!teamId) {
+      return new NextResponse("Seleccioná un equipo antes de enviar", { status: 428 });
+    }
+
+    const membership = await prisma.userTeam.findFirst({
+      where: { userId: session.user.id, teamId },
+      select: { id: true },
+    });
+    if (!membership) {
+      return new NextResponse("No pertenecés a este equipo", { status: 403 });
+    }
+
     const b = await req.json();
-    const userId = String(b?.userId || "").trim();
     const dateStr = String(b?.date || "").trim();
-    if (!userId || !dateStr) {
-      return new NextResponse("userId y date requeridos", { status: 400 });
+    if (!dateStr) {
+      return new NextResponse("La fecha es requerida", { status: 400 });
     }
 
     const start = toUTCStart(dateStr);
@@ -94,7 +168,7 @@ export async function POST(req: Request) {
     const total = sleepQuality + fatigue + muscleSoreness + stress + mood;
 
     const entry = await prisma.wellnessEntry.upsert({
-      where: { userId_date: { userId, date: start } },
+      where: { userId_date: { userId: session.user.id, date: start } },
       update: {
         sleepQuality,
         sleepHours,
@@ -106,7 +180,7 @@ export async function POST(req: Request) {
         total,
       },
       create: {
-        userId,
+        userId: session.user.id,
         date: start,
         sleepQuality,
         sleepHours,
