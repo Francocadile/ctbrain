@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getToken } from "next-auth/jwt";
+import { getServerSession } from "next-auth";
 import type { Prisma } from "@prisma/client";
 import {
   ClinicalStatus,
@@ -11,11 +10,18 @@ import {
   Severity,
   SystemAffected,
   IllAptitude,
+  Role,
 } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { authOptions } from "@/lib/auth";
+import { getCurrentTeamId } from "@/lib/sessionScope";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+const readerRoles = new Set<Role>([Role.MEDICO, Role.CT, Role.ADMIN]);
+const editorRoles = new Set<Role>([Role.MEDICO, Role.ADMIN]);
 
 /* Utils */
 function toYMD(d: Date) { const x = new Date(d); x.setHours(0,0,0,0); return x.toISOString().slice(0,10); }
@@ -35,19 +41,38 @@ const clean = <T extends object>(o: T) =>
    MEDICO, CT o ADMIN (lectura)
 ======================= */
 export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-  const role = (token as any)?.role as string | undefined;
-  if (!token || !["MEDICO", "CT", "ADMIN"].includes(role ?? "")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await getServerSession(authOptions);
+  const role = session?.user?.role as Role | undefined;
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
+  }
+  if (!role || !readerRoles.has(role)) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
+  const teamId = getCurrentTeamId(session);
+  if (!teamId) {
+    return NextResponse.json({ error: "TEAM_REQUIRED" }, { status: 428 });
   }
 
   const id = ctx.params.id;
   const r = await prisma.clinicalEntry.findUnique({
     where: { id },
-    include: { user: { select: { name: true, email: true } } },
+    include: {
+      user: {
+        select: {
+          name: true,
+          email: true,
+          teams: { select: { teamId: true } },
+        },
+      },
+    },
   });
 
-  if (!r) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  const allowed = r?.user?.teams?.some((t) => t.teamId === teamId);
+  if (!r || !allowed) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   return NextResponse.json({
     id: r.id,
@@ -95,14 +120,34 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
    Solo MEDICO o ADMIN
 ======================= */
 export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-  const role = (token as any)?.role as string | undefined;
-  if (!token || !["MEDICO", "ADMIN"].includes(role ?? "")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await getServerSession(authOptions);
+  const role = session?.user?.role as Role | undefined;
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
+  }
+  if (!role || !editorRoles.has(role)) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
+  const teamId = getCurrentTeamId(session);
+  if (!teamId) {
+    return NextResponse.json({ error: "TEAM_REQUIRED" }, { status: 428 });
   }
 
   const id = ctx.params.id;
   const body = await req.json().catch(() => ({} as Record<string, any>));
+
+  const existing = await prisma.clinicalEntry.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      user: { select: { teams: { select: { teamId: true } } } },
+    },
+  });
+  const allowed = existing?.user?.teams?.some((t) => t.teamId === teamId);
+  if (!existing || !allowed) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   // --- Cálculo de ETR (flujo nuevo) ---
   let expectedReturn: Date | null | undefined =
@@ -183,7 +228,7 @@ export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
 
   try {
     const saved = await prisma.clinicalEntry.update({
-      where: { id },
+      where: { id: existing.id },
       data: upd,
       select: { id: true, date: true, status: true },
     });
@@ -206,14 +251,34 @@ export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
    Solo ADMIN
 ======================= */
 export async function DELETE(req: NextRequest, ctx: { params: { id: string } }) {
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-  const role = (token as any)?.role as string | undefined;
-  if (!token || !["ADMIN"].includes(role ?? "")) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const session = await getServerSession(authOptions);
+  const role = session?.user?.role as Role | undefined;
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
+  }
+  if (role !== Role.ADMIN) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
+  const teamId = getCurrentTeamId(session);
+  if (!teamId) {
+    return NextResponse.json({ error: "TEAM_REQUIRED" }, { status: 428 });
+  }
+
+  const existing = await prisma.clinicalEntry.findUnique({
+    where: { id: ctx.params.id },
+    select: {
+      id: true,
+      user: { select: { teams: { select: { teamId: true } } } },
+    },
+  });
+  const allowed = existing?.user?.teams?.some((t) => t.teamId === teamId);
+  if (!existing || !allowed) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   try {
-    await prisma.clinicalEntry.delete({ where: { id: ctx.params.id } });
+    await prisma.clinicalEntry.delete({ where: { id: existing.id } });
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     if (e?.code === "P2025") {

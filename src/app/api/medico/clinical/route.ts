@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getToken } from "next-auth/jwt";
+import { getServerSession } from "next-auth";
 import type { Prisma } from "@prisma/client";
 import {
   ClinicalStatus,
@@ -11,11 +10,18 @@ import {
   Severity,
   SystemAffected,
   IllAptitude,
+  Role,
 } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
+import { authOptions } from "@/lib/auth";
+import { getCurrentTeamId } from "@/lib/sessionScope";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+const readerRoles = new Set<Role>([Role.MEDICO, Role.CT, Role.ADMIN]);
+const editorRoles = new Set<Role>([Role.MEDICO, Role.ADMIN]);
 
 /* Utils */
 function toYMD(d: Date) { const x = new Date(d); x.setHours(0,0,0,0); return x.toISOString().slice(0,10); }
@@ -32,10 +38,18 @@ function nextDay(d: Date) { const x = startOfDay(d); x.setDate(x.getDate() + 1);
 
 /* =============== GET (lista con activos persistentes) =============== */
 export async function GET(req: NextRequest) {
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-  const role = (token as any)?.role as string | undefined;
-  if (!token || !["MEDICO", "CT", "ADMIN"].includes(role ?? "")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await getServerSession(authOptions);
+  const role = session?.user?.role as Role | undefined;
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
+  }
+  if (!role || !readerRoles.has(role)) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
+  const teamId = getCurrentTeamId(session);
+  if (!teamId) {
+    return NextResponse.json({ error: "TEAM_REQUIRED" }, { status: 428 });
   }
 
   const { searchParams } = req.nextUrl;
@@ -49,7 +63,10 @@ export async function GET(req: NextRequest) {
   // --- COMPAT: solo el día exacto (como antes)
   if (mode === "day-only") {
     const rows = await prisma.clinicalEntry.findMany({
-      where: { date: { gte: from, lt: to } },
+      where: {
+        date: { gte: from, lt: to },
+        user: { teams: { some: { teamId } } },
+      },
       include: { user: { select: { name: true, email: true} } },
       orderBy: [{ date: "desc" }, { updatedAt: "desc" }],
     });
@@ -95,7 +112,10 @@ export async function GET(req: NextRequest) {
   // --- NUEVO: Activos persistentes hasta ALTA (+ ALTAS del día)
   const upTo = nextDay(baseDate);
   const allUpTo = await prisma.clinicalEntry.findMany({
-    where: { date: { lt: upTo } },
+    where: {
+      date: { lt: upTo },
+      user: { teams: { some: { teamId } } },
+    },
     include: { user: { select: { name: true, email: true } } },
     orderBy: [{ userId: "asc" }, { date: "desc" }, { updatedAt: "desc" }],
   });
@@ -105,7 +125,11 @@ export async function GET(req: NextRequest) {
   const activeLatest = Array.from(latestByUser.values()).filter((r) => r.status !== "ALTA");
 
   const altasToday = await prisma.clinicalEntry.findMany({
-    where: { date: { gte: from, lt: to }, status: "ALTA" as ClinicalStatus },
+    where: {
+      date: { gte: from, lt: to },
+      status: "ALTA" as ClinicalStatus,
+      user: { teams: { some: { teamId } } },
+    },
     include: { user: { select: { name: true, email: true } } },
     orderBy: [{ updatedAt: "desc" }],
   });
@@ -176,10 +200,18 @@ export async function GET(req: NextRequest) {
 
 /* =============== POST (upsert por userId+date) =============== */
 export async function POST(req: NextRequest) {
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-  const role = (token as any)?.role as string | undefined;
-  if (!token || !["MEDICO", "ADMIN"].includes(role ?? "")) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await getServerSession(authOptions);
+  const role = session?.user?.role as Role | undefined;
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
+  }
+  if (!role || !editorRoles.has(role)) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
+  const teamId = getCurrentTeamId(session);
+  if (!teamId) {
+    return NextResponse.json({ error: "TEAM_REQUIRED" }, { status: 428 });
   }
 
   try {
@@ -190,6 +222,14 @@ export async function POST(req: NextRequest) {
 
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
     if (!user) return NextResponse.json({ error: "userId inválido (no existe el usuario)" }, { status: 400 });
+
+    const membership = await prisma.userTeam.findFirst({
+      where: { userId: user.id, teamId },
+      select: { id: true },
+    });
+    if (!membership) {
+      return NextResponse.json({ error: "El jugador no pertenece a tu equipo" }, { status: 403 });
+    }
 
     const dateYMD = typeof body.date === "string" ? body.date : undefined;
     const parsed = parseYMD(dateYMD) ?? (body.date ? new Date(body.date) : new Date());

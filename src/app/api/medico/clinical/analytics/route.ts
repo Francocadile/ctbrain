@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
+import { getServerSession } from "next-auth";
+import { Role } from "@prisma/client";
 import prisma from "@/lib/prisma";
+import { authOptions } from "@/lib/auth";
+import { getCurrentTeamId } from "@/lib/sessionScope";
 
 type ClinicalStatus = "BAJA" | "REINTEGRO" | "LIMITADA" | "ALTA";
 
@@ -12,11 +15,20 @@ function daysBetween(a: Date, b: Date) { const ms = endOfDay(b).getTime() - star
 
 export async function GET(req: NextRequest) {
   // Auth (CT o ADMIN o MEDICO pueden leer analytics)
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const role = (token as any).role as string | undefined;
-  const allowed = role === "CT" || role === "ADMIN" || role === "MEDICO";
-  if (!allowed) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const session = await getServerSession(authOptions);
+  const role = session?.user?.role as Role | undefined;
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
+  }
+  const allowed = role === Role.CT || role === Role.ADMIN || role === Role.MEDICO;
+  if (!allowed) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
+  const teamId = getCurrentTeamId(session);
+  if (!teamId) {
+    return NextResponse.json({ error: "TEAM_REQUIRED" }, { status: 428 });
+  }
 
   const url = new URL(req.url);
   const start = url.searchParams.get("start");
@@ -32,7 +44,10 @@ export async function GET(req: NextRequest) {
 
   // Traemos entradas del rango
   const rows = await prisma.clinicalEntry.findMany({
-    where: { date: { gte: startDate, lte: endDate } },
+    where: {
+      date: { gte: startDate, lte: endDate },
+      user: { teams: { some: { teamId } } },
+    },
     select: {
       id: true, userId: true, date: true, status: true, leaveKind: true,
       bodyPart: true, mechanism: true, severity: true, startDate: true, expectedReturn: true,
