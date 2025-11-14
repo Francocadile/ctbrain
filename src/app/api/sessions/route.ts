@@ -4,6 +4,8 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { requireAuth, requireSessionWithRoles } from "@/lib/auth-helpers";
 import { Role } from "@prisma/client";
+import { getCurrentTeamId } from "@/lib/sessionScope";
+import type { Prisma } from "@prisma/client";
 
 /* ---------- Fecha ---------- */
 function toYYYYMMDDUTC(d: Date) {
@@ -75,9 +77,17 @@ const createSchema = z
 /* ?start=YYYY-MM-DD  -> devuelve mapa de la semana (Lun..Dom),
    usando lunes siguiente como FIN EXCLUSIVO (lt: nextMonday) para incluir DOMINGO a cualquier hora.
    Sin start -> listado de últimas 50 sesiones (para /ct/sessions). */
+const SCOPED_ROLES: Role[] = [Role.CT, Role.MEDICO, Role.DIRECTIVO, Role.JUGADOR];
+
 export async function GET(req: Request) {
   try {
-    await requireAuth();
+    const session = await requireAuth();
+    const role = session.user.role as Role | undefined;
+    const teamId = getCurrentTeamId(session);
+    const shouldScope = role ? SCOPED_ROLES.includes(role) : false;
+    if (shouldScope && !teamId) {
+      return NextResponse.json({ error: "Team no disponible" }, { status: 403 });
+    }
 
     const url = new URL(req.url);
     const start = url.searchParams.get("start");
@@ -95,8 +105,17 @@ export async function GET(req: Request) {
       const monday = getMondayUTC(startDate);
       const nextMonday = addDaysUTC(monday, 7); // ✅ FIN EXCLUSIVO
 
+      const where: Prisma.SessionWhereInput = {
+        date: { gte: monday, lt: nextMonday },
+      };
+      if (shouldScope) {
+        where.user = {
+          teams: { some: { teamId: teamId! } },
+        };
+      }
+
       const items = await prisma.session.findMany({
-        where: { date: { gte: monday, lt: nextMonday } }, // ✅ lt para incluir DOMINGO entero
+        where,
         orderBy: [{ date: "asc" }, { createdAt: "asc" }],
         select: sessionSelect,
       });
@@ -121,7 +140,15 @@ export async function GET(req: Request) {
     }
 
     // Listado para /ct/sessions (no tocar, así como te funciona)
+    const where: Prisma.SessionWhereInput = {};
+    if (shouldScope) {
+      where.user = {
+        teams: { some: { teamId: teamId! } },
+      };
+    }
+
     const sessions = await prisma.session.findMany({
+      where,
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       select: sessionSelect,
       take: 50,
