@@ -1,103 +1,158 @@
+import { NextRequest, NextResponse } from "next/server";
+import { Role } from "@prisma/client";
+import { dbScope } from "@/lib/dbScope";
+const teamSelection = {
+  id: true,
+  name: true,
+  slug: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
 
+function slugify(input: string) {
+  return (input || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "equipo";
+}
 
-import { NextResponse } from "next/server";
-import { NextRequest } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
-
-const prisma = new PrismaClient();
-
-async function requireSuperAdmin() {
-  const session = await getServerSession(authOptions);
-  if (!session || !session.user) {
-    return { ok: false as const, status: 401 as const, error: "UNAUTHENTICATED" };
+async function readJson<T = Record<string, unknown>>(req: Request): Promise<T> {
+  try {
+    return (await req.json()) as T;
+  } catch {
+    return {} as T;
   }
-  if (session.user.role !== "SUPERADMIN") {
-    return { ok: false as const, status: 403 as const, error: "FORBIDDEN" };
-  }
-  return { ok: true as const, session };
+}
+
+function errorResponse(message: string, status = 400) {
+  return NextResponse.json({ error: message }, { status });
+}
+
+function handleException(err: unknown, context: string) {
+  if (err instanceof Response) return err;
+  console.error(`[superadmin/teams] ${context}`, err);
+  return NextResponse.json({ error: "Error interno" }, { status: 500 });
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const auth = await requireSuperAdmin();
-    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+    const { prisma } = await dbScope({ req, roles: [Role.SUPERADMIN] });
     const teams = await prisma.team.findMany({
       orderBy: { createdAt: "desc" },
-      select: { id: true, name: true },
+      select: teamSelection,
     });
     return NextResponse.json(teams);
   } catch (err) {
-    console.error("[superadmin/teams] GET error", err);
-    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+    return handleException(err, "GET error");
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const auth = await requireSuperAdmin();
-    if (!auth.ok) {
-      return NextResponse.json({ error: auth.error }, { status: auth.status });
-    }
-    const { name, adminName, adminEmail, adminPassword } = await req.json();
-    const cleanName = (name || "").trim();
-    const cleanAdminName = (adminName || "").trim();
-    const cleanAdminEmail = (adminEmail || "").trim().toLowerCase();
-    const cleanAdminPassword = (adminPassword || "").trim();
-    if (!cleanName || !cleanAdminName || !cleanAdminEmail || !cleanAdminPassword) {
-      return NextResponse.json({ error: "Todos los campos son obligatorios" }, { status: 400 });
-    }
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(cleanAdminEmail)) {
-      return NextResponse.json({ error: "El email no es válido" }, { status: 400 });
-    }
-    const teamExists = await prisma.team.findFirst({
-      where: { name: { equals: cleanName, mode: "insensitive" } },
+    const { prisma } = await dbScope({ req, roles: [Role.SUPERADMIN] });
+    const body = await readJson(req);
+    const name = typeof body?.name === "string" ? body.name.trim() : "";
+    const slugInput = typeof body?.slug === "string" ? body.slug.trim() : "";
+
+    if (!name) return errorResponse("El nombre es obligatorio");
+
+    const nameExists = await prisma.team.findFirst({
+      where: { name: { equals: name, mode: "insensitive" } },
       select: { id: true },
     });
-    if (teamExists) {
-      return NextResponse.json({ error: "Ya existe un equipo con ese nombre" }, { status: 409 });
-    }
-    const userExists = await prisma.user.findFirst({
-      where: { email: cleanAdminEmail },
-      select: { id: true },
+    if (nameExists) return errorResponse("Ya existe un equipo con ese nombre", 409);
+
+    const slug = slugify(slugInput || name);
+    const slugExists = await prisma.team.findUnique({ where: { slug }, select: { id: true } });
+    if (slugExists) return errorResponse("Ya existe un equipo con ese slug", 409);
+
+    const team = await prisma.team.create({
+      data: { name, slug, isActive: true },
+      select: teamSelection,
     });
-    if (userExists) {
-      return NextResponse.json({ error: "Ya existe un usuario con ese email" }, { status: 409 });
-    }
-    let result;
-    try {
-      result = await prisma.$transaction(async (tx) => {
-        const team = await tx.team.create({
-          data: { name: cleanName },
-        });
-        const passwordHash = await bcrypt.hash(cleanAdminPassword, 10);
-        const adminUser = await tx.user.create({
-          data: {
-            name: cleanAdminName,
-            email: cleanAdminEmail,
-            passwordHash,
-            role: "ADMIN",
-            isApproved: true,
-          },
-        });
-        await tx.userTeam.create({
-          data: {
-            userId: adminUser.id,
-            teamId: team.id,
-            role: "ADMIN",
-          },
-        });
-        return { team };
-      });
-    } catch (err) {
-      console.error("[superadmin/teams] POST error", err);
-      return NextResponse.json({ error: "Error interno" }, { status: 500 });
-    }
-    return NextResponse.json(result.team, { status: 201 });
+
+    return NextResponse.json(team, { status: 201 });
   } catch (err) {
-    console.error("[superadmin/teams] POST error", err);
-    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+    return handleException(err, "POST error");
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const { prisma } = await dbScope({ req, roles: [Role.SUPERADMIN] });
+    const body = await readJson(req);
+    const id = typeof body?.id === "string" ? body.id.trim() : "";
+    if (!id) return errorResponse("ID requerido");
+
+    const data: Record<string, any> = {};
+
+    if ("name" in body) {
+      const name = typeof body.name === "string" ? body.name.trim() : "";
+      if (!name) return errorResponse("El nombre es obligatorio");
+      data.name = name;
+      const duplicate = await prisma.team.findFirst({
+        where: {
+          name: { equals: name, mode: "insensitive" },
+          NOT: { id },
+        },
+        select: { id: true },
+      });
+      if (duplicate) return errorResponse("Ya existe un equipo con ese nombre", 409);
+    }
+
+    if ("slug" in body) {
+      const slugRaw = typeof body.slug === "string" ? body.slug.trim() : "";
+      if (!slugRaw) return errorResponse("El slug es obligatorio");
+      const slug = slugify(slugRaw);
+      data.slug = slug;
+      const duplicateSlug = await prisma.team.findFirst({
+        where: { slug, NOT: { id } },
+        select: { id: true },
+      });
+      if (duplicateSlug) return errorResponse("Ya existe un equipo con ese slug", 409);
+    }
+
+    if ("isActive" in body) {
+      if (typeof body.isActive !== "boolean") {
+        return errorResponse("isActive debe ser booleano");
+      }
+      data.isActive = body.isActive;
+    }
+
+    if (!Object.keys(data).length) return errorResponse("No hay cambios para aplicar");
+
+    const team = await prisma.team.update({
+      where: { id },
+      data,
+      select: teamSelection,
+    });
+
+    return NextResponse.json(team);
+  } catch (err) {
+    if ((err as any)?.code === "P2025") {
+      return errorResponse("Equipo no encontrado", 404);
+    }
+    return handleException(err, "PATCH error");
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { prisma } = await dbScope({ req, roles: [Role.SUPERADMIN] });
+    const body = await readJson(req);
+    const id = typeof body?.id === "string" ? body.id.trim() : "";
+    if (!id) return errorResponse("ID requerido");
+
+    await prisma.team.delete({ where: { id } });
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    if ((err as any)?.code === "P2025") {
+      return errorResponse("Equipo no encontrado", 404);
+    }
+    return handleException(err, "DELETE error");
   }
 }

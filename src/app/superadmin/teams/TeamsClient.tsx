@@ -1,78 +1,113 @@
 "use client";
-import { useState } from "react";
-import Modal from "@/components/ui/Modal";
-import dynamic from "next/dynamic";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import CreateTeamForm from "./CreateTeamForm";
 import TeamRow from "./TeamRow";
+import type { FeedbackPayload, SuperadminTeam } from "./types";
 
-const CreateTeamForm = dynamic(() => import("./CreateTeamForm"), { ssr: false });
+type Props = {
+  teams: SuperadminTeam[];
+  error: string | null;
+};
 
-export default function TeamsClient({ teams, error }: { teams: any[]; error: string | null }) {
-  const [modalOpen, setModalOpen] = useState(false);
+export default function TeamsClient({ teams, error }: Props) {
+  const router = useRouter();
+  const [feedback, setFeedback] = useState<FeedbackPayload | null>(null);
+
+  const sortedTeams = useMemo(
+    () => [...teams].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
+    [teams],
+  );
+
+  const handleFeedback = useCallback(
+    (payload: FeedbackPayload) => {
+      setFeedback(payload);
+      if (payload.type === "success" || payload.refresh) {
+        router.refresh();
+      }
+    },
+    [router],
+  );
+
+  useEffect(() => {
+    if (!feedback) return undefined;
+    const timer = setTimeout(() => setFeedback(null), 5000);
+    return () => clearTimeout(timer);
+  }, [feedback]);
 
   return (
     <main className="min-h-[70vh] px-6 py-10 space-y-10">
-      {/* Título y botón crear */}
-      <header className="flex items-center justify-between">
+      <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Equipos · SUPERADMIN</h1>
-          <p className="text-gray-600 mt-1">
-            Gestiona equipos, administradores y estructura global.
-          </p>
+          <p className="mt-1 text-gray-600">Gestioná equipos globales, sus slugs y estados de actividad.</p>
         </div>
         <button
-          className="bg-blue-600 text-white rounded-lg px-4 py-2 font-semibold shadow hover:bg-blue-700 transition"
-          onClick={() => setModalOpen(true)}
+          className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50"
+          onClick={() => router.refresh()}
         >
-          + Crear nuevo equipo
+          Actualizar lista
         </button>
       </header>
 
-      {/* Modal para crear equipo */}
-      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)}>
-        <h2 className="text-xl font-semibold mb-4">Crear nuevo equipo</h2>
-        <CreateTeamForm onSuccess={() => { setModalOpen(false); window.location.reload(); }} />
-      </Modal>
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Error al cargar equipos: {error}
+        </div>
+      )}
 
-      {/* Tabla de equipos */}
+      {feedback && (
+        <div
+          className={`rounded-lg border px-4 py-3 text-sm ${
+            feedback.type === "success"
+              ? "border-green-200 bg-green-50 text-green-800"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          {feedback.message}
+        </div>
+      )}
+
+      <section className="rounded-2xl border bg-white p-6 shadow-sm">
+        <div className="mb-4">
+          <h2 className="text-xl font-semibold">Crear nuevo equipo</h2>
+          <p className="text-sm text-gray-500">Define un nombre y slug únicos para habilitarlo automáticamente.</p>
+        </div>
+        <CreateTeamForm onFeedback={handleFeedback} />
+      </section>
+
       <section>
-        <h2 className="text-xl font-semibold mb-4">Equipos existentes</h2>
-
-        {error && (
-          <div className="mb-4 text-red-600 text-sm">
-            {error}
-          </div>
-        )}
-
-        <div className="overflow-hidden rounded-xl border bg-white">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Equipos existentes</h2>
+          <span className="text-sm text-gray-500">{sortedTeams.length} equipos</span>
+        </div>
+        <div className="overflow-hidden rounded-2xl border bg-white shadow-sm">
           <table className="min-w-full text-sm">
-            <thead className="bg-gray-100">
+            <thead className="bg-gray-100 text-xs font-semibold uppercase tracking-wide text-gray-600">
               <tr>
-                <th className="px-4 py-2 text-left font-medium">Nombre</th>
-                <th className="px-4 py-2 text-left font-medium">ID</th>
-                <th className="px-4 py-2 text-left font-medium">Acciones</th>
+                <th className="px-4 py-3 text-left">Nombre</th>
+                <th className="px-4 py-3 text-left">Slug</th>
+                <th className="px-4 py-3 text-left">Estado</th>
+                <th className="px-4 py-3 text-left">ID</th>
+                <th className="px-4 py-3 text-left">Acciones</th>
               </tr>
             </thead>
-
             <tbody>
-              {teams.length === 0 ? (
+              {sortedTeams.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={3}
-                    className="px-4 py-6 text-center text-gray-400"
-                  >
-                    No hay equipos registrados.
+                  <td colSpan={5} className="px-4 py-6 text-center text-gray-400">
+                    No hay equipos registrados todavía.
                   </td>
                 </tr>
               ) : (
-                teams.map((team: any) => (
-                  <TeamRow key={team.id} team={team} />
+                sortedTeams.map((team) => (
+                  <TeamRow key={team.id} team={team} onFeedback={handleFeedback} />
                 ))
               )}
             </tbody>
           </table>
         </div>
       </section>
-
     </main>
   );
 }

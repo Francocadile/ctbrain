@@ -4,6 +4,16 @@ import prisma from "@/lib/prisma";
 
 const TEAM_NAME = "Demo";
 
+function slugify(input: string) {
+  return (input || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "equipo";
+}
+
 const USERS: Array<{
   email: string;
   password: string;
@@ -56,10 +66,13 @@ const USERS: Array<{
 ];
 
 async function main() {
+  const teamSlug = slugify(TEAM_NAME);
   const team = await prisma.team.upsert({
     where: { name: TEAM_NAME },
-    update: {},
-    create: { name: TEAM_NAME },
+    update: {
+      slug: teamSlug,
+    },
+    create: { name: TEAM_NAME, slug: teamSlug, isActive: true },
   });
 
   for (const { email, password, role, teamRole, name } of USERS) {

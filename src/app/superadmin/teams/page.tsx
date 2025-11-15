@@ -1,6 +1,7 @@
 import RoleGate from "@/components/auth/RoleGate";
 import { headers } from "next/headers";
 import TeamsClient from "./TeamsClient";
+import type { SuperadminTeam } from "./types";
 
 export default async function SuperAdminTeamsPage() {
   const heads = headers();
@@ -8,7 +9,7 @@ export default async function SuperAdminTeamsPage() {
   const protocol = heads.get("x-forwarded-proto") ?? "https";
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `${protocol}://${host}`;
 
-  let teams: any[] = [];
+  let teams: SuperadminTeam[] = [];
   let error: string | null = null;
 
   try {
@@ -29,7 +30,8 @@ export default async function SuperAdminTeamsPage() {
       throw new Error(`Status ${res.status}${detail}`);
     }
 
-    teams = await res.json();
+  const data = await res.json();
+  teams = Array.isArray(data) ? data : [];
   } catch (e: any) {
     error = e.message;
   }

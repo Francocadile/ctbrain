@@ -1,5 +1,15 @@
 import prisma from "@/lib/prisma";
 
+function slugify(input: string) {
+  return (input || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "equipo";
+}
+
 async function main() {
   // 1) Buscar un equipo existente o crear uno por defecto
   let team = await prisma.team.findFirst({
@@ -10,7 +20,7 @@ async function main() {
     team =
       (await prisma.team.findFirst({ orderBy: { createdAt: "asc" } })) ??
       (await prisma.team.create({
-        data: { name: "Equipo Principal" },
+        data: { name: "Equipo Principal", slug: slugify("Equipo Principal"), isActive: true },
       }));
   }
 
