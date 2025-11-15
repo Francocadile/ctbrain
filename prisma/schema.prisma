@@ -14,6 +14,7 @@ model Team {
   plannerPrefs PlannerPrefs[]
   scoutingCategories ScoutingCategory[]
   scoutingPlayers    ScoutingPlayer[]
+  reports   Report[]
 }
 // prisma/schema.prisma
 generator client {
@@ -136,6 +137,7 @@ model User {
   exercises       Exercise[]
   clinicalEntries ClinicalEntry[]
   teams           UserTeam[]
+  reports         Report[]
 }
 
 model UserTeam {
@@ -447,4 +449,21 @@ model ScoutingPlayer {
   @@index([teamId, categoriaId])
   @@index([teamId, estado])
   @@index([teamId, fullName])
+}
+
+model Report {
+  id        String   @id @default(cuid())
+  teamId    String
+  title     String
+  summary   String?
+  content   String
+  type      String
+  authorId  String
+  createdAt DateTime @default(now())
+
+  team   Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, createdAt])
+  @@index([authorId])
 }
