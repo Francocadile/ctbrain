@@ -1,16 +1,8 @@
 // src/app/api/ct/rivales/[id]/player/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import { requireTeamIdFromRequest } from "@/lib/teamContext";
-import { scopedWhere } from "@/lib/dbScope";
+import { dbScope, scopedWhere } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
-
-// Reusar Prisma en dev/hot-reload
-const prisma = (globalThis as any).__prisma__ ?? new PrismaClient();
-if (process.env.NODE_ENV !== "production") {
-  (globalThis as any).__prisma__ = prisma;
-}
 
 type RivalBasics = {
   id: string;
@@ -132,9 +124,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
-    const teamId = await requireTeamIdFromRequest(req);
+    const { prisma, team } = await dbScope({ req });
     const r = await prisma.rival.findFirst({
-      where: scopedWhere(teamId, { id }) as any,
+      where: scopedWhere(team.id, { id }) as any,
       select: {
         id: true,
         name: true,
@@ -229,7 +221,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     };
 
     return NextResponse.json({ data });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("multitenant rival player route error", error);
+    return new NextResponse(error?.message || "Error", { status: 500 });
   }
 }

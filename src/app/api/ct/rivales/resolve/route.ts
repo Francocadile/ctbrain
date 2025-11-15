@@ -1,16 +1,8 @@
 // src/app/api/ct/rivales/resolve/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import { requireTeamIdFromRequest } from "@/lib/teamContext";
-import { scopedWhere } from "@/lib/dbScope";
+import { dbScope, scopedWhere } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
-
-// Reusar Prisma en dev/hot-reload
-const prisma = (globalThis as any).__prisma__ ?? new PrismaClient();
-if (process.env.NODE_ENV !== "production") {
-  (globalThis as any).__prisma__ = prisma;
-}
 
 // Extrae candidato del título: "Partido vs Boca", "vs. River", "contra San Lorenzo"
 function extractCandidate(raw: string) {
@@ -30,11 +22,11 @@ export async function GET(req: Request) {
     const candidate = extractCandidate(q);
     if (!candidate) return new NextResponse("query vacío", { status: 400 });
 
-    const teamId = await requireTeamIdFromRequest(req);
+    const { prisma, team } = await dbScope({ req });
 
     // 1) Intento exacto (insensible a mayúsculas)
     let rival = await prisma.rival.findFirst({
-      where: scopedWhere(teamId, {
+      where: scopedWhere(team.id, {
         name: { equals: candidate, mode: "insensitive" },
       }) as any,
       select: { id: true, name: true },
@@ -43,7 +35,7 @@ export async function GET(req: Request) {
     // 2) Si no, por 'contains'
     if (!rival) {
       rival = await prisma.rival.findFirst({
-        where: scopedWhere(teamId, {
+        where: scopedWhere(team.id, {
           name: { contains: candidate, mode: "insensitive" },
         }) as any,
         select: { id: true, name: true },
@@ -52,7 +44,9 @@ export async function GET(req: Request) {
 
     if (!rival) return new NextResponse("No encontrado", { status: 404 });
     return NextResponse.json({ data: rival });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("multitenant rivales resolve error", error);
+    return new NextResponse(error?.message || "Error", { status: 500 });
   }
 }

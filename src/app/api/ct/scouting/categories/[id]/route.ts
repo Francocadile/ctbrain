@@ -1,45 +1,63 @@
 // src/app/api/ct/scouting/categories/[id]/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import type { Prisma } from "@prisma/client";
+import { dbScope, scopedWhere } from "@/lib/dbScope";
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: { id: string } }) {
   try {
-    const data = await prisma.scoutingCategory.findUnique({ where: { id: params.id } });
+    const { prisma, team } = await dbScope({ req });
+    const data = await prisma.scoutingCategory.findFirst({
+      where: scopedWhere(team.id, { id: params.id }) as any,
+    });
     if (!data) return NextResponse.json({ error: "Categoría no encontrada" }, { status: 404 });
     return NextResponse.json({ data });
   } catch (err: any) {
+    console.error("multitenant scouting category get error", err);
     return NextResponse.json({ error: err?.message ?? "Error" }, { status: 500 });
   }
 }
 
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {
+    const { prisma, team } = await dbScope({ req });
     const body = await req.json();
-    const data = await prisma.scoutingCategory.update({
-      where: { id: params.id },
-      data: {
-        nombre: typeof body.nombre === "string" ? body.nombre : undefined,
-        color: typeof body.color === "string" ? body.color : undefined,
-        activa: typeof body.activa === "boolean" ? body.activa : undefined,
-        orden: typeof body.orden === "number" ? body.orden : undefined,
-      },
+    const dataPatch: Prisma.ScoutingCategoryUpdateInput = {
+      nombre: typeof body.nombre === "string" ? body.nombre : undefined,
+      color: typeof body.color === "string" ? body.color : undefined,
+      activa: typeof body.activa === "boolean" ? body.activa : undefined,
+      orden: typeof body.orden === "number" ? body.orden : undefined,
+    };
+
+    const updated = await prisma.scoutingCategory.updateMany({
+      where: { id: params.id, teamId: team.id },
+      data: dataPatch,
+    });
+    if (updated.count === 0) {
+      return NextResponse.json({ error: "Categoría no encontrada" }, { status: 404 });
+    }
+
+    const data = await prisma.scoutingCategory.findFirst({
+      where: scopedWhere(team.id, { id: params.id }) as any,
     });
     return NextResponse.json({ data });
   } catch (err: any) {
-    // Si no existe, Prisma tira error; devolvemos 404 amigable
-    const msg = String(err?.message ?? "");
-    if (msg.includes("Record to update not found")) {
-      return NextResponse.json({ error: "Categoría no encontrada" }, { status: 404 });
-    }
+    console.error("multitenant scouting category put error", err);
     return NextResponse.json({ error: err?.message ?? "Error al actualizar" }, { status: 500 });
   }
 }
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(req: Request, { params }: { params: { id: string } }) {
   try {
+    const { prisma, team } = await dbScope({ req });
+    const exists = await prisma.scoutingCategory.findFirst({
+      where: scopedWhere(team.id, { id: params.id }) as any,
+      select: { id: true },
+    });
+    if (!exists) return NextResponse.json({ error: "Categoría no encontrada" }, { status: 404 });
+
     // no permitir borrar si tiene jugadores asignados
     const countPlayers = await prisma.scoutingPlayer.count({
-      where: { categoriaId: params.id },
+      where: scopedWhere(team.id, { categoriaId: params.id }) as any,
     });
     if (countPlayers > 0) {
       return NextResponse.json(
@@ -48,13 +66,14 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
       );
     }
 
-    const res = await prisma.scoutingCategory.deleteMany({ where: { id: params.id } });
+    const res = await prisma.scoutingCategory.deleteMany({ where: { id: params.id, teamId: team.id } });
     if (res.count === 0) {
       return NextResponse.json({ error: "Categoría no encontrada" }, { status: 404 });
     }
 
     return NextResponse.json({ ok: true });
   } catch (err: any) {
+    console.error("multitenant scouting category delete error", err);
     return NextResponse.json({ error: err?.message ?? "Error al borrar" }, { status: 500 });
   }
 }

@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import { requireTeamIdFromRequest } from "@/lib/teamContext";
-import { scopedFindManyArgs } from "@/lib/dbScope";
+import { dbScope, scopedFindManyArgs } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
-const prisma = new PrismaClient();
 
 export async function GET(req: Request) {
   try {
@@ -14,9 +11,9 @@ export async function GET(req: Request) {
 
     if (!q) return NextResponse.json({ data: [] });
 
-    const teamId = await requireTeamIdFromRequest(req);
+    const { prisma, team } = await dbScope({ req });
     const rows = await prisma.rival.findMany(
-      scopedFindManyArgs(teamId, {
+      scopedFindManyArgs(team.id, {
         where: { name: { contains: q, mode: "insensitive" } },
         orderBy: { name: "asc" },
         take: limit,
@@ -25,7 +22,9 @@ export async function GET(req: Request) {
     );
 
     return NextResponse.json({ data: rows });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("multitenant rivales search error", error);
+    return NextResponse.json({ error: error?.message || "Error" }, { status: 500 });
   }
 }

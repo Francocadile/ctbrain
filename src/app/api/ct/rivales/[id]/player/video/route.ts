@@ -1,13 +1,9 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import { requireTeamIdFromRequest } from "@/lib/teamContext";
-import { scopedWhere } from "@/lib/dbScope";
+import { dbScope, scopedWhere } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 30;
-
-const prisma = new PrismaClient();
 
 type Body = {
   player_name?: string;
@@ -23,7 +19,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const id = params?.id;
     if (!id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
 
-    const teamId = await requireTeamIdFromRequest(req);
+    const { prisma, team } = await dbScope({ req });
 
     const body: Body = await req.json().catch(() => ({}));
     const playerName = String(body.player_name || "").trim();
@@ -34,7 +30,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     if (!videoUrl)   return NextResponse.json({ error: "videoUrl requerido" }, { status: 400 });
 
     const rival = await prisma.rival.findFirst({
-      where: scopedWhere(teamId, { id }) as any,
+      where: scopedWhere(team.id, { id }) as any,
       select: { planReport: true }
     });
     if (!rival) return NextResponse.json({ error: "Rival no encontrado" }, { status: 404 });
@@ -62,11 +58,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
 
     const planReport = { ...pr, players };
-  await prisma.rival.update({ where: { id }, data: { planReport } });
+    const updated = await prisma.rival.updateMany({ where: { id, teamId: team.id }, data: { planReport } });
+    if (updated.count === 0) return NextResponse.json({ error: "Rival no encontrado" }, { status: 404 });
 
     return NextResponse.json({ ok: true, player_name: playerName, videoUrl, videoTitle });
-  } catch (e: any) {
-    console.error("[PLAYER VIDEO PATCH ERROR]", e);
-    return NextResponse.json({ error: String(e?.message || e) }, { status: 500 });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("multitenant rival player video error", error);
+    return NextResponse.json({ error: String(error?.message || error) }, { status: 500 });
   }
 }

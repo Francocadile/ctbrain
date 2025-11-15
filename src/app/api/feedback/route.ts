@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
 import { z } from "zod";
-import prisma from "@/lib/prisma";
-import { requireTeamIdFromRequest } from "@/lib/teamContext";
-import { scopedCreateArgs, scopedFindManyArgs, scopedWhere } from "@/lib/dbScope";
-
-const secret = process.env.NEXTAUTH_SECRET;
+import { dbScope, scopedCreateArgs, scopedFindManyArgs, scopedWhere } from "@/lib/dbScope";
 
 const listSchema = z.object({
   playerId: z.string().trim().min(1).optional(),
@@ -40,12 +35,8 @@ function asMap<T extends { id: string }>(rows: T[]) {
 
 export async function GET(req: NextRequest) {
   try {
-    if (!secret) throw new Error("NEXTAUTH_SECRET missing");
-
-    const token = await getToken({ req, secret });
-    if (!token?.sub) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const role = (token as any).role as string | undefined;
+  const { prisma, team, user } = await dbScope({ req });
+  const role = user.role as string | undefined;
     if (!role || !["CT", "MEDICO"].includes(role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -53,10 +44,9 @@ export async function GET(req: NextRequest) {
     const params = listSchema.safeParse(Object.fromEntries(req.nextUrl.searchParams));
     if (!params.success) return NextResponse.json({ error: "Parámetros inválidos" }, { status: 400 });
 
-    const teamId = await requireTeamIdFromRequest(req);
     const { playerId, from, to } = params.data;
 
-    const where: Record<string, any> = scopedWhere(teamId, {});
+    const where: Record<string, any> = scopedWhere(team.id, {});
     if (playerId) where.playerId = playerId;
     if (from || to) {
       where.createdAt = {};
@@ -69,7 +59,7 @@ export async function GET(req: NextRequest) {
     }
 
     const entries = await prisma.playerFeedback.findMany(
-      scopedFindManyArgs(teamId, {
+      scopedFindManyArgs(team.id, {
         where,
         orderBy: [{ createdAt: "desc" }],
         take: 200,
@@ -77,10 +67,15 @@ export async function GET(req: NextRequest) {
     );
 
     const ids = Array.from(new Set(entries.flatMap((e) => [e.playerId, e.createdBy])));
-    const users = await prisma.user.findMany({
-      where: { id: { in: ids } },
-      select: { id: true, name: true, email: true },
-    });
+    const users = ids.length
+      ? await prisma.user.findMany({
+          where: {
+            id: { in: ids },
+            teams: { some: { teamId: team.id } },
+          },
+          select: { id: true, name: true, email: true },
+        })
+      : [];
     const userMap = asMap(users);
 
     return NextResponse.json({
@@ -97,45 +92,40 @@ export async function GET(req: NextRequest) {
       })),
     });
   } catch (err) {
-    console.error("[feedback] GET failed", err);
+    console.error("multitenant feedback get error", err);
     return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    if (!secret) throw new Error("NEXTAUTH_SECRET missing");
-
-    const token = await getToken({ req, secret });
-    if (!token?.sub) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-    const role = (token as any).role as string | undefined;
+  const { prisma, team, user } = await dbScope({ req });
+  const role = user.role as string | undefined;
     if (role !== "JUGADOR") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await req.json().catch(() => ({}));
     const parsed = createSchema.safeParse(body);
     if (!parsed.success) return NextResponse.json({ error: "Datos inválidos" }, { status: 400 });
 
-    const teamId = await requireTeamIdFromRequest(req);
     const { playerId, subject, text, rating } = parsed.data;
 
-    if (playerId !== token.sub) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+    if (playerId !== user.id) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
 
     const entry = await prisma.playerFeedback.create(
-      scopedCreateArgs(teamId, {
+      scopedCreateArgs(team.id, {
         data: {
           playerId,
           subject,
           text,
           rating,
-          createdBy: token.sub,
+          createdBy: user.id,
         },
       }) as any,
     );
 
     return NextResponse.json({ data: entry }, { status: 201 });
   } catch (err) {
-    console.error("[feedback] POST failed", err);
+    console.error("multitenant feedback post error", err);
     return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
 }

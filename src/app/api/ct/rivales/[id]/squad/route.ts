@@ -1,15 +1,7 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import { requireTeamIdFromRequest } from "@/lib/teamContext";
-import { scopedWhere } from "@/lib/dbScope";
+import { dbScope, scopedWhere } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
-
-// Reusar Prisma en dev / hot-reload
-const prisma = (globalThis as any).__prisma__ ?? new PrismaClient();
-if (process.env.NODE_ENV !== "production") {
-  (globalThis as any).__prisma__ = prisma;
-}
 
 type SquadVideo = { title?: string | null; url: string };
 type SquadPlayer = {
@@ -30,17 +22,19 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
-    const teamId = await requireTeamIdFromRequest(req);
+    const { prisma, team } = await dbScope({ req });
     const row = await prisma.rival.findFirst({
-      where: scopedWhere(teamId, { id }) as any,
+      where: scopedWhere(team.id, { id }) as any,
       select: { planSquad: true },
     });
     if (!row) return new NextResponse("No encontrado", { status: 404 });
 
     const data = Array.isArray(row.planSquad) ? row.planSquad : [];
     return NextResponse.json({ data });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("multitenant rival squad get error", error);
+    return new NextResponse(error?.message || "Error", { status: 500 });
   }
 }
 
@@ -50,9 +44,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
-    const teamId = await requireTeamIdFromRequest(req);
-    const current = await prisma.rival.findFirst({ where: scopedWhere(teamId, { id }) as any, select: { id: true } });
-    if (!current) return new NextResponse("No encontrado", { status: 404 });
+  const { prisma, team } = await dbScope({ req });
+  const exists = await prisma.rival.findFirst({ where: scopedWhere(team.id, { id }) as any, select: { id: true } });
+  if (!exists) return new NextResponse("No encontrado", { status: 404 });
 
     const body = await req.json().catch(() => ({}));
 
@@ -78,15 +72,22 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
     const clean = toCleanJson(prepared);
 
-    const row = await prisma.rival.update({
-      where: { id },
+    const updated = await prisma.rival.updateMany({
+      where: { id, teamId: team.id },
       data: { planSquad: clean as any },
+    });
+    if (updated.count === 0) return new NextResponse("No encontrado", { status: 404 });
+
+    const row = await prisma.rival.findFirst({
+      where: scopedWhere(team.id, { id }) as any,
       select: { planSquad: true },
     });
 
-    const data = Array.isArray(row.planSquad) ? row.planSquad : [];
+    const data = Array.isArray(row?.planSquad) ? row?.planSquad : [];
     return NextResponse.json({ data });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("multitenant rival squad put error", error);
+    return new NextResponse(error?.message || "Error", { status: 500 });
   }
 }

@@ -10,6 +10,8 @@ model Team {
   sessions  Session[]
   places    Place[]
   plannerPrefs PlannerPrefs[]
+  scoutingCategories ScoutingCategory[]
+  scoutingPlayers    ScoutingPlayer[]
 }
 // prisma/schema.prisma
 generator client {
@@ -394,8 +396,10 @@ enum ScoutingStatus {
 
 model ScoutingCategory {
   id        String   @id @default(cuid())
+  teamId    String?
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
   nombre    String
-  slug      String   @unique
+  slug      String
   orden     Int      @default(0)
   color     String?
   activa    Boolean  @default(true)
@@ -405,12 +409,15 @@ model ScoutingCategory {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([orden])
-  @@unique([nombre])
+  @@index([teamId, orden])
+  @@unique([teamId, slug])
+  @@unique([teamId, nombre])
 }
 
 model ScoutingPlayer {
   id           String            @id @default(cuid())
+  teamId       String?
+  team         Team?             @relation(fields: [teamId], references: [id], onDelete: Cascade)
   fullName     String
   positions    String[]          @default([])
   club         String?
@@ -434,7 +441,8 @@ model ScoutingPlayer {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
-  @@index([categoriaId])
-  @@index([estado])
-  @@index([fullName])
+  @@index([teamId])
+  @@index([teamId, categoriaId])
+  @@index([teamId, estado])
+  @@index([teamId, fullName])
 }

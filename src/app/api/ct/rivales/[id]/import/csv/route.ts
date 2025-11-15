@@ -1,11 +1,8 @@
 // src/app/api/ct/rivales/[id]/import/csv/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import { requireTeamIdFromRequest } from "@/lib/teamContext";
-import { scopedWhere } from "@/lib/dbScope";
+import { dbScope, scopedWhere } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
-const prisma = new PrismaClient();
 
 type RecentRow = {
   date?: string;         // ISO o texto
@@ -48,7 +45,7 @@ export async function POST(
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
-    const teamId = await requireTeamIdFromRequest(req);
+    const { prisma, team } = await dbScope({ req });
 
     const form = await req.formData();
     const file = form.get("file");
@@ -136,12 +133,15 @@ export async function POST(
 
     // Traemos el estado actual para mergear sin romper otras llaves
     const current = await prisma.rival.findFirst({
-      where: scopedWhere(teamId, { id }) as any,
+      where: scopedWhere(team.id, { id }) as any,
+      select: { planStats: true },
     });
     if (!current) return new NextResponse("No encontrado", { status: 404 });
 
+    const base = asObj<RivalStats>(current.planStats);
     const merged: RivalStats = {
       totals: {
+        ...asObj(base.totals),
         ...(Number.isFinite(gfSum) ? { gf: gfSum } : {}),
         ...(Number.isFinite(gaSum) ? { ga: gaSum } : {}),
         ...(typeof possAvg === "number" ? { possession: possAvg } : {}),
@@ -149,11 +149,20 @@ export async function POST(
       recent,
     };
 
-    const row = await prisma.rival.findFirst({
-      where: scopedWhere(teamId, { id }) as any,
+    const updated = await prisma.rival.updateMany({
+      where: { id, teamId: team.id },
+      data: { planStats: merged as any },
     });
-    return NextResponse.json({ data: row });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
+    if (updated.count === 0) return new NextResponse("No encontrado", { status: 404 });
+
+    const row = await prisma.rival.findFirst({
+      where: scopedWhere(team.id, { id }) as any,
+      select: { planStats: true },
+    });
+    return NextResponse.json({ data: row?.planStats || {} });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("multitenant rival import csv error", error);
+    return new NextResponse(error?.message || "Error", { status: 500 });
   }
 }

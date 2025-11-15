@@ -1,14 +1,11 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
 import { createRequire } from "node:module";
-import { requireTeamIdFromRequest } from "@/lib/teamContext";
-import { scopedWhere } from "@/lib/dbScope";
+import { dbScope, scopedWhere } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const prisma = new PrismaClient();
 const require = createRequire(import.meta.url);
 
 /* ------------------------- Utils seguras ------------------------- */
@@ -127,7 +124,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const id = String(params?.id || "");
     if (!id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
 
-    const teamId = await requireTeamIdFromRequest(req);
+    const { prisma, team } = await dbScope({ req });
 
     const form = await req.formData();
     const fileEntry = (form.get("file") ?? form.get("pdf")) as unknown;
@@ -166,7 +163,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     };
 
     const current = await prisma.rival.findFirst({
-      where: scopedWhere(teamId, { id }) as any,
+      where: scopedWhere(team.id, { id }) as any,
       select: { coach: true, baseSystem: true }
     });
     if (!current) return NextResponse.json({ error: "Rival no encontrado" }, { status: 404 });
@@ -192,20 +189,26 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     if (ext.coach)  dataPatch.coach = ext.coach;
     if (ext.system) dataPatch.baseSystem = ext.system;
 
-    const row = await prisma.rival.update({
-      where: { id },
+    const updated = await prisma.rival.updateMany({
+      where: { id, teamId: team.id },
       data: dataPatch,
-      select: { coach: true, baseSystem: true }
+    });
+    if (updated.count === 0) return NextResponse.json({ error: "Rival no encontrado" }, { status: 404 });
+
+    const row = await prisma.rival.findFirst({
+      where: scopedWhere(team.id, { id }) as any,
+      select: { coach: true, baseSystem: true },
     });
 
     return NextResponse.json({
-      data: { coach: row.coach, baseSystem: row.baseSystem },
+      data: { coach: row?.coach, baseSystem: row?.baseSystem },
       message: "PDF procesado: se actualizaron plan y estadísticas."
     });
-  } catch (e: any) {
-    console.error("[PDF IMPORT ERROR]", e);
-    const stack = String(e?.stack || "").split("\n").slice(0, 6).join("\n");
-    const msg = String(e?.message || e || "Error");
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("multitenant rival pdf import error", error);
+    const stack = String(error?.stack || "").split("\n").slice(0, 6).join("\n");
+    const msg = String(error?.message || error || "Error");
     return NextResponse.json({ error: msg, origin: stack }, { status: 500 });
   }
 }

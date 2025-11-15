@@ -1,16 +1,9 @@
 // src/app/api/ct/rivales/[id]/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient, type Rival as RivalRow } from "@prisma/client";
-import { requireTeamIdFromRequest } from "@/lib/teamContext";
-import { scopedWhere } from "@/lib/dbScope";
+import type { Rival as RivalRow } from "@prisma/client";
+import { dbScope, scopedWhere } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
-
-// Evitar múltiples clientes en dev/hot-reload
-const prisma = (globalThis as any).__prisma__ ?? new PrismaClient();
-if (process.env.NODE_ENV !== "production") {
-  (globalThis as any).__prisma__ = prisma;
-}
 
 function toDTO(r: RivalRow) {
   return {
@@ -33,13 +26,15 @@ export async function GET(
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
-    const teamId = await requireTeamIdFromRequest(req);
-    const row = await prisma.rival.findFirst({ where: scopedWhere(teamId, { id }) as any });
+    const { prisma, team } = await dbScope({ req });
+    const row = await prisma.rival.findFirst({ where: scopedWhere(team.id, { id }) as any });
     if (!row) return new NextResponse("No encontrado", { status: 404 });
 
     return NextResponse.json({ data: toDTO(row) });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("multitenant rival show error", error);
+    return new NextResponse(error?.message || "Error", { status: 500 });
   }
 }
 
@@ -56,12 +51,9 @@ export async function PUT(
     const name = String(body?.name || "").trim();
     if (!name) return new NextResponse("name requerido", { status: 400 });
 
-    const teamId = await requireTeamIdFromRequest(req);
-    const current = await prisma.rival.findFirst({ where: scopedWhere(teamId, { id }) as any, select: { id: true } });
-    if (!current) return new NextResponse("No encontrado", { status: 404 });
-
-    const row = await prisma.rival.update({
-      where: { id },
+    const { prisma, team } = await dbScope({ req });
+    const result = await prisma.rival.updateMany({
+      where: { id, teamId: team.id },
       data: {
         name,
         logoUrl: body?.logoUrl ?? null,
@@ -71,10 +63,14 @@ export async function PUT(
         nextMatchCompetition: body?.nextMatchCompetition ?? null,
       },
     });
+    if (result.count === 0) return new NextResponse("No encontrado", { status: 404 });
 
-    return NextResponse.json({ data: toDTO(row) });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
+    const row = await prisma.rival.findFirst({ where: scopedWhere(team.id, { id }) as any });
+    return NextResponse.json({ data: row ? toDTO(row) : null });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("multitenant rival update error", error);
+    return new NextResponse(error?.message || "Error", { status: 500 });
   }
 }
 
@@ -87,13 +83,13 @@ export async function DELETE(
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
-    const teamId = await requireTeamIdFromRequest(req);
-    const current = await prisma.rival.findFirst({ where: scopedWhere(teamId, { id }) as any, select: { id: true } });
-    if (!current) return new NextResponse("No encontrado", { status: 404 });
-
-    await prisma.rival.delete({ where: { id } });
+    const { prisma, team } = await dbScope({ req });
+    const deleted = await prisma.rival.deleteMany({ where: { id, teamId: team.id } });
+    if (deleted.count === 0) return new NextResponse("No encontrado", { status: 404 });
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("multitenant rival delete error", error);
+    return new NextResponse(error?.message || "Error", { status: 500 });
   }
 }

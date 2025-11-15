@@ -1,11 +1,8 @@
 // src/app/api/ct/rivales/[id]/videos/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import { requireTeamIdFromRequest } from "@/lib/teamContext";
-import { scopedWhere } from "@/lib/dbScope";
+import { dbScope, scopedWhere } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
-const prisma = new PrismaClient();
 
 type RivalVideo = { title?: string | null; url: string };
 
@@ -32,17 +29,19 @@ export async function GET(
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
-    const teamId = await requireTeamIdFromRequest(req);
+    const { prisma, team } = await dbScope({ req });
     const r = await prisma.rival.findFirst({
-      where: scopedWhere(teamId, { id }) as any,
+      where: scopedWhere(team.id, { id }) as any,
       select: { planVideos: true },
     });
     if (!r) return new NextResponse("No encontrado", { status: 404 });
 
     const videos = Array.isArray(r.planVideos) ? (r.planVideos as any[]) : [];
     return NextResponse.json({ data: sanitize(videos) });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("multitenant rival videos get error", error);
+    return new NextResponse(error?.message || "Error", { status: 500 });
   }
 }
 
@@ -54,22 +53,29 @@ export async function PUT(
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
-    const teamId = await requireTeamIdFromRequest(req);
-    const current = await prisma.rival.findFirst({ where: scopedWhere(teamId, { id }) as any, select: { id: true } });
-    if (!current) return new NextResponse("No encontrado", { status: 404 });
+    const { prisma, team } = await dbScope({ req });
+    const existing = await prisma.rival.findFirst({ where: scopedWhere(team.id, { id }) as any, select: { id: true } });
+    if (!existing) return new NextResponse("No encontrado", { status: 404 });
 
     const body = await req.json();
     const videos = sanitize(body?.videos);
 
-    const row = await prisma.rival.update({
-      where: { id },
+    const updated = await prisma.rival.updateMany({
+      where: { id, teamId: team.id },
       data: { planVideos: videos as any },
+    });
+    if (updated.count === 0) return new NextResponse("No encontrado", { status: 404 });
+
+    const row = await prisma.rival.findFirst({
+      where: scopedWhere(team.id, { id }) as any,
       select: { planVideos: true },
     });
 
-    const data = Array.isArray(row.planVideos) ? row.planVideos : [];
+    const data = Array.isArray(row?.planVideos) ? row?.planVideos : [];
     return NextResponse.json({ data });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("multitenant rival videos put error", error);
+    return new NextResponse(error?.message || "Error", { status: 500 });
   }
 }

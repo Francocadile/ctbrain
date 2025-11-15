@@ -1,24 +1,16 @@
 // src/app/api/ct/rivales/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient, type Rival as RivalRow } from "@prisma/client";
-import { requireTeamIdFromRequest } from "@/lib/teamContext";
-import { scopedFindManyArgs } from "@/lib/dbScope";
+import type { Rival as RivalRow } from "@prisma/client";
+import { dbScope, scopedFindManyArgs } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
-
-// Evitar múltiples clientes en dev/hot-reload
-const prisma =
-  (globalThis as any).__prisma__ ?? new PrismaClient();
-if (process.env.NODE_ENV !== "production") {
-  (globalThis as any).__prisma__ = prisma;
-}
 
 // GET /api/ct/rivales  -> lista de rivales (ordenada)
 export async function GET(req: Request) {
   try {
-    const teamId = await requireTeamIdFromRequest(req);
+    const { prisma, team } = await dbScope({ req });
     const items: RivalRow[] = await prisma.rival.findMany(
-      scopedFindManyArgs(teamId, {
+      scopedFindManyArgs(team.id, {
         orderBy: [{ name: "asc" }],
       }) as any,
     );
@@ -34,15 +26,17 @@ export async function GET(req: Request) {
     }));
 
     return NextResponse.json({ data });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("multitenant rivales list error", error);
+    return NextResponse.json({ error: error?.message || "Error" }, { status: 500 });
   }
 }
 
 // POST /api/ct/rivales  -> crear (upsert por nombre para evitar duplicados)
 export async function POST(req: Request) {
   try {
-    const teamId = await requireTeamIdFromRequest(req);
+  const { prisma, team } = await dbScope({ req });
     const body = await req.json();
     const name = String(body?.name || "").trim();
     if (!name) return new NextResponse("name requerido", { status: 400 });
@@ -54,7 +48,7 @@ export async function POST(req: Request) {
     const nextMatchCompetition = body?.nextMatchCompetition ?? null;
 
     const row = await prisma.rival.upsert({
-      where: { teamId_name: { teamId, name } },
+      where: { teamId_name: { teamId: team.id, name } },
       update: {
         logoUrl,
         coach,
@@ -63,7 +57,7 @@ export async function POST(req: Request) {
         nextMatchCompetition,
       },
       create: {
-        teamId,
+        teamId: team.id,
         name,
         logoUrl,
         coach,
@@ -84,7 +78,9 @@ export async function POST(req: Request) {
     };
 
     return NextResponse.json({ data });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("multitenant rivales create error", error);
+    return NextResponse.json({ error: error?.message || "Error" }, { status: 500 });
   }
 }

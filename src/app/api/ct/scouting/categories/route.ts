@@ -1,6 +1,7 @@
 // src/app/api/ct/scouting/categories/route.ts
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import type { Prisma } from "@prisma/client";
+import { dbScope, scopedFindManyArgs, scopedWhere } from "@/lib/dbScope";
 
 // slugify sin dependencia
 function slugify(input: string) {
@@ -13,19 +14,24 @@ function slugify(input: string) {
     .slice(0, 80) || "categoria";
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const data = await prisma.scoutingCategory.findMany({
-      orderBy: [{ orden: "asc" }, { nombre: "asc" }],
-    });
+    const { prisma, team } = await dbScope({ req });
+    const data = await prisma.scoutingCategory.findMany(
+      scopedFindManyArgs(team.id, {
+        orderBy: [{ orden: "asc" }, { nombre: "asc" }],
+      }) as any,
+    );
     return NextResponse.json({ data });
   } catch (err: any) {
+    console.error("multitenant scouting categories get error", err);
     return NextResponse.json({ error: err?.message ?? "Error al listar" }, { status: 500 });
   }
 }
 
 export async function POST(req: Request) {
   try {
+    const { prisma, team } = await dbScope({ req });
     const { nombre } = await req.json();
     if (!nombre || typeof nombre !== "string") {
       return NextResponse.json({ error: "Nombre requerido" }, { status: 400 });
@@ -36,23 +42,34 @@ export async function POST(req: Request) {
     let n = 1;
     // evitar colisión de slug
     // eslint-disable-next-line no-await-in-loop
-    while (await prisma.scoutingCategory.findUnique({ where: { slug } })) {
+    while (
+      await prisma.scoutingCategory.findFirst({
+        where: scopedWhere(team.id, { slug }) as any,
+        select: { id: true },
+      })
+    ) {
       slug = `${base}-${n++}`;
     }
 
-    const ordenMax = await prisma.scoutingCategory.aggregate({ _max: { orden: true } });
+    const ordenMax = await prisma.scoutingCategory.aggregate({
+      where: { teamId: team.id } as Prisma.ScoutingCategoryWhereInput,
+      _max: { orden: true },
+    });
+    const nextOrder = (ordenMax._max?.orden ?? 0) + 1;
 
     const data = await prisma.scoutingCategory.create({
       data: {
+        teamId: team.id,
         nombre,
         slug,
         activa: true,
-        orden: (ordenMax._max.orden ?? 0) + 1,
-      },
+        orden: nextOrder,
+      } as Prisma.ScoutingCategoryCreateInput,
     });
 
     return NextResponse.json({ data }, { status: 201 });
   } catch (err: any) {
+    console.error("multitenant scouting categories post error", err);
     return NextResponse.json({ error: err?.message ?? "Error al crear" }, { status: 500 });
   }
 }

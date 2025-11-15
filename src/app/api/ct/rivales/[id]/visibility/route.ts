@@ -1,16 +1,8 @@
 // src/app/api/ct/rivales/[id]/visibility/route.ts
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import { requireTeamIdFromRequest } from "@/lib/teamContext";
-import { scopedWhere } from "@/lib/dbScope";
+import { dbScope, scopedWhere } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
-
-// Cliente único en dev
-const prisma = (globalThis as any).__prisma__ ?? new PrismaClient();
-if (process.env.NODE_ENV !== "production") {
-  (globalThis as any).__prisma__ = prisma;
-}
 
 // Claves de visibilidad soportadas
 export type VisibilitySettings = {
@@ -91,17 +83,19 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
-    const teamId = await requireTeamIdFromRequest(req);
+    const { prisma, team } = await dbScope({ req });
     const r = await prisma.rival.findFirst({
-      where: scopedWhere(teamId, { id }) as any,
+      where: scopedWhere(team.id, { id }) as any,
       select: { planVisibility: true },
     });
     if (!r) return new NextResponse("No encontrado", { status: 404 });
 
     const vis = mergeVisibility(r.planVisibility);
     return NextResponse.json({ data: vis });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("multitenant rival visibility get error", error);
+    return new NextResponse(error?.message || "Error", { status: 500 });
   }
 }
 
@@ -111,9 +105,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     const id = String(params?.id || "");
     if (!id) return new NextResponse("id requerido", { status: 400 });
 
-    const teamId = await requireTeamIdFromRequest(req);
+    const { prisma, team } = await dbScope({ req });
     const current = await prisma.rival.findFirst({
-      where: scopedWhere(teamId, { id }) as any,
+      where: scopedWhere(team.id, { id }) as any,
       select: { planVisibility: true },
     });
     if (!current) return new NextResponse("No encontrado", { status: 404 });
@@ -122,15 +116,22 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
     const merged = mergeVisibility(current.planVisibility, body);
 
-    const row = await prisma.rival.update({
-      where: { id },
+    const updated = await prisma.rival.updateMany({
+      where: { id, teamId: team.id },
       data: { planVisibility: merged as any },
+    });
+    if (updated.count === 0) return new NextResponse("No encontrado", { status: 404 });
+
+    const row = await prisma.rival.findFirst({
+      where: scopedWhere(team.id, { id }) as any,
       select: { planVisibility: true },
     });
 
-    const data = mergeVisibility(row.planVisibility);
+    const data = mergeVisibility(row?.planVisibility);
     return NextResponse.json({ data });
-  } catch (e: any) {
-    return new NextResponse(e?.message || "Error", { status: 500 });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("multitenant rival visibility put error", error);
+    return new NextResponse(error?.message || "Error", { status: 500 });
   }
 }

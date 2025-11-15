@@ -35,8 +35,22 @@ export type ScoutingPlayer = {
 };
 
 // ---------- utils ----------
-const CAT_KEY = "ct_scout_categories";
-const PLY_KEY_PREFIX = "ct_scout_players_"; // por categoría
+const CAT_KEY_BASE = "ct_scout_categories";
+const PLY_KEY_BASE = "ct_scout_players"; // por categoría + team
+
+function currentTeamSuffix(): string {
+  if (typeof document === "undefined") return "";
+  const match = document.cookie.match(/(?:^|;\s*)ctb_team=([^;]+)/);
+  if (!match) return "";
+  try {
+    return `_${decodeURIComponent(match[1])}`;
+  } catch {
+    return `_${match[1]}`;
+  }
+}
+
+const catCacheKey = () => `${CAT_KEY_BASE}${currentTeamSuffix()}`;
+const playerCacheKey = (categoriaId: string) => `${PLY_KEY_BASE}_${categoriaId}${currentTeamSuffix()}`;
 
 async function safeFetch<T = any>(
   url: string,
@@ -65,11 +79,11 @@ async function safeFetch<T = any>(
 export async function listCategories(): Promise<ScoutingCategory[]> {
   const api = await safeFetch<{ data: ScoutingCategory[] }>("/api/ct/scouting/categories");
   if (api?.data) {
-    try { localStorage.setItem(CAT_KEY, JSON.stringify(api.data)); } catch {}
+    try { localStorage.setItem(catCacheKey(), JSON.stringify(api.data)); } catch {}
     return api.data;
   }
   try {
-    const raw = localStorage.getItem(CAT_KEY);
+    const raw = localStorage.getItem(catCacheKey());
     if (raw) return JSON.parse(raw) as ScoutingCategory[];
   } catch {}
   return [];
@@ -84,7 +98,7 @@ export async function createCategory(nombre: string): Promise<ScoutingCategory> 
   if (api?.data) {
     const list = await listCategories();
     list.push(api.data);
-    try { localStorage.setItem(CAT_KEY, JSON.stringify(list)); } catch {}
+    try { localStorage.setItem(catCacheKey(), JSON.stringify(list)); } catch {}
     return api.data;
   }
   // local (fallback simple)
@@ -99,7 +113,7 @@ export async function createCategory(nombre: string): Promise<ScoutingCategory> 
   };
   const list = await listCategories();
   list.push(cat);
-  try { localStorage.setItem(CAT_KEY, JSON.stringify(list)); } catch {}
+  try { localStorage.setItem(catCacheKey(), JSON.stringify(list)); } catch {}
   return cat;
 }
 
@@ -116,14 +130,14 @@ export async function updateCategory(
     const list = await listCategories();
     const idx = list.findIndex((c: ScoutingCategory) => c.id === id);
     if (idx >= 0) list[idx] = api.data;
-    try { localStorage.setItem(CAT_KEY, JSON.stringify(list)); } catch {}
+    try { localStorage.setItem(catCacheKey(), JSON.stringify(list)); } catch {}
     return api.data;
   }
   // local
   const list = await listCategories();
   const idx = list.findIndex((c: ScoutingCategory) => c.id === id);
   if (idx >= 0) list[idx] = { ...list[idx], ...patch } as ScoutingCategory;
-  try { localStorage.setItem(CAT_KEY, JSON.stringify(list)); } catch {}
+  try { localStorage.setItem(catCacheKey(), JSON.stringify(list)); } catch {}
   return list[idx];
 }
 
@@ -144,7 +158,7 @@ export async function deleteCategory(id: string): Promise<{ ok: true } | { error
 
     // Actualizo cache local igualmente
     const list = (await listCategories()).filter((c: ScoutingCategory) => c.id !== id);
-    try { localStorage.setItem(CAT_KEY, JSON.stringify(list)); } catch {}
+    try { localStorage.setItem(catCacheKey(), JSON.stringify(list)); } catch {}
     return { ok: true };
   } catch (err: any) {
     return { error: err?.message || "Error de red al borrar categoría" };
@@ -165,14 +179,14 @@ export async function listPlayers(
   );
   if (api?.data) {
     if (params?.categoriaId) {
-      try { localStorage.setItem(PLY_KEY_PREFIX + params.categoriaId, JSON.stringify(api.data)); } catch {}
+      try { localStorage.setItem(playerCacheKey(params.categoriaId), JSON.stringify(api.data)); } catch {}
     }
     return api.data;
   }
   // local
   if (params?.categoriaId) {
     try {
-      const raw = localStorage.getItem(PLY_KEY_PREFIX + params.categoriaId);
+      const raw = localStorage.getItem(playerCacheKey(params.categoriaId));
       if (raw) return JSON.parse(raw) as ScoutingPlayer[];
     } catch {}
   }
@@ -202,7 +216,7 @@ export async function upsertPlayer(
       const list = await listPlayers({ categoriaId: api.data.categoriaId });
       const idx = list.findIndex((p: ScoutingPlayer) => p.id === api.data.id);
       if (idx >= 0) list[idx] = api.data; else list.push(api.data);
-      try { localStorage.setItem(PLY_KEY_PREFIX + api.data.categoriaId, JSON.stringify(list)); } catch {}
+      try { localStorage.setItem(playerCacheKey(api.data.categoriaId), JSON.stringify(list)); } catch {}
     }
     return api.data;
   }
@@ -231,7 +245,7 @@ export async function upsertPlayer(
     const list = await listPlayers({ categoriaId: p.categoriaId });
     const idx = list.findIndex((x: ScoutingPlayer) => x.id === p.id);
     if (idx >= 0) list[idx] = p; else list.push(p);
-    try { localStorage.setItem(PLY_KEY_PREFIX + p.categoriaId, JSON.stringify(list)); } catch {}
+    try { localStorage.setItem(playerCacheKey(p.categoriaId), JSON.stringify(list)); } catch {}
   }
   return p;
 }
