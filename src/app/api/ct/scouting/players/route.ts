@@ -1,7 +1,7 @@
 // src/app/api/ct/scouting/players/route.ts
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
-import { dbScope, scopedFindManyArgs, scopedWhere } from "@/lib/dbScope";
+import { dbScope, scopedCreateArgs, scopedFindManyArgs, scopedWhere } from "@/lib/dbScope";
 
 export async function GET(req: Request) {
   try {
@@ -55,28 +55,29 @@ export async function POST(req: Request) {
       }
     }
 
-    const data = await prisma.scoutingPlayer.create({
-      data: {
-        teamId: team.id,
-        fullName: body.fullName,
-        positions: Array.isArray(body.positions) ? body.positions : [],
-        club: body.club ?? null,
-        estado: body.estado ?? "ACTIVO",
-        categoriaId,
+    const data = await prisma.scoutingPlayer.create(
+      scopedCreateArgs(team.id, {
+        data: {
+          fullName: body.fullName,
+          positions: Array.isArray(body.positions) ? body.positions : [],
+          club: body.club ?? null,
+          estado: body.estado ?? "ACTIVO",
+          categoriaId,
 
-        agentName: body.agentName ?? null,
-        agentPhone: body.agentPhone ?? null,
-        agentEmail: body.agentEmail ?? null,
-        playerPhone: body.playerPhone ?? null,
-        playerEmail: body.playerEmail ?? null,
-        instagram: body.instagram ?? null,
+          agentName: body.agentName ?? null,
+          agentPhone: body.agentPhone ?? null,
+          agentEmail: body.agentEmail ?? null,
+          playerPhone: body.playerPhone ?? null,
+          playerEmail: body.playerEmail ?? null,
+          instagram: body.instagram ?? null,
 
-        videos: Array.isArray(body.videos) ? body.videos : [],
-        notes: body.notes ?? null,
-        rating: typeof body.rating === "number" ? body.rating : null,
-        tags: Array.isArray(body.tags) ? body.tags : [],
-      },
-    });
+          videos: Array.isArray(body.videos) ? body.videos : [],
+          notes: body.notes ?? null,
+          rating: typeof body.rating === "number" ? body.rating : null,
+          tags: Array.isArray(body.tags) ? body.tags : [],
+        },
+      }) as Prisma.ScoutingPlayerCreateArgs,
+    );
 
     return NextResponse.json({ data }, { status: 201 });
   } catch (err: any) {

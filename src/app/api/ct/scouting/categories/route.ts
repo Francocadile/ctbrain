@@ -1,7 +1,7 @@
 // src/app/api/ct/scouting/categories/route.ts
 import { NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
-import { dbScope, scopedFindManyArgs, scopedWhere } from "@/lib/dbScope";
+import { dbScope, scopedCreateArgs, scopedFindManyArgs, scopedWhere } from "@/lib/dbScope";
 
 // slugify sin dependencia
 function slugify(input: string) {
@@ -52,20 +52,21 @@ export async function POST(req: Request) {
     }
 
     const ordenMax = await prisma.scoutingCategory.aggregate({
-      where: { teamId: team.id } as Prisma.ScoutingCategoryWhereInput,
+      where: scopedWhere(team.id, {}) as Prisma.ScoutingCategoryWhereInput,
       _max: { orden: true },
     });
     const nextOrder = (ordenMax._max?.orden ?? 0) + 1;
 
-    const data = await prisma.scoutingCategory.create({
-      data: {
-        teamId: team.id,
-        nombre,
-        slug,
-        activa: true,
-        orden: nextOrder,
-      } as Prisma.ScoutingCategoryCreateInput,
-    });
+    const data = await prisma.scoutingCategory.create(
+      scopedCreateArgs(team.id, {
+        data: {
+          nombre,
+          slug,
+          activa: true,
+          orden: nextOrder,
+        },
+      }) as Prisma.ScoutingCategoryCreateArgs,
+    );
 
     return NextResponse.json({ data }, { status: 201 });
   } catch (err: any) {

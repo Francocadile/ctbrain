@@ -55,7 +55,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     };
 
     const updated = await prisma.scoutingPlayer.updateMany({
-      where: { id: params.id, teamId: team.id },
+      where: scopedWhere(team.id, { id: params.id }) as Prisma.ScoutingPlayerWhereInput,
       data: dataPatch,
     });
     if (updated.count === 0) {
@@ -75,7 +75,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
   try {
     const { prisma, team } = await dbScope({ req });
-    const res = await prisma.scoutingPlayer.deleteMany({ where: { id: params.id, teamId: team.id } });
+    const res = await prisma.scoutingPlayer.deleteMany({
+      where: scopedWhere(team.id, { id: params.id }) as Prisma.ScoutingPlayerWhereInput,
+    });
     if (res.count === 0) {
       return NextResponse.json({ error: "No encontrado" }, { status: 404 });
     }

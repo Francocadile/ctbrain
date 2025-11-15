@@ -29,7 +29,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     };
 
     const updated = await prisma.scoutingCategory.updateMany({
-      where: { id: params.id, teamId: team.id },
+      where: scopedWhere(team.id, { id: params.id }) as Prisma.ScoutingCategoryWhereInput,
       data: dataPatch,
     });
     if (updated.count === 0) {
@@ -66,7 +66,9 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
       );
     }
 
-    const res = await prisma.scoutingCategory.deleteMany({ where: { id: params.id, teamId: team.id } });
+    const res = await prisma.scoutingCategory.deleteMany({
+      where: scopedWhere(team.id, { id: params.id }) as Prisma.ScoutingCategoryWhereInput,
+    });
     if (res.count === 0) {
       return NextResponse.json({ error: "Categoría no encontrada" }, { status: 404 });
     }
