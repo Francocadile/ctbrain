@@ -2,11 +2,7 @@ import RoleGate from "@/components/auth/RoleGate";
 import { headers } from "next/headers";
 import Link from "next/link";
 import TeamUsersClient from "./TeamUsersClient";
-import type {
-  SuperadminTeam,
-  TeamUserAssignment,
-  SuperadminUserSummary,
-} from "../../types";
+import type { SuperadminTeam, TeamUserAssignment } from "../../types";
 
 async function fetchJson<T>(
   url: string,
@@ -43,7 +39,7 @@ export default async function TeamUsersPage({ params }: { params: { teamId: stri
     },
   };
 
-  const [teamResult, userTeamsResult, usersResult] = await Promise.all([
+  const [teamResult, userTeamsResult] = await Promise.all([
     fetchJson<SuperadminTeam>(`${baseUrl}/api/superadmin/teams/${teamId}`, fetchOptions),
     fetchJson<{ data: TeamUserAssignment[] }>(`${baseUrl}/api/superadmin/user-teams`, {
       ...fetchOptions,
@@ -52,16 +48,13 @@ export default async function TeamUsersPage({ params }: { params: { teamId: stri
         "x-team": teamId,
       },
     }),
-    fetchJson<SuperadminUserSummary[]>(`${baseUrl}/api/superadmin/users`, fetchOptions),
   ]);
 
   const team = teamResult.ok ? teamResult.data : null;
   const assignments = userTeamsResult.ok ? userTeamsResult.data.data : [];
-  const users = usersResult.ok ? usersResult.data : [];
   const initialError =
     (!teamResult.ok && teamResult.error) ||
     (!userTeamsResult.ok && userTeamsResult.error) ||
-    (!usersResult.ok && usersResult.error) ||
     null;
 
   if (!team) {
@@ -89,12 +82,7 @@ export default async function TeamUsersPage({ params }: { params: { teamId: stri
 
   return (
     <RoleGate allow={["SUPERADMIN"]}>
-      <TeamUsersClient
-        team={team}
-        assignments={assignments}
-        users={users}
-        initialError={initialError}
-      />
+      <TeamUsersClient team={team} assignments={assignments} initialError={initialError} />
     </RoleGate>
   );
 }

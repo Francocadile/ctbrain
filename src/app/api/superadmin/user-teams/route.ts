@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Role, TeamRole } from "@prisma/client";
+import { hash } from "bcryptjs";
 import { dbScope } from "@/lib/dbScope";
 
 const userTeamSelect = {
@@ -25,6 +26,10 @@ function isTeamRole(value: unknown): value is TeamRole {
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
+}
+
+function isValidEmail(email: string) {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
 }
 
 async function readJson<T = Record<string, unknown>>(req: Request): Promise<T> {
@@ -54,29 +59,48 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const { prisma, team } = await dbScope({ req, roles: [Role.SUPERADMIN] });
-    const body = await readJson<{ userId?: string; role?: string }>(req);
-    const userId = typeof body.userId === "string" ? body.userId.trim() : "";
-    const role = body.role;
+    const body = await readJson<{ email?: string; password?: string; name?: string; role?: string }>(req);
 
-    if (!userId) return jsonError("userId es obligatorio");
-    if (!isTeamRole(role)) return jsonError("role inválido");
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    let password = typeof body.password === "string" ? body.password.trim() : "";
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    const teamRole = body.role;
 
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
-    if (!user) return jsonError("Usuario no encontrado", 404);
+    if (!email) return jsonError("email es obligatorio");
+    if (!isValidEmail(email)) return jsonError("email inválido");
+    if (!password) return jsonError("password es obligatorio");
+    if (password.length < 6) return jsonError("password debe tener al menos 6 caracteres");
+    if (!isTeamRole(teamRole)) return jsonError("role inválido");
 
-    const existing = await prisma.userTeam.findUnique({
-      where: { userId_teamId: { userId, teamId: team.id } },
-      select: { id: true },
-    });
-    if (existing) return jsonError("El usuario ya pertenece a este equipo", 409);
+    const existingEmail = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (existingEmail) return jsonError("Ya existe un usuario con ese email", 409);
 
-    const created = await prisma.userTeam.create({
-      data: {
-        userId,
-        teamId: team.id,
-        role,
-      },
-      select: userTeamSelect,
+  const passwordHash = await hash(password, 10);
+  const globalRoleKey = teamRole as keyof typeof Role;
+  const globalRole = Role[globalRoleKey];
+
+    const created = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email,
+          name: name || null,
+          passwordHash,
+          role: globalRole,
+          isApproved: true,
+        },
+        select: { id: true },
+      });
+
+      const assignment = await tx.userTeam.create({
+        data: {
+          userId: user.id,
+          teamId: team.id,
+          role: teamRole,
+        },
+        select: userTeamSelect,
+      });
+
+      return assignment;
     });
 
     return NextResponse.json({ data: created }, { status: 201 });

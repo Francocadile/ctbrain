@@ -23,13 +23,6 @@ export const TEAM_ROLE_OPTIONS = [
 
 export type TeamRoleValue = (typeof TEAM_ROLE_OPTIONS)[number]["value"];
 
-export type SuperadminUserSummary = {
-  id: string;
-  name: string | null;
-  email: string;
-  role: string;
-};
-
 export type TeamUserAssignment = {
   id: string;
   userId: string;

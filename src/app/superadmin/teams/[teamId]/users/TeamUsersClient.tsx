@@ -1,39 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type {
   FeedbackPayload,
   SuperadminTeam,
   TeamRoleValue,
   TeamUserAssignment,
-  SuperadminUserSummary,
 } from "../../types";
 import { TEAM_ROLE_OPTIONS } from "../../types";
 
 type Props = {
   team: SuperadminTeam;
   assignments: TeamUserAssignment[];
-  users: SuperadminUserSummary[];
   initialError: string | null;
 };
 
-export default function TeamUsersClient({ team, assignments, users, initialError }: Props) {
+export default function TeamUsersClient({ team, assignments, initialError }: Props) {
   const router = useRouter();
   const [feedback, setFeedback] = useState<FeedbackPayload | null>(
     initialError ? { type: "error", message: initialError } : null,
   );
-  const [selectedUserId, setSelectedUserId] = useState("");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [selectedRole, setSelectedRole] = useState<TeamRoleValue>("CT");
   const [adding, setAdding] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
-
-  const availableUsers = useMemo(() => {
-    const assigned = new Set(assignments.map((a) => a.userId));
-    return users.filter((user) => !assigned.has(user.id));
-  }, [assignments, users]);
 
   useEffect(() => {
     if (!feedback) return undefined;
@@ -73,23 +68,39 @@ export default function TeamUsersClient({ team, assignments, users, initialError
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedUserId) {
-      showFeedback({ type: "error", message: "Seleccioná un usuario" });
+    if (!email.trim()) {
+      showFeedback({ type: "error", message: "Ingresá un email válido" });
+      return;
+    }
+    if (!password.trim()) {
+      showFeedback({ type: "error", message: "Ingresá una contraseña" });
       return;
     }
     setAdding(true);
     try {
       await request({
         method: "POST",
-        body: JSON.stringify({ userId: selectedUserId, role: selectedRole }),
+        body: JSON.stringify({
+          email: email.trim(),
+          password: password.trim(),
+          name: name.trim() || undefined,
+          role: selectedRole,
+        }),
       });
-      setSelectedUserId("");
-      showFeedback({ type: "success", message: "Usuario agregado al equipo" });
+      setName("");
+      setEmail("");
+      setPassword("");
+      showFeedback({ type: "success", message: "Usuario creado y asignado" });
     } catch (err: any) {
       showFeedback({ type: "error", message: err?.message || "No se pudo agregar" });
     } finally {
       setAdding(false);
     }
+  };
+
+  const handleGeneratePassword = () => {
+    const random = Math.random().toString(36).slice(2, 10);
+    setPassword(random);
   };
 
   const handleRoleChange = async (assignmentId: string, role: TeamRoleValue) => {
@@ -149,28 +160,50 @@ export default function TeamUsersClient({ team, assignments, users, initialError
 
       <section className="rounded-2xl border bg-white p-6 shadow-sm">
         <div className="mb-4">
-          <h2 className="text-xl font-semibold">Agregar usuario existente</h2>
-          <p className="text-sm text-gray-500">Seleccioná un usuario aprobado y elegí el rol dentro del equipo.</p>
+          <h2 className="text-xl font-semibold">Crear y asignar usuario</h2>
+          <p className="text-sm text-gray-500">Generá un nuevo usuario y definí su rol global y dentro del equipo.</p>
         </div>
         <form className="grid gap-4 md:grid-cols-2" onSubmit={handleAdd}>
           <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-700">Usuario</label>
-            <select
+            <label className="text-sm font-medium text-gray-700">Nombre (opcional)</label>
+            <input
+              type="text"
               className="rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              value={selectedUserId}
-              onChange={(e) => setSelectedUserId(e.target.value)}
-              disabled={!availableUsers.length}
-            >
-              <option value="">Seleccionar usuario</option>
-              {availableUsers.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name || user.email} · {user.email}
-                </option>
-              ))}
-            </select>
-            {!availableUsers.length && (
-              <p className="text-xs text-gray-500">Todos los usuarios disponibles ya pertenecen a este equipo.</p>
-            )}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ej: Coordinador Juvenil"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-700">Email</label>
+            <input
+              type="email"
+              className="rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="usuario@club.com"
+              required
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-700">Contraseña</label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                className="w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Mínimo 6 caracteres"
+                required
+              />
+              <button
+                type="button"
+                onClick={handleGeneratePassword}
+                className="rounded-lg border border-gray-200 px-3 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+              >
+                Auto
+              </button>
+            </div>
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-gray-700">Rol dentro del equipo</label>
@@ -190,9 +223,9 @@ export default function TeamUsersClient({ team, assignments, users, initialError
             <button
               type="submit"
               className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={adding || !availableUsers.length}
+              disabled={adding}
             >
-              {adding ? "Agregando..." : "Agregar al equipo"}
+              {adding ? "Creando..." : "Crear usuario"}
             </button>
           </div>
         </form>
