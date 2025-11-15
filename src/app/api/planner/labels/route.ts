@@ -7,6 +7,10 @@ function cleanPlaces(input: string[] | undefined) {
   return Array.from(new Set((input ?? []).map((s) => (s ?? "").trim()).filter(Boolean)));
 }
 
+function plannerPrefsKey(userId: string, teamId: string): Prisma.PlannerPrefsWhereUniqueInput {
+  return { userId_teamId: { userId, teamId } } as Prisma.PlannerPrefsWhereUniqueInput;
+}
+
 // GET -> { rowLabels, places }
 export async function GET(req: NextRequest) {
   try {
@@ -15,7 +19,7 @@ export async function GET(req: NextRequest) {
     const userId = user.id;
 
     const pref = await prisma.plannerPrefs.findUnique({
-      where: { userId_teamId: { userId, teamId } },
+      where: plannerPrefsKey(userId, teamId),
     });
     const places = await prisma.place.findMany({
       where: scopedWhere(teamId, {}) as Prisma.PlaceWhereInput,
@@ -48,7 +52,7 @@ export async function POST(req: NextRequest) {
     await prisma.$transaction(async (tx) => {
       if (body.rowLabels) {
         await tx.plannerPrefs.upsert({
-          where: { userId_teamId: { userId, teamId } },
+          where: plannerPrefsKey(userId, teamId),
           update: { rowLabels: body.rowLabels },
           create: { userId, teamId, rowLabels: body.rowLabels },
         });
@@ -101,7 +105,7 @@ export async function DELETE(req: NextRequest) {
     const userId = user.id;
 
     await prisma.plannerPrefs.upsert({
-      where: { userId_teamId: { userId, teamId } },
+      where: plannerPrefsKey(userId, teamId),
       update: { rowLabels: {} },
       create: { userId, teamId, rowLabels: {} },
     });
