@@ -87,7 +87,11 @@ export async function getDirectivoMetrics(): Promise<DirectivoMetrics> {
       select: { id: true, createdAt: true },
     }),
     prisma.user.findMany({
-      where: scopedWhere(team.id, {}),
+      where: {
+        teams: {
+          some: { teamId: team.id },
+        },
+      },
       select: { id: true },
     }),
   ]);
