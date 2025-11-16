@@ -1,4 +1,5 @@
 import RoleGate from "@/components/auth/RoleGate";
+import { headers } from "next/headers";
 import dynamic from "next/dynamic";
 
 const CreateUserForm = dynamic(() => import("./CreateUserForm"), { ssr: false });
@@ -8,7 +9,12 @@ export default async function SuperAdminUsersPage() {
   let users: any[] = [];
   let error = null;
   try {
-    const res = await fetch("/api/superadmin/users", { next: { revalidate: 0 } });
+    const headersList = headers();
+    const protocol = headersList.get("x-forwarded-proto") ?? "http";
+    const host = headersList.get("x-forwarded-host") ?? headersList.get("host") ?? "localhost:3000";
+    const baseUrl = `${protocol}://${host}`;
+
+    const res = await fetch(`${baseUrl}/api/superadmin/users`, { cache: "no-store" });
     if (!res.ok) throw new Error("No se pudo cargar la lista de usuarios");
     users = await res.json();
   } catch (e: any) {
