@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
-import { Role, type Prisma } from "@prisma/client";
+import { Role } from "@prisma/client";
 import { dbScope } from "@/lib/dbScope";
+import prisma from "@/lib/prisma";
 
 export const VIDEO_TYPE_OPTIONS = [
   { value: "propio", label: "Propio" },
@@ -25,21 +26,38 @@ export const teamVideoSelect = {
   title: true,
   notes: true,
   type: true,
+  visibleToDirectivo: true,
   createdAt: true,
-} satisfies Prisma.TeamVideoSelect;
+};
 
-export type TeamVideoDTO = Prisma.TeamVideoGetPayload<{ select: typeof teamVideoSelect }>;
+export type TeamVideoDTO = {
+  id: string;
+  teamId: string;
+  url: string;
+  title: string;
+  notes: string | null;
+  type: string;
+  visibleToDirectivo: boolean;
+  createdAt: Date;
+};
 
 type ListOptions = {
   req?: Request | NextRequest;
   roles?: Role[];
   take?: number;
+  scope?: "ct" | "directivo" | "all";
 };
 
 export async function listTeamVideos(options: ListOptions = {}) {
-  const { prisma, team } = await dbScope({ req: options.req, roles: options.roles });
+  const { team } = await dbScope({ req: options.req, roles: options.roles });
+
+  const where: any = { teamId: team.id };
+  if (options.scope === "directivo") {
+    where.visibleToDirectivo = true;
+  }
+
   return prisma.teamVideo.findMany({
-    where: { teamId: team.id },
+    where,
     orderBy: { createdAt: "desc" },
     select: teamVideoSelect,
     take: options.take,

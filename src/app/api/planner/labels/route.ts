@@ -8,7 +8,9 @@ function cleanPlaces(input: string[] | undefined) {
 }
 
 function plannerPrefsKey(userId: string, teamId: string): Prisma.PlannerPrefsWhereUniqueInput {
-  return { userId_teamId: { userId, teamId } } as Prisma.PlannerPrefsWhereUniqueInput;
+  return {
+    userId_teamId: { userId, teamId },
+  } as unknown as Prisma.PlannerPrefsWhereUniqueInput;
 }
 
 // GET -> { rowLabels, places }
@@ -54,7 +56,7 @@ export async function POST(req: NextRequest) {
         await tx.plannerPrefs.upsert({
           where: plannerPrefsKey(userId, teamId),
           update: { rowLabels: body.rowLabels },
-          create: { userId, teamId, rowLabels: body.rowLabels },
+          create: { userId, teamId, rowLabels: body.rowLabels } as any,
         });
       }
 
@@ -107,7 +109,7 @@ export async function DELETE(req: NextRequest) {
     await prisma.plannerPrefs.upsert({
       where: plannerPrefsKey(userId, teamId),
       update: { rowLabels: {} },
-      create: { userId, teamId, rowLabels: {} },
+      create: { userId, teamId, rowLabels: {} } as any,
     });
     return NextResponse.json({ ok: true });
   } catch (error: any) {

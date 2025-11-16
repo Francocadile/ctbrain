@@ -460,6 +460,7 @@ model Report {
   content   String
   type      String
   authorId  String
+  visibleToDirectivo Boolean @default(true)
   createdAt DateTime @default(now())
 
   team   Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
@@ -475,7 +476,8 @@ model TeamVideo {
   url       String
   title     String
   notes     String?
-  type      String
+  type      String   // "propio" | "rival"
+  visibleToDirectivo Boolean @default(true)
   createdAt DateTime @default(now())
 
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
