@@ -14,6 +14,7 @@ model Team {
   plannerPrefs PlannerPrefs[]
   scoutingCategories ScoutingCategory[]
   scoutingPlayers    ScoutingPlayer[]
+  videos    TeamVideo[]
   reports   Report[]
 }
 // prisma/schema.prisma
@@ -466,4 +467,18 @@ model Report {
 
   @@index([teamId, createdAt])
   @@index([authorId])
+}
+
+model TeamVideo {
+  id        String   @id @default(cuid())
+  teamId    String
+  url       String
+  title     String
+  notes     String?
+  type      String
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, createdAt])
 }
