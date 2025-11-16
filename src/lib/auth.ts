@@ -45,6 +45,7 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
+        // Nota: aquí listamos TODOS los equipos del usuario autenticado. No es un acceso multi-tenant por teamId, sino una lectura controlada de sus memberships.
         // Buscar equipos del usuario
         const userTeams = await prisma.userTeam.findMany({
           where: { userId: user.id },
