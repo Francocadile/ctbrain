@@ -2,9 +2,23 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function UserRow({ user }: { user: any }) {
+type SuperadminUserRow = {
+  id: string;
+  name: string | null;
+  email: string;
+  role: string;
+  teamId: string | null;
+  teamName: string;
+};
+
+type SuperadminTeamOption = {
+  id: string;
+  name: string;
+};
+
+export default function UserRow({ user, teams }: { user: SuperadminUserRow; teams: SuperadminTeamOption[] }) {
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(user.name);
+  const [name, setName] = useState(user.name ?? "");
   const [email, setEmail] = useState(user.email);
   const [role, setRole] = useState(user.role);
   const [teamId, setTeamId] = useState(user.teamId || "");
@@ -19,7 +33,13 @@ export default function UserRow({ user }: { user: any }) {
     const res = await fetch("/api/superadmin/users", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: user.id, name, email, role, teamId }),
+      body: JSON.stringify({
+        id: user.id,
+        name,
+        email,
+        role,
+        teamId: teamId || null,
+      }),
     });
     if (res.ok) {
       setEditing(false);
@@ -54,7 +74,12 @@ export default function UserRow({ user }: { user: any }) {
       <td className="px-4 py-2">
         {editing ? (
           <form onSubmit={handleEdit} className="flex gap-2 items-center">
-            <input type="text" value={name} onChange={e => setName(e.target.value)} className="border rounded px-2 py-1" />
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              className="border rounded px-2 py-1"
+            />
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="border rounded px-2 py-1" />
             <select value={role} onChange={e => setRole(e.target.value)} className="border rounded px-2 py-1">
               <option value="SUPERADMIN">Superadmin</option>
@@ -64,7 +89,21 @@ export default function UserRow({ user }: { user: any }) {
               <option value="JUGADOR">Jugador</option>
               <option value="DIRECTIVO">Directivo</option>
             </select>
-            <input type="text" value={teamId} onChange={e => setTeamId(e.target.value)} className="border rounded px-2 py-1" placeholder="ID equipo" />
+            <select
+              value={teamId || ""}
+              onChange={(e) => {
+                const value = e.target.value;
+                setTeamId(value === "" ? "" : value);
+              }}
+              className="border rounded px-2 py-1"
+            >
+              <option value="">Sin equipo</option>
+              {teams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
             <button type="submit" disabled={loading || !email} className="bg-green-600 text-white px-2 py-1 rounded">Guardar</button>
             <button type="button" onClick={() => setEditing(false)} className="text-gray-500 px-2 py-1">Cancelar</button>
           </form>
@@ -73,9 +112,9 @@ export default function UserRow({ user }: { user: any }) {
         )}
         {error && <div className="text-xs text-red-600 mt-1">{error}</div>}
       </td>
-      <td className="px-4 py-2 text-xs text-gray-500">{user.email}</td>
-      <td className="px-4 py-2 text-xs text-gray-500">{user.role}</td>
-      <td className="px-4 py-2 text-xs text-gray-500">{user.teamId || "Sin equipo"}</td>
+  <td className="px-4 py-2 text-xs text-gray-500">{user.email}</td>
+  <td className="px-4 py-2 text-xs text-gray-500">{user.role}</td>
+  <td className="px-4 py-2 text-xs text-gray-500">{user.teamName || "Sin equipo"}</td>
       <td className="px-4 py-2">
         {!editing && (
           <>
