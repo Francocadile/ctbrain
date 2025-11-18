@@ -14,11 +14,6 @@ SET "teamId" = umt."teamId"
 FROM user_main_team umt
 WHERE s."teamId" IS NULL AND s."createdBy" = umt."userId";
 
-WITH user_main_team AS (
-  SELECT DISTINCT ON ("userId") "userId", "teamId"
-  FROM "UserTeam"
-  ORDER BY "userId", "createdAt" ASC
-)
 UPDATE "PlannerPrefs" pp
 SET "teamId" = umt."teamId"
 FROM user_main_team umt
@@ -35,22 +30,10 @@ UPDATE "Place"
 SET "teamId" = (SELECT "id" FROM primary_team)
 WHERE "teamId" IS NULL;
 
-WITH primary_team AS (
-  SELECT "id"
-  FROM "Team"
-  ORDER BY "createdAt" ASC
-  LIMIT 1
-)
 UPDATE "Session"
 SET "teamId" = (SELECT "id" FROM primary_team)
 WHERE "teamId" IS NULL;
 
-WITH primary_team AS (
-  SELECT "id"
-  FROM "Team"
-  ORDER BY "createdAt" ASC
-  LIMIT 1
-)
 UPDATE "PlannerPrefs"
 SET "teamId" = (SELECT "id" FROM primary_team)
 WHERE "teamId" IS NULL;
