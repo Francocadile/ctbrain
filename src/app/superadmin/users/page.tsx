@@ -1,25 +1,31 @@
 import RoleGate from "@/components/auth/RoleGate";
-import { headers } from "next/headers";
+import prisma from "@/lib/prisma";
 import dynamic from "next/dynamic";
 
 const CreateUserForm = dynamic(() => import("./CreateUserForm"), { ssr: false });
 const UserRow = dynamic(() => import("./UserRow"), { ssr: false });
 
 export default async function SuperAdminUsersPage() {
-  let users: any[] = [];
-  let error = null;
-  try {
-    const headersList = headers();
-    const protocol = headersList.get("x-forwarded-proto") ?? "http";
-    const host = headersList.get("x-forwarded-host") ?? headersList.get("host") ?? "localhost:3000";
-    const baseUrl = `${protocol}://${host}`;
+  let error: string | null = null;
 
-    const res = await fetch(`${baseUrl}/api/superadmin/users`, { cache: "no-store" });
-    if (!res.ok) throw new Error("No se pudo cargar la lista de usuarios");
-    users = await res.json();
-  } catch (e: any) {
-    error = e.message || "Error desconocido";
-  }
+  const users = await prisma.user
+    .findMany({
+      include: { teams: true },
+      orderBy: { createdAt: "desc" },
+    })
+    .catch((e: any) => {
+      console.error("[SUPERADMIN_USERS_PAGE_GET]", e);
+      error = e?.message || "Error desconocido";
+      return [] as any[];
+    });
+
+  const rows = users.map((u: any) => ({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    teamId: u.teams?.[0]?.teamId ?? null,
+  }));
 
   return (
     <RoleGate allow={["SUPERADMIN"]}>
@@ -39,10 +45,14 @@ export default async function SuperAdminUsersPage() {
               </tr>
             </thead>
             <tbody>
-              {users.length === 0 ? (
-                <tr><td colSpan={5} className="px-4 py-4 text-gray-400">No hay usuarios registrados.</td></tr>
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-4 text-gray-400">
+                    No hay usuarios registrados.
+                  </td>
+                </tr>
               ) : (
-                users.map((user) => <UserRow key={user.id} user={user} />)
+                rows.map((user) => <UserRow key={user.id} user={user} />)
               )}
             </tbody>
           </table>
