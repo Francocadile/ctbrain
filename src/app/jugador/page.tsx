@@ -161,6 +161,22 @@ export default async function JugadorHomePage() {
               <p className="text-sm text-yellow-700">No cargado</p>
             )}
             <p className="mt-1 text-xs text-gray-500">Carga percibida del último entrenamiento.</p>
+
+            {lastRpe && isToday(lastRpe.date) ? (
+              <a
+                href="/jugador/rpe"
+                className="block w-full mt-3 text-center text-blue-600 underline text-sm"
+              >
+                Editar RPE
+              </a>
+            ) : (
+              <a
+                href="/jugador/rpe"
+                className="block w-full mt-3 text-center bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-md text-sm"
+              >
+                Cargar RPE
+              </a>
+            )}
           </div>
 
           {/* Wellness hoy */}
@@ -182,6 +198,22 @@ export default async function JugadorHomePage() {
               <p className="text-sm text-yellow-700">No cargado</p>
             )}
             <p className="mt-1 text-xs text-gray-500">Tu estado general al inicio del día.</p>
+
+            {wellnessToday ? (
+              <a
+                href="/jugador/wellness"
+                className="block w-full mt-3 text-center text-blue-600 underline text-sm"
+              >
+                Editar Wellness
+              </a>
+            ) : (
+              <a
+                href="/jugador/wellness"
+                className="block w-full mt-3 text-center bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-md text-sm"
+              >
+                Cargar Wellness
+              </a>
+            )}
           </div>
 
           {/* Minutos últimos 5 partidos */}
