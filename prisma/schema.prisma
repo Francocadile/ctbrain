@@ -17,6 +17,7 @@ model Team {
   videos    TeamVideo[]
   reports   Report[]
   players   Player[]
+  routines  Routine[]
 }
 // prisma/schema.prisma
 generator client {
@@ -171,6 +172,8 @@ model Session {
   user        User        @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
   teamId      String
   team        Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  routines    SessionRoutine[]
 
   @@index([date])
   @@index([type])
@@ -515,4 +518,50 @@ model TeamVideo {
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@index([teamId, createdAt])
+}
+
+model Routine {
+  id        String   @id @default(cuid())
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+
+  items    RoutineItem[]
+  sessions SessionRoutine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teamId])
+}
+
+model RoutineItem {
+  id        String   @id @default(cuid())
+  routineId String
+  routine   Routine  @relation(fields: [routineId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  order       Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([routineId])
+}
+
+model SessionRoutine {
+  id        String   @id @default(cuid())
+  sessionId String
+  routineId String
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  routine Routine @relation(fields: [routineId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sessionId, routineId])
 }
