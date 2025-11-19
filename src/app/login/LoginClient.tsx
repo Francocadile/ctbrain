@@ -1,10 +1,22 @@
 "use client";
 
-import { signIn } from "next-auth/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { signIn, signOut } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 
 export default function LoginClient() {
   const [loadingLogin, setLoadingLogin] = useState(false);
+
+  const searchParams = useSearchParams();
+  const error = searchParams.get("error");
+
+  useEffect(() => {
+    // Borra cualquier sesión previa sin redirigir
+    signOut({ redirect: false });
+  }, []);
+
+  const niceError =
+    error === "CredentialsSignin" ? "Email o contraseña incorrectos." : null;
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -34,6 +46,10 @@ export default function LoginClient() {
               Accedé con tu email y contraseña.
             </p>
           </header>
+
+          {niceError && (
+            <p className="mt-3 text-sm text-red-600">{niceError}</p>
+          )}
 
           <form onSubmit={handleLogin} className="mt-6 space-y-3">
             <input
