@@ -12,7 +12,8 @@
     "postinstall": "prisma generate",
     "prepare": "echo \"skipping husky on CI\"",
     "db:push": "prisma db push",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "migrate:deploy": "prisma migrate deploy"
   },
   "dependencies": {
     "@next-auth/prisma-adapter": "1.0.7",
