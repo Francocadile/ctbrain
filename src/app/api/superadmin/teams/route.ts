@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Role } from "@prisma/client";
-import { dbScope } from "@/lib/dbScope";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import prisma from "@/lib/prisma";
 const teamSelection = {
   id: true,
   name: true,
@@ -34,17 +36,22 @@ function errorResponse(message: string, status = 400) {
 
 function handleException(err: unknown, context: string) {
   if (err instanceof Response) return err;
-  console.error(`[superadmin/teams] ${context}`, err);
+  console.error("[SUPERADMIN_TEAMS]", context, err);
   return NextResponse.json({ error: "Error interno" }, { status: 500 });
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   try {
-    const { prisma } = await dbScope({ req, roles: [Role.SUPERADMIN] });
+    const session = await getServerSession(authOptions);
+    if (session?.user?.role !== Role.SUPERADMIN) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
     const teams = await prisma.team.findMany({
       orderBy: { createdAt: "desc" },
       select: teamSelection,
     });
+
     return NextResponse.json(teams);
   } catch (err) {
     return handleException(err, "GET error");
@@ -53,29 +60,39 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { prisma } = await dbScope({ req, roles: [Role.SUPERADMIN] });
+    const session = await getServerSession(authOptions);
+    if (session?.user?.role !== Role.SUPERADMIN) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
     const body = await readJson(req);
     const name = typeof body?.name === "string" ? body.name.trim() : "";
     const slugInput = typeof body?.slug === "string" ? body.slug.trim() : "";
 
-    if (!name) return errorResponse("El nombre es obligatorio");
+    if (!name || !slugInput) {
+      return NextResponse.json(
+        { error: "Nombre y slug son requeridos" },
+        { status: 400 }
+      );
+    }
 
-    const nameExists = await prisma.team.findFirst({
-      where: { name: { equals: name, mode: "insensitive" } },
-      select: { id: true },
-    });
-    if (nameExists) return errorResponse("Ya existe un equipo con ese nombre", 409);
+    const slug = slugify(slugInput);
 
-    const slug = slugify(slugInput || name);
-    const slugExists = await prisma.team.findUnique({ where: { slug }, select: { id: true } });
-    if (slugExists) return errorResponse("Ya existe un equipo con ese slug", 409);
-
-    const team = await prisma.team.create({
-      data: { name, slug, isActive: true },
-      select: teamSelection,
-    });
-
-    return NextResponse.json(team, { status: 201 });
+    try {
+      const team = await (prisma as any).team.create({
+        data: { name, slug, isActive: true },
+        select: teamSelection,
+      });
+      return NextResponse.json(team, { status: 201 });
+    } catch (err: any) {
+      if (err?.code === "P2002") {
+        return NextResponse.json(
+          { error: "Nombre o slug ya están en uso" },
+          { status: 400 }
+        );
+      }
+      throw err;
+    }
   } catch (err) {
     return handleException(err, "POST error");
   }
@@ -83,7 +100,10 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const { prisma } = await dbScope({ req, roles: [Role.SUPERADMIN] });
+    const session = await getServerSession(authOptions);
+    if (session?.user?.role !== Role.SUPERADMIN) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
     const body = await readJson(req);
     const id = typeof body?.id === "string" ? body.id.trim() : "";
     if (!id) return errorResponse("ID requerido");
@@ -109,7 +129,7 @@ export async function PATCH(req: NextRequest) {
       if (!slugRaw) return errorResponse("El slug es obligatorio");
       const slug = slugify(slugRaw);
       data.slug = slug;
-      const duplicateSlug = await prisma.team.findFirst({
+      const duplicateSlug = await (prisma as any).team.findFirst({
         where: { slug, NOT: { id } },
         select: { id: true },
       });
@@ -125,7 +145,7 @@ export async function PATCH(req: NextRequest) {
 
     if (!Object.keys(data).length) return errorResponse("No hay cambios para aplicar");
 
-    const team = await prisma.team.update({
+    const team = await (prisma as any).team.update({
       where: { id },
       data,
       select: teamSelection,
@@ -142,12 +162,15 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const { prisma } = await dbScope({ req, roles: [Role.SUPERADMIN] });
+    const session = await getServerSession(authOptions);
+    if (session?.user?.role !== Role.SUPERADMIN) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
     const body = await readJson(req);
     const id = typeof body?.id === "string" ? body.id.trim() : "";
     if (!id) return errorResponse("ID requerido");
 
-    await prisma.team.delete({ where: { id } });
+  await (prisma as any).team.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (err) {
     if ((err as any)?.code === "P2025") {
