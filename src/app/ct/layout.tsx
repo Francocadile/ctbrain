@@ -81,6 +81,14 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
               Lesionados
             </NavItem>
           </li>
+              <li>
+                <NavItem
+                  href={"/ct/plantel" as Route}
+                  active={isActive("/ct/plantel")}
+                >
+                  Plantel
+                </NavItem>
+              </li>
         </ul>
 
         <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">

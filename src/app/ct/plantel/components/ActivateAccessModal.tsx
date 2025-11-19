@@ -6,6 +6,8 @@ import type { PlayerWithUser } from "@/app/ct/plantel/components/PlantelTable";
 export default function ActivateAccessModal({ player, onClose }: { player: PlayerWithUser; onClose: () => void }) {
   const [email, setEmail] = useState("");
   const [generatePassword, setGeneratePassword] = useState(true);
+  const [password, setPassword] = useState("");
+  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,14 +19,23 @@ export default function ActivateAccessModal({ player, onClose }: { player: Playe
       const res = await fetch(`/api/ct/plantel/${player.id}/access`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, generatePassword }),
+        body: JSON.stringify({
+          email,
+          generatePassword,
+          password: generatePassword ? null : password || null,
+        }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Error al activar acceso");
       }
-      onClose();
-      window.location.reload();
+      const data = await res.json().catch(() => ({}));
+      if (data?.password) {
+        setGeneratedPassword(data.password as string);
+      } else {
+        onClose();
+        window.location.reload();
+      }
     } catch (err: any) {
       setError(err.message || "Error al activar acceso");
     } finally {
@@ -55,6 +66,27 @@ export default function ActivateAccessModal({ player, onClose }: { player: Playe
             />
             <span>Generar contraseña aleatoria</span>
           </label>
+
+          {!generatePassword && (
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Contraseña</label>
+              <input
+                className="w-full rounded-md border px-2 py-1.5 text-sm"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Dejar vacío para usar 123123"
+              />
+            </div>
+          )}
+
+          {generatedPassword && (
+            <div className="rounded-md bg-gray-50 border px-2 py-1.5 text-xs text-gray-700">
+              Contraseña generada: <span className="font-mono font-semibold">{generatedPassword}</span>
+              <br />
+              Compartila con el jugador para su primer acceso.
+            </div>
+          )}
 
           {error && <div className="text-xs text-red-600">{error}</div>}
 

@@ -14,10 +14,11 @@ function randomPassword(length = 10) {
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
-  const { prisma, team } = await dbScope({ req });
+    const { prisma, team } = await dbScope({ req });
     const body = await req.json();
     const email = (body?.email ?? "").trim().toLowerCase();
     const generatePassword: boolean = body?.generatePassword ?? true;
+    const rawPassword: string | null = body?.password ?? null;
 
     if (!email) {
       return NextResponse.json({ error: "email requerido" }, { status: 400 });
@@ -38,8 +39,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     let passwordPlain: string | null = null;
 
     if (!user) {
-      passwordPlain = generatePassword ? randomPassword(10) : null;
-      const passwordHash = passwordPlain ? await hash(passwordPlain, 10) : null;
+      if (generatePassword) {
+        passwordPlain = randomPassword(10);
+      } else if (rawPassword && rawPassword.trim().length > 0) {
+        passwordPlain = rawPassword;
+      } else {
+        passwordPlain = "123123";
+      }
+
+      const passwordHash = await hash(passwordPlain, 10);
 
       user = await prisma.user.create({
         data: {
@@ -69,7 +77,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
 
     if (!player.userId) {
-  await (prisma as any).player.update({
+      await (prisma as any).player.update({
         where: { id: player.id },
         data: { userId: user.id },
       });
