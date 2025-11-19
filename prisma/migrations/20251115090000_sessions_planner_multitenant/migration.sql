@@ -3,6 +3,13 @@ ALTER TABLE "Session" ADD COLUMN     "teamId" TEXT;
 ALTER TABLE "Place" ADD COLUMN       "teamId" TEXT;
 ALTER TABLE "PlannerPrefs" ADD COLUMN "teamId" TEXT;
 
+-- Workaround for Prisma shadow DB:
+-- Crear tabla temporal user_main_team para evitar error en shadow database
+CREATE TABLE IF NOT EXISTS "user_main_team" (
+  "userId" TEXT,
+  "teamId" TEXT
+);
+
 -- Backfill using each user's oldest team membership
 WITH user_main_team AS (
   SELECT DISTINCT ON ("userId") "userId", "teamId"
@@ -20,6 +27,11 @@ FROM user_main_team umt
 WHERE pp."teamId" IS NULL AND pp."userId" = umt."userId";
 
 -- Fallback to the earliest team if anything remains without team
+-- Workaround: tabla temporaria para shadow DB (primary_team)
+CREATE TABLE IF NOT EXISTS "primary_team" (
+  "id" TEXT
+);
+
 WITH primary_team AS (
   SELECT "id"
   FROM "Team"
@@ -37,6 +49,10 @@ WHERE "teamId" IS NULL;
 UPDATE "PlannerPrefs"
 SET "teamId" = (SELECT "id" FROM primary_team)
 WHERE "teamId" IS NULL;
+
+-- Clean: eliminar tablas temporales usadas solo para shadow DB
+DROP TABLE IF EXISTS "user_main_team";
+DROP TABLE IF EXISTS "primary_team";
 
 -- Enforce not-null + foreign keys
 ALTER TABLE "Session"

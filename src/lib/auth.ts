@@ -1,10 +1,29 @@
 // src/lib/auth.ts
 import type { NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, type Role } from "@prisma/client";
 import bcryptjs from "bcryptjs";
 
 const prisma = new PrismaClient();
+
+export function getHomeForRole(role: Role): string {
+  switch (role) {
+    case "JUGADOR":
+      return "/jugador";
+    case "CT":
+      return "/ct";
+    case "MEDICO":
+      return "/medico";
+    case "ADMIN":
+      return "/ct"; // panel principal operativo
+    case "SUPERADMIN":
+      return "/superadmin";
+    case "DIRECTIVO":
+      return "/directivo";
+    default:
+      return "/login";
+  }
+}
 
 /**
  * CTB-BASE-12 | FASE 1

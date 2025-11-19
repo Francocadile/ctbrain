@@ -16,6 +16,7 @@ model Team {
   scoutingPlayers    ScoutingPlayer[]
   videos    TeamVideo[]
   reports   Report[]
+  players   Player[]
 }
 // prisma/schema.prisma
 generator client {
@@ -139,6 +140,7 @@ model User {
   clinicalEntries ClinicalEntry[]
   teams           UserTeam[]
   reports         Report[]
+  players         Player[]
 }
 
 model UserTeam {
@@ -399,6 +401,14 @@ enum ScoutingStatus {
   DESCARTADO
 }
 
+enum PlayerStatus {
+  ACTIVO
+  LESIONADO
+  RECUPERACION
+  ALTA_PARCIAL
+  ALTA_TOTAL
+}
+
 model ScoutingCategory {
   id        String   @id @default(cuid())
   teamId    String?
@@ -417,6 +427,28 @@ model ScoutingCategory {
   @@index([teamId, orden])
   @@unique([teamId, slug])
   @@unique([teamId, nombre])
+}
+
+model Player {
+  id          String   @id @default(cuid())
+  teamId      String
+  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  name        String
+  shirtNumber Int?
+  position    String?
+  photoUrl    String?
+  birthDate   DateTime?
+
+  status      PlayerStatus @default(ACTIVO)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([teamId])
 }
 
 model ScoutingPlayer {

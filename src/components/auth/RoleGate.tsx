@@ -1,29 +1,10 @@
 // src/components/auth/RoleGate.tsx
-import { authOptions } from "@/lib/auth";
+import { authOptions, getHomeForRole } from "@/lib/auth";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
 type Role = "SUPERADMIN" | "ADMIN" | "CT" | "MEDICO" | "JUGADOR" | "DIRECTIVO";
-
-function roleHome(role?: Role) {
-  switch (role) {
-    case "SUPERADMIN":
-      return "/superadmin";
-    case "ADMIN":
-      return "/admin";
-    case "CT":
-      return "/ct";
-    case "MEDICO":
-      return "/medico";
-    case "JUGADOR":
-      return "/jugador";
-    case "DIRECTIVO":
-      return "/directivo";
-    default:
-      return "/login";
-  }
-}
 
 export default async function RoleGate({
   allow,
@@ -53,7 +34,7 @@ export default async function RoleGate({
       role,
       userId: session.user.id,
     });
-    redirect(roleHome(role));
+    redirect(getHomeForRole(role ?? "JUGADOR"));
   }
 
   if (requireTeam) {
