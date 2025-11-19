@@ -55,6 +55,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           name: player.name,
           role: Role.JUGADOR,
           passwordHash,
+          isApproved: true,
         },
       });
     }
