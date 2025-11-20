@@ -1,24 +1,25 @@
 model Team {
-  id        String           @id @default(cuid())
-  name      String           @unique
-  slug      String           @unique
-  isActive  Boolean          @default(true)
-  logoUrl   String?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
-  members   UserTeam[]
-  rivals    Rival[]
-  feedback  PlayerFeedback[]
-  sessions  Session[]
-  places    Place[]
-  plannerPrefs PlannerPrefs[]
+  id                 String             @id @default(cuid())
+  name               String             @unique
+  slug               String             @unique
+  isActive           Boolean            @default(true)
+  logoUrl            String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  members            UserTeam[]
+  rivals             Rival[]
+  feedback           PlayerFeedback[]
+  sessions           Session[]
+  places             Place[]
+  plannerPrefs       PlannerPrefs[]
   scoutingCategories ScoutingCategory[]
   scoutingPlayers    ScoutingPlayer[]
-  videos    TeamVideo[]
-  reports   Report[]
-  players   Player[]
-  routines  Routine[]
+  videos             TeamVideo[]
+  reports            Report[]
+  players            Player[]
+  routines           Routine[]
 }
+
 // prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
@@ -63,6 +64,7 @@ model GlobalConfig {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
+
 // ========= Enums clínicos =========
 enum ClinicalStatus {
   BAJA
@@ -122,18 +124,18 @@ enum IllAptitude {
 
 // ========= Modelos existentes =========
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
+  id           String  @id @default(cuid())
+  email        String  @unique
   name         String?
   passwordHash String?
-  role         Role     @default(JUGADOR)
+  role         Role    @default(JUGADOR)
 
-  isApproved Boolean  @default(false)
+  isApproved Boolean @default(false)
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  sessions        Session[]      @relation("UserSessions")
+  sessions        Session[]       @relation("UserSessions")
   rpeEntries      RPEEntry[]
   wellnessEntries WellnessEntry[]
   plannerPrefs    PlannerPrefs[]
@@ -168,12 +170,12 @@ model Session {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  createdBy   String
-  user        User        @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
-  teamId      String
-  team        Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy String
+  user      User   @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
+  teamId    String
+  team      Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
-  routines    SessionRoutine[]
+  routines SessionRoutine[]
 
   @@index([date])
   @@index([type])
@@ -183,32 +185,32 @@ model Session {
 }
 
 model Rival {
-  id      String @id @default(cuid())
+  id      String  @id @default(cuid())
   teamId  String
   name    String
   logoUrl String?
 
-  coach                 String?
-  baseSystem            String?
-  nextMatchDate         DateTime?
-  nextMatchCompetition  String?
+  coach                String?
+  baseSystem           String?
+  nextMatchDate        DateTime?
+  nextMatchCompetition String?
 
-  planCharlaUrl   String?
-  planReport      Json?   @default("{}")
-  planVideos      Json?   @default("[]")
-  planStats       Json?   @default("{}")
-  planNotes       Json?   @default("{}")
-  planVisibility  Json?   @default("{}")
+  planCharlaUrl  String?
+  planReport     Json?   @default("{}")
+  planVideos     Json?   @default("[]")
+  planStats      Json?   @default("{}")
+  planNotes      Json?   @default("{}")
+  planVisibility Json?   @default("{}")
 
-  planSquad       Json?   @default("[]")
+  planSquad Json? @default("[]")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
-  @@index([teamId])
   @@unique([teamId, name])
+  @@index([teamId])
   @@index([nextMatchDate])
 }
 
@@ -246,18 +248,18 @@ model ExerciseKind {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  exercises  Exercise[]
+  exercises Exercise[]
 }
 
 model Exercise {
-  id          String        @id @default(cuid())
+  id String @id @default(cuid())
 
-  userId      String
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  title       String
-  kindId      String?
-  kind        ExerciseKind? @relation(fields: [kindId], references: [id], onDelete: SetNull)
+  title  String
+  kindId String?
+  kind   ExerciseKind? @relation(fields: [kindId], references: [id], onDelete: SetNull)
 
   space       String?
   players     String?
@@ -265,10 +267,10 @@ model Exercise {
   description String?
   imageUrl    String?
 
-  tags        String[]      @default([])
+  tags String[] @default([])
 
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId, createdAt])
   @@index([userId, title])
@@ -276,19 +278,19 @@ model Exercise {
 }
 
 model RPEEntry {
-  id        String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  date      DateTime
-  session   Int      @default(1)
+  date         DateTime
+  session      Int      @default(1)
   sessionLabel String?
   sessionUid   String?
 
-  rpe       Int
-  duration  Int?
-  load      Int?
+  rpe      Int
+  duration Int?
+  load     Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -301,24 +303,24 @@ model RPEEntry {
 }
 
 model WellnessEntry {
-  id              String   @id @default(cuid())
-  userId          String
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  date            DateTime
+  date DateTime
 
-  sleepQuality    Int
-  sleepHours      Float?
-  fatigue         Int
-  muscleSoreness  Int
-  stress          Int
-  mood            Int
-  comment         String?
+  sleepQuality   Int
+  sleepHours     Float?
+  fatigue        Int
+  muscleSoreness Int
+  stress         Int
+  mood           Int
+  comment        String?
 
-  total           Int?
+  total Int?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([userId, date], name: "userId_date")
   @@index([date])
@@ -334,8 +336,8 @@ model PlannerPrefs {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@unique([userId, teamId])
   @@index([teamId])
@@ -343,13 +345,13 @@ model PlannerPrefs {
 
 // ========= Clínico =========
 model ClinicalEntry {
-  id        String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  date      DateTime
-  status    ClinicalStatus
+  date   DateTime
+  status ClinicalStatus
 
   leaveStage LeaveStage?
   leaveKind  LeaveKind?
@@ -370,13 +372,13 @@ model ClinicalEntry {
   startDate            DateTime?
   daysPlanned          Int?
   expectedReturn       DateTime?
-  expectedReturnManual Boolean? @default(false)
+  expectedReturnManual Boolean?  @default(false)
 
   capMinutes          Int?
-  noSprint            Boolean  @default(false)
-  noChangeOfDirection Boolean  @default(false)
-  gymOnly             Boolean  @default(false)
-  noContact           Boolean  @default(false)
+  noSprint            Boolean @default(false)
+  noChangeOfDirection Boolean @default(false)
+  gymOnly             Boolean @default(false)
+  noContact           Boolean @default(false)
 
   notes        String?
   medSignature String?
@@ -413,32 +415,32 @@ enum PlayerStatus {
 }
 
 model ScoutingCategory {
-  id        String   @id @default(cuid())
-  teamId    String?
-  team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  nombre    String
-  slug      String
-  orden     Int      @default(0)
-  color     String?
-  activa    Boolean  @default(true)
+  id     String  @id @default(cuid())
+  teamId String?
+  team   Team?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  nombre String
+  slug   String
+  orden  Int     @default(0)
+  color  String?
+  activa Boolean @default(true)
 
-  players   ScoutingPlayer[]
+  players ScoutingPlayer[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([teamId, orden])
   @@unique([teamId, slug])
   @@unique([teamId, nombre])
+  @@index([teamId, orden])
 }
 
 model Player {
-  id          String   @id @default(cuid())
-  teamId      String
-  team        Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
-  userId      String?
-  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   name        String
   shirtNumber Int?
@@ -446,40 +448,40 @@ model Player {
   photoUrl    String?
   birthDate   DateTime?
 
-  status      PlayerStatus @default(ACTIVO)
+  status PlayerStatus @default(ACTIVO)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([teamId])
 }
 
 model ScoutingPlayer {
-  id           String            @id @default(cuid())
-  teamId       String?
-  team         Team?             @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  fullName     String
-  positions    String[]          @default([])
-  club         String?
-  estado       ScoutingStatus    @default(ACTIVO)
+  id        String         @id @default(cuid())
+  teamId    String?
+  team      Team?          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  fullName  String
+  positions String[]       @default([])
+  club      String?
+  estado    ScoutingStatus @default(ACTIVO)
 
-  categoriaId  String?
-  categoria    ScoutingCategory? @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
+  categoriaId String?
+  categoria   ScoutingCategory? @relation(fields: [categoriaId], references: [id], onDelete: SetNull)
 
-  agentName    String?
-  agentPhone   String?
-  agentEmail   String?
-  playerPhone  String?
-  playerEmail  String?
-  instagram    String?
+  agentName   String?
+  agentPhone  String?
+  agentEmail  String?
+  playerPhone String?
+  playerEmail String?
+  instagram   String?
 
-  videos       String[]          @default([])
-  notes        String?
-  rating       Int?
-  tags         String[]          @default([])
+  videos String[] @default([])
+  notes  String?
+  rating Int?
+  tags   String[] @default([])
 
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([teamId])
   @@index([teamId, categoriaId])
@@ -488,15 +490,15 @@ model ScoutingPlayer {
 }
 
 model Report {
-  id        String   @id @default(cuid())
-  teamId    String
-  title     String
-  summary   String?
-  content   String
-  type      String
-  authorId  String
-  visibleToDirectivo Boolean @default(true)
-  createdAt DateTime @default(now())
+  id                 String   @id @default(cuid())
+  teamId             String
+  title              String
+  summary            String?
+  content            String
+  type               String
+  authorId           String
+  visibleToDirectivo Boolean  @default(true)
+  createdAt          DateTime @default(now())
 
   team   Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
   author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
@@ -506,14 +508,14 @@ model Report {
 }
 
 model TeamVideo {
-  id        String   @id @default(cuid())
-  teamId    String
-  url       String
-  title     String
-  notes     String?
-  type      String   // "propio" | "rival"
-  visibleToDirectivo Boolean @default(true)
-  createdAt DateTime @default(now())
+  id                 String   @id @default(cuid())
+  teamId             String
+  url                String
+  title              String
+  notes              String?
+  type               String // "propio" | "rival"
+  visibleToDirectivo Boolean  @default(true)
+  createdAt          DateTime @default(now())
 
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
@@ -521,9 +523,9 @@ model TeamVideo {
 }
 
 model Routine {
-  id        String   @id @default(cuid())
-  teamId    String
-  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   title       String
   description String?
@@ -538,9 +540,9 @@ model Routine {
 }
 
 model RoutineItem {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   routineId String
-  routine   Routine  @relation(fields: [routineId], references: [id], onDelete: Cascade)
+  routine   Routine @relation(fields: [routineId], references: [id], onDelete: Cascade)
 
   title       String
   description String?
@@ -553,7 +555,7 @@ model RoutineItem {
 }
 
 model SessionRoutine {
-  id        String   @id @default(cuid())
+  id        String @id @default(cuid())
   sessionId String
   routineId String
 

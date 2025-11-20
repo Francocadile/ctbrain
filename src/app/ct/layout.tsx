@@ -113,6 +113,11 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
               Ejercicios
             </NavItem>
           </li>
+          <li>
+            <NavItem href={"/ct/rutinas" as Route} active={isActive("/ct/rutinas")}>
+              Rutinas
+            </NavItem>
+          </li>
         </ul>
 
         <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
