@@ -522,6 +522,11 @@ model TeamVideo {
   @@index([teamId, createdAt])
 }
 
+enum RoutineVisibility {
+  STAFF_ONLY
+  PLAYER_VISIBLE
+}
+
 model Routine {
   id     String @id @default(cuid())
   teamId String
@@ -530,13 +535,33 @@ model Routine {
   title       String
   description String?
 
+  // nuevos campos Rutinas PRO
+  goal            String?
+  visibility      RoutineVisibility? @default(STAFF_ONLY)
+  notesForAthlete String?
+
   items    RoutineItem[]
+  blocks   RoutineBlock[]
   sessions SessionRoutine[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([teamId])
+}
+
+model RoutineBlock {
+  id        String  @id @default(cuid())
+  routineId String
+  routine   Routine @relation(fields: [routineId], references: [id], onDelete: Cascade)
+
+  name        String
+  order       Int
+  description String?
+
+  items RoutineItem[]
+
+  @@index([routineId])
 }
 
 model RoutineItem {
@@ -548,10 +573,27 @@ model RoutineItem {
   description String?
   order       Int
 
+  // relación opcional a bloque
+  blockId String?
+  block   RoutineBlock? @relation(fields: [blockId], references: [id])
+
+  // parámetros de entrenamiento
+  exerciseName String?
+  exerciseId   String?
+  sets         Int?
+  reps         Int?
+  load         String?
+  tempo        String?
+  rest         String?
+  notes        String?
+  athleteNotes String?
+  videoUrl     String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([routineId])
+  @@index([blockId])
 }
 
 model SessionRoutine {

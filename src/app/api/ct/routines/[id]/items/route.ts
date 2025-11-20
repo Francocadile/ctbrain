@@ -3,7 +3,7 @@ import { dbScope } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
 
-// POST /api/ct/routines/[id]/items -> crear RoutineItem
+// POST /api/ct/routines/[id]/items -> crear RoutineItem PRO
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
     const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN"] as any });
@@ -26,9 +26,31 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
 
     const rawDescription = body?.description;
-    const description = typeof rawDescription === "string" ? rawDescription.trim() || null : null;
+    const description =
+      typeof rawDescription === "string" ? rawDescription.trim() || null : null;
 
     const order = typeof body?.order === "number" ? body.order : 0;
+
+    const blockId = typeof body?.blockId === "string" && body.blockId.trim()
+      ? body.blockId.trim()
+      : undefined;
+
+    const exerciseName =
+      typeof body?.exerciseName === "string" ? body.exerciseName.trim() || null : null;
+    const exerciseId =
+      typeof body?.exerciseId === "string" ? body.exerciseId.trim() || null : null;
+
+    const sets = typeof body?.sets === "number" ? body.sets : null;
+    const reps = typeof body?.reps === "number" ? body.reps : null;
+
+    const load = typeof body?.load === "string" ? body.load.trim() || null : null;
+    const tempo = typeof body?.tempo === "string" ? body.tempo.trim() || null : null;
+    const rest = typeof body?.rest === "string" ? body.rest.trim() || null : null;
+    const notes = typeof body?.notes === "string" ? body.notes.trim() || null : null;
+    const athleteNotes =
+      typeof body?.athleteNotes === "string" ? body.athleteNotes.trim() || null : null;
+    const videoUrl =
+      typeof body?.videoUrl === "string" ? body.videoUrl.trim() || null : null;
 
     const item = await prisma.routineItem.create({
       data: {
@@ -36,14 +58,37 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         title,
         description,
         order,
+        ...(blockId ? { blockId } : {}),
+        exerciseName,
+        exerciseId,
+        sets,
+        reps,
+        load,
+        tempo,
+        rest,
+        notes,
+        athleteNotes,
+        videoUrl,
       },
     });
 
     const data = {
       id: item.id,
+      routineId: item.routineId,
+      blockId: item.blockId ?? null,
       title: item.title,
       description: item.description ?? null,
       order: item.order,
+      exerciseName: item.exerciseName ?? null,
+      exerciseId: item.exerciseId ?? null,
+      sets: item.sets ?? null,
+      reps: item.reps ?? null,
+      load: item.load ?? null,
+      tempo: item.tempo ?? null,
+      rest: item.rest ?? null,
+      notes: item.notes ?? null,
+      athleteNotes: item.athleteNotes ?? null,
+      videoUrl: item.videoUrl ?? null,
       createdAt: item.createdAt.toISOString(),
       updatedAt: item.updatedAt.toISOString(),
     };

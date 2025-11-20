@@ -3,7 +3,7 @@ import { dbScope } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
 
-// PATCH /api/ct/routines/items/[itemId] -> actualizar RoutineItem
+// PATCH /api/ct/routines/items/[itemId] -> actualizar RoutineItem PRO
 export async function PATCH(req: Request, { params }: { params: { itemId: string } }) {
   try {
     const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN"] as any });
@@ -39,6 +39,59 @@ export async function PATCH(req: Request, { params }: { params: { itemId: string
       data.order = body.order;
     }
 
+    if (typeof body?.blockId === "string") {
+      const bid = body.blockId.trim();
+      data.blockId = bid || null;
+    }
+
+    if (typeof body?.exerciseName === "string") {
+      const v = body.exerciseName.trim();
+      data.exerciseName = v || null;
+    }
+
+    if (typeof body?.exerciseId === "string") {
+      const v = body.exerciseId.trim();
+      data.exerciseId = v || null;
+    }
+
+    if (typeof body?.sets === "number") {
+      data.sets = body.sets;
+    }
+
+    if (typeof body?.reps === "number") {
+      data.reps = body.reps;
+    }
+
+    if (typeof body?.load === "string") {
+      const v = body.load.trim();
+      data.load = v || null;
+    }
+
+    if (typeof body?.tempo === "string") {
+      const v = body.tempo.trim();
+      data.tempo = v || null;
+    }
+
+    if (typeof body?.rest === "string") {
+      const v = body.rest.trim();
+      data.rest = v || null;
+    }
+
+    if (typeof body?.notes === "string") {
+      const v = body.notes.trim();
+      data.notes = v || null;
+    }
+
+    if (typeof body?.athleteNotes === "string") {
+      const v = body.athleteNotes.trim();
+      data.athleteNotes = v || null;
+    }
+
+    if (typeof body?.videoUrl === "string") {
+      const v = body.videoUrl.trim();
+      data.videoUrl = v || null;
+    }
+
     const updated = await prisma.routineItem.update({
       where: { id: existing.id },
       data,
@@ -46,9 +99,21 @@ export async function PATCH(req: Request, { params }: { params: { itemId: string
 
     const resp = {
       id: updated.id,
+      routineId: updated.routineId,
+      blockId: updated.blockId ?? null,
       title: updated.title,
       description: updated.description ?? null,
       order: updated.order,
+      exerciseName: updated.exerciseName ?? null,
+      exerciseId: updated.exerciseId ?? null,
+      sets: updated.sets ?? null,
+      reps: updated.reps ?? null,
+      load: updated.load ?? null,
+      tempo: updated.tempo ?? null,
+      rest: updated.rest ?? null,
+      notes: updated.notes ?? null,
+      athleteNotes: updated.athleteNotes ?? null,
+      videoUrl: updated.videoUrl ?? null,
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),
     };

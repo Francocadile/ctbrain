@@ -6,18 +6,31 @@ export const dynamic = "force-dynamic";
 // GET /api/ct/routines -> lista de rutinas del equipo actual
 export async function GET(req: Request) {
   try {
-  const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN"] as any });
+    const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN"] as any });
 
     const rows = await prisma.routine.findMany(
       scopedFindManyArgs(team.id, {
         orderBy: [{ createdAt: "desc" }],
+        include: {
+          _count: {
+            select: {
+              blocks: true,
+              items: true,
+            },
+          },
+        },
       }) as any,
     );
 
-  const data = rows.map((r: any) => ({
+    const data = rows.map((r: any) => ({
       id: r.id,
       title: r.title,
       description: r.description ?? null,
+      goal: r.goal ?? null,
+      visibility: r.visibility ?? null,
+      notesForAthlete: r.notesForAthlete ?? null,
+      blocksCount: r._count?.blocks ?? 0,
+      itemsCount: r._count?.items ?? 0,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     }));
@@ -30,10 +43,10 @@ export async function GET(req: Request) {
   }
 }
 
-// POST /api/ct/routines -> crear rutina { title, description }
+// POST /api/ct/routines -> crear rutina { title, description, goal, visibility, notesForAthlete }
 export async function POST(req: Request) {
   try {
-  const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN"] as any });
+    const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN"] as any });
     const body = await req.json();
 
     const rawTitle = body?.title;
@@ -43,13 +56,30 @@ export async function POST(req: Request) {
     }
 
     const rawDescription = body?.description;
-    const description = typeof rawDescription === "string" ? rawDescription.trim() || null : null;
+    const description =
+      typeof rawDescription === "string" ? rawDescription.trim() || null : null;
+
+    const rawGoal = body?.goal;
+    const goal = typeof rawGoal === "string" ? rawGoal.trim() || null : null;
+
+    const rawVisibility = body?.visibility;
+    const visibility =
+      rawVisibility === "STAFF_ONLY" || rawVisibility === "PLAYER_VISIBLE"
+        ? rawVisibility
+        : undefined; // deja que Prisma use el default
+
+    const rawNotesForAthlete = body?.notesForAthlete;
+    const notesForAthlete =
+      typeof rawNotesForAthlete === "string" ? rawNotesForAthlete.trim() || null : null;
 
     const row = await prisma.routine.create({
       data: {
         teamId: team.id,
         title,
         description,
+        goal,
+        notesForAthlete,
+        ...(visibility ? { visibility } : {}),
       },
     });
 
@@ -57,6 +87,9 @@ export async function POST(req: Request) {
       id: row.id,
       title: row.title,
       description: row.description ?? null,
+      goal: row.goal ?? null,
+      visibility: row.visibility ?? null,
+      notesForAthlete: row.notesForAthlete ?? null,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
