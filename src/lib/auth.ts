@@ -40,48 +40,57 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
       async authorize(creds) {
-        const email = (creds?.email || "").trim().toLowerCase();
-        const password = (creds?.password || "").toString();
-        if (!email) return null;
+        try {
+          const email = (creds?.email || "").trim().toLowerCase();
+          const password = (creds?.password || "").toString();
+          if (!email) return null;
 
-        const user = await prisma.user.findUnique({
-          where: { email },
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            role: true,
-            isApproved: true,
-            passwordHash: true,
-          },
-        });
-        if (!user) return null;
+          // Buscar usuario
+          const user = await prisma.user.findUnique({
+            where: { email },
+            select: {
+              id: true,
+              email: true,
+              name: true,
+              role: true,
+              isApproved: true,
+              passwordHash: true,
+            },
+          });
 
-        if (user.passwordHash) {
-          const ok = await bcryptjs.compare(password, user.passwordHash);
-          if (!ok) return null;
-        } else if (process.env.NODE_ENV !== "development") {
+          if (!user) return null;
+
+          // Validación de password
+          if (user.passwordHash) {
+            const ok = await bcryptjs.compare(password, user.passwordHash);
+            if (!ok) return null;
+          } else {
+            // En producción NO permitimos usuarios sin passwordHash
+            if (process.env.NODE_ENV !== "development") return null;
+          }
+
+          // Cargar equipos del usuario (multi-tenant)
+          const memberships = await prisma.userTeam.findMany({
+            where: { userId: user.id },
+            select: { teamId: true },
+          });
+
+          const teamIds = memberships.map((m: { teamId: string }) => m.teamId);
+          const currentTeamId = teamIds.length > 0 ? teamIds[0] : null;
+
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name ?? user.email,
+            role: user.role,
+            isApproved: user.isApproved,
+            teamIds,
+            currentTeamId,
+          };
+        } catch (err) {
+          console.error("Auth authorize error", err);
           return null;
         }
-
-        // Nota: aquí listamos TODOS los equipos del usuario autenticado. No es un acceso multi-tenant por teamId, sino una lectura controlada de sus memberships.
-        // Buscar equipos del usuario
-        const userTeams = await prisma.userTeam.findMany({
-          where: { userId: user.id },
-          select: { teamId: true },
-        });
-        const teamIds = userTeams.map((ut) => ut.teamId);
-        const currentTeamId = teamIds.length > 0 ? teamIds[0] : null;
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name ?? user.email,
-          role: user.role,
-          isApproved: user.isApproved,
-          teamIds,
-          currentTeamId,
-        } as any;
       },
     }),
   ],
