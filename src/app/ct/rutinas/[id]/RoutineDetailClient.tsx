@@ -134,6 +134,29 @@ export function RoutineDetailClient({ routine, blocks, items }: Props) {
     }
   }
 
+  async function handleDeleteRoutine() {
+    setError(null);
+    const confirmed = window.confirm(
+      "Esta acción eliminará la rutina y todos sus ejercicios. ¿Continuar?",
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`/api/ct/routines/${header.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+
+      startTransition(() => {
+        router.push("/ct/rutinas");
+        router.refresh();
+      });
+    } catch (e) {
+      console.error(e);
+      setError("No se pudo eliminar la rutina");
+    }
+  }
+
   async function handleAddBlock() {
     setError(null);
     try {
@@ -233,12 +256,19 @@ export function RoutineDetailClient({ routine, blocks, items }: Props) {
             onChange={(e) => handleFieldChange("description", e.target.value || null)}
           />
         </div>
-        <div className="flex justify-end">
+        <div className="flex flex-col gap-2 items-stretch sm:flex-row sm:justify-between sm:items-center">
+          <button
+            type="button"
+            onClick={handleDeleteRoutine}
+            className="inline-flex items-center justify-center rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
+          >
+            Eliminar rutina
+          </button>
           <button
             type="button"
             onClick={() => startTransition(() => void handleSaveHeader())}
             disabled={isPending}
-            className="inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+            className="inline-flex items-center justify-center rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
           >
             {isPending ? "Guardando..." : "Guardar cabecera"}
           </button>
