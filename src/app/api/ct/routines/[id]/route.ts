@@ -68,7 +68,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   }
 }
 
-// PATCH /api/ct/routines/[id] -> editar cabecera { title, description, goal, visibility, notesForAthlete }
+// PATCH /api/ct/routines/[id] -> editar cabecera { title, description, goal, visibility, notesForAthlete, shareMode, playerIds }
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   try {
     const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN"] as any });
@@ -114,20 +114,80 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       }
     }
 
-    const updated = await prisma.routine.update({
-      where: { id: existing.id },
-      data,
+    let shareMode: "STAFF_ONLY" | "ALL_PLAYERS" | "SELECTED_PLAYERS" | undefined;
+    if (typeof body?.shareMode === "string") {
+      if (
+        body.shareMode === "STAFF_ONLY" ||
+        body.shareMode === "ALL_PLAYERS" ||
+        body.shareMode === "SELECTED_PLAYERS"
+      ) {
+        shareMode = body.shareMode;
+        data.shareMode = shareMode;
+      } else {
+        return new NextResponse("shareMode inválido", { status: 400 });
+      }
+    }
+
+    const playerIds: string[] | undefined = Array.isArray(body?.playerIds)
+      ? body.playerIds.filter((x: unknown): x is string => typeof x === "string" && (x as string).trim().length > 0)
+      : undefined;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const updated = await tx.routine.update({
+        where: { id: existing.id },
+        data,
+      });
+
+      if (shareMode && (shareMode === "STAFF_ONLY" || shareMode === "ALL_PLAYERS")) {
+        await (tx as any).routinePlayerShare.deleteMany({
+          where: { routineId: updated.id },
+        });
+      }
+
+      if (shareMode === "SELECTED_PLAYERS") {
+        if (!playerIds || playerIds.length === 0) {
+          throw new NextResponse("playerIds requerido para SELECTED_PLAYERS", { status: 400 });
+        }
+
+        const validPlayers = await tx.user.findMany({
+          where: {
+            id: { in: playerIds },
+            role: "JUGADOR",
+            teams: {
+              some: { teamId: team.id },
+            },
+          },
+          select: { id: true },
+        });
+
+        const validIds = new Set(validPlayers.map((p) => p.id));
+        const filteredIds = playerIds.filter((pid) => validIds.has(pid));
+
+        await (tx as any).routinePlayerShare.deleteMany({
+          where: { routineId: updated.id },
+        });
+
+        if (filteredIds.length > 0) {
+          await (tx as any).routinePlayerShare.createMany({
+            data: filteredIds.map((pid) => ({ routineId: updated.id, playerId: pid })),
+            skipDuplicates: true,
+          });
+        }
+      }
+
+      return updated;
     });
 
     const resp = {
-      id: updated.id,
-      title: updated.title,
-      description: updated.description ?? null,
-      goal: updated.goal ?? null,
-      visibility: updated.visibility ?? null,
-      notesForAthlete: updated.notesForAthlete ?? null,
-      createdAt: updated.createdAt.toISOString(),
-      updatedAt: updated.updatedAt.toISOString(),
+      id: result.id,
+      title: result.title,
+      description: result.description ?? null,
+      goal: result.goal ?? null,
+      visibility: result.visibility ?? null,
+      notesForAthlete: result.notesForAthlete ?? null,
+      shareMode: result.shareMode,
+      createdAt: result.createdAt.toISOString(),
+      updatedAt: result.updatedAt.toISOString(),
     };
 
     return NextResponse.json({ data: resp });

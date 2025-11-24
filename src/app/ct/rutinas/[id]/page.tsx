@@ -11,22 +11,27 @@ export default async function CTRoutineDetailPage({
 }) {
   const { prisma, team } = await dbScope();
 
-  const routine = await prisma.routine.findFirst({
+  const routine = (await prisma.routine.findFirst({
     where: { id: params.id, teamId: team.id },
     include: {
       blocks: { orderBy: { order: "asc" } },
       items: { orderBy: { order: "asc" } },
+      sharedWithPlayers: {
+        select: { playerId: true },
+      },
       sessions: {
         include: {
           session: true,
         },
       },
     },
-  });
+  } as any)) as any;
 
   if (!routine) {
     return notFound();
   }
+
+  const sharedPlayerIds = routine.sharedWithPlayers.map((s: any) => s.playerId);
 
   const dto = {
     routine: {
@@ -36,6 +41,7 @@ export default async function CTRoutineDetailPage({
       goal: routine.goal ?? null,
       visibility: routine.visibility ?? null,
       notesForAthlete: routine.notesForAthlete ?? null,
+      shareMode: routine.shareMode,
       createdAt: routine.createdAt.toISOString(),
       updatedAt: routine.updatedAt.toISOString(),
     },
@@ -71,6 +77,7 @@ export default async function CTRoutineDetailPage({
         routine={dto.routine}
         blocks={dto.blocks}
         items={dto.items}
+        sharedPlayerIds={sharedPlayerIds}
       />
     </div>
   );

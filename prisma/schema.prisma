@@ -18,6 +18,7 @@ model Team {
   reports            Report[]
   players            Player[]
   routines           Routine[]
+  exercises          Exercise[]
 }
 
 // prisma/schema.prisma
@@ -139,11 +140,11 @@ model User {
   rpeEntries      RPEEntry[]
   wellnessEntries WellnessEntry[]
   plannerPrefs    PlannerPrefs[]
-  exercises       Exercise[]
   clinicalEntries ClinicalEntry[]
   teams           UserTeam[]
   reports         Report[]
   players         Player[]
+  routineShares   RoutinePlayerShare[]
 }
 
 model UserTeam {
@@ -247,34 +248,22 @@ model ExerciseKind {
   name      String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  exercises Exercise[]
 }
 
+// Biblioteca de ejercicios por equipo
 model Exercise {
-  id String @id @default(cuid())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  title  String
-  kindId String?
-  kind   ExerciseKind? @relation(fields: [kindId], references: [id], onDelete: SetNull)
-
-  space       String?
-  players     String?
-  duration    String?
-  description String?
-  imageUrl    String?
-
-  tags String[] @default([])
+  id       String  @id @default(cuid())
+  teamId   String? // null = ejercicio global cargado por el sistema
+  team     Team?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  name     String
+  zone     String?
+  videoUrl String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([userId, createdAt])
-  @@index([userId, title])
-  @@index([kindId])
+  // Relación con rutinas
+  routineItems RoutineItem[]
 }
 
 model RPEEntry {
@@ -527,6 +516,12 @@ enum RoutineVisibility {
   PLAYER_VISIBLE
 }
 
+enum RoutineShareMode {
+  STAFF_ONLY
+  ALL_PLAYERS
+  SELECTED_PLAYERS
+}
+
 model Routine {
   id     String @id @default(cuid())
   teamId String
@@ -539,6 +534,9 @@ model Routine {
   goal            String?
   visibility      RoutineVisibility? @default(STAFF_ONLY)
   notesForAthlete String?
+
+  shareMode         RoutineShareMode   @default(STAFF_ONLY)
+  sharedWithPlayers RoutinePlayerShare[]
 
   items    RoutineItem[]
   blocks   RoutineBlock[]
@@ -578,8 +576,11 @@ model RoutineItem {
   block   RoutineBlock? @relation(fields: [blockId], references: [id])
 
   // parámetros de entrenamiento
-  exerciseName String?
   exerciseId   String?
+  exercise     Exercise? @relation(fields: [exerciseId], references: [id], onDelete: SetNull)
+
+  // Mantener compatibilidad con lo actual
+  exerciseName String?
   sets         Int?
   reps         Int?
   load         String?
@@ -608,4 +609,18 @@ model SessionRoutine {
   updatedAt DateTime @updatedAt
 
   @@unique([sessionId, routineId])
+}
+
+model RoutinePlayerShare {
+  id        String   @id @default(cuid())
+
+  routineId String
+  playerId  String
+
+  routine   Routine @relation(fields: [routineId], references: [id], onDelete: Cascade)
+  player    User    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([routineId, playerId])
 }
