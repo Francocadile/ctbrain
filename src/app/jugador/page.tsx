@@ -1,4 +1,5 @@
 import { getServerSession } from "next-auth";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
@@ -313,7 +314,7 @@ export default async function JugadorHomePage() {
         </section>
 
         {/* Tarjeta Rutinas */}
-  <section className="rounded-2xl border bg-white p-4 shadow-sm">
+        <Link href="/jugador/rutinas" className="block rounded-2xl border bg-white p-4 shadow-sm">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Rutinas</h2>
           {/* TODO: conectar con módulo de rutinas del CT */}
           <ul className="mt-1 space-y-1 text-sm text-gray-700">
@@ -321,7 +322,7 @@ export default async function JugadorHomePage() {
             <li>· Post-partido: recuperación guiada</li>
             <li>· Gimnasio: fuerza tren inferior 2x semana</li>
           </ul>
-        </section>
+        </Link>
       </main>
     </RoleGate>
   );
