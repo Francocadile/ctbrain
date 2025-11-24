@@ -110,6 +110,14 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
   const [sessions, setSessions] = useState<SessionListDTO[]>([]);
   const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([]);
 
+  useEffect(() => {
+    setLocalBlocks(blocks);
+  }, [blocks]);
+
+  useEffect(() => {
+    setLocalItems(items);
+  }, [items]);
+
   const [exercises, setExercises] = useState<ExerciseDTO[]>([]);
 
   const [players, setPlayers] = useState<PlayerDTO[]>([]);
