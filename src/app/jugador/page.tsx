@@ -289,40 +289,47 @@ export default async function JugadorHomePage() {
           </div>
         </section>
 
-        {/* Tarjeta Entrenamiento del día */}
-  <section className="rounded-2xl border bg-white p-4 shadow-sm">
+        {/* ENTRENAMIENTO DE HOY */}
+        <section className="rounded-2xl border bg-white p-4 shadow-sm">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
             Entrenamiento de hoy
           </h2>
-          {training ? (
-            <div className="space-y-1 text-sm text-gray-700">
-              <p className="font-semibold text-gray-900">{training.title}</p>
-              <p className="text-xs text-gray-500">
-                {training.date.toLocaleDateString()} · {training.date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-              </p>
-              {training.description && (
-                <p className="mt-1 text-sm text-gray-700 line-clamp-3">
-                  {training.description}
-                </p>
-              )}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-600">
-              No hay entrenamiento cargado para hoy.
-            </p>
-          )}
+
+          <p className="text-sm text-gray-600">
+            Acá vas a ver la sesión que te asigne el CT, con los ejercicios y videos del día.
+          </p>
+
+          <button
+            type="button"
+            disabled
+            className="mt-3 inline-flex items-center justify-center rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+          >
+            Ver entrenamiento de hoy
+          </button>
+
+          <p className="mt-1 text-[11px] text-gray-400">
+            Próximamente vas a poder abrir acá tu entrenamiento diario directamente desde CTBrain.
+          </p>
         </section>
 
         {/* Tarjeta Rutinas */}
-        <Link href="/jugador/rutinas" className="block rounded-2xl border bg-white p-4 shadow-sm">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Rutinas</h2>
-          {/* TODO: conectar con módulo de rutinas del CT */}
-          <ul className="mt-1 space-y-1 text-sm text-gray-700">
-            <li>· Pre-partido: activación + movilidad</li>
-            <li>· Post-partido: recuperación guiada</li>
-            <li>· Gimnasio: fuerza tren inferior 2x semana</li>
-          </ul>
-        </Link>
+        <section className="rounded-2xl border bg-white p-4 shadow-sm">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+            Rutinas de fuerza
+          </h2>
+
+          <p className="text-sm text-gray-600">
+            Tocá el botón para ver las rutinas que tu CT te asignó: fuerza, movilidad y trabajo
+            complementario.
+          </p>
+
+          <Link
+            href="/jugador/rutinas"
+            className="mt-3 inline-flex items-center justify-center rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          >
+            Ver mis rutinas
+          </Link>
+        </section>
       </main>
     </RoleGate>
   );
