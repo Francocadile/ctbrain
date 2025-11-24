@@ -115,222 +115,352 @@ export default async function JugadorHomePage() {
 
   const wellnessToday = lastWellness && isToday(lastWellness.date) ? lastWellness : null;
 
+  // Rutinas visibles para el jugador: reutilizamos la misma lógica de visibilidad que en la página de detalle
+  const routines = await prisma.routine.findMany({
+    where: {
+      teamId: player.teamId,
+      OR: [
+        { shareMode: "ALL_PLAYERS" },
+        {
+          shareMode: "SELECTED_PLAYERS",
+          sharedWithPlayers: {
+            some: { playerId: player.id },
+          },
+        },
+      ],
+    },
+    orderBy: { createdAt: "desc" },
+    take: 5,
+  } as any);
+
   return (
     <RoleGate allow={["JUGADOR"]}>
-      <main className="min-h-screen px-4 py-4 md:px-6 md:py-8 space-y-6">
-        {/* Header jugador */}
-        <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex flex-col items-center gap-3 md:flex-row md:items-center">
-            <div className="h-20 w-20 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
-              {player.photoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={player.photoUrl} alt={player.name} className="h-full w-full object-cover" />
-              ) : (
-                <span className="text-lg font-semibold text-gray-500">
-                  {player.name?.charAt(0) ?? "J"}
-                </span>
-              )}
-            </div>
-            <div className="text-center md:text-left">
-              <h1 className="text-xl md:text-2xl font-bold">{player.name}</h1>
-              <p className="mt-1 text-sm text-gray-600 flex flex-wrap justify-center md:justify-start gap-2 items-center">
-                {player.position && <span>{player.position}</span>}
-                {player.shirtNumber != null && (
-                  <span className="text-gray-500">· #{player.shirtNumber}</span>
-                )}
-                {player.team && (
-                  <span className="text-gray-500">· {player.team.name}</span>
-                )}
+      <main className="min-h-screen px-4 py-4 md:px-6 md:py-8">
+        <div className="max-w-3xl mx-auto space-y-6">
+          <PlayerHomeHeader player={player} />
+
+          <PlayerHomeTodayStatus
+            lastRpe={lastRpe}
+            rpeLabel={rpeLabel}
+            rpeClass={rpeClass}
+            wellnessToday={wellnessToday}
+            fakeMinutes={fakeMinutes}
+            feedbacks={feedbacks}
+          />
+
+          <PlayerHomeRoutines routines={routines} />
+
+          <PlayerHomeGpsCard />
+        </div>
+      </main>
+    </RoleGate>
+  );
+}
+
+function PlayerHomeHeader({ player }: { player: PlayerWithTeam }) {
+  return (
+    <section className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="flex flex-col items-center gap-3 md:flex-row md:items-center">
+        <div className="h-20 w-20 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden">
+          {player.photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={player.photoUrl} alt={player.name} className="h-full w-full object-cover" />
+          ) : (
+            <span className="text-lg font-semibold text-gray-500">
+              {player.name?.charAt(0) ?? "J"}
+            </span>
+          )}
+        </div>
+        <div className="text-center md:text-left">
+          <h1 className="text-xl md:text-2xl font-bold">
+            Hola{player.name ? `, ${player.name}` : ""}
+          </h1>
+          <p className="mt-1 text-sm text-gray-600 flex flex-wrap justify-center md:justify-start gap-2 items-center">
+            <span>Tu resumen de hoy</span>
+            {player.position && <span>· {player.position}</span>}
+            {player.shirtNumber != null && (
+              <span className="text-gray-500">· #{player.shirtNumber}</span>
+            )}
+            {player.team && (
+              <span className="text-gray-500">· {player.team.name}</span>
+            )}
+          </p>
+        </div>
+      </div>
+      <div className="flex justify-center md:block">
+        <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+          {player.status}
+        </span>
+      </div>
+    </section>
+  );
+}
+
+type PlayerHomeTodayStatusProps = {
+  lastRpe: any;
+  rpeLabel: string;
+  rpeClass: string;
+  wellnessToday: any;
+  fakeMinutes: number[];
+  feedbacks: any[];
+};
+
+function PlayerHomeTodayStatus({
+  lastRpe,
+  rpeLabel,
+  rpeClass,
+  wellnessToday,
+  fakeMinutes,
+  feedbacks,
+}: PlayerHomeTodayStatusProps) {
+  const hasRpeToday = lastRpe && isToday(lastRpe.date);
+
+  return (
+    <section className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* RPE hoy */}
+        <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              RPE de hoy
+            </h2>
+          </div>
+          {hasRpeToday ? (
+            <p className={`text-lg font-semibold ${rpeClass}`}>{rpeLabel}</p>
+          ) : (
+            <p className="text-sm text-yellow-700">No cargado</p>
+          )}
+          <p className="mt-1 text-xs text-gray-500">
+            Cómo sentiste la carga de tu último entrenamiento.
+          </p>
+
+          {hasRpeToday ? (
+            <Link
+              href="/jugador/rpe"
+              className="block w-full mt-3 text-center text-blue-600 underline text-sm"
+            >
+              Editar RPE
+            </Link>
+          ) : (
+            <Link
+              href="/jugador/rpe"
+              className="block w-full mt-3 text-center bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-md text-sm"
+            >
+              Cargar RPE
+            </Link>
+          )}
+        </div>
+
+        {/* Wellness hoy */}
+        <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Wellness de hoy
+          </h2>
+          {wellnessToday ? (
+            <div className="space-y-1 text-sm">
+              <p>
+                <span className="text-gray-500">Fatiga:</span> {wellnessToday.fatigue}
+              </p>
+              <p>
+                <span className="text-gray-500">Dolor muscular:</span> {wellnessToday.muscleSoreness}
+              </p>
+              <p>
+                <span className="text-gray-500">Estrés:</span> {wellnessToday.stress}
               </p>
             </div>
-          </div>
-          <div className="flex justify-center md:block">
-            <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
-              {player.status}
-            </span>
-          </div>
-        </section>
+          ) : (
+            <p className="text-sm text-yellow-700">No cargado</p>
+          )}
+          <p className="mt-1 text-xs text-gray-500">Tu estado general al inicio del día.</p>
 
-        {/* Grid estado del día */}
-  <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          {/* RPE hoy */}
-          <div className="rounded-2xl border bg-white p-4 shadow-sm">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">RPE hoy</h2>
-            {lastRpe && isToday(lastRpe.date) ? (
-              <p className={`text-lg font-semibold ${rpeClass}`}>{rpeLabel}</p>
-            ) : (
-              <p className="text-sm text-yellow-700">No cargado</p>
-            )}
-            <p className="mt-1 text-xs text-gray-500">Carga percibida del último entrenamiento.</p>
+          {wellnessToday ? (
+            <Link
+              href="/jugador/wellness"
+              className="block w-full mt-3 text-center text-blue-600 underline text-sm"
+            >
+              Editar Wellness
+            </Link>
+          ) : (
+            <Link
+              href="/jugador/wellness"
+              className="block w-full mt-3 text-center bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-md text-sm"
+            >
+              Cargar Wellness
+            </Link>
+          )}
+        </div>
 
-            {lastRpe && isToday(lastRpe.date) ? (
-              <a
-                href="/jugador/rpe"
-                className="block w-full mt-3 text-center text-blue-600 underline text-sm"
-              >
-                Editar RPE
-              </a>
-            ) : (
-              <a
-                href="/jugador/rpe"
-                className="block w-full mt-3 text-center bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-md text-sm"
-              >
-                Cargar RPE
-              </a>
-            )}
-          </div>
-
-          {/* Wellness hoy */}
-          <div className="rounded-2xl border bg-white p-4 shadow-sm">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Wellness hoy</h2>
-            {wellnessToday ? (
-              <div className="space-y-1 text-sm">
-                <p>
-                  <span className="text-gray-500">Fatiga:</span> {wellnessToday.fatigue}
-                </p>
-                <p>
-                  <span className="text-gray-500">Dolor muscular:</span> {wellnessToday.muscleSoreness}
-                </p>
-                <p>
-                  <span className="text-gray-500">Estrés:</span> {wellnessToday.stress}
-                </p>
-              </div>
-            ) : (
-              <p className="text-sm text-yellow-700">No cargado</p>
-            )}
-            <p className="mt-1 text-xs text-gray-500">Tu estado general al inicio del día.</p>
-
-            {wellnessToday ? (
-              <a
-                href="/jugador/wellness"
-                className="block w-full mt-3 text-center text-blue-600 underline text-sm"
-              >
-                Editar Wellness
-              </a>
-            ) : (
-              <a
-                href="/jugador/wellness"
-                className="block w-full mt-3 text-center bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-md text-sm"
-              >
-                Cargar Wellness
-              </a>
-            )}
-          </div>
-
-          {/* Minutos últimos 5 partidos */}
-          <div className="rounded-2xl border bg-white p-4 shadow-sm">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
-              Minutos últimos 5 partidos
-            </h2>
-            {/* TODO: conectar con módulo de partidos */}
-            <ul className="mt-2 space-y-1 text-xs text-gray-700">
-              {fakeMinutes.map((m, idx) => (
-                <li key={idx} className="flex items-center gap-2">
-                  <span className="w-10 shrink-0 text-gray-500">J{idx + 1}</span>
-                  <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-blue-500"
-                      style={{ width: `${(m / 90) * 100}%` }}
-                    />
-                  </div>
-                  <span className="w-10 shrink-0 text-right">{m}'</span>
+        {/* Feedback reciente */}
+        <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Feedback reciente
+          </h2>
+          {feedbacks.length === 0 ? (
+            <p className="text-sm text-gray-500">
+              Aún no tenés feedback registrado.
+            </p>
+          ) : (
+            <ul className="mt-1 space-y-2 text-xs text-gray-700">
+              {feedbacks.map((fb) => (
+                <li key={fb.id} className="border-b last:border-b-0 pb-1 last:pb-0">
+                  <p className="font-medium text-gray-800">
+                    {fb.subject || "Feedback"}
+                  </p>
+                  <p className="text-[11px] text-gray-400">
+                    {fb.createdAt.toLocaleDateString()}
+                  </p>
+                  <p className="mt-0.5 text-gray-600 line-clamp-2">{fb.text}</p>
                 </li>
               ))}
             </ul>
-          </div>
+          )}
+        </div>
+      </div>
 
-          {/* Feedback reciente */}
-          <div className="rounded-2xl border bg-white p-4 shadow-sm">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Feedback reciente</h2>
-            {feedbacks.length === 0 ? (
-              <p className="text-sm text-gray-500">Aún no tienes feedback registrado.</p>
-            ) : (
-              <ul className="mt-2 space-y-2 text-xs text-gray-700">
-                {feedbacks.map((fb) => (
-                  <li key={fb.id} className="border-b last:border-b-0 pb-1 last:pb-0">
-                    <p className="font-medium text-gray-800">
-                      {fb.subject || "Feedback"}
-                    </p>
-                    <p className="text-[11px] text-gray-400">
-                      {fb.createdAt.toLocaleDateString()}
-                    </p>
-                    <p className="mt-0.5 text-gray-600 line-clamp-2">{fb.text}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </section>
+      {/* Minutos últimos 5 partidos (historial rápido) */}
+      <section className="rounded-2xl border bg-white p-4 shadow-sm">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
+          Minutos últimos 5 partidos
+        </h2>
+        {/* TODO: conectar con módulo de partidos */}
+        <ul className="mt-2 space-y-1 text-xs text-gray-700">
+          {fakeMinutes.map((m, idx) => (
+            <li key={idx} className="flex items-center gap-2">
+              <span className="w-10 shrink-0 text-gray-500">J{idx + 1}</span>
+              <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-blue-500"
+                  style={{ width: `${(m / 90) * 100}%` }}
+                />
+              </div>
+              <span className="w-10 shrink-0 text-right">{m}'</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </section>
+  );
+}
 
-        {/* Tarjeta GPS */}
-  <section className="rounded-2xl border bg-white p-4 shadow-sm">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">GPS & Carga</h2>
-          {/* TODO: conectar con modelo GPS cuando esté listo */}
-          <p className="text-sm text-gray-600 mb-3">
-            GPS & Carga (próximamente conectado a los archivos XLS del club).
-          </p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-            <div>
-              <p className="text-gray-500">Distancia total</p>
-              <p className="text-sm font-semibold">7.800 m</p>
-            </div>
-            <div>
-              <p className="text-gray-500">Alta intensidad</p>
-              <p className="text-sm font-semibold">900 m</p>
-            </div>
-            <div>
-              <p className="text-gray-500">Sprints</p>
-              <p className="text-sm font-semibold">18</p>
-            </div>
-            <div>
-              <p className="text-gray-500">Aceleraciones</p>
-              <p className="text-sm font-semibold">42</p>
-            </div>
-          </div>
-        </section>
-
-        {/* ENTRENAMIENTO DE HOY */}
-        <section className="rounded-2xl border bg-white p-4 shadow-sm">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-            Entrenamiento de hoy
+function PlayerHomeRoutines({ routines }: { routines: any[] }) {
+  if (!routines || routines.length === 0) {
+    return (
+      <section className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Mis rutinas
           </h2>
-
-          <p className="text-sm text-gray-600">
-            Acá vas a ver la sesión que te asigne el CT, con los ejercicios y videos del día.
-          </p>
-
-          <button
-            type="button"
-            disabled
-            className="mt-3 inline-flex items-center justify-center rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
-          >
-            Ver entrenamiento de hoy
-          </button>
-
-          <p className="mt-1 text-[11px] text-gray-400">
-            Próximamente vas a poder abrir acá tu entrenamiento diario directamente desde CTBrain.
-          </p>
-        </section>
-
-        {/* Tarjeta Rutinas */}
-        <section className="rounded-2xl border bg-white p-4 shadow-sm">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-            Rutinas de fuerza
-          </h2>
-
-          <p className="text-sm text-gray-600">
-            Tocá el botón para ver las rutinas que tu CT te asignó: fuerza, movilidad y trabajo
-            complementario.
-          </p>
-
           <Link
             href="/jugador/rutinas"
-            className="mt-3 inline-flex items-center justify-center rounded-md bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+            className="text-[11px] text-blue-600 hover:underline"
           >
-            Ver mis rutinas
+            Ver todas
           </Link>
-        </section>
-      </main>
-    </RoleGate>
+        </div>
+        <p className="text-sm text-gray-600">
+          Todavía no tenés rutinas asignadas por tu CT.
+        </p>
+      </section>
+    );
+  }
+
+  const [first, ...rest] = routines;
+
+  return (
+    <section className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          Mis rutinas
+        </h2>
+        <Link
+          href="/jugador/rutinas"
+          className="text-[11px] text-blue-600 hover:underline"
+        >
+          Ver todas
+        </Link>
+      </div>
+
+      {/* Rutina destacada (última creada / de hoy en el futuro) */}
+      <div className="rounded-xl border bg-gray-50 p-3 space-y-2">
+        <p className="text-[11px] font-semibold text-gray-500 mb-1">Rutina destacada</p>
+        <h3 className="text-sm font-semibold text-gray-900 truncate">{first.title}</h3>
+        {first.goal && (
+          <p className="text-xs text-gray-600 line-clamp-2">{first.goal}</p>
+        )}
+        <div className="flex items-center justify-between mt-2 gap-2">
+          <p className="text-[11px] text-gray-500">
+            {/* TODO: filtrar por fecha para mostrar "de hoy" cuando tengamos esa info */}
+            Rutina creada el {first.createdAt.toLocaleDateString()}
+          </p>
+          <Link
+            href={`/jugador/rutinas/${first.id}`}
+            className="inline-flex items-center justify-center rounded-md bg-black px-3 py-1.5 text-[11px] font-medium text-white hover:bg-gray-800"
+          >
+            Ver rutina
+          </Link>
+        </div>
+      </div>
+
+      {rest.length > 0 && (
+        <div className="space-y-1 pt-1 border-t mt-2">
+          <p className="text-[11px] font-semibold text-gray-500 mb-1">
+            Otras rutinas disponibles
+          </p>
+          <ul className="space-y-1 text-xs">
+            {rest.map((rt) => (
+              <li
+                key={rt.id}
+                className="flex items-center justify-between gap-2 rounded-md border px-2 py-1 bg-gray-50"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium text-gray-800 truncate">{rt.title}</p>
+                  {rt.goal && (
+                    <p className="text-[11px] text-gray-500 truncate">{rt.goal}</p>
+                  )}
+                </div>
+                <Link
+                  href={`/jugador/rutinas/${rt.id}`}
+                  className="text-[11px] text-blue-600 hover:underline shrink-0"
+                >
+                  Ver rutina
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PlayerHomeGpsCard() {
+  return (
+    <section className="rounded-2xl border bg-white p-4 shadow-sm">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+        GPS & Carga
+      </h2>
+      {/* TODO: conectar con modelo GPS cuando esté listo */}
+      <p className="text-sm text-gray-600 mb-3">
+        GPS & Carga (próximamente conectado a los archivos XLS del club).
+      </p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+        <div>
+          <p className="text-gray-500">Distancia total</p>
+          <p className="text-sm font-semibold">7.800 m</p>
+        </div>
+        <div>
+          <p className="text-gray-500">Alta intensidad</p>
+          <p className="text-sm font-semibold">900 m</p>
+        </div>
+        <div>
+          <p className="text-gray-500">Sprints</p>
+          <p className="text-sm font-semibold">18</p>
+        </div>
+        <div>
+          <p className="text-gray-500">Aceleraciones</p>
+          <p className="text-sm font-semibold">42</p>
+        </div>
+      </div>
+    </section>
   );
 }
