@@ -299,6 +299,31 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
     }
   };
 
+  async function handleRenameBlock(b: RoutineBlockDTO, name: string) {
+    const trimmed = name.trim();
+
+    // Si queda vacío, no mandamos nada y dejamos el valor actual de props/estado
+    if (!trimmed) {
+      // Forzamos a que el estado local vuelva al valor previo conocido
+      setLocalBlocks((prev) =>
+        prev.map((blk) => (blk.id === b.id ? { ...blk, name: b.name } : blk)),
+      );
+      return;
+    }
+
+    try {
+      await patchJSON(`/api/ct/routines/blocks/${b.id}`, { name: trimmed });
+      startTransition(() => router.refresh());
+    } catch (err) {
+      console.error(err);
+      setError("No se pudo renombrar el bloque");
+      // Volvemos al valor anterior en caso de error
+      setLocalBlocks((prev) =>
+        prev.map((blk) => (blk.id === b.id ? { ...blk, name: b.name } : blk)),
+      );
+    }
+  }
+
   return (
     <div className="space-y-6">
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -451,7 +476,17 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
                   <input
                     className="w-full rounded-md border px-2 py-1 text-sm bg-white"
                     value={b.name}
-                    readOnly
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setLocalBlocks((prev) =>
+                        prev.map((blk) =>
+                          blk.id === b.id ? { ...blk, name: value } : blk,
+                        ),
+                      );
+                    }}
+                    onBlur={(e) => {
+                      void handleRenameBlock(b, e.target.value);
+                    }}
                   />
                   {b.description && (
                     <p className="text-[11px] text-gray-500 line-clamp-2">{b.description}</p>
@@ -497,12 +532,28 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
                             }}
                           >
                             <option value="">Ejercicio libre…</option>
-                            {exercises.map((ex) => (
-                              <option key={ex.id} value={ex.id}>
-                                {ex.name}
-                              </option>
-                            ))}
+                            {exercises.map((ex) => {
+                              const labelParts = [ex.name];
+                              if (ex.zone) labelParts.push(ex.zone);
+                              if (ex.videoUrl) labelParts.push("video");
+                              const label = labelParts.join(" · ");
+                              return (
+                                <option key={ex.id} value={ex.id}>
+                                  {label}
+                                </option>
+                              );
+                            })}
                           </select>
+                          {it.videoUrl && (
+                            <a
+                              href={it.videoUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-block text-[11px] text-blue-600 hover:underline mt-1"
+                            >
+                              Ver video
+                            </a>
+                          )}
                         </div>
 
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1">
