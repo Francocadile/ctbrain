@@ -1075,15 +1075,23 @@ function ExerciseSelectorPanel({
     [exercises],
   );
 
-  const primaryZones = useMemo(() => {
-    const set = new Set<string>();
-    derivedExercises.forEach((e) => set.add(e.primaryZone));
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [derivedExercises]);
-
   const [search, setSearch] = useState("");
   const [groupFilter, setGroupFilter] = useState<"all" | ExerciseGroup>("all");
   const [zoneFilter, setZoneFilter] = useState<string>("all");
+
+  // 🔁 cada vez que cambio de Warmup/Campo/Gym, limpio la zona
+  useEffect(() => {
+    setZoneFilter("all");
+  }, [groupFilter]);
+
+  // 🔍 zonas principales según el tipo seleccionado
+  const primaryZones = useMemo(() => {
+    const set = new Set<string>();
+    derivedExercises
+      .filter((ex) => groupFilter === "all" || ex.group === groupFilter)
+      .forEach((ex) => set.add(ex.primaryZone));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [derivedExercises, groupFilter]);
 
   const filtered = useMemo(
     () =>
@@ -1219,6 +1227,11 @@ function ExerciseQuickPreview({
 }: ExerciseQuickPreviewProps) {
   if (!open || !exercise) return null;
 
+  const videoUrl = exercise.videoUrl ?? "";
+  const isExternalPlayer = /youtube\.com|youtu\.be|vimeo\.com/.test(
+    videoUrl.toLowerCase(),
+  );
+
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
       <div className="w-full max-w-lg rounded-xl bg-white shadow-lg p-4 space-y-3">
@@ -1238,12 +1251,20 @@ function ExerciseQuickPreview({
           </button>
         </div>
 
-        {exercise.videoUrl ? (
-          <video
-            src={exercise.videoUrl}
-            controls
-            className="w-full rounded-md bg-black max-h-64"
-          />
+        {videoUrl ? (
+          <div className="w-full rounded-md bg-black max-h-64 overflow-hidden aspect-video">
+            {isExternalPlayer ? (
+              <iframe
+                src={videoUrl}
+                title={exercise.name}
+                className="h-full w-full border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
+            ) : (
+              <video src={videoUrl} controls className="h-full w-full" />
+            )}
+          </div>
         ) : (
           <div className="w-full rounded-md bg-gray-100 flex items-center justify-center h-40 text-xs text-gray-500">
             Sin video disponible
