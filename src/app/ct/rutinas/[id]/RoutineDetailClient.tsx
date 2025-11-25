@@ -1040,23 +1040,61 @@ function ExerciseSelectorPanel({
   onAddToRoutine,
   onQuickPreview,
 }: ExerciseSelectorPanelProps) {
-  const [search, setSearch] = useState("");
-  const [zoneFilter, setZoneFilter] = useState<string | null>(null);
+  type ExerciseGroup = "Warmup" | "Campo" | "Gym";
 
-  const zones = useMemo(
-    () =>
-      Array.from(new Set(exercises.map((ex) => ex.zone).filter((z): z is string => !!z))).sort(),
+  function deriveExerciseMeta(zoneRaw: string | null | undefined): {
+    group: ExerciseGroup;
+    primaryZone: string;
+    tags: string[];
+  } {
+    const zone = zoneRaw?.trim();
+    if (!zone) {
+      return {
+        group: "Gym",
+        primaryZone: "Sin zona",
+        tags: [],
+      };
+    }
+
+    let group: ExerciseGroup = "Gym";
+    if (zone.startsWith("Warmup")) {
+      group = "Warmup";
+    } else if (zone.startsWith("Drills Campo")) {
+      group = "Campo";
+    }
+
+    const parts = zone.split(",").map((p) => p.trim()).filter(Boolean);
+    const primaryZone = parts[0] || "Sin zona";
+    const tags = parts.slice(1);
+
+    return { group, primaryZone, tags };
+  }
+
+  const derivedExercises = useMemo(
+    () => exercises.map((e) => ({ ...e, ...deriveExerciseMeta(e.zone) })),
     [exercises],
   );
 
-  const filtered = exercises.filter((ex) => {
-    const matchesSearch =
-      !search ||
-      ex.name.toLowerCase().includes(search.toLowerCase()) ||
-      (ex.zone || "").toLowerCase().includes(search.toLowerCase());
-    const matchesZone = !zoneFilter || ex.zone === zoneFilter;
-    return matchesSearch && matchesZone;
-  });
+  const primaryZones = useMemo(() => {
+    const set = new Set<string>();
+    derivedExercises.forEach((e) => set.add(e.primaryZone));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [derivedExercises]);
+
+  const [search, setSearch] = useState("");
+  const [groupFilter, setGroupFilter] = useState<"all" | ExerciseGroup>("all");
+  const [zoneFilter, setZoneFilter] = useState<string>("all");
+
+  const filtered = useMemo(
+    () =>
+      derivedExercises.filter((ex) => {
+        if (groupFilter !== "all" && ex.group !== groupFilter) return false;
+        if (zoneFilter !== "all" && ex.primaryZone !== zoneFilter) return false;
+        if (search && !ex.name.toLowerCase().includes(search.toLowerCase())) return false;
+        return true;
+      }),
+    [derivedExercises, groupFilter, zoneFilter, search],
+  );
 
   return (
     <div className="rounded-lg border bg-white p-3 space-y-3 shadow-sm h-full">
@@ -1064,39 +1102,39 @@ function ExerciseSelectorPanel({
         <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
           Biblioteca de ejercicios
         </p>
-        <input
-          className="w-full rounded-md border px-2 py-1 text-xs"
-          placeholder="Buscar por nombre o zona…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        {zones.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1">
-            <button
-              type="button"
-              className={`px-2 py-0.5 rounded-full text-[10px] border ${
-                !zoneFilter ? "bg-gray-900 text-white" : "bg-white text-gray-700 hover:bg-gray-50"
-              }`}
-              onClick={() => setZoneFilter(null)}
+        <div className="space-y-2 mb-3">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nombre…"
+            className="w-full rounded-md border px-2 py-1 text-sm"
+          />
+          <div className="flex gap-2">
+            <select
+              className="flex-1 rounded-md border px-2 py-1 text-sm"
+              value={groupFilter}
+              onChange={(e) => setGroupFilter(e.target.value as any)}
             >
-              Todas
-            </button>
-            {zones.map((z) => (
-              <button
-                key={z}
-                type="button"
-                className={`px-2 py-0.5 rounded-full text-[10px] border ${
-                  zoneFilter === z
-                    ? "bg-gray-900 text-white"
-                    : "bg-white text-gray-700 hover:bg-gray-50"
-                }`}
-                onClick={() => setZoneFilter(z)}
-              >
-                {z}
-              </button>
-            ))}
+              <option value="all">Todos los tipos</option>
+              <option value="Warmup">Warmup</option>
+              <option value="Campo">Campo</option>
+              <option value="Gym">Gym</option>
+            </select>
+            <select
+              className="flex-1 rounded-md border px-2 py-1 text-sm"
+              value={zoneFilter}
+              onChange={(e) => setZoneFilter(e.target.value)}
+            >
+              <option value="all">Todas las zonas</option>
+              {primaryZones.map((z) => (
+                <option key={z} value={z}>
+                  {z}
+                </option>
+              ))}
+            </select>
           </div>
-        )}
+        </div>
       </div>
 
       {!selectedBlockId && (
@@ -1110,41 +1148,22 @@ function ExerciseSelectorPanel({
           <p className="text-[11px] text-gray-400">No hay ejercicios que coincidan con la búsqueda.</p>
         ) : (
           filtered.map((ex) => {
-            const labelParts = [ex.name];
-            if (ex.zone) labelParts.push(ex.zone);
-            if (ex.videoUrl) labelParts.push("video");
-            const label = labelParts.join(" · ");
+            const meta = deriveExerciseMeta(ex.zone);
+            const tagsText = meta.tags.join(" · ");
 
             return (
               <div
                 key={ex.id}
-                className="rounded-md border bg-gray-50 px-2 py-2 text-xs space-y-1 hover:bg-gray-100"
+                className="rounded-md border bg-gray-50 px-2 py-2 text-xs space-y-1 hover:bg-gray-100 cursor-pointer"
               >
                 <div className="flex items-start gap-2">
-                  <div className="h-10 w-10 flex-shrink-0 rounded-md bg-gray-200 flex items-center justify-center text-[10px] text-gray-500">
-                    VID
-                  </div>
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">{ex.name}</p>
-                    {ex.zone && (
-                      <p className="text-[11px] text-gray-500">
-                        Zona: <span className="font-medium">{ex.zone}</span>
-                      </p>
-                    )}
-                    <p className="text-[10px] text-gray-400">{label}</p>
+                    <p className="text-[11px] text-gray-500">
+                      {meta.primaryZone}
+                      {tagsText ? ` · ${tagsText}` : ""}
+                    </p>
                   </div>
-                </div>
-                <div className="flex flex-wrap gap-1 mt-1">
-                  {ex.zone && (
-                    <span className="inline-flex items-center rounded-full bg-gray-200 px-2 py-0.5 text-[10px] text-gray-700">
-                      {ex.zone}
-                    </span>
-                  )}
-                  {ex.videoUrl && (
-                    <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] text-blue-700">
-                      Video
-                    </span>
-                  )}
                 </div>
                 <div className="flex gap-2 mt-2">
                   {onSelectForItem && (
