@@ -1,6 +1,9 @@
 // prisma/seed.ts
 import { PrismaClient, Role } from "@prisma/client";
 import { hash } from "bcryptjs";
+import fs from "fs/promises";
+import path from "path";
+import { parse } from "csv-parse/sync";
 
 const prisma = new PrismaClient();
 
@@ -110,9 +113,53 @@ async function seedWellnessAndRPE(users: { id: string }[]) {
   console.log("📊 Seed demo: wellness (28d) + rpe (ayer/hoy) cargados.");
 }
 
+// Seed de ejercicios globales desde CSV
+async function seedExercisesFromCsv() {
+  const filePath = path.resolve(process.cwd(), "data/exercises-master.csv");
+
+  try {
+    const content = await fs.readFile(filePath, "utf-8");
+    const rows: any[] = parse(content, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+    });
+
+    console.log(`📁 Seed ejercicios: ${rows.length} filas leídas desde ${filePath}`);
+
+    for (const row of rows) {
+      const name = row.name?.trim();
+      if (!name) continue;
+
+      const zone = row.Category?.trim() || null;
+      const videoUrl = row.videoUrl?.trim() || null;
+
+      await prisma.exercise.upsert({
+        where: { name }, // 🔥 ahora sí podemos deduplicar por nombre
+        update: {
+          zone,
+          videoUrl,
+          teamId: null,
+        },
+        create: {
+          name,
+          zone,
+          videoUrl,
+          teamId: null,
+        },
+      });
+    }
+
+    console.log("✅ Seed ejercicios globales desde CSV completado.");
+  } catch (err: any) {
+    console.error("⚠️ Error al seedear ejercicios desde CSV:", err?.message || err);
+  }
+}
+
 async function main() {
   await seedAdmin();
   await seedCoreUsers();
+  await seedExercisesFromCsv();
   if (DO_DEMO) {
     const players = await ensurePlayers();
     if (players.length) await seedWellnessAndRPE(players);

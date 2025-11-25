@@ -255,7 +255,7 @@ model Exercise {
   id       String  @id @default(cuid())
   teamId   String? // null = ejercicio global cargado por el sistema
   team     Team?   @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  name     String
+  name     String  @unique
   zone     String?
   videoUrl String?
 
