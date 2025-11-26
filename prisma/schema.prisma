@@ -57,6 +57,11 @@ enum SessionType {
   RECUPERACION
 }
 
+enum ExerciseUsage {
+  ROUTINE
+  SESSION
+}
+
 model GlobalConfig {
   id         String   @id @default(cuid())
   systemName String
@@ -258,6 +263,8 @@ model Exercise {
   name     String  @unique
   zone     String?
   videoUrl String?
+
+  usage    ExerciseUsage @default(ROUTINE)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

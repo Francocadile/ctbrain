@@ -57,6 +57,7 @@ type ExerciseDTO = {
   name: string;
   zone: string | null;
   videoUrl: string | null;
+  usage?: "ROUTINE" | "SESSION" | null;
 };
 
 type PlayerDTO = {
@@ -147,7 +148,9 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
         );
         setSelectedSessionIds(linkResp.sessionIds || []);
 
-        const exercisesResp = await getJSON<{ data: ExerciseDTO[] }>("/api/ct/exercises");
+        const exercisesResp = await getJSON<{ data: ExerciseDTO[] }>(
+          "/api/ct/exercises?usage=ROUTINE",
+        );
         setExercises(exercisesResp.data || []);
 
         const playersResp = await getJSON<{ data: PlayerDTO[] }>("/api/ct/team/players");

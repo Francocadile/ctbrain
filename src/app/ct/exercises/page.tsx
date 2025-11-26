@@ -9,18 +9,16 @@ export const dynamic = "force-dynamic";
 
 async function getExercisesForLibrary() {
 	const raw = await prisma.exercise.findMany({
-		where: {
-			teamId: null, // por ahora: solo ejercicios globales de la biblioteca
-		},
 		orderBy: { name: "asc" },
 	});
 
-	return raw.map((e) => ({
+	return raw.map((e: any) => ({
 		id: e.id,
 		name: e.name,
 		zone: e.zone,
 		videoUrl: e.videoUrl,
 		isTeamExercise: e.teamId != null,
+		usage: e.usage,
 		createdAt: e.createdAt.toISOString(),
 	}));
 }
