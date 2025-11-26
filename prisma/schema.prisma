@@ -522,6 +522,13 @@ enum RoutineShareMode {
   SELECTED_PLAYERS
 }
 
+enum RoutineBlockType {
+  WARMUP
+  MAIN
+  COOLDOWN
+  ACCESSORY
+}
+
 model Routine {
   id     String @id @default(cuid())
   teamId String
@@ -557,7 +564,13 @@ model RoutineBlock {
   order       Int
   description String?
 
+  // nuevo: tipo opcional del bloque (warmup, main, etc.)
+  type RoutineBlockType?
+
   items RoutineItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([routineId])
 }
