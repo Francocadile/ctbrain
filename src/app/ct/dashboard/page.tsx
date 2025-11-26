@@ -10,6 +10,7 @@ import {
   type SessionDTO,
 } from "@/lib/api/sessions";
 import PlannerMatchLink from "@/components/PlannerMatchLink";
+import VideoPlayerModal from "@/components/training/VideoPlayerModal";
 
 /* =========================================================
    Tipos / filas
@@ -73,8 +74,8 @@ const MICRO_STYLES: Record<MicroKey, { bg: string; text: string; border: string 
   "MD-3": { bg: "bg-orange-50", text: "text-orange-900", border: "border-orange-200" },
   "MD-2": { bg: "bg-green-50", text: "text-green-900", border: "border-green-200" },
   "MD-1": { bg: "bg-gray-50", text: "text-gray-700", border: "border-gray-200" },
-  "MD": { bg: "bg-amber-50", text: "text-amber-900", border: "border-amber-200" },
-  "DESCANSO": { bg: "bg-gray-100", text: "text-gray-700", border: "border-gray-200" },
+  MD: { bg: "bg-amber-50", text: "text-amber-900", border: "border-amber-200" },
+  DESCANSO: { bg: "bg-gray-100", text: "text-gray-700", border: "border-gray-200" },
 };
 
 /* =========================================================
@@ -131,6 +132,11 @@ function DashboardSemanaInner() {
   const [daysMap, setDaysMap] = useState<Record<string, SessionDTO[]>>({});
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
+  const [videoPreview, setVideoPreview] = useState<{
+    title: string;
+    zone?: string | null;
+    videoUrl?: string | null;
+  } | null>(null);
 
   // ===== Row labels (mismos que el Editor) =====
   const [rowLabels, setRowLabels] = useState<Record<string, string>>({});
@@ -201,14 +207,19 @@ function DashboardSemanaInner() {
     if (row === "VIDEO") {
       const { label, url } = parseVideoValue(text);
       return url ? (
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer"
+        <button
+          type="button"
           className="h-6 text-[11px] underline text-emerald-700 px-1 flex items-center truncate"
+          onClick={() =>
+            setVideoPreview({
+              title: label || "Video sesión",
+              zone: null,
+              videoUrl: url,
+            })
+          }
         >
           {label || "Video"}
-        </a>
+        </button>
       ) : (
         <div className="h-6 text-[11px] px-1 flex items-center truncate">{label}</div>
       );
@@ -391,7 +402,7 @@ function DashboardSemanaInner() {
         </header>
       )}
 
-      {loadingWeek ? (
+       {loadingWeek ? (
         <div className="text-gray-500">Cargando…</div>
       ) : (
         <div className="rounded-2xl border bg-white shadow-sm">
@@ -449,6 +460,13 @@ function DashboardSemanaInner() {
           </div>
         </div>
       )}
+       <VideoPlayerModal
+         open={!!videoPreview}
+         onClose={() => setVideoPreview(null)}
+         title={videoPreview?.title ?? ""}
+         zone={videoPreview?.zone ?? null}
+         videoUrl={videoPreview?.videoUrl ?? null}
+       />
     </div>
   );
 }
