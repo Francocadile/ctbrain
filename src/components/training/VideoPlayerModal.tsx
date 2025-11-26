@@ -11,25 +11,23 @@ export type VideoPlayerModalProps = {
 };
 
 function resolveYoutubeEmbedUrl(url: string): string {
-  const lower = url.toLowerCase();
-  // Short form: https://youtu.be/VIDEO_ID
-  const shortMatch = /youtu\.be\/([^?&#]+)/.exec(lower);
+  // Usamos la URL original para no romper el case del ID
+  const shortMatch = /youtu\.be\/([^?&#]+)/i.exec(url);
   if (shortMatch?.[1]) {
     return `https://www.youtube.com/embed/${shortMatch[1]}`;
   }
 
-  // Watch form: https://www.youtube.com/watch?v=VIDEO_ID
-  const watchMatch = /youtube\.com\/watch\?[^#]*v=([^&]+)/.exec(lower);
+  const watchMatch = /youtube\.com\/watch\?[^#]*v=([^&]+)/i.exec(url);
   if (watchMatch?.[1]) {
     return `https://www.youtube.com/embed/${watchMatch[1]}`;
   }
 
-  // Already an embed or other youtube URL, return as is
+  // Ya es un embed u otra variante de YouTube
   return url;
 }
 
 function isVimeoUrl(url: string): boolean {
-  return /vimeo\.com/.test(url.toLowerCase());
+  return /vimeo\.com/i.test(url);
 }
 
 const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
@@ -41,8 +39,9 @@ const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 }) => {
   if (!open || !videoUrl) return null;
 
-  const trimmedUrl = videoUrl.trim();
-  const isYoutube = /youtube\.com|youtu\.be/.test(trimmedUrl.toLowerCase());
+  const trimmedUrl = (videoUrl || "").trim();
+
+  const isYoutube = /youtube\.com|youtu\.be/i.test(trimmedUrl);
   const isVimeo = isVimeoUrl(trimmedUrl);
 
   let finalUrl = trimmedUrl;
