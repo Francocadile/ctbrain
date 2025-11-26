@@ -469,131 +469,43 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
     <div className="space-y-6">
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      {/* Cabecera */}
-      <section className="rounded-xl border bg-white p-4 shadow-sm space-y-3">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div className="flex-1 space-y-2">
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-gray-500">Título</label>
-              <input
-                className="w-full rounded-md border px-3 py-1.5 text-sm"
-                value={header.title}
-                onChange={(e) => handleFieldChange("title", e.target.value)}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-gray-500">Objetivo</label>
-              <input
-                className="w-full rounded-md border px-3 py-1.5 text-sm"
-                value={header.goal ?? ""}
-                onChange={(e) => handleFieldChange("goal", e.target.value || null)}
-                placeholder="Ej: Activación + fuerza general"
-              />
-            </div>
+      {/* Flecha volver */}
+      <div className="mb-1">
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
+          onClick={() => router.push("/ct/rutinas")}
+        >
+          <span className="text-lg">←</span>
+          <span>Volver a rutinas</span>
+        </button>
+      </div>
+
+      {/* Cabecera simplificada */}
+      <section className="mb-4 rounded-2xl border bg-white p-4 shadow-sm space-y-3">
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-700">Nombre de la rutina</label>
+            <input
+              className="w-full rounded-md border px-3 py-2 text-sm"
+              value={header.title}
+              onChange={(e) => handleFieldChange("title", e.target.value)}
+              placeholder="Ej: Fuerza general, Activación, Gimnasio..."
+            />
           </div>
-          <div className="w-full md:w-56 space-y-1">
-            <label className="text-[11px] font-medium text-gray-500">Visibilidad</label>
-            <select
-              className="w-full rounded-md border px-3 py-1.5 text-sm bg-white"
-              value={header.visibility ?? "STAFF_ONLY"}
-              onChange={(e) =>
-                handleFieldChange("visibility", e.target.value as "STAFF_ONLY" | "PLAYER_VISIBLE")
-              }
-            >
-              <option value="STAFF_ONLY">Solo staff</option>
-              <option value="PLAYER_VISIBLE">Visible para jugadores</option>
-            </select>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-gray-700">Objetivo</label>
+            <input
+              className="w-full rounded-md border px-3 py-2 text-sm"
+              value={header.goal ?? ""}
+              onChange={(e) => handleFieldChange("goal", e.target.value || null)}
+              placeholder="Ej: Activación + fuerza general"
+            />
           </div>
-        </div>
-        <div className="space-y-1">
-          <label className="text-[11px] font-medium text-gray-500">Descripción</label>
-          <textarea
-            className="w-full rounded-md border px-3 py-1.5 text-sm min-h-[60px]"
-            value={header.description ?? ""}
-            onChange={(e) => handleFieldChange("description", e.target.value || null)}
-          />
-        </div>
-        <div className="flex flex-col gap-2 items-stretch sm:flex-row sm:justify-between sm:items-center">
-          <button
-            type="button"
-            onClick={handleDeleteRoutine}
-            className="inline-flex items-center justify-center rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
-          >
-            Eliminar rutina
-          </button>
-          <button
-            type="button"
-            onClick={() => startTransition(() => void handleSaveHeader())}
-            disabled={isPending}
-            className="inline-flex items-center justify-center rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            {isPending ? "Guardando..." : "Guardar cabecera"}
-          </button>
         </div>
       </section>
 
-      {/* Notas para el jugador */}
-      <section className="rounded-xl border bg-white p-4 shadow-sm space-y-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Notas para el jugador</h2>
-        </div>
-        <textarea
-          className="w-full rounded-md border px-3 py-1.5 text-sm min-h-[80px]"
-          value={header.notesForAthlete ?? ""}
-          onChange={(e) => handleFieldChange("notesForAthlete", e.target.value || null)}
-          placeholder="Mensaje que verá el jugador al recibir esta rutina."
-        />
-      </section>
-
-      {/* Visibilidad para jugadores */}
-      <section className="rounded-xl border bg-white p-4 shadow-sm space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Visibilidad para jugadores</h2>
-        </div>
-
-        <div className="space-y-2">
-          <select
-            className="w-full rounded-md border px-3 py-1.5 text-sm bg-white"
-            value={header.shareMode}
-            onChange={(e) =>
-              handleShareModeChange(
-                e.target.value as "STAFF_ONLY" | "ALL_PLAYERS" | "SELECTED_PLAYERS",
-              )
-            }
-          >
-            <option value="STAFF_ONLY">Solo staff</option>
-            <option value="ALL_PLAYERS">Todos los jugadores del equipo</option>
-            <option value="SELECTED_PLAYERS">Jugadores específicos</option>
-          </select>
-        </div>
-
-        {header.shareMode === "SELECTED_PLAYERS" && (
-          <div className="space-y-2">
-            <p className="text-[11px] text-gray-500">Elegí los jugadores que verán esta rutina:</p>
-            <div className="max-h-52 overflow-auto border rounded-md p-2 space-y-1 text-xs">
-              {players.length === 0 ? (
-                <p className="text-[11px] text-gray-400">No hay jugadores en este equipo.</p>
-              ) : (
-                players.map((p) => {
-                  const checked = selectedPlayerIds.includes(p.id);
-                  const label = p.name || p.email || "(Sin nombre)";
-                  return (
-                    <label key={p.id} className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="h-3 w-3 rounded border-gray-300"
-                        checked={checked}
-                        onChange={() => togglePlayer(p.id)}
-                      />
-                      <span className="truncate">{label}</span>
-                    </label>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        )}
-      </section>
+      {/* Notas y visibilidad se ocultaron de la cabecera; se podrán reintroducir luego en otra tarjeta si hace falta */}
 
       {/* Bloques e items – nuevo layout 3 columnas */}
       <section className="rounded-xl border bg-white p-4 shadow-sm space-y-4">
@@ -686,42 +598,56 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
         />
       </section>
 
-      {/* Asignación a sesiones */}
-      <section className="rounded-xl border bg-white p-4 shadow-sm space-y-3">
-        <header className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Asignar a sesiones</h2>
-          <button
-            type="button"
-            className="text-xs rounded-md border px-3 py-1 hover:bg-gray-50"
-            onClick={handleSaveSessions}
-            disabled={isPending}
-          >
-            Guardar asignación
-          </button>
-        </header>
-        {sessions.length === 0 ? (
-          <p className="text-sm text-gray-500">No hay sesiones recientes para mostrar.</p>
-        ) : (
-          <ul className="max-h-64 overflow-auto space-y-1 text-xs">
-            {sessions.map((s) => {
-              const d = new Date(s.date);
-              const label = `${d.toLocaleDateString()} — ${s.title || "(Sin nombre)"}`;
-              const checked = selectedSessionIds.includes(s.id);
-              return (
-                <li key={s.id} className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    className="h-3 w-3 rounded border-gray-300"
-                    checked={checked}
-                    onChange={() => toggleSession(s.id)}
-                  />
-                  <span className="truncate">{label}</span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
+      {/* Botón de guardado principal al final de la página */}
+      <div className="mt-6 flex justify-end">
+        <button
+          type="button"
+          onClick={() => startTransition(() => void handleSaveHeader())}
+          disabled={isPending}
+          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+        >
+          {isPending ? "Guardando..." : "Guardar rutina"}
+        </button>
+      </div>
+
+      {/* Asignación a sesiones (oculta por ahora) */}
+      {false && (
+        <section className="rounded-xl border bg-white p-4 shadow-sm space-y-3">
+          <header className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Asignar a sesiones</h2>
+            <button
+              type="button"
+              className="text-xs rounded-md border px-3 py-1 hover:bg-gray-50"
+              onClick={handleSaveSessions}
+              disabled={isPending}
+            >
+              Guardar asignación
+            </button>
+          </header>
+          {sessions.length === 0 ? (
+            <p className="text-sm text-gray-500">No hay sesiones recientes para mostrar.</p>
+          ) : (
+            <ul className="max-h-64 overflow-auto space-y-1 text-xs">
+              {sessions.map((s) => {
+                const d = new Date(s.date);
+                const label = `${d.toLocaleDateString()} — ${s.title || "(Sin nombre)"}`;
+                const checked = selectedSessionIds.includes(s.id);
+                return (
+                  <li key={s.id} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      className="h-3 w-3 rounded border-gray-300"
+                      checked={checked}
+                      onChange={() => toggleSession(s.id)}
+                    />
+                    <span className="truncate">{label}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
     </div>
   );
 }
@@ -755,6 +681,15 @@ function RoutineStructurePanel({
   onBlockNameChangeLocal,
   onRenameBlock,
 }: RoutineStructurePanelProps) {
+  const BLOCK_COLORS = [
+    "bg-emerald-700",
+    "bg-sky-700",
+    "bg-violet-700",
+    "bg-amber-700",
+    "bg-rose-700",
+    "bg-slate-700",
+  ];
+
   return (
     <section className="flex-1 space-y-3">
       <div className="flex items-center justify-between">
@@ -782,8 +717,11 @@ function RoutineStructurePanel({
         )}
 
         {blocks.map((block) => {
-          const items = byBlock[block.id] || [];
+          const blockIndex = blocks.findIndex((b) => b.id === block.id);
+          const letter = String.fromCharCode(65 + blockIndex);
+          const colorClass = BLOCK_COLORS[blockIndex % BLOCK_COLORS.length];
           const isBlockSelected = selectedBlockId === block.id;
+          const items = byBlock[block.id] || [];
 
           return (
             <article
@@ -793,16 +731,16 @@ function RoutineStructurePanel({
               }`}
             >
               {/* Header del bloque */}
-              <header className="flex items-center justify-between bg-slate-900 px-3 py-2 text-xs text-white">
+              <header className={`flex items-center justify-between px-3 py-2 text-xs text-white ${colorClass}`}>
                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-[11px] font-semibold">
-                    B{block.order}
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/15 text-[11px] font-semibold">
+                    {letter}
                   </span>
                   <div className="flex flex-col min-w-0 gap-0.5">
                     <input
                       className="w-full rounded-md border border-white/20 bg-white/5 px-2 py-1 text-[11px] font-semibold placeholder:text-white/60 focus:outline-none focus:ring-1 focus:ring-emerald-300"
-                      value={block.name}
-                      placeholder="Bloque sin título"
+                      value={block.name || `Bloque ${letter}`}
+                      placeholder={`Bloque ${letter}`}
                       onChange={(e) => onBlockNameChangeLocal(block.id, e.target.value)}
                       onBlur={(e) => void onRenameBlock(block, e.target.value)}
                     />
