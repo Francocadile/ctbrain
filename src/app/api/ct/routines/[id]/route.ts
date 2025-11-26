@@ -39,6 +39,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         name: b.name,
         order: b.order,
         description: b.description ?? null,
+        type: b.type ?? null,
       })),
       items: routine.items.map((it: any) => ({
         id: it.id,

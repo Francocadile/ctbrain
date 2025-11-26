@@ -38,7 +38,18 @@ export async function PATCH(req: Request, { params }: { params: { blockId: strin
       data.order = body.order;
     }
 
-    const updated = await prisma.routineBlock.update({
+    if (typeof body?.type === "string") {
+      const t = body.type.trim();
+      if (t === "WARMUP" || t === "MAIN" || t === "COOLDOWN" || t === "ACCESSORY") {
+        data.type = t;
+      } else if (t === "" || t === "null") {
+        data.type = null;
+      } else {
+        return new NextResponse("type inválido", { status: 400 });
+      }
+    }
+
+    const updated = await (prisma as any).routineBlock.update({
       where: { id: existing.id },
       data,
     });
@@ -49,6 +60,7 @@ export async function PATCH(req: Request, { params }: { params: { blockId: strin
       name: updated.name,
       order: updated.order,
       description: updated.description ?? null,
+      type: updated.type ?? null,
     };
 
     return NextResponse.json({ data: resp });

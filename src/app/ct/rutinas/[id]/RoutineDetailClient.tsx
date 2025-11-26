@@ -22,6 +22,7 @@ type RoutineBlockDTO = {
   name: string;
   order: number;
   description: string | null;
+  type?: "WARMUP" | "MAIN" | "COOLDOWN" | "ACCESSORY" | null;
 };
 
 type RoutineItemDTO = {
@@ -63,6 +64,10 @@ type PlayerDTO = {
   name: string | null;
   email: string | null;
 };
+
+function getItemDisplayName(item: RoutineItemDTO): string {
+  return item.exerciseName || item.title || "Ejercicio sin nombre";
+}
 
 async function patchJSON(url: string, body: unknown) {
   const res = await fetch(url, {
@@ -312,6 +317,30 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
     setLocalBlocks((prev) =>
       prev.map((blk) => (blk.id === blockId ? { ...blk, name } : blk)),
     );
+  }
+
+  async function handleChangeBlockType(
+    blockId: string,
+    type: "WARMUP" | "MAIN" | "COOLDOWN" | "ACCESSORY" | null,
+  ) {
+    setError(null);
+
+    const payload: { type: string | null } = {
+      type: type ?? null,
+    };
+
+    // Actualizamos optimistamente en local
+    setLocalBlocks((prev) =>
+      prev.map((blk) => (blk.id === blockId ? { ...blk, type } : blk)),
+    );
+
+    try {
+      await patchJSON(`/api/ct/routines/blocks/${blockId}`, payload);
+      startTransition(() => router.refresh());
+    } catch (err) {
+      console.error(err);
+      setError("No se pudo actualizar el tipo de bloque");
+    }
   }
 
   // Item seleccionado derivado del estado
@@ -609,6 +638,7 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
             onAddItem={handleAddItem}
             onBlockNameChangeLocal={handleRenameBlockLocal}
             onRenameBlock={handleRenameBlock}
+            onChangeBlockType={handleChangeBlockType}
           />
 
           <ExerciseSelectorPanel
@@ -744,6 +774,10 @@ type RoutineStructurePanelProps = {
   onAddItem: (blockId: string) => void;
   onBlockNameChangeLocal: (blockId: string, name: string) => void;
   onRenameBlock: (b: RoutineBlockDTO, name: string) => Promise<void> | void;
+  onChangeBlockType: (
+    blockId: string,
+    type: "WARMUP" | "MAIN" | "COOLDOWN" | "ACCESSORY" | null,
+  ) => Promise<void> | void;
 };
 
 function RoutineStructurePanel({
@@ -757,6 +791,7 @@ function RoutineStructurePanel({
   onAddItem,
   onBlockNameChangeLocal,
   onRenameBlock,
+  onChangeBlockType,
 }: RoutineStructurePanelProps) {
   const BLOCK_COLORS = [
     "bg-emerald-700",
@@ -804,6 +839,17 @@ function RoutineStructurePanel({
               ? `Bloque ${letter}`
               : block.name;
 
+          const typeLabel: string =
+            block.type === "WARMUP"
+              ? "Warmup"
+              : block.type === "MAIN"
+              ? "Main"
+              : block.type === "COOLDOWN"
+              ? "Cooldown"
+              : block.type === "ACCESSORY"
+              ? "Accessory"
+              : "Sin tipo";
+
           return (
             <article
               key={block.id}
@@ -830,11 +876,41 @@ function RoutineStructurePanel({
                         {header.goal}
                       </span>
                     )}
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className="text-[10px] text-emerald-100">Tipo:</span>
+                      <select
+                        className="rounded border border-white/30 bg-white/10 px-1.5 py-0.5 text-[10px] text-white focus:outline-none focus:ring-1 focus:ring-emerald-200"
+                        value={block.type ?? ""}
+                        onChange={(e) => {
+                          const value = e.target.value as
+                            | "WARMUP"
+                            | "MAIN"
+                            | "COOLDOWN"
+                            | "ACCESSORY"
+                            | "";
+                          const nextType =
+                            value === ""
+                              ? null
+                              : (value as
+                                  | "WARMUP"
+                                  | "MAIN"
+                                  | "COOLDOWN"
+                                  | "ACCESSORY");
+                          void onChangeBlockType(block.id, nextType);
+                        }}
+                      >
+                        <option value="">Sin tipo</option>
+                        <option value="WARMUP">Warmup</option>
+                        <option value="MAIN">Main</option>
+                        <option value="COOLDOWN">Cooldown</option>
+                        <option value="ACCESSORY">Accessory</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 text-[10px]">
-                  <span className="text-emerald-200">
-                    {items.length} ejercicios
+                  <span className="text-emerald-50">
+                    {typeLabel} · {items.length} ejercicios
                   </span>
                   <button
                     type="button"
@@ -923,6 +999,13 @@ function RoutineItemEditor({
   onMoveToBlock,
   onShowVideo,
 }: RoutineItemEditorProps) {
+  const [pendingValues, setPendingValues] = useState<
+    Partial<Record<keyof RoutineItemDTO, string | number | null>>
+  >({});
+  const [debounceTimers, setDebounceTimers] = useState<
+    Partial<Record<keyof RoutineItemDTO, number | undefined>>
+  >({});
+
   if (!item) {
     return (
       <div className="rounded-lg border bg-gray-50 p-4 text-sm text-gray-500 flex items-center justify-center h-full">
@@ -931,17 +1014,69 @@ function RoutineItemEditor({
     );
   }
 
+  function scheduleSave(field: keyof RoutineItemDTO, raw: string) {
+    if (!item) return;
+    let value: unknown = raw || null;
+
+    if (field === "sets" || field === "reps") {
+      value = raw ? Number(raw) : null;
+    }
+
+  const original = (item as any)[field] ?? null;
+    if (value === original) {
+      setPendingValues((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+      const timerId = debounceTimers[field];
+      if (timerId !== undefined) {
+        clearTimeout(timerId);
+        setDebounceTimers((prev) => ({ ...prev, [field]: undefined }));
+      }
+      return;
+    }
+
+    setPendingValues((prev) => ({ ...prev, [field]: value as any }));
+
+    const existingTimer = debounceTimers[field];
+    if (existingTimer !== undefined) {
+      clearTimeout(existingTimer);
+    }
+
+    const timeoutId = window.setTimeout(async () => {
+      if (!item) return;
+      try {
+  const latest = (item as any)[field] ?? null;
+        const toSave = pendingValues[field] ?? value;
+        if (toSave === latest) {
+          setPendingValues((prev) => {
+            const next = { ...prev };
+            delete next[field];
+            return next;
+          });
+          setDebounceTimers((prev) => ({ ...prev, [field]: undefined }));
+          return;
+        }
+        await onSaveField(item.id, field, toSave);
+      } finally {
+        setPendingValues((prev) => {
+          const next = { ...prev };
+          delete next[field];
+          return next;
+        });
+        setDebounceTimers((prev) => ({ ...prev, [field]: undefined }));
+      }
+    }, 500);
+
+    setDebounceTimers((prev) => ({ ...prev, [field]: timeoutId }));
+  }
+
   const handleBlur =
     (field: keyof RoutineItemDTO) =>
     async (e: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       const raw = e.target.value;
-      let value: unknown = raw || null;
-
-      if (field === "sets" || field === "reps") {
-        value = raw ? Number(raw) : null;
-      }
-
-      await onSaveField(item.id, field, value);
+      scheduleSave(field, raw);
     };
 
   return (
@@ -952,11 +1087,30 @@ function RoutineItemEditor({
             Ejercicio seleccionado
           </p>
           <p className="text-sm font-medium text-gray-900">
-            {item.exerciseName || item.title || "Ejercicio sin nombre"}
+            {getItemDisplayName(item)}
           </p>
-          {item.description && (
-            <p className="text-[11px] text-gray-500 line-clamp-2">{item.description}</p>
-          )}
+          <div className="flex flex-wrap gap-1 mt-1">
+            {item.sets != null && item.reps != null && (
+              <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">
+                {item.sets}×{item.reps}
+              </span>
+            )}
+            {item.tempo && (
+              <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">
+                Tempo {item.tempo}
+              </span>
+            )}
+            {item.rest && (
+              <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">
+                Descanso {item.rest}
+              </span>
+            )}
+            {item.load && (
+              <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">
+                Carga {item.load}
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex flex-col gap-1">
           <button
@@ -976,10 +1130,27 @@ function RoutineItemEditor({
         </div>
       </div>
 
+      <div className="space-y-1 pt-1">
+        <label className="block text-[10px] text-gray-500">Descripción</label>
+        <textarea
+          className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+          rows={3}
+          defaultValue={item.description ?? ""}
+          placeholder="Descripción del ejercicio (opcional)"
+          onChange={(e) => {
+            onLocalChange(item.id, { description: e.target.value || null });
+            scheduleSave("description", e.target.value);
+          }}
+          onBlur={handleBlur("description")}
+        />
+      </div>
+
+      <hr className="my-2" />
+
       <div className="space-y-2">
         <label className="block text-[10px] text-gray-500">Bloque</label>
         <select
-          className="w-full rounded-md border px-2 py-1 text-xs bg-white"
+          className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
           value={item.blockId ?? ""}
           onChange={async (e) => {
             const blockId = e.target.value || null;
@@ -988,11 +1159,26 @@ function RoutineItemEditor({
           }}
         >
           <option value="">Sin bloque</option>
-          {blocks.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
+          {blocks
+            .slice()
+            .sort((a, b) => a.order - b.order)
+            .map((b) => {
+              const typeLabel =
+                b.type === "WARMUP"
+                  ? "Warmup"
+                  : b.type === "MAIN"
+                  ? "Main"
+                  : b.type === "COOLDOWN"
+                  ? "Cooldown"
+                  : b.type === "ACCESSORY"
+                  ? "Accessory"
+                  : "Sin tipo";
+              return (
+                <option key={b.id} value={b.id}>
+                  {b.name} ({typeLabel})
+                </option>
+              );
+            })}
         </select>
       </div>
 
@@ -1001,7 +1187,7 @@ function RoutineItemEditor({
           <label className="block text-[10px] text-gray-500">Series</label>
           <input
             type="number"
-            className="w-full rounded-md border px-2 py-1 text-xs"
+            className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             defaultValue={item.sets ?? ""}
             onChange={(e) =>
               onLocalChange(item.id, { sets: e.target.value ? Number(e.target.value) : null })
@@ -1013,7 +1199,7 @@ function RoutineItemEditor({
           <label className="block text-[10px] text-gray-500">Reps</label>
           <input
             type="number"
-            className="w-full rounded-md border px-2 py-1 text-xs"
+            className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             defaultValue={item.reps ?? ""}
             onChange={(e) =>
               onLocalChange(item.id, { reps: e.target.value ? Number(e.target.value) : null })
@@ -1025,9 +1211,12 @@ function RoutineItemEditor({
           <label className="block text-[10px] text-gray-500">Carga</label>
           <input
             type="text"
-            className="w-full rounded-md border px-2 py-1 text-xs"
+            className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             defaultValue={item.load ?? ""}
-            onChange={(e) => onLocalChange(item.id, { load: e.target.value || null })}
+            onChange={(e) => {
+              onLocalChange(item.id, { load: e.target.value || null });
+              scheduleSave("load", e.target.value);
+            }}
             onBlur={handleBlur("load")}
           />
         </div>
@@ -1035,9 +1224,12 @@ function RoutineItemEditor({
           <label className="block text-[10px] text-gray-500">Tempo</label>
           <input
             type="text"
-            className="w-full rounded-md border px-2 py-1 text-xs"
+            className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             defaultValue={item.tempo ?? ""}
-            onChange={(e) => onLocalChange(item.id, { tempo: e.target.value || null })}
+            onChange={(e) => {
+              onLocalChange(item.id, { tempo: e.target.value || null });
+              scheduleSave("tempo", e.target.value);
+            }}
             onBlur={handleBlur("tempo")}
           />
         </div>
@@ -1045,9 +1237,12 @@ function RoutineItemEditor({
           <label className="block text-[10px] text-gray-500">Descanso</label>
           <input
             type="text"
-            className="w-full rounded-md border px-2 py-1 text-xs"
+            className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             defaultValue={item.rest ?? ""}
-            onChange={(e) => onLocalChange(item.id, { rest: e.target.value || null })}
+            onChange={(e) => {
+              onLocalChange(item.id, { rest: e.target.value || null });
+              scheduleSave("rest", e.target.value);
+            }}
             onBlur={handleBlur("rest")}
           />
         </div>
@@ -1055,9 +1250,12 @@ function RoutineItemEditor({
           <label className="block text-[10px] text-gray-500">Notas staff</label>
           <input
             type="text"
-            className="w-full rounded-md border px-2 py-1 text-xs"
+            className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             defaultValue={item.notes ?? ""}
-            onChange={(e) => onLocalChange(item.id, { notes: e.target.value || null })}
+            onChange={(e) => {
+              onLocalChange(item.id, { notes: e.target.value || null });
+              scheduleSave("notes", e.target.value);
+            }}
             onBlur={handleBlur("notes")}
           />
         </div>
@@ -1065,32 +1263,53 @@ function RoutineItemEditor({
           <label className="block text-[10px] text-gray-500">Notas jugador</label>
           <input
             type="text"
-            className="w-full rounded-md border px-2 py-1 text-xs"
+            className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             defaultValue={item.athleteNotes ?? ""}
-            onChange={(e) =>
-              onLocalChange(item.id, { athleteNotes: e.target.value || null })
-            }
+            onChange={(e) => {
+              onLocalChange(item.id, { athleteNotes: e.target.value || null });
+              scheduleSave("athleteNotes", e.target.value);
+            }}
             onBlur={handleBlur("athleteNotes")}
           />
         </div>
       </div>
+      <hr className="my-2" />
 
-      {item.videoUrl && (
+      {(item.videoUrl || item.exerciseId) && (
         <div className="mt-2 space-y-1">
-          <label className="block text-[10px] text-gray-500">Video asociado</label>
-          <button
-            type="button"
-            className="inline-block text-[11px] text-blue-600 hover:underline"
-            onClick={() =>
-              onShowVideo({
-                id: item.id,
-                name: item.exerciseName || item.title || "Ejercicio",
-                videoUrl: item.videoUrl,
-              })
-            }
-          >
-            Ver video
-          </button>
+          <label className="block text-[10px] text-gray-500">Recursos asociados</label>
+          <div className="flex flex-wrap gap-2">
+            {item.videoUrl && (
+              <button
+                type="button"
+                className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] text-blue-700 hover:bg-blue-100"
+                onClick={() =>
+                  onShowVideo({
+                    id: item.id,
+                    name: getItemDisplayName(item),
+                    videoUrl: item.videoUrl,
+                  })
+                }
+              >
+                Ver video
+              </button>
+            )}
+            {item.exerciseId && (
+              <button
+                type="button"
+                className="inline-flex items-center rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] text-gray-700 hover:bg-gray-100"
+                onClick={() =>
+                  onShowVideo({
+                    id: item.exerciseId!,
+                    name: getItemDisplayName(item),
+                    videoUrl: item.videoUrl,
+                  })
+                }
+              >
+                Ver ejercicio original
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

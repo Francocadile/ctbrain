@@ -29,6 +29,15 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const description =
       typeof rawDescription === "string" ? rawDescription.trim() || null : null;
 
+    const rawType = body?.type;
+    const type =
+      rawType === "WARMUP" ||
+      rawType === "MAIN" ||
+      rawType === "COOLDOWN" ||
+      rawType === "ACCESSORY"
+        ? rawType
+        : null;
+
     let order: number;
     if (typeof body?.order === "number") {
       order = body.order;
@@ -40,11 +49,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       order = last ? last.order + 1 : 1;
     }
 
-    const block = await prisma.routineBlock.create({
+    const block = await (prisma as any).routineBlock.create({
       data: {
         routineId: routine.id,
         name,
         description,
+        type,
         order,
       },
     });
@@ -55,6 +65,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       name: block.name,
       order: block.order,
       description: block.description ?? null,
+      type: block.type ?? null,
     };
 
     return NextResponse.json({ data }, { status: 201 });
