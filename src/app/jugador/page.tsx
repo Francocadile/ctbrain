@@ -139,6 +139,10 @@ export default async function JugadorHomePage() {
         <div className="max-w-3xl mx-auto space-y-6">
           <PlayerHomeHeader player={player} />
 
+          {/* Primero las rutinas visibles para el jugador */}
+          <PlayerHomeRoutines routines={routines} />
+
+          {/* Luego el resumen de hoy (RPE, wellness, feedback, minutos) */}
           <PlayerHomeTodayStatus
             lastRpe={lastRpe}
             rpeLabel={rpeLabel}
@@ -147,8 +151,6 @@ export default async function JugadorHomePage() {
             fakeMinutes={fakeMinutes}
             feedbacks={feedbacks}
           />
-
-          <PlayerHomeRoutines routines={routines} />
 
           <PlayerHomeGpsCard />
         </div>
@@ -348,7 +350,7 @@ function PlayerHomeRoutines({ routines }: { routines: any[] }) {
       <section className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-            Mis rutinas
+            Rutina de hoy
           </h2>
           <Link
             href="/jugador/rutinas"
@@ -370,7 +372,7 @@ function PlayerHomeRoutines({ routines }: { routines: any[] }) {
     <section className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-          Mis rutinas
+          Rutina de hoy
         </h2>
         <Link
           href="/jugador/rutinas"
@@ -380,17 +382,22 @@ function PlayerHomeRoutines({ routines }: { routines: any[] }) {
         </Link>
       </div>
 
+      <p className="text-[11px] text-gray-400">
+        {new Date().toLocaleDateString()}
+      </p>
+
       {/* Rutina destacada (última creada / de hoy en el futuro) */}
       <div className="rounded-xl border bg-gray-50 p-3 space-y-2">
-        <p className="text-[11px] font-semibold text-gray-500 mb-1">Rutina destacada</p>
+        <p className="text-[11px] font-semibold text-gray-500 mb-1">
+          Rutina asignada por tu CT
+        </p>
         <h3 className="text-sm font-semibold text-gray-900 truncate">{first.title}</h3>
         {first.goal && (
           <p className="text-xs text-gray-600 line-clamp-2">{first.goal}</p>
         )}
         <div className="flex items-center justify-between mt-2 gap-2">
           <p className="text-[11px] text-gray-500">
-            {/* TODO: filtrar por fecha para mostrar "de hoy" cuando tengamos esa info */}
-            Rutina creada el {first.createdAt.toLocaleDateString()}
+            Creada el {first.createdAt.toLocaleDateString()}
           </p>
           <Link
             href={`/jugador/rutinas/${first.id}`}
