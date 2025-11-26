@@ -9,7 +9,6 @@ type ExerciseClientDTO = {
   zone: string | null;
   videoUrl: string | null;
   isTeamExercise: boolean;
-  usage: "ROUTINE" | "SESSION";
   createdAt: string;
 };
 
@@ -89,7 +88,6 @@ export default function ExercisesLibraryClient({ exercises }: Props) {
   const [search, setSearch] = useState("");
   const [groupFilter, setGroupFilter] = useState<"all" | ExerciseGroup>("all");
   const [zoneFilter, setZoneFilter] = useState<string>("all");
-  const [usageFilter, setUsageFilter] = useState<"ALL" | "ROUTINE" | "SESSION">("ALL");
   const [videoPreview, setVideoPreview] = useState<{
     title: string;
     zone?: string | null;
@@ -116,14 +114,12 @@ export default function ExercisesLibraryClient({ exercises }: Props) {
   const filtered = useMemo(
     () =>
       derived.filter((ex) => {
-        if (usageFilter === "ROUTINE" && ex.usage !== "ROUTINE") return false;
-        if (usageFilter === "SESSION" && ex.usage !== "SESSION") return false;
         if (groupFilter !== "all" && ex.group !== groupFilter) return false;
         if (zoneFilter !== "all" && ex.primaryZone !== zoneFilter) return false;
         if (search && !ex.name.toLowerCase().includes(search.toLowerCase())) return false;
         return true;
       }),
-    [derived, usageFilter, groupFilter, zoneFilter, search],
+    [derived, groupFilter, zoneFilter, search],
   );
 
   const totalCount = exercises.length;
@@ -151,42 +147,6 @@ export default function ExercisesLibraryClient({ exercises }: Props) {
           </div>
 
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            {/* Filtro por tipo de uso */}
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => setUsageFilter("ALL")}
-                className={`rounded-full border px-3 py-1 text-[11px] md:text-xs ${
-                  usageFilter === "ALL"
-                    ? "bg-gray-900 text-white border-gray-900"
-                    : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                }`}
-              >
-                Todos
-              </button>
-              <button
-                type="button"
-                onClick={() => setUsageFilter("ROUTINE")}
-                className={`rounded-full border px-3 py-1 text-[11px] md:text-xs ${
-                  usageFilter === "ROUTINE"
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-500 ring-1 ring-offset-1 ring-emerald-500"
-                    : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:opacity-100 opacity-80"
-                }`}
-              >
-                Rutinas (Gym)
-              </button>
-              <button
-                type="button"
-                onClick={() => setUsageFilter("SESSION")}
-                className={`rounded-full border px-3 py-1 text-[11px] md:text-xs ${
-                  usageFilter === "SESSION"
-                    ? "bg-sky-50 text-sky-700 border-sky-500 ring-1 ring-offset-1 ring-sky-500"
-                    : "bg-sky-50 text-sky-700 border-sky-200 hover:opacity-100 opacity-80"
-                }`}
-              >
-                Sesiones / Campo
-              </button>
-            </div>
             {/* Filtro por grupo */}
             <div className="flex flex-wrap gap-1.5">
               <button
@@ -255,9 +215,6 @@ export default function ExercisesLibraryClient({ exercises }: Props) {
                           }`}
                         >
                           {groupLabels[ex.group]}
-                        </span>
-                        <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">
-                          {ex.usage === "ROUTINE" ? "Rutina" : "Sesión"}
                         </span>
                         <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">
                           {ex.primaryZone}

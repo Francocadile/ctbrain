@@ -1,27 +1,10 @@
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import RoleGate from "@/components/auth/RoleGate";
-import ExercisesLibraryClient from "./ExercisesLibraryClient";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
-
-async function getExercisesForLibrary() {
-	const raw = await prisma.exercise.findMany({
-		orderBy: { name: "asc" },
-	});
-
-	return raw.map((e: any) => ({
-		id: e.id,
-		name: e.name,
-		zone: e.zone,
-		videoUrl: e.videoUrl,
-		isTeamExercise: e.teamId != null,
-		usage: e.usage,
-		createdAt: e.createdAt.toISOString(),
-	}));
-}
 
 export default async function CTExercisesPage() {
 	const session = await getServerSession(authOptions);
@@ -39,8 +22,6 @@ export default async function CTExercisesPage() {
 		redirect("/");
 	}
 
-	const exercises = await getExercisesForLibrary();
-
 	return (
 		<RoleGate allow={["CT", "ADMIN", "SUPERADMIN"]}>
 			<main className="min-h-screen px-4 py-4 md:px-6 md:py-8">
@@ -48,15 +29,33 @@ export default async function CTExercisesPage() {
 					<header className="flex items-center justify-between gap-2">
 						<div>
 							<h1 className="text-lg md:text-xl font-bold text-gray-900">
-								Biblioteca de ejercicios
+								Biblioteca de Ejercicios
 							</h1>
-							<p className="text-xs md:text-sm text-gray-600">
-								Busca, filtra y visualiza los ejercicios disponibles para armar tus rutinas.
-							</p>
 						</div>
 					</header>
 
-					<ExercisesLibraryClient exercises={exercises} />
+					<section className="mt-6 flex flex-col items-center justify-center gap-4 md:gap-6">
+						<div className="grid w-full max-w-xl grid-cols-1 gap-4 md:grid-cols-2">
+							<Link
+								href="/ct/exercises/rutina"
+								className="flex flex-col items-center justify-center rounded-xl border bg-white px-6 py-4 text-center text-lg font-semibold text-gray-800 shadow-sm hover:bg-gray-50 transition-colors"
+							>
+								<span>Rutinas / Gym</span>
+								<span className="mt-1 text-xs font-normal text-gray-500">
+									Ejercicios para rutinas y trabajo de fuerza.
+								</span>
+							</Link>
+							<Link
+								href="/ct/exercises/sesion"
+								className="flex flex-col items-center justify-center rounded-xl border bg-white px-6 py-4 text-center text-lg font-semibold text-gray-800 shadow-sm hover:bg-gray-50 transition-colors"
+							>
+								<span>Sesiones / Campo</span>
+								<span className="mt-1 text-xs font-normal text-gray-500">
+									Ejercicios para sesiones y trabajos en campo.
+								</span>
+							</Link>
+						</div>
+					</section>
 				</div>
 			</main>
 		</RoleGate>
