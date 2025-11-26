@@ -756,91 +756,122 @@ function RoutineStructurePanel({
   onRenameBlock,
 }: RoutineStructurePanelProps) {
   return (
-    <div className="space-y-3">
-      <div className="space-y-1">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-          Estructura de la rutina
-        </h3>
-        <p className="text-sm font-medium text-gray-900">{header.title}</p>
-        {header.goal && <p className="text-xs text-gray-500">{header.goal}</p>}
-      </div>
-
-      <div className="flex items-center justify-between mt-2">
-        <span className="text-[11px] font-medium text-gray-500">Bloques</span>
+    <section className="flex-1 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Estructura de la rutina
+          </h3>
+          <p className="text-sm font-medium text-gray-900">{header.title}</p>
+          {header.goal && <p className="text-xs text-gray-500">{header.goal}</p>}
+        </div>
         <button
           type="button"
-          className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
+          className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
           onClick={onAddBlock}
         >
           + Bloque
         </button>
       </div>
 
-      <div className="space-y-2 max-h-[420px] overflow-auto pr-1">
+      <div className="space-y-3 max-h-[420px] overflow-auto pr-1">
         {blocks.length === 0 && (
-          <p className="text-[11px] text-gray-400">Todavía no hay bloques. Creá el primero.</p>
+          <p className="text-[11px] text-gray-400">
+            Todavía no hay bloques. Creá el primero.
+          </p>
         )}
 
-        {blocks.map((b) => {
-          const itemsInBlock = byBlock[b.id] || [];
-          const isBlockSelected = selectedBlockId === b.id;
+        {blocks.map((block) => {
+          const items = byBlock[block.id] || [];
+          const isBlockSelected = selectedBlockId === block.id;
+
           return (
-            <div
-              key={b.id}
-              className={`rounded-lg border bg-gray-50 p-2 space-y-2 ${
-                isBlockSelected ? "ring-1 ring-blue-500 border-blue-400" : ""
+            <article
+              key={block.id}
+              className={`rounded-2xl border bg-white shadow-sm overflow-hidden ${
+                isBlockSelected ? "ring-1 ring-emerald-500 border-emerald-400" : ""
               }`}
             >
-              <div className="flex items-center justify-between gap-2">
-                <input
-                  className="w-full rounded-md border px-2 py-1 text-xs bg-white"
-                  value={b.name}
-                  onChange={(e) => onBlockNameChangeLocal(b.id, e.target.value)}
-                  onBlur={(e) => void onRenameBlock(b, e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-[11px] text-gray-500">
-                  <span>Ejercicios ({itemsInBlock.length})</span>
+              {/* Header del bloque */}
+              <header className="flex items-center justify-between bg-slate-900 px-3 py-2 text-xs text-white">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-[11px] font-semibold">
+                    B{block.order}
+                  </span>
+                  <div className="flex flex-col min-w-0 gap-0.5">
+                    <input
+                      className="w-full rounded-md border border-white/20 bg-white/5 px-2 py-1 text-[11px] font-semibold placeholder:text-white/60 focus:outline-none focus:ring-1 focus:ring-emerald-300"
+                      value={block.name}
+                      placeholder="Bloque sin título"
+                      onChange={(e) => onBlockNameChangeLocal(block.id, e.target.value)}
+                      onBlur={(e) => void onRenameBlock(block, e.target.value)}
+                    />
+                    {header.goal && (
+                      <span className="text-[10px] text-emerald-200 truncate">
+                        {header.goal}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 text-[10px]">
+                  <span className="text-emerald-200">
+                    {items.length} ejercicios
+                  </span>
                   <button
                     type="button"
-                    className="rounded-md border px-2 py-0.5 hover:bg-gray-100"
-                    onClick={() => onAddItem(b.id)}
+                    className="rounded border border-white/30 px-2 py-0.5 text-[10px] hover:bg-white/10"
+                    onClick={() => onAddItem(block.id)}
                   >
                     + Ejercicio
                   </button>
                 </div>
-                <ul className="space-y-0.5">
-                  {itemsInBlock.map((it) => {
+              </header>
+
+              {/* Lista de ejercicios */}
+              <div className="px-3 py-2 space-y-1.5">
+                {items.length === 0 ? (
+                  <p className="text-[11px] text-gray-400">
+                    No hay ejercicios aún en este bloque.
+                  </p>
+                ) : (
+                  items.map((it, index) => {
                     const isSelected = selectedItemId === it.id;
+                    const name = it.exerciseName || it.title || "Ejercicio sin nombre";
+
                     return (
-                      <li key={it.id}>
-                        <button
-                          type="button"
-                          onClick={() => onSelectItem(b.id, it.id)}
-                          className={`w-full text-left rounded-md px-2 py-1 text-[11px] ${
-                            isSelected
-                              ? "bg-blue-50 text-blue-700 border border-blue-300"
-                              : "bg-white border border-transparent hover:bg-gray-50 text-gray-700"
-                          }`}
-                        >
-                          <span className="font-medium mr-1">#{it.order}</span>
-                          <span>{it.exerciseName || it.title}</span>
-                        </button>
-                      </li>
+                      <button
+                        key={it.id}
+                        type="button"
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-left text-[11px] flex items-center justify-between gap-2 ${
+                          isSelected
+                            ? "border-emerald-500 bg-emerald-50"
+                            : "border-gray-200 hover:border-emerald-400 hover:bg-emerald-50/40"
+                        }`}
+                        onClick={() => onSelectItem(block.id, it.id)}
+                      >
+                        <div className="flex items-start gap-2 flex-1 min-w-0">
+                          <span className="mt-[2px] text-[10px] font-semibold text-gray-500">
+                            #{index + 1}
+                          </span>
+                          <div className="flex flex-col min-w-0">
+                            <span className="truncate font-medium text-gray-900">
+                              {name}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="shrink-0 text-[10px] text-gray-400">
+                          #{it.order}
+                        </span>
+                      </button>
                     );
-                  })}
-                  {itemsInBlock.length === 0 && (
-                    <li className="text-[11px] text-gray-400">Sin ejercicios aún.</li>
-                  )}
-                </ul>
+                  })
+                )}
               </div>
-            </div>
+            </article>
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }
 
