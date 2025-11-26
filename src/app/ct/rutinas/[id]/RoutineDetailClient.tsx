@@ -201,8 +201,11 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
   async function handleAddBlock() {
     setError(null);
     try {
-      const name = "Bloque nuevo";
-      await postJSON(`/api/ct/routines/${header.id}/blocks`, { name });
+      const blockIndex = localBlocks.length;
+      const letter = String.fromCharCode(65 + blockIndex);
+      const defaultName = `Bloque ${letter}`;
+
+      await postJSON(`/api/ct/routines/${header.id}/blocks`, { name: defaultName });
     } catch (e) {
       console.error(e);
       setError("No se pudo crear el bloque");
@@ -505,7 +508,98 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
         </div>
       </section>
 
-      {/* Notas y visibilidad se ocultaron de la cabecera; se podrán reintroducir luego en otra tarjeta si hace falta */}
+      {/* Visibilidad para jugadores */}
+      <section className="rounded-xl border bg-white p-4 shadow-sm space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Visibilidad para jugadores</h2>
+        </div>
+
+        <div className="space-y-2">
+          <select
+            className="w-full rounded-md border px-3 py-1.5 text-sm bg-white"
+            value={header.shareMode}
+            onChange={(e) =>
+              handleShareModeChange(
+                e.target.value as "STAFF_ONLY" | "ALL_PLAYERS" | "SELECTED_PLAYERS",
+              )
+            }
+          >
+            <option value="STAFF_ONLY">Solo staff</option>
+            <option value="ALL_PLAYERS">Todos los jugadores del equipo</option>
+            <option value="SELECTED_PLAYERS">Jugadores específicos</option>
+          </select>
+        </div>
+
+        {header.shareMode === "SELECTED_PLAYERS" && (
+          <div className="space-y-2">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-gray-600">Visibilidad:</span>
+              <button
+                type="button"
+                className="rounded-full border px-2.5 py-1 text-[11px] hover:bg-gray-50"
+                onClick={async () => {
+                  const allIds = players.map((p) => p.id);
+                  setSelectedPlayerIds(allIds);
+                  try {
+                    await patchJSON(`/api/ct/routines/${header.id}`, {
+                      shareMode: "SELECTED_PLAYERS",
+                      playerIds: allIds,
+                    });
+                    startTransition(() => router.refresh());
+                  } catch (err: any) {
+                    console.error(err);
+                    setError(err?.message || "No se pudo actualizar los jugadores compartidos");
+                  }
+                }}
+              >
+                Visible para todos
+              </button>
+              <button
+                type="button"
+                className="rounded-full border px-2.5 py-1 text-[11px] hover:bg-gray-50"
+                onClick={async () => {
+                  setSelectedPlayerIds([]);
+                  try {
+                    await patchJSON(`/api/ct/routines/${header.id}`, {
+                      shareMode: "SELECTED_PLAYERS",
+                      playerIds: [],
+                    });
+                    startTransition(() => router.refresh());
+                  } catch (err: any) {
+                    console.error(err);
+                    setError(err?.message || "No se pudo actualizar los jugadores compartidos");
+                  }
+                }}
+              >
+                Elegir jugadores
+              </button>
+            </div>
+
+            <p className="text-[11px] text-gray-500">Elegí los jugadores que verán esta rutina:</p>
+            <div className="max-h-52 overflow-auto border rounded-md p-2 space-y-1 text-xs">
+              {players.length === 0 ? (
+                <p className="text-[11px] text-gray-400">No hay jugadores en este equipo.</p>
+              ) : (
+                players.map((p) => {
+                  const checked = selectedPlayerIds.includes(p.id);
+                  const label = p.name || p.email || "(Sin nombre)";
+                  return (
+                    <label key={p.id} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="h-3 w-3 rounded border-gray-300"
+                        checked={checked}
+                        onChange={() => togglePlayer(p.id)}
+                      />
+                      <span className="truncate">{label}</span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* Bloques e items – nuevo layout 3 columnas */}
       <section className="rounded-xl border bg-white p-4 shadow-sm space-y-4">
@@ -722,6 +816,10 @@ function RoutineStructurePanel({
           const colorClass = BLOCK_COLORS[blockIndex % BLOCK_COLORS.length];
           const isBlockSelected = selectedBlockId === block.id;
           const items = byBlock[block.id] || [];
+          const derivedName =
+            !block.name || block.name === "Bloque nuevo"
+              ? `Bloque ${letter}`
+              : block.name;
 
           return (
             <article
@@ -739,7 +837,7 @@ function RoutineStructurePanel({
                   <div className="flex flex-col min-w-0 gap-0.5">
                     <input
                       className="w-full rounded-md border border-white/20 bg-white/5 px-2 py-1 text-[11px] font-semibold placeholder:text-white/60 focus:outline-none focus:ring-1 focus:ring-emerald-300"
-                      value={block.name || `Bloque ${letter}`}
+                      value={derivedName}
                       placeholder={`Bloque ${letter}`}
                       onChange={(e) => onBlockNameChangeLocal(block.id, e.target.value)}
                       onBlur={(e) => void onRenameBlock(block, e.target.value)}
@@ -755,13 +853,6 @@ function RoutineStructurePanel({
                   <span className="text-emerald-200">
                     {items.length} ejercicios
                   </span>
-                  <button
-                    type="button"
-                    className="rounded border border-white/30 px-2 py-0.5 text-[10px] hover:bg-white/10"
-                    onClick={() => onAddItem(block.id)}
-                  >
-                    + Ejercicio
-                  </button>
                 </div>
               </header>
 
