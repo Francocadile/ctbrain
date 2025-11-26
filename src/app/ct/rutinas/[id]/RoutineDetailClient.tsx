@@ -624,6 +624,7 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
           />
 
           <RoutineItemEditor
+            key={selectedItem?.id || "no-item"}
             item={selectedItem}
             blocks={localBlocks}
             onLocalChange={updateLocalItem}
