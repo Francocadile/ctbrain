@@ -623,6 +623,18 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
             onRenameBlock={handleRenameBlock}
           />
 
+          <ExerciseSelectorPanel
+            exercises={exercises}
+            selectedBlockId={selectedBlockId}
+            selectedItemId={selectedItemId}
+            onSelectForItem={selectExerciseForItem}
+            onAddToRoutine={addExerciseToRoutine}
+            onQuickPreview={(ex) => {
+              setQuickPreviewExercise(ex);
+              setIsPreviewOpen(true);
+            }}
+          />
+
           <RoutineItemEditor
             item={selectedItem}
             blocks={localBlocks}
@@ -639,18 +651,6 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
                 zone: null,
                 videoUrl,
               });
-              setIsPreviewOpen(true);
-            }}
-          />
-
-          <ExerciseSelectorPanel
-            exercises={exercises}
-            selectedBlockId={selectedBlockId}
-            selectedItemId={selectedItemId}
-            onSelectForItem={selectExerciseForItem}
-            onAddToRoutine={addExerciseToRoutine}
-            onQuickPreview={(ex) => {
-              setQuickPreviewExercise(ex);
               setIsPreviewOpen(true);
             }}
           />
@@ -1216,47 +1216,34 @@ function ExerciseSelectorPanel({
             return (
               <div
                 key={ex.id}
-                className="rounded-md border bg-gray-50 px-2 py-2 text-xs space-y-1 hover:bg-gray-100 cursor-pointer"
+                className="rounded-lg border bg-white px-3 py-2 shadow-sm text-xs space-y-1"
               >
-                <div className="flex items-start gap-2">
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900">{ex.name}</p>
-                    <p className="text-[11px] text-gray-500">
-                      {meta.primaryZone}
-                      {tagsText ? ` · ${tagsText}` : ""}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex gap-2 mt-2">
-                  {onSelectForItem && (
+                <p className="font-semibold text-gray-900 truncate">{ex.name}</p>
+                <p className="text-[11px] text-gray-500 truncate">
+                  {meta.primaryZone}
+                  {tagsText ? ` · ${tagsText}` : ""}
+                </p>
+                <div className="flex justify-end gap-2 pt-1">
+                  {ex.videoUrl && onQuickPreview && (
                     <button
                       type="button"
-                      className="flex-1 rounded-md border px-2 py-1 text-[11px] hover:bg-white"
-                      onClick={() => onSelectForItem(ex)}
+                      className="text-[11px] text-blue-600 hover:underline"
+                      onClick={() => onQuickPreview(ex)}
                     >
-                      Usar en ítem seleccionado
+                      Ver video
                     </button>
                   )}
                   {onAddToRoutine && (
                     <button
                       type="button"
-                      className="flex-1 rounded-md bg-black px-2 py-1 text-[11px] font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+                      className="rounded-md border px-2 py-1 text-[11px] font-medium hover:bg-emerald-50"
                       onClick={() => onAddToRoutine(ex)}
                       disabled={!selectedBlockId}
                     >
-                      Agregar a rutina
+                      Agregar
                     </button>
                   )}
                 </div>
-                {onQuickPreview && (
-                  <button
-                    type="button"
-                    className="mt-1 text-[11px] text-blue-600 hover:underline"
-                    onClick={() => onQuickPreview(ex)}
-                  >
-                    Ver rápido
-                  </button>
-                )}
               </div>
             );
           })
