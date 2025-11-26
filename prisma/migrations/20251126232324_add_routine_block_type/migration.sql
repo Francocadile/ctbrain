@@ -1,0 +1,7 @@
+-- CreateEnum
+CREATE TYPE "RoutineBlockType" AS ENUM ('WARMUP', 'MAIN', 'COOLDOWN', 'ACCESSORY');
+
+-- AlterTable
+ALTER TABLE "RoutineBlock" ADD COLUMN     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "type" "RoutineBlockType",
+ADD COLUMN     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;

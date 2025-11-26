@@ -570,7 +570,7 @@ model RoutineBlock {
   items RoutineItem[]
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @updatedAt @default(now())
 
   @@index([routineId])
 }
