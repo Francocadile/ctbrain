@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import VideoPlayerModal from "@/components/training/VideoPlayerModal";
 
 type Player = {
   player_name?: string;
@@ -37,6 +38,11 @@ export default function PlayerList({
   const [players, setPlayers] = useState<Player[]>(() => initialPlayers || []);
   const [filter, setFilter] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
+  const [videoPreview, setVideoPreview] = useState<{
+    title: string;
+    zone?: string | null;
+    videoUrl?: string | null;
+  } | null>(null);
 
   const filtered = useMemo(() => {
     const f = filter.trim().toLowerCase();
@@ -110,6 +116,7 @@ export default function PlayerList({
                 p={p}
                 saving={saving === (p.player_name || "")}
                 onSave={(url, title) => saveVideo(p, url, title)}
+                onShowVideo={(preview) => setVideoPreview(preview)}
               />
             ))}
             {filtered.length === 0 && (
@@ -122,6 +129,14 @@ export default function PlayerList({
           </tbody>
         </table>
       </div>
+
+      <VideoPlayerModal
+        open={!!videoPreview}
+        onClose={() => setVideoPreview(null)}
+        title={videoPreview?.title ?? ""}
+        zone={videoPreview?.zone ?? null}
+        videoUrl={videoPreview?.videoUrl ?? null}
+      />
     </div>
   );
 }
@@ -156,10 +171,12 @@ function Row({
   p,
   onSave,
   saving,
+  onShowVideo,
 }: {
   p: Player;
   onSave: (url: string, title: string) => void;
   saving: boolean;
+  onShowVideo?: (preview: { title: string; zone?: string | null; videoUrl?: string | null }) => void;
 }) {
   const [url, setUrl] = useState(p.videoUrl || "");
   const [title, setTitle] = useState(p.videoTitle || "");
@@ -173,14 +190,19 @@ function Row({
       <Td className="whitespace-nowrap">{p.position || ""}</Td>
       <Td>
         {p.videoUrl ? (
-          <a
-            href={p.videoUrl}
-            target="_blank"
-            rel="noreferrer"
+          <button
+            type="button"
             className="text-blue-600 hover:underline"
+            onClick={() =>
+              onShowVideo?.({
+                title: p.videoTitle || p.player_name || "Video jugador",
+                zone: null,
+                videoUrl: p.videoUrl,
+              })
+            }
           >
             Ver video
-          </a>
+          </button>
         ) : (
           <span className="text-gray-400">Sin video</span>
         )}

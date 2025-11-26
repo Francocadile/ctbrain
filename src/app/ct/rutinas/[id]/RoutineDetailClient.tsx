@@ -3,6 +3,7 @@
 import type { FocusEvent } from "react";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import VideoPlayerModal from "@/components/training/VideoPlayerModal";
 
 type RoutineHeaderDTO = {
   id: string;
@@ -630,6 +631,16 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
             onDelete={deleteItem}
             onDuplicate={duplicateItem}
             onMoveToBlock={moveItemToBlock}
+            onShowVideo={({ id, name, videoUrl }) => {
+              if (!videoUrl) return;
+              setQuickPreviewExercise({
+                id,
+                name,
+                zone: null,
+                videoUrl,
+              });
+              setIsPreviewOpen(true);
+            }}
           />
 
           <ExerciseSelectorPanel
@@ -666,11 +677,12 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
           </div>
         )}
 
-        <ExerciseQuickPreview
-          exercise={quickPreviewExercise}
-          open={isPreviewOpen}
-          onClose={() => setIsPreviewOpen(false)}
-          onAddToRoutine={addPreviewExerciseToRoutine}
+        <VideoPlayerModal
+          open={!!quickPreviewExercise}
+          onClose={() => setQuickPreviewExercise(null)}
+          title={quickPreviewExercise?.name ?? ""}
+          zone={quickPreviewExercise?.zone ?? null}
+          videoUrl={quickPreviewExercise?.videoUrl ?? null}
         />
       </section>
 
@@ -844,6 +856,11 @@ type RoutineItemEditorProps = {
   onDelete: (itemId: string) => Promise<void>;
   onDuplicate: (itemId: string) => Promise<void>;
   onMoveToBlock: (itemId: string, blockId: string) => Promise<void>;
+  onShowVideo: (payload: {
+    id: string;
+    name: string;
+    videoUrl: string | null;
+  }) => void;
 };
 
 function RoutineItemEditor({
@@ -854,6 +871,7 @@ function RoutineItemEditor({
   onDelete,
   onDuplicate,
   onMoveToBlock,
+  onShowVideo,
 }: RoutineItemEditorProps) {
   if (!item) {
     return (
@@ -1010,14 +1028,19 @@ function RoutineItemEditor({
       {item.videoUrl && (
         <div className="mt-2 space-y-1">
           <label className="block text-[10px] text-gray-500">Video asociado</label>
-          <a
-            href={item.videoUrl}
-            target="_blank"
-            rel="noreferrer"
+          <button
+            type="button"
             className="inline-block text-[11px] text-blue-600 hover:underline"
+            onClick={() =>
+              onShowVideo({
+                id: item.id,
+                name: item.exerciseName || item.title || "Ejercicio",
+                videoUrl: item.videoUrl,
+              })
+            }
           >
             Ver video
-          </a>
+          </button>
         </div>
       )}
     </div>
@@ -1227,73 +1250,13 @@ function ExerciseQuickPreview({
 }: ExerciseQuickPreviewProps) {
   if (!open || !exercise) return null;
 
-  const videoUrl = exercise.videoUrl ?? "";
-  const isExternalPlayer = /youtube\.com|youtu\.be|vimeo\.com/.test(
-    videoUrl.toLowerCase(),
-  );
-
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-lg rounded-xl bg-white shadow-lg p-4 space-y-3">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900">{exercise.name}</h3>
-            {exercise.zone && (
-              <p className="text-[11px] text-gray-500 mt-0.5">Zona: {exercise.zone}</p>
-            )}
-          </div>
-          <button
-            type="button"
-            className="text-xs rounded-md border px-2 py-1 hover:bg-gray-50"
-            onClick={onClose}
-          >
-            Cerrar
-          </button>
-        </div>
-
-        {videoUrl ? (
-          <div className="w-full rounded-md bg-black max-h-64 overflow-hidden aspect-video">
-            {isExternalPlayer ? (
-              <iframe
-                src={videoUrl}
-                title={exercise.name}
-                className="h-full w-full border-0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-              />
-            ) : (
-              <video src={videoUrl} controls className="h-full w-full" />
-            )}
-          </div>
-        ) : (
-          <div className="w-full rounded-md bg-gray-100 flex items-center justify-center h-40 text-xs text-gray-500">
-            Sin video disponible
-          </div>
-        )}
-
-        <p className="text-[11px] text-gray-500">
-          Cuando este ejercicio tenga descripción y puntos clave en el modelo, se mostrarán acá.
-        </p>
-
-        <div className="flex justify-end gap-2 pt-1">
-          {onAddToRoutine && (
-            <button
-              type="button"
-              className="inline-flex items-center justify-center rounded-md bg-black px-3 py-1.5 text-xs font-medium text-white hover:bg-gray-800"
-              onClick={onAddToRoutine}
-            >
-              Agregar a rutina
-            </button>
-          )}
-          <button
-            type="button"
-            className="inline-flex items-center justify-center rounded-md border px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-            onClick={onClose}
-          >
-            Cerrar
-          </button>
-        </div>
-      </div>
-    </div>
+    <VideoPlayerModal
+      open={open}
+      onClose={onClose}
+      title={exercise.name}
+      zone={exercise.zone}
+      videoUrl={exercise.videoUrl}
+    />
   );
 }

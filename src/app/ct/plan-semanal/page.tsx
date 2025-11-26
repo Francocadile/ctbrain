@@ -14,6 +14,7 @@ import {
 } from "@/lib/api/sessions";
 import PlannerActionsBar from "./PlannerActionsBar";
 import PlannerMatchLink from "@/components/PlannerMatchLink";
+import VideoPlayerModal from "@/components/training/VideoPlayerModal";
 
 export const dynamic = "force-dynamic";
 
@@ -188,6 +189,11 @@ function PlanSemanalInner() {
   const [daysMap, setDaysMap] = useState<Record<string, SessionDTO[]>>({});
   const [weekStart, setWeekStart] = useState<string>("");
   const [weekEnd, setWeekEnd] = useState<string>("");
+  const [videoPreview, setVideoPreview] = useState<{
+    title: string;
+    zone?: string | null;
+    videoUrl?: string | null;
+  } | null>(null);
 
   // Preferencias de usuario (labels + places)
   const [rowLabels, setRowLabels] = useState<Record<string, string>>({});
@@ -443,9 +449,20 @@ function PlanSemanalInner() {
         return (
           <div className="flex items-center justify-between gap-1">
             {parsed.url ? (
-              <a href={parsed.url} target="_blank" rel="noreferrer" className="text-[12px] underline text-emerald-700 truncate" title={parsed.label || "Video"}>
+              <button
+                type="button"
+                className="text-[12px] underline text-emerald-700 truncate"
+                title={parsed.label || "Video"}
+                onClick={() =>
+                  setVideoPreview({
+                    title: parsed.label || "Video sesión",
+                    zone: null,
+                    videoUrl: parsed.url,
+                  })
+                }
+              >
                 {parsed.label || "Video"}
-              </a>
+              </button>
             ) : (
               <span className="text-[12px] text-gray-500 truncate">{parsed.label}</span>
             )}
@@ -872,6 +889,14 @@ function PlanSemanalInner() {
           <TurnEditor turn={activeTurn} />
         </div>
       )}
+
+      <VideoPlayerModal
+        open={!!videoPreview}
+        onClose={() => setVideoPreview(null)}
+        title={videoPreview?.title ?? ""}
+        zone={videoPreview?.zone ?? null}
+        videoUrl={videoPreview?.videoUrl ?? null}
+      />
 
       {/* DATALIST GLOBAL */}
       <datalist id="places-datalist">
