@@ -214,27 +214,9 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
     }
   }
 
-  async function handleAddItem(blockId: string) {
-    setError(null);
-    try {
-      const itemsInBlock = localItems.filter((it) => it.blockId === blockId);
-      const nextOrder =
-        itemsInBlock.length > 0 ? Math.max(...itemsInBlock.map((it) => it.order)) + 1 : 1;
-
-      await postJSON(`/api/ct/routines/${header.id}/items`, {
-        title: "Nuevo ejercicio",
-        description: "",
-        blockId,
-        exerciseId: null,
-        exerciseName: "",
-        order: nextOrder,
-      });
-    } catch (e) {
-      console.error(e);
-      setError("No se pudo crear el ejercicio");
-    } finally {
-      startTransition(() => router.refresh());
-    }
+  function handleAddItem(blockId: string) {
+    setSelectedBlockId(blockId);
+    setSelectedItemId(null);
   }
 
   const { byBlock, unassigned } = useMemo(() => {
@@ -853,6 +835,13 @@ function RoutineStructurePanel({
                   <span className="text-emerald-200">
                     {items.length} ejercicios
                   </span>
+                  <button
+                    type="button"
+                    className="rounded border border-white/30 px-2 py-0.5 text-[10px] hover:bg-white/10"
+                    onClick={() => onAddItem(block.id)}
+                  >
+                    + Ejercicio
+                  </button>
                 </div>
               </header>
 
