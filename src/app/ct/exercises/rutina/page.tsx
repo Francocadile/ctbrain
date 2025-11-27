@@ -3,27 +3,29 @@ import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import RoleGate from "@/components/auth/RoleGate";
 import ExercisesLibraryClient from "../ExercisesLibraryClient";
+import { dbScope } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
 
-async function getRoutineExercises() {
-  const res = await fetch(`/api/ct/exercises?usage=ROUTINE`, {
-    cache: "no-store",
+async function getRoutineExercises(userId: string) {
+  const { prisma, team } = await dbScope();
+
+  // Ejercicios para rutinas (Gym): globales + del equipo
+  const exercises = await prisma.exercise.findMany({
+    where: {
+      usage: "ROUTINE",
+      OR: [{ teamId: null }, { teamId: team.id }],
+    },
+    orderBy: { name: "asc" },
   });
 
-  if (!res.ok) {
-    throw new Error("No se pudieron cargar los ejercicios de rutina");
-  }
-
-  const json = (await res.json()) as { data: any[] };
-  return json.data.map((e: any) => ({
+  return exercises.map((e) => ({
     id: e.id,
     name: e.name,
     zone: e.zone,
     videoUrl: e.videoUrl,
     isTeamExercise: e.teamId != null,
-    usage: e.usage,
-    createdAt: typeof e.createdAt === "string" ? e.createdAt : new Date(e.createdAt).toISOString(),
+    createdAt: e.createdAt.toISOString(),
   }));
 }
 
@@ -42,7 +44,7 @@ export default async function CTRoutineExercisesPage() {
     redirect("/");
   }
 
-  const exercises = await getRoutineExercises();
+  const exercises = await getRoutineExercises(session.user.id);
 
   return (
     <RoleGate allow={["CT", "ADMIN", "SUPERADMIN"]}>
@@ -51,10 +53,10 @@ export default async function CTRoutineExercisesPage() {
           <header className="flex items-center justify-between gap-2">
             <div>
               <h1 className="text-lg md:text-xl font-bold text-gray-900">
-                Biblioteca de ejercicios · Rutinas / Gym
+                Biblioteca de Ejercicios – Rutinas / Gym
               </h1>
-              <p className="text-xs md:text-sm text-gray-600">
-                Explora y filtra los ejercicios pensados para rutinas y trabajo de fuerza.
+              <p className="mt-1 text-sm text-gray-600">
+                Ejercicios pensados para rutinas y trabajo de fuerza.
               </p>
             </div>
           </header>
