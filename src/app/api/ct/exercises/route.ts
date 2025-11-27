@@ -71,10 +71,26 @@ export async function POST(req: Request) {
     }
 
     const { name, zone, videoUrl, usage, sessionMeta } = parsed.data;
+    const trimmedName = name.trim();
 
+    // 👉 1) Si ya existe un ejercicio de este equipo con mismo nombre y uso,
+    // lo devolvemos y NO intentamos crear otro (evita el error de unique).
+    const existing = await prisma.exercise.findFirst({
+      where: {
+        name: trimmedName,
+        teamId: team.id,
+        usage: usage as any,
+      },
+    });
+
+    if (existing) {
+      return NextResponse.json({ data: existing }, { status: 200 });
+    }
+
+    // 👉 2) Si no existe, lo creamos normalmente
     const created = await prisma.exercise.create({
       data: {
-        name: name.trim(),
+        name: trimmedName,
         zone: zone?.trim() || null,
         videoUrl: videoUrl?.trim() || null,
         usage: usage as any,
