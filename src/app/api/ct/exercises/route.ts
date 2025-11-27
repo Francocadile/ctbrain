@@ -4,17 +4,18 @@ import { dbScope } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
 
-const sessionMetaSchema = z
-  .object({
-    type: z.string().optional().nullable(),
-    space: z.string().optional().nullable(),
-    players: z.number().int().optional().nullable(),
-    duration: z.string().optional().nullable(),
-    description: z.string().optional().nullable(),
-    imageUrl: z.string().url().optional().nullable(),
-    sessionId: z.string().optional().nullable(),
-  })
-  .partial();
+// Snapshot de datos de la sesión: lo hacemos bien permisivo
+const sessionMetaSchema = z.object({
+  type: z.string().optional().nullable(),
+  space: z.string().optional().nullable(),
+  // puede venir como número o como string ("22")
+  players: z.union([z.number(), z.string()]).optional().nullable(),
+  duration: z.string().optional().nullable(),
+  description: z.string().optional().nullable(),
+  // no validamos como URL estricta, solo string opcional
+  imageUrl: z.string().optional().nullable(),
+  sessionId: z.string().optional().nullable(),
+});
 
 const createSchema = z.object({
   name: z.string().min(2, "Nombre demasiado corto"),
