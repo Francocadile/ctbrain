@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { getSessionById, updateSession, type SessionDTO } from "@/lib/api/sessions";
 import { createSessionExercise } from "@/lib/api/exercises";
 import { listKinds, addKind as apiAddKind, replaceKinds } from "@/lib/settings";
@@ -107,10 +107,12 @@ function encodeExercises(prefix: string, exercises: Exercise[]) {
 // ---------- page ----------
 export default function SesionDetailEditorPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  const isViewMode = searchParams.get("view") === "1";
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [editing, setEditing] = useState(true);
+  const [editing, setEditing] = useState(!isViewMode);
 
   const [s, setS] = useState<SessionDTO | null>(null);
   const [prefix, setPrefix] = useState<string>("");
@@ -151,7 +153,7 @@ export default function SesionDetailEditorPage() {
               ]
         );
 
-        setEditing(true);
+  setEditing(!isViewMode);
       } catch (e) {
         console.error(e);
         setS(null);
@@ -176,6 +178,7 @@ export default function SesionDetailEditorPage() {
   }
 
   function addExercise() {
+    if (isViewMode) return;
     setExercises((prev) => [
       ...prev,
       {
@@ -191,10 +194,12 @@ export default function SesionDetailEditorPage() {
   }
 
   function removeExercise(idx: number) {
+    if (isViewMode) return;
     setExercises((prev) => prev.filter((_, i) => i !== idx));
   }
 
   function addKind() {
+    if (isViewMode) return;
     const n = prompt("Nuevo tipo de ejercicio:");
     if (!n) return;
     const name = n.trim();
@@ -207,6 +212,7 @@ export default function SesionDetailEditorPage() {
   }
 
   function manageKinds() {
+    if (isViewMode) return;
     (async () => {
       const edited = prompt(
         "Gestionar tipos (una línea por opción). Borrá para eliminar, editá para renombrar:",
@@ -220,6 +226,7 @@ export default function SesionDetailEditorPage() {
   }
 
   async function saveAll() {
+    if (isViewMode) return;
     if (!s) return;
     setSaving(true);
     try {
@@ -244,15 +251,16 @@ export default function SesionDetailEditorPage() {
   }
 
   async function handleSaveToSessionLibrary() {
+    if (!s || isViewMode) return;
     if (!exercises.length) return;
     try {
       setSavingToLibrary(true);
       setErrorLibrary(null);
 
       const first = exercises[0];
-      const name = (first.title || first.kind || "Ejercicio sin nombre").trim();
-      const zone = (first.kind || "").trim() || null;
-      const videoUrl = (first.imageUrl || "").trim() || null;
+  const name = (first.title || first.kind || "Ejercicio sin nombre").trim();
+  const zone = (first.kind || "").trim() || null;
+  const videoUrl = (first.imageUrl || "").trim() || null;
       const sessionMeta = {
         type: first.kind ?? null,
         space: (first as any).space ?? null,
@@ -260,10 +268,10 @@ export default function SesionDetailEditorPage() {
         duration: (first as any).duration ?? null,
         description: (first as any).description ?? null,
         imageUrl: first.imageUrl ?? null,
-        sessionId: s?.id ?? null,
+        sessionId: s.id,
       };
 
-      await createSessionExercise({ name, zone, videoUrl, sessionMeta });
+      await createSessionExercise({ name, zone, videoUrl, originSessionId: s.id, sessionMeta });
       alert("Ejercicio guardado en la biblioteca de Sesiones / Campo");
     } catch (err: any) {
       console.error(err);

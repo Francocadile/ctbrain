@@ -297,11 +297,11 @@ export default function SessionTurnoPage() {
                 </h2>
                 {id ? (
                   <a
-                    href={`/ct/sessions/${id}`}
+                    href={`/ct/sessions/${id}?view=1`}
                     className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50 no-print"
-                    title="Editar ejercicios de este bloque"
+                    title="Ver ejercicio de este bloque"
                   >
-                    Editar ejercicios
+                    Ver ejercicio
                   </a>
                 ) : null}
               </div>

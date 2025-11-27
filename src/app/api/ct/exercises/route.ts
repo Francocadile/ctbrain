@@ -22,6 +22,7 @@ const createSchema = z.object({
   zone: z.string().optional().nullable(),
   videoUrl: z.string().url().optional().nullable(),
   usage: z.enum(["ROUTINE", "SESSION"]).default("ROUTINE"),
+  originSessionId: z.string().optional().nullable(),
   sessionMeta: sessionMetaSchema.optional(),
 });
 
@@ -70,7 +71,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { name, zone, videoUrl, usage, sessionMeta } = parsed.data;
+  const { name, zone, videoUrl, usage, originSessionId, sessionMeta } = parsed.data;
     const trimmedName = name.trim();
 
     // 👉 1) Si ya existe un ejercicio de este equipo con mismo nombre y uso,
@@ -95,8 +96,10 @@ export async function POST(req: Request) {
         videoUrl: videoUrl?.trim() || null,
         usage: usage as any,
         teamId: team.id, // 👉 ejercicios de sesión siempre del equipo actual
+        // originSessionId se persiste desde el editor de sesiones
+        originSessionId: originSessionId ?? null,
         sessionMeta: sessionMeta ? (sessionMeta as any) : null,
-      },
+      } as any,
     });
 
     return NextResponse.json({ data: created }, { status: 201 });

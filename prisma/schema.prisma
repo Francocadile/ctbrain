@@ -141,7 +141,7 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sessions        Session[]       @relation("UserSessions")
+  sessions        Session[]            @relation("UserSessions")
   rpeEntries      RPEEntry[]
   wellnessEntries WellnessEntry[]
   plannerPrefs    PlannerPrefs[]
@@ -180,6 +180,9 @@ model Session {
   user      User   @relation("UserSessions", fields: [createdBy], references: [id], onDelete: Cascade)
   teamId    String
   team      Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  // Ejercicios de biblioteca que se originaron en esta sesión/celda
+  originExercises Exercise[]
 
   routines SessionRoutine[]
 
@@ -264,16 +267,22 @@ model Exercise {
   zone     String?
   videoUrl String?
 
-  usage    ExerciseUsage @default(ROUTINE)
-  
+  usage ExerciseUsage @default(ROUTINE)
+
+  // Sesión (celda) de origen, si aplica
+  originSessionId String?
+  originSession   Session? @relation(fields: [originSessionId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relación con rutinas
   routineItems RoutineItem[]
-  
+
   // snapshot de los datos de la sesión de donde salió (opcional)
   sessionMeta Json?
+
+  @@index([originSessionId])
 }
 
 model RPEEntry {
@@ -552,7 +561,7 @@ model Routine {
   visibility      RoutineVisibility? @default(STAFF_ONLY)
   notesForAthlete String?
 
-  shareMode         RoutineShareMode   @default(STAFF_ONLY)
+  shareMode         RoutineShareMode     @default(STAFF_ONLY)
   sharedWithPlayers RoutinePlayerShare[]
 
   items    RoutineItem[]
@@ -580,7 +589,7 @@ model RoutineBlock {
   items RoutineItem[]
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
   @@index([routineId])
 }
@@ -599,8 +608,8 @@ model RoutineItem {
   block   RoutineBlock? @relation(fields: [blockId], references: [id])
 
   // parámetros de entrenamiento
-  exerciseId   String?
-  exercise     Exercise? @relation(fields: [exerciseId], references: [id], onDelete: SetNull)
+  exerciseId String?
+  exercise   Exercise? @relation(fields: [exerciseId], references: [id], onDelete: SetNull)
 
   // Mantener compatibilidad con lo actual
   exerciseName String?
@@ -635,13 +644,13 @@ model SessionRoutine {
 }
 
 model RoutinePlayerShare {
-  id        String   @id @default(cuid())
+  id String @id @default(cuid())
 
   routineId String
   playerId  String
 
-  routine   Routine @relation(fields: [routineId], references: [id], onDelete: Cascade)
-  player    User    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  routine Routine @relation(fields: [routineId], references: [id], onDelete: Cascade)
+  player  User    @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 

@@ -17,6 +17,7 @@ export type ExerciseDTO = {
   videoUrl: string | null;
   usage: "ROUTINE" | "SESSION" | null;
   createdAt: string;
+  originSessionId?: string | null;
   sessionMeta?: SessionMeta | null;
 };
 
@@ -25,6 +26,7 @@ export async function createSessionExercise(input: {
   name: string;
   zone?: string | null;
   videoUrl?: string | null;
+  originSessionId: string;
   sessionMeta?: SessionMeta | null;
 }): Promise<ExerciseDTO> {
   const res = await fetch("/api/ct/exercises", {

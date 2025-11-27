@@ -187,12 +187,16 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
   }
 
   function handleEdit(ex: ExerciseClientDTO) {
-    const sessionId = ex.originSessionId || ex.sessionMeta?.originSessionId;
-    if (!sessionId) {
+    if (!ex.originSessionId) {
       alert("Este ejercicio no tiene sesión de origen vinculada.");
       return;
     }
-    router.push(`/ct/sessions/${sessionId}`);
+    router.push(`/ct/sessions/${ex.originSessionId}`);
+  }
+
+  function handleView(ex: ExerciseClientDTO) {
+    if (!ex.originSessionId) return;
+    router.push(`/ct/sessions/${ex.originSessionId}?view=1`);
   }
 
   return (
@@ -293,9 +297,7 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
                     <div className="min-w-0 flex-1">
                       <button
                         type="button"
-                        onClick={() =>
-                          setExpandedId((prev) => (prev === ex.id ? null : ex.id))
-                        }
+                        onClick={() => handleView(ex)}
                         className="text-left w-full"
                       >
                         <p className="font-medium text-gray-900 truncate underline-offset-2 hover:underline">

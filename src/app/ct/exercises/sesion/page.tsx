@@ -26,6 +26,7 @@ async function getSessionExercises(userId: string) {
     videoUrl: e.videoUrl,
     isTeamExercise: e.teamId != null,
     createdAt: e.createdAt.toISOString(),
+    originSessionId: (e as any).originSessionId ?? null,
     sessionMeta: (e as any).sessionMeta ?? null,
   }));
 }
