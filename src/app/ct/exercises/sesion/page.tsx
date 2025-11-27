@@ -7,7 +7,7 @@ import ExercisesLibraryClient from "../ExercisesLibraryClient";
 export const dynamic = "force-dynamic";
 
 async function getSessionExercises() {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL ?? ""}/api/ct/exercises?usage=SESSION`, {
+  const res = await fetch(`/api/ct/exercises?usage=SESSION`, {
     cache: "no-store",
   });
 

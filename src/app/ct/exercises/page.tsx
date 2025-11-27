@@ -34,7 +34,7 @@ export default async function CTExercisesPage() {
 						</div>
 					</header>
 
-					<section className="mt-6 flex flex-col items-center justify-center gap-4 md:gap-6">
+					<section className="mt-6 flex flex-col items-start gap-4 md:gap-6">
 						<div className="grid w-full max-w-xl grid-cols-1 gap-4 md:grid-cols-2">
 							<Link
 								href="/ct/exercises/rutina"
