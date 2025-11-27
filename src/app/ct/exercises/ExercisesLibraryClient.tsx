@@ -1,24 +1,32 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import VideoPlayerModal from "@/components/training/VideoPlayerModal";
-import {
-  updateSessionExercise,
-  deleteSessionExercise,
-  type SessionMeta,
-} from "@/lib/api/exercises";
+import { deleteSessionExercise } from "@/lib/api/exercises";
+
+type Mode = "ROUTINE" | "SESSION";
+
+type SessionMeta = {
+  type?: string | null;
+  space?: string | null;
+  players?: number | null;
+  duration?: string | null;
+  description?: string | null;
+  originSessionId?: string | null;
+};
 
 type ExerciseClientDTO = {
   id: string;
   name: string;
   zone: string | null;
   videoUrl: string | null;
-  isTeamExercise: boolean;
+  isTeamExercise?: boolean;
   createdAt: string;
+  // Extra para Sesiones / Campo
+  originSessionId?: string | null;
   sessionMeta?: SessionMeta | null;
 };
-
-type Mode = "ROUTINE" | "SESSION";
 
 type Props = {
   exercises: ExerciseClientDTO[];
@@ -50,8 +58,7 @@ function deriveExerciseMeta(zoneRaw: string | null, mode: Mode): {
   primaryZone: string;
   tags: string[];
 } {
-  // Sesiones / Campo: sin Warmup/Campo/Gym como grouping,
-  // solo una categoría simple usando zone.
+  // 👉 Sesiones / Campo: usamos una categoría simple
   if (mode === "SESSION") {
     const raw = zoneRaw?.trim() || "";
     return {
@@ -61,7 +68,7 @@ function deriveExerciseMeta(zoneRaw: string | null, mode: Mode): {
     };
   }
 
-  // Rutinas / Gym: lógica original
+  // 👉 Rutinas / Gym (lógica original)
   if (!zoneRaw) {
     return {
       group: "Gym",
@@ -108,6 +115,8 @@ function deriveExerciseMeta(zoneRaw: string | null, mode: Mode): {
 }
 
 export default function ExercisesLibraryClient({ exercises, mode }: Props) {
+  const router = useRouter();
+
   const [search, setSearch] = useState("");
   const [groupFilter, setGroupFilter] = useState<"all" | ExerciseGroup>("all");
   const [zoneFilter, setZoneFilter] = useState<string>("all");
@@ -117,15 +126,10 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
     videoUrl?: string | null;
   } | null>(null);
 
-  // edición / borrado (solo Sesiones / Campo)
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editZone, setEditZone] = useState("");
-  const [editVideoUrl, setEditVideoUrl] = useState("");
-  const [savingEdit, setSavingEdit] = useState(false);
+  // Sesiones / Campo
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const derived: DerivedExercise[] = useMemo(
     () =>
@@ -159,53 +163,42 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
 
   const totalCount = exercises.length;
 
-  function startEdit(ex: DerivedExercise) {
-    if (mode !== "SESSION") return;
-    setEditingId(ex.id);
-    setEditName(ex.name);
-    setEditZone(ex.zone ?? ex.primaryZone ?? "");
-    setEditVideoUrl(ex.videoUrl ?? "");
-    setErrorMsg(null);
-  }
-
-  async function handleSaveEdit(id: string) {
-    if (mode !== "SESSION") return;
-    try {
-      setSavingEdit(true);
-      setErrorMsg(null);
-      await updateSessionExercise(id, {
-        name: editName,
-        zone: editZone || null,
-        videoUrl: editVideoUrl || null,
-      });
-      setEditingId(null);
-      // refresco simple
-      window.location.reload();
-    } catch (e: any) {
-      setErrorMsg(e?.message || "Error al guardar cambios");
-    } finally {
-      setSavingEdit(false);
-    }
-  }
-
   async function handleDelete(id: string) {
-    if (mode !== "SESSION") return;
     if (!confirm("¿Eliminar este ejercicio de la biblioteca?")) return;
     try {
       setDeletingId(id);
       setErrorMsg(null);
       await deleteSessionExercise(id);
-      window.location.reload();
-    } catch (e: any) {
-      setErrorMsg(e?.message || "Error al eliminar ejercicio");
+      // Refresco optimista: filtramos localmente
+      const remaining = exercises.filter((e) => e.id !== id);
+      const updated = remaining.map((e) => {
+        const meta = deriveExerciseMeta(e.zone, mode);
+        return { ...e, ...meta };
+      });
+      // No podemos cambiar props, así que solo mostramos un toast.
+      // Para ver el cambio real, el usuario recarga la página.
+      alert("Ejercicio eliminado. Recarga la página para actualizar la lista.");
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(err?.message || "No se pudo eliminar el ejercicio");
     } finally {
       setDeletingId(null);
     }
   }
 
+  function handleEdit(ex: ExerciseClientDTO) {
+    const sessionId = ex.originSessionId || ex.sessionMeta?.originSessionId;
+    if (!sessionId) {
+      alert("Este ejercicio no tiene sesión de origen vinculada.");
+      return;
+    }
+    router.push(`/ct/sessions/${sessionId}`);
+  }
+
   return (
     <>
       <section className="space-y-3">
+        {/* Filtros */}
         <div className="rounded-2xl border bg-white p-3 md:p-4 shadow-sm space-y-3">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
@@ -213,9 +206,7 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
                 {filtered.length} de {totalCount} ejercicios
               </p>
               {errorMsg && (
-                <p className="mt-1 text-[11px] text-red-600">
-                  {errorMsg}
-                </p>
+                <p className="mt-1 text-[11px] text-red-600">{errorMsg}</p>
               )}
             </div>
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
@@ -230,7 +221,7 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
           </div>
 
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            {/* Filtro por grupo solo en Rutinas / Gym */}
+            {/* Filtro por grupo: SOLO Rutinas / Gym */}
             {mode === "ROUTINE" ? (
               <div className="flex flex-wrap gap-1.5">
                 <button
@@ -288,7 +279,7 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
           </div>
         </div>
 
-        {/* Lista */}
+        {/* Lista de ejercicios */}
         <div className="rounded-2xl border bg-white shadow-sm max-h-[520px] overflow-auto">
           {filtered.length === 0 ? (
             <div className="p-4 text-sm text-gray-500">
@@ -296,215 +287,155 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
             </div>
           ) : (
             <ul className="divide-y divide-gray-100">
-              {filtered.map((ex) => {
-                const isEditing = mode === "SESSION" && editingId === ex.id;
+              {filtered.map((ex) => (
+                <li key={ex.id} className="px-3 py-2.5 text-xs md:text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedId((prev) => (prev === ex.id ? null : ex.id))
+                        }
+                        className="text-left w-full"
+                      >
+                        <p className="font-medium text-gray-900 truncate underline-offset-2 hover:underline">
+                          {ex.name}
+                        </p>
+                      </button>
 
-                return (
-                  <li key={ex.id} className="px-3 py-2.5 text-xs md:text-sm">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        {isEditing ? (
-                          <>
-                            <input
-                              className="mb-1 w-full rounded border px-2 py-1 text-xs"
-                              value={editName}
-                              onChange={(e) => setEditName(e.target.value)}
-                            />
-                            <input
-                              className="mb-1 w-full rounded border px-2 py-1 text-xs"
-                              placeholder="Categoría"
-                              value={editZone}
-                              onChange={(e) => setEditZone(e.target.value)}
-                            />
-                            <input
-                              className="mb-1 w-full rounded border px-2 py-1 text-xs"
-                              placeholder="URL de video (opcional)"
-                              value={editVideoUrl}
-                              onChange={(e) => setEditVideoUrl(e.target.value)}
-                            />
-                          </>
-                        ) : (
-                          <>
-                            {mode === "SESSION" ? (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setExpandedId(expandedId === ex.id ? null : ex.id)
-                                }
-                                className="font-medium text-gray-900 truncate text-left hover:underline"
-                              >
-                                {ex.name}
-                              </button>
-                            ) : (
-                              <p className="font-medium text-gray-900 truncate">
-                                {ex.name}
-                              </p>
-                            )}
-                            {mode === "ROUTINE" ? (
-                              <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
-                                <span
-                                  className={`inline-flex items-center rounded-full px-2 py-0.5 border text-[10px] ${
-                                    groupChipClasses[ex.group]
-                                  }`}
-                                >
-                                  {groupLabels[ex.group]}
-                                </span>
-                                <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">
-                                  {ex.primaryZone}
-                                </span>
-                                {ex.tags.slice(0, 2).map((tag) => (
-                                  <span
-                                    key={tag}
-                                    className="inline-flex items-center rounded-full bg-gray-50 px-2 py-0.5"
-                                  >
-                                    {tag}
-                                  </span>
-                                ))}
-                                {ex.tags.length > 2 && (
-                                  <span className="text-[9px] text-gray-400">
-                                    +{ex.tags.length - 2} más
-                                  </span>
-                                )}
-                              </div>
-                            ) : (
-                              <>
-                                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
-                                  {ex.primaryZone &&
-                                    ex.primaryZone !== "Sin categoría" && (
-                                      <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">
-                                        {ex.primaryZone}
-                                      </span>
-                                    )}
-                                </div>
-                                {expandedId === ex.id && (
-                                  ex.sessionMeta ? (
-                                    <div className="mt-2 rounded-lg border bg-gray-50 p-3 text-[11px] text-gray-700 space-y-1">
-                                      {ex.sessionMeta.type && (
-                                        <p>
-                                          <span className="font-semibold">Tipo:</span>{" "}
-                                          {ex.sessionMeta.type}
-                                        </p>
-                                      )}
-                                      {ex.sessionMeta.space && (
-                                        <p>
-                                          <span className="font-semibold">Espacio:</span>{" "}
-                                          {ex.sessionMeta.space}
-                                        </p>
-                                      )}
-                                      {typeof ex.sessionMeta.players === "number" && (
-                                        <p>
-                                          <span className="font-semibold">Jugadores:</span>{" "}
-                                          {ex.sessionMeta.players}
-                                        </p>
-                                      )}
-                                      {ex.sessionMeta.duration && (
-                                        <p>
-                                          <span className="font-semibold">Duración:</span>{" "}
-                                          {ex.sessionMeta.duration}
-                                        </p>
-                                      )}
-                                      {ex.sessionMeta.description && (
-                                        <p>
-                                          <span className="font-semibold">Descripción:</span>{" "}
-                                          {ex.sessionMeta.description}
-                                        </p>
-                                      )}
-                                      {ex.sessionMeta.imageUrl && (
-                                        <p>
-                                          <span className="font-semibold">Imagen:</span>{" "}
-                                          <a
-                                            href={ex.sessionMeta.imageUrl}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="text-blue-600 hover:underline break-all"
-                                          >
-                                            {ex.sessionMeta.imageUrl}
-                                          </a>
-                                        </p>
-                                      )}
-                                      {ex.sessionMeta.sessionId && (
-                                        <p>
-                                          <span className="font-semibold">Sesión origen:</span>{" "}
-                                          {ex.sessionMeta.sessionId}
-                                        </p>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <div className="mt-2 rounded-lg border border-dashed bg-gray-50 p-3 text-[11px] text-gray-500">
-                                      Este ejercicio se guardó sin detalles de sesión.
-                                    </div>
-                                  )
-                                )}
-                              </>
-                            )}
-                          </>
-                        )}
-                      </div>
+                      {/* Tags / chips debajo del nombre */}
+                      {mode === "ROUTINE" ? (
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 border text-[10px] ${
+                              groupChipClasses[ex.group]
+                            }`}
+                          >
+                            {groupLabels[ex.group]}
+                          </span>
+                          <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">
+                            {ex.primaryZone}
+                          </span>
+                          {ex.tags.slice(0, 2).map((tag) => (
+                            <span
+                              key={tag}
+                              className="inline-flex items-center rounded-full bg-gray-50 px-2 py-0.5"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                          {ex.tags.length > 2 && (
+                            <span className="text-[9px] text-gray-400">
+                              +{ex.tags.length - 2} más
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
+                          {ex.primaryZone && ex.primaryZone !== "Sin categoría" && (
+                            <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">
+                              {ex.primaryZone}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
 
-                      <div className="flex flex-col items-end gap-1 shrink-0">
-                        {ex.videoUrl && !isEditing && (
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      {ex.videoUrl && (
+                        <button
+                          type="button"
+                          className="text-[11px] text-blue-600 hover:underline"
+                          onClick={() =>
+                            setVideoPreview({
+                              title: ex.name,
+                              zone: ex.zone,
+                              videoUrl: ex.videoUrl,
+                            })
+                          }
+                        >
+                          Ver video
+                        </button>
+                      )}
+                      <span className="text-[9px] text-gray-400">
+                        {new Date(ex.createdAt).toLocaleDateString()}
+                      </span>
+
+                      {mode === "SESSION" && (
+                        <div className="mt-1 flex items-center gap-1">
                           <button
                             type="button"
-                            className="text-[11px] text-blue-600 hover:underline"
-                            onClick={() =>
-                              setVideoPreview({
-                                title: ex.name,
-                                zone: ex.zone,
-                                videoUrl: ex.videoUrl,
-                              })
-                            }
+                            onClick={() => handleEdit(ex)}
+                            className="rounded-md border px-2 py-0.5 text-[10px] text-gray-700 hover:bg-gray-50"
                           >
-                            Ver video
+                            Editar
                           </button>
-                        )}
-                        <span className="text-[9px] text-gray-400">
-                          {new Date(ex.createdAt).toLocaleDateString()}
-                        </span>
-
-                        {mode === "SESSION" && (
-                          isEditing ? (
-                            <div className="flex gap-1 mt-1">
-                              <button
-                                type="button"
-                                onClick={() => handleSaveEdit(ex.id)}
-                                disabled={savingEdit}
-                                className="rounded bg-emerald-600 px-2 py-0.5 text-[10px] text-white"
-                              >
-                                {savingEdit ? "Guardando..." : "Guardar"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setEditingId(null)}
-                                className="rounded bg-gray-200 px-2 py-0.5 text-[10px] text-gray-700"
-                              >
-                                Cancelar
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex gap-1 mt-1">
-                              <button
-                                type="button"
-                                onClick={() => startEdit(ex)}
-                                className="rounded bg-gray-100 px-2 py-0.5 text-[10px] text-gray-700"
-                              >
-                                Editar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(ex.id)}
-                                disabled={deletingId === ex.id}
-                                className="rounded bg-red-50 px-2 py-0.5 text-[10px] text-red-600"
-                              >
-                                {deletingId === ex.id ? "Eliminando..." : "Eliminar"}
-                              </button>
-                            </div>
-                          )
-                        )}
-                      </div>
+                          <button
+                            type="button"
+                            disabled={deletingId === ex.id}
+                            onClick={() => handleDelete(ex.id)}
+                            className="rounded-md border border-red-200 px-2 py-0.5 text-[10px] text-red-600 hover:bg-red-50 disabled:opacity-60"
+                          >
+                            {deletingId === ex.id ? "Borrando..." : "Eliminar"}
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  </li>
-                );
-              })}
+                  </div>
+
+                  {/* Detalle expandido SOLO en Sesiones / Campo */}
+                  {mode === "SESSION" && expandedId === ex.id && (
+                    <div className="mt-3 rounded-xl border bg-gray-50 px-3 py-2.5 text-[11px] text-gray-700">
+                      {ex.sessionMeta ? (
+                        <div className="space-y-0.5">
+                          {ex.sessionMeta.type && (
+                            <p>
+                              <span className="font-semibold">Tipo: </span>
+                              {ex.sessionMeta.type}
+                            </p>
+                          )}
+                          {ex.sessionMeta.space && (
+                            <p>
+                              <span className="font-semibold">Espacio: </span>
+                              {ex.sessionMeta.space}
+                            </p>
+                          )}
+                          {ex.sessionMeta.players != null && (
+                            <p>
+                              <span className="font-semibold">Nº de jugadores: </span>
+                              {ex.sessionMeta.players}
+                            </p>
+                          )}
+                          {ex.sessionMeta.duration && (
+                            <p>
+                              <span className="font-semibold">Duración: </span>
+                              {ex.sessionMeta.duration}
+                            </p>
+                          )}
+                          {ex.sessionMeta.description && (
+                            <p>
+                              <span className="font-semibold">Descripción: </span>
+                              {ex.sessionMeta.description}
+                            </p>
+                          )}
+                          {(ex.originSessionId ||
+                            ex.sessionMeta.originSessionId) && (
+                            <p className="text-[10px] text-gray-500">
+                              <span className="font-semibold">Sesión origen: </span>
+                              {ex.originSessionId || ex.sessionMeta.originSessionId}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-gray-500">
+                          No hay detalles guardados para este ejercicio. Se creó
+                          manualmente desde la sesión.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </li>
+              ))}
             </ul>
           )}
         </div>
