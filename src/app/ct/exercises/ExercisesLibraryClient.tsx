@@ -12,9 +12,11 @@ type ExerciseClientDTO = {
   createdAt: string;
 };
 
+type Mode = "ROUTINE" | "SESSION";
+
 type Props = {
   exercises: ExerciseClientDTO[];
-  mode?: "ROUTINE" | "SESSION";
+  mode: Mode;
 };
 
 type ExerciseGroup = "Warmup" | "Campo" | "Gym";
@@ -25,11 +27,35 @@ type DerivedExercise = ExerciseClientDTO & {
   tags: string[];
 };
 
-function deriveExerciseMeta(zoneRaw: string | null): {
+const groupLabels: Record<ExerciseGroup, string> = {
+  Warmup: "Warmup",
+  Campo: "Campo",
+  Gym: "Gym / Fuerza",
+};
+
+const groupChipClasses: Record<ExerciseGroup, string> = {
+  Warmup: "bg-orange-50 text-orange-700 border-orange-200",
+  Campo: "bg-sky-50 text-sky-700 border-sky-200",
+  Gym: "bg-emerald-50 text-emerald-700 border-emerald-200",
+};
+
+function deriveExerciseMeta(zoneRaw: string | null, mode: Mode): {
   group: ExerciseGroup;
   primaryZone: string;
   tags: string[];
 } {
+  // 👉 Sesiones / Campo: sin Warmup/Campo/Gym como grouping,
+  // solo una categoría simple usando zone.
+  if (mode === "SESSION") {
+    const raw = zoneRaw?.trim() || "";
+    return {
+      group: "Campo",
+      primaryZone: raw || "Sin categoría",
+      tags: [],
+    };
+  }
+
+  // 👉 Rutinas / Gym: mantenemos la lógica original.
   if (!zoneRaw) {
     return {
       group: "Gym",
@@ -47,7 +73,9 @@ function deriveExerciseMeta(zoneRaw: string | null): {
     };
   }
 
-  if (raw.toLowerCase().startsWith("warmup")) {
+  const lower = raw.toLowerCase();
+
+  if (lower.startsWith("warmup")) {
     const parts = raw.split(",").map((p) => p.trim()).filter(Boolean);
     return {
       group: "Warmup",
@@ -56,7 +84,7 @@ function deriveExerciseMeta(zoneRaw: string | null): {
     };
   }
 
-  if (raw.toLowerCase().startsWith("drills campo") || raw.toLowerCase().includes("campo")) {
+  if (lower.startsWith("drills campo") || lower.includes("campo")) {
     const parts = raw.split(",").map((p) => p.trim()).filter(Boolean);
     return {
       group: "Campo",
@@ -73,19 +101,7 @@ function deriveExerciseMeta(zoneRaw: string | null): {
   };
 }
 
-const groupLabels: Record<ExerciseGroup, string> = {
-  Warmup: "Warmup",
-  Campo: "Campo",
-  Gym: "Gym / Fuerza",
-};
-
-const groupChipClasses: Record<ExerciseGroup, string> = {
-  Warmup: "bg-orange-50 text-orange-700 border-orange-200",
-  Campo: "bg-sky-50 text-sky-700 border-sky-200",
-  Gym: "bg-emerald-50 text-emerald-700 border-emerald-200",
-};
-
-export default function ExercisesLibraryClient({ exercises, mode = "ROUTINE" }: Props) {
+export default function ExercisesLibraryClient({ exercises, mode }: Props) {
   const [search, setSearch] = useState("");
   const [groupFilter, setGroupFilter] = useState<"all" | ExerciseGroup>("all");
   const [zoneFilter, setZoneFilter] = useState<string>("all");
@@ -98,10 +114,10 @@ export default function ExercisesLibraryClient({ exercises, mode = "ROUTINE" }: 
   const derived: DerivedExercise[] = useMemo(
     () =>
       exercises.map((e) => {
-        const meta = deriveExerciseMeta(e.zone);
+        const meta = deriveExerciseMeta(e.zone, mode);
         return { ...e, ...meta };
       }),
-    [exercises],
+    [exercises, mode],
   );
 
   const zones = useMemo(() => {
@@ -115,14 +131,15 @@ export default function ExercisesLibraryClient({ exercises, mode = "ROUTINE" }: 
   const filtered = useMemo(
     () =>
       derived.filter((ex) => {
-        if (mode === "ROUTINE") {
-          if (groupFilter !== "all" && ex.group !== groupFilter) return false;
+        // 👉 Solo Rutinas usan filtro por grupo Warmup/Campo/Gym
+        if (mode === "ROUTINE" && groupFilter !== "all" && ex.group !== groupFilter) {
+          return false;
         }
         if (zoneFilter !== "all" && ex.primaryZone !== zoneFilter) return false;
         if (search && !ex.name.toLowerCase().includes(search.toLowerCase())) return false;
         return true;
       }),
-    [derived, groupFilter, zoneFilter, search, mode],
+    [derived, mode, groupFilter, zoneFilter, search],
   );
 
   const totalCount = exercises.length;
@@ -150,8 +167,8 @@ export default function ExercisesLibraryClient({ exercises, mode = "ROUTINE" }: 
           </div>
 
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            {/* Filtro por grupo */}
-            {mode === "ROUTINE" && (
+            {/* Filtro por grupo: SOLO en Rutinas / Gym */}
+            {mode === "ROUTINE" ? (
               <div className="flex flex-wrap gap-1.5">
                 <button
                   type="button"
@@ -179,17 +196,26 @@ export default function ExercisesLibraryClient({ exercises, mode = "ROUTINE" }: 
                   </button>
                 ))}
               </div>
+            ) : (
+              // Sesiones / Campo: sin chips Warmup/Campo/Gym
+              <div className="text-[11px] text-gray-500">
+                Biblioteca de ejercicios de campo guardados desde las sesiones.
+              </div>
             )}
 
-            {/* Filtro por zona */}
+            {/* Filtro por zona / categoría */}
             <div className="flex items-center gap-1.5">
-              <span className="text-[11px] text-gray-500">Zona:</span>
+              <span className="text-[11px] text-gray-500">
+                {mode === "ROUTINE" ? "Zona:" : "Categoría:"}
+              </span>
               <select
                 value={zoneFilter}
                 onChange={(e) => setZoneFilter(e.target.value)}
                 className="rounded-lg border px-2 py-1 text-[11px] md:text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
               >
-                <option value="all">Todas</option>
+                <option value="all">
+                  {mode === "ROUTINE" ? "Todas" : "Todas las categorías"}
+                </option>
                 {zones.map((z) => (
                   <option key={z} value={z}>
                     {z}
@@ -213,8 +239,10 @@ export default function ExercisesLibraryClient({ exercises, mode = "ROUTINE" }: 
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-gray-900 truncate">{ex.name}</p>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
-                        {mode === "ROUTINE" && (
+
+                      {/* Tags / chips debajo del nombre */}
+                      {mode === "ROUTINE" ? (
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
                           <span
                             className={`inline-flex items-center rounded-full px-2 py-0.5 border text-[10px] ${
                               groupChipClasses[ex.group]
@@ -222,24 +250,33 @@ export default function ExercisesLibraryClient({ exercises, mode = "ROUTINE" }: 
                           >
                             {groupLabels[ex.group]}
                           </span>
-                        )}
-                        <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">
-                          {ex.primaryZone}
-                        </span>
-                        {ex.tags.slice(0, 2).map((tag) => (
-                          <span
-                            key={tag}
-                            className="inline-flex items-center rounded-full bg-gray-50 px-2 py-0.5"
-                          >
-                            {tag}
+                          <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">
+                            {ex.primaryZone}
                           </span>
-                        ))}
-                        {ex.tags.length > 2 && (
-                          <span className="text-[9px] text-gray-400">
-                            +{ex.tags.length - 2} más
-                          </span>
-                        )}
-                      </div>
+                          {ex.tags.slice(0, 2).map((tag) => (
+                            <span
+                              key={tag}
+                              className="inline-flex items-center rounded-full bg-gray-50 px-2 py-0.5"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                          {ex.tags.length > 2 && (
+                            <span className="text-[9px] text-gray-400">
+                              +{ex.tags.length - 2} más
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        // Sesiones / Campo: solo categoría simple
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
+                          {ex.primaryZone && ex.primaryZone !== "Sin categoría" && (
+                            <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">
+                              {ex.primaryZone}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex flex-col items-end gap-1 shrink-0">

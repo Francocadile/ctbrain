@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { getSessionById, updateSession, type SessionDTO } from "@/lib/api/sessions";
+import { createSessionExercise } from "@/lib/api/exercises";
 import { listKinds, addKind as apiAddKind, replaceKinds } from "@/lib/settings";
 
 type TurnKey = "morning" | "afternoon";
@@ -115,6 +116,8 @@ export default function SesionDetailEditorPage() {
   const [prefix, setPrefix] = useState<string>("");
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [kinds, setKinds] = useState<string[]>([]);
+  const [savingToLibrary, setSavingToLibrary] = useState(false);
+  const [errorLibrary, setErrorLibrary] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => setKinds(await listKinds()))();
@@ -240,6 +243,27 @@ export default function SesionDetailEditorPage() {
     }
   }
 
+  async function handleSaveToSessionLibrary() {
+    if (!exercises.length) return;
+    try {
+      setSavingToLibrary(true);
+      setErrorLibrary(null);
+
+      const first = exercises[0];
+      const name = (first.title || first.kind || "Ejercicio sin nombre").trim();
+      const zone = (first.kind || "").trim() || null;
+      const videoUrl = (first.imageUrl || "").trim() || null;
+
+      await createSessionExercise({ name, zone, videoUrl });
+      alert("Ejercicio guardado en la biblioteca de Sesiones / Campo");
+    } catch (err: any) {
+      console.error(err);
+      setErrorLibrary(err?.message || "No se pudo guardar en la biblioteca");
+    } finally {
+      setSavingToLibrary(false);
+    }
+  }
+
   if (loading) return <div className="p-6 text-gray-500">Cargando…</div>;
   if (!s)
     return (
@@ -262,6 +286,9 @@ export default function SesionDetailEditorPage() {
           <p className="text-xs md:text-sm text-gray-500">
             Día: {marker.ymd || "—"} · Tipo: {s.type}
           </p>
+          {errorLibrary && (
+            <p className="mt-1 text-[11px] text-red-600">{errorLibrary}</p>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -281,6 +308,15 @@ export default function SesionDetailEditorPage() {
           <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
             ✏️ Editor semanal
           </a>
+
+          <button
+            type="button"
+            onClick={handleSaveToSessionLibrary}
+            disabled={savingToLibrary}
+            className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
+          >
+            {savingToLibrary ? "Guardando..." : "Guardar en biblioteca"}
+          </button>
 
           {editing ? (
             <button
