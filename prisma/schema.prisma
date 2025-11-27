@@ -265,12 +265,15 @@ model Exercise {
   videoUrl String?
 
   usage    ExerciseUsage @default(ROUTINE)
-
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relación con rutinas
   routineItems RoutineItem[]
+  
+  // snapshot de los datos de la sesión de donde salió (opcional)
+  sessionMeta Json?
 }
 
 model RPEEntry {

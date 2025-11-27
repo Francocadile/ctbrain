@@ -253,8 +253,17 @@ export default function SesionDetailEditorPage() {
       const name = (first.title || first.kind || "Ejercicio sin nombre").trim();
       const zone = (first.kind || "").trim() || null;
       const videoUrl = (first.imageUrl || "").trim() || null;
+      const sessionMeta = {
+        type: first.kind ?? null,
+        space: (first as any).space ?? null,
+        players: (first as any).players ?? null,
+        duration: (first as any).duration ?? null,
+        description: (first as any).description ?? null,
+        imageUrl: first.imageUrl ?? null,
+        sessionId: s?.id ?? null,
+      };
 
-      await createSessionExercise({ name, zone, videoUrl });
+      await createSessionExercise({ name, zone, videoUrl, sessionMeta });
       alert("Ejercicio guardado en la biblioteca de Sesiones / Campo");
     } catch (err: any) {
       console.error(err);

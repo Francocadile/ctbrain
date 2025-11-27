@@ -4,11 +4,24 @@ import { dbScope } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
 
+const sessionMetaSchema = z
+  .object({
+    type: z.string().optional().nullable(),
+    space: z.string().optional().nullable(),
+    players: z.number().int().optional().nullable(),
+    duration: z.string().optional().nullable(),
+    description: z.string().optional().nullable(),
+    imageUrl: z.string().url().optional().nullable(),
+    sessionId: z.string().optional().nullable(),
+  })
+  .partial();
+
 const createSchema = z.object({
   name: z.string().min(2, "Nombre demasiado corto"),
   zone: z.string().optional().nullable(),
   videoUrl: z.string().url().optional().nullable(),
   usage: z.enum(["ROUTINE", "SESSION"]).default("ROUTINE"),
+  sessionMeta: sessionMetaSchema.optional(),
 });
 
 // GET /api/ct/exercises
@@ -45,10 +58,10 @@ export async function GET(req: Request) {
 // Crea un ejercicio en la biblioteca (por ahora lo usaremos para usage=SESSION).
 export async function POST(req: Request) {
   try {
-    const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN"] as any });
+  const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN"] as any });
 
-    const body = await req.json();
-    const parsed = createSchema.safeParse(body);
+  const body = await req.json();
+  const parsed = createSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
         { error: "Datos inválidos", details: parsed.error.flatten() },
@@ -56,7 +69,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { name, zone, videoUrl, usage } = parsed.data;
+    const { name, zone, videoUrl, usage, sessionMeta } = parsed.data;
 
     const created = await prisma.exercise.create({
       data: {
@@ -65,6 +78,7 @@ export async function POST(req: Request) {
         videoUrl: videoUrl?.trim() || null,
         usage: usage as any,
         teamId: team.id, // 👉 ejercicios de sesión siempre del equipo actual
+        sessionMeta: sessionMeta ? (sessionMeta as any) : null,
       },
     });
 

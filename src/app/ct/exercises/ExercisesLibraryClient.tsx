@@ -5,6 +5,7 @@ import VideoPlayerModal from "@/components/training/VideoPlayerModal";
 import {
   updateSessionExercise,
   deleteSessionExercise,
+  type SessionMeta,
 } from "@/lib/api/exercises";
 
 type ExerciseClientDTO = {
@@ -14,6 +15,7 @@ type ExerciseClientDTO = {
   videoUrl: string | null;
   isTeamExercise: boolean;
   createdAt: string;
+  sessionMeta?: SessionMeta | null;
 };
 
 type Mode = "ROUTINE" | "SESSION";
@@ -123,6 +125,7 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const derived: DerivedExercise[] = useMemo(
     () =>
@@ -322,9 +325,21 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
                           </>
                         ) : (
                           <>
-                            <p className="font-medium text-gray-900 truncate">
-                              {ex.name}
-                            </p>
+                            {mode === "SESSION" ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setExpandedId(expandedId === ex.id ? null : ex.id)
+                                }
+                                className="font-medium text-gray-900 truncate text-left hover:underline"
+                              >
+                                {ex.name}
+                              </button>
+                            ) : (
+                              <p className="font-medium text-gray-900 truncate">
+                                {ex.name}
+                              </p>
+                            )}
                             {mode === "ROUTINE" ? (
                               <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
                                 <span
@@ -352,14 +367,75 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
                                 )}
                               </div>
                             ) : (
-                              <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
-                                {ex.primaryZone &&
-                                  ex.primaryZone !== "Sin categoría" && (
-                                    <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">
-                                      {ex.primaryZone}
-                                    </span>
-                                  )}
-                              </div>
+                              <>
+                                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
+                                  {ex.primaryZone &&
+                                    ex.primaryZone !== "Sin categoría" && (
+                                      <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">
+                                        {ex.primaryZone}
+                                      </span>
+                                    )}
+                                </div>
+                                {expandedId === ex.id && (
+                                  ex.sessionMeta ? (
+                                    <div className="mt-2 rounded-lg border bg-gray-50 p-3 text-[11px] text-gray-700 space-y-1">
+                                      {ex.sessionMeta.type && (
+                                        <p>
+                                          <span className="font-semibold">Tipo:</span>{" "}
+                                          {ex.sessionMeta.type}
+                                        </p>
+                                      )}
+                                      {ex.sessionMeta.space && (
+                                        <p>
+                                          <span className="font-semibold">Espacio:</span>{" "}
+                                          {ex.sessionMeta.space}
+                                        </p>
+                                      )}
+                                      {typeof ex.sessionMeta.players === "number" && (
+                                        <p>
+                                          <span className="font-semibold">Jugadores:</span>{" "}
+                                          {ex.sessionMeta.players}
+                                        </p>
+                                      )}
+                                      {ex.sessionMeta.duration && (
+                                        <p>
+                                          <span className="font-semibold">Duración:</span>{" "}
+                                          {ex.sessionMeta.duration}
+                                        </p>
+                                      )}
+                                      {ex.sessionMeta.description && (
+                                        <p>
+                                          <span className="font-semibold">Descripción:</span>{" "}
+                                          {ex.sessionMeta.description}
+                                        </p>
+                                      )}
+                                      {ex.sessionMeta.imageUrl && (
+                                        <p>
+                                          <span className="font-semibold">Imagen:</span>{" "}
+                                          <a
+                                            href={ex.sessionMeta.imageUrl}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-blue-600 hover:underline break-all"
+                                          >
+                                            {ex.sessionMeta.imageUrl}
+                                          </a>
+                                        </p>
+                                      )}
+                                      {ex.sessionMeta.sessionId && (
+                                        <p>
+                                          <span className="font-semibold">Sesión origen:</span>{" "}
+                                          {ex.sessionMeta.sessionId}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="mt-2 rounded-lg border border-dashed bg-gray-50 p-3 text-[11px] text-gray-500">
+                                      Este ejercicio se guardó sin detalles de sesión.
+                                    </div>
+                                  )
+                                )}
+                              </>
                             )}
                           </>
                         )}

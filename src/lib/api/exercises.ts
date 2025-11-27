@@ -1,5 +1,15 @@
 // src/lib/api/exercises.ts
 
+export type SessionMeta = {
+  type?: string | null;
+  space?: string | null;
+  players?: number | null;
+  duration?: string | null;
+  description?: string | null;
+  imageUrl?: string | null;
+  sessionId?: string | null;
+};
+
 export type ExerciseDTO = {
   id: string;
   name: string;
@@ -7,6 +17,7 @@ export type ExerciseDTO = {
   videoUrl: string | null;
   usage: "ROUTINE" | "SESSION" | null;
   createdAt: string;
+  sessionMeta?: SessionMeta | null;
 };
 
 // Crea un ejercicio de SESIÓN (campo) desde el editor de sesiones
@@ -14,6 +25,7 @@ export async function createSessionExercise(input: {
   name: string;
   zone?: string | null;
   videoUrl?: string | null;
+  sessionMeta?: SessionMeta | null;
 }): Promise<ExerciseDTO> {
   const res = await fetch("/api/ct/exercises", {
     method: "POST",
