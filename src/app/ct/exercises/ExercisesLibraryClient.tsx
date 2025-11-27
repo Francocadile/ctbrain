@@ -14,6 +14,7 @@ type ExerciseClientDTO = {
 
 type Props = {
   exercises: ExerciseClientDTO[];
+  mode?: "ROUTINE" | "SESSION";
 };
 
 type ExerciseGroup = "Warmup" | "Campo" | "Gym";
@@ -84,7 +85,7 @@ const groupChipClasses: Record<ExerciseGroup, string> = {
   Gym: "bg-emerald-50 text-emerald-700 border-emerald-200",
 };
 
-export default function ExercisesLibraryClient({ exercises }: Props) {
+export default function ExercisesLibraryClient({ exercises, mode = "ROUTINE" }: Props) {
   const [search, setSearch] = useState("");
   const [groupFilter, setGroupFilter] = useState<"all" | ExerciseGroup>("all");
   const [zoneFilter, setZoneFilter] = useState<string>("all");
@@ -114,12 +115,14 @@ export default function ExercisesLibraryClient({ exercises }: Props) {
   const filtered = useMemo(
     () =>
       derived.filter((ex) => {
-        if (groupFilter !== "all" && ex.group !== groupFilter) return false;
+        if (mode === "ROUTINE") {
+          if (groupFilter !== "all" && ex.group !== groupFilter) return false;
+        }
         if (zoneFilter !== "all" && ex.primaryZone !== zoneFilter) return false;
         if (search && !ex.name.toLowerCase().includes(search.toLowerCase())) return false;
         return true;
       }),
-    [derived, groupFilter, zoneFilter, search],
+    [derived, groupFilter, zoneFilter, search, mode],
   );
 
   const totalCount = exercises.length;
@@ -148,33 +151,35 @@ export default function ExercisesLibraryClient({ exercises }: Props) {
 
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             {/* Filtro por grupo */}
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                type="button"
-                onClick={() => setGroupFilter("all")}
-                className={`rounded-full border px-3 py-1 text-[11px] md:text-xs ${
-                  groupFilter === "all"
-                    ? "bg-gray-900 text-white border-gray-900"
-                    : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                }`}
-              >
-                Todos
-              </button>
-              {(["Warmup", "Campo", "Gym"] as ExerciseGroup[]).map((g) => (
+            {mode === "ROUTINE" && (
+              <div className="flex flex-wrap gap-1.5">
                 <button
-                  key={g}
                   type="button"
-                  onClick={() => setGroupFilter(g)}
+                  onClick={() => setGroupFilter("all")}
                   className={`rounded-full border px-3 py-1 text-[11px] md:text-xs ${
-                    groupFilter === g
-                      ? `${groupChipClasses[g]} ring-1 ring-offset-1 ring-emerald-500`
-                      : `${groupChipClasses[g]} opacity-80 hover:opacity-100`
+                    groupFilter === "all"
+                      ? "bg-gray-900 text-white border-gray-900"
+                      : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
                   }`}
                 >
-                  {groupLabels[g]}
+                  Todos
                 </button>
-              ))}
-            </div>
+                {(["Warmup", "Campo", "Gym"] as ExerciseGroup[]).map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setGroupFilter(g)}
+                    className={`rounded-full border px-3 py-1 text-[11px] md:text-xs ${
+                      groupFilter === g
+                        ? `${groupChipClasses[g]} ring-1 ring-offset-1 ring-emerald-500`
+                        : `${groupChipClasses[g]} opacity-80 hover:opacity-100`
+                    }`}
+                  >
+                    {groupLabels[g]}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Filtro por zona */}
             <div className="flex items-center gap-1.5">
@@ -209,13 +214,15 @@ export default function ExercisesLibraryClient({ exercises }: Props) {
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-gray-900 truncate">{ex.name}</p>
                       <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 border text-[10px] ${
-                            groupChipClasses[ex.group]
-                          }`}
-                        >
-                          {groupLabels[ex.group]}
-                        </span>
+                        {mode === "ROUTINE" && (
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 border text-[10px] ${
+                              groupChipClasses[ex.group]
+                            }`}
+                          >
+                            {groupLabels[ex.group]}
+                          </span>
+                        )}
                         <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">
                           {ex.primaryZone}
                         </span>

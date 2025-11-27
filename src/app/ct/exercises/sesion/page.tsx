@@ -61,7 +61,12 @@ export default async function CTSessionExercisesPage() {
             </div>
           </header>
 
-          <ExercisesLibraryClient exercises={exercises} />
+            <div className="rounded-lg border border-yellow-200 bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
+              Por ahora esta biblioteca no se llena automáticamente desde el editor de sesiones.
+              Más adelante vas a poder guardar aquí las tareas de campo que quieras reutilizar.
+            </div>
+
+            <ExercisesLibraryClient exercises={exercises} mode="SESSION" />
         </div>
       </main>
     </RoleGate>

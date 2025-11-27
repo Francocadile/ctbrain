@@ -61,7 +61,7 @@ export default async function CTRoutineExercisesPage() {
             </div>
           </header>
 
-          <ExercisesLibraryClient exercises={exercises} />
+            <ExercisesLibraryClient exercises={exercises} mode="ROUTINE" />
         </div>
       </main>
     </RoleGate>
