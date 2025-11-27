@@ -319,20 +319,11 @@ export default function SesionDetailEditorPage() {
           </button>
 
           {editing ? (
-            <button
-              onClick={saveAll}
-              disabled={saving}
-              className={`px-3 py-1.5 rounded-xl text-xs ${
-                saving ? "bg-gray-200 text-gray-500" : "bg-black text-white hover:opacity-90"
-              }`}
-            >
+            <button onClick={saveAll} disabled={saving} className="hidden">
               {saving ? "Guardando…" : "Guardar y bloquear"}
             </button>
           ) : (
-            <button
-              onClick={() => setEditing(true)}
-              className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
-            >
+            <button onClick={() => setEditing(true)} className="hidden">
               ✏️ Editar
             </button>
           )}

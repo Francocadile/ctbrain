@@ -2,6 +2,10 @@
 
 import React, { useMemo, useState } from "react";
 import VideoPlayerModal from "@/components/training/VideoPlayerModal";
+import {
+  updateSessionExercise,
+  deleteSessionExercise,
+} from "@/lib/api/exercises";
 
 type ExerciseClientDTO = {
   id: string;
@@ -44,7 +48,7 @@ function deriveExerciseMeta(zoneRaw: string | null, mode: Mode): {
   primaryZone: string;
   tags: string[];
 } {
-  // 👉 Sesiones / Campo: sin Warmup/Campo/Gym como grouping,
+  // Sesiones / Campo: sin Warmup/Campo/Gym como grouping,
   // solo una categoría simple usando zone.
   if (mode === "SESSION") {
     const raw = zoneRaw?.trim() || "";
@@ -55,7 +59,7 @@ function deriveExerciseMeta(zoneRaw: string | null, mode: Mode): {
     };
   }
 
-  // 👉 Rutinas / Gym: mantenemos la lógica original.
+  // Rutinas / Gym: lógica original
   if (!zoneRaw) {
     return {
       group: "Gym",
@@ -111,6 +115,15 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
     videoUrl?: string | null;
   } | null>(null);
 
+  // edición / borrado (solo Sesiones / Campo)
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editZone, setEditZone] = useState("");
+  const [editVideoUrl, setEditVideoUrl] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   const derived: DerivedExercise[] = useMemo(
     () =>
       exercises.map((e) => {
@@ -131,7 +144,6 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
   const filtered = useMemo(
     () =>
       derived.filter((ex) => {
-        // 👉 Solo Rutinas usan filtro por grupo Warmup/Campo/Gym
         if (mode === "ROUTINE" && groupFilter !== "all" && ex.group !== groupFilter) {
           return false;
         }
@@ -144,16 +156,64 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
 
   const totalCount = exercises.length;
 
+  function startEdit(ex: DerivedExercise) {
+    if (mode !== "SESSION") return;
+    setEditingId(ex.id);
+    setEditName(ex.name);
+    setEditZone(ex.zone ?? ex.primaryZone ?? "");
+    setEditVideoUrl(ex.videoUrl ?? "");
+    setErrorMsg(null);
+  }
+
+  async function handleSaveEdit(id: string) {
+    if (mode !== "SESSION") return;
+    try {
+      setSavingEdit(true);
+      setErrorMsg(null);
+      await updateSessionExercise(id, {
+        name: editName,
+        zone: editZone || null,
+        videoUrl: editVideoUrl || null,
+      });
+      setEditingId(null);
+      // refresco simple
+      window.location.reload();
+    } catch (e: any) {
+      setErrorMsg(e?.message || "Error al guardar cambios");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (mode !== "SESSION") return;
+    if (!confirm("¿Eliminar este ejercicio de la biblioteca?")) return;
+    try {
+      setDeletingId(id);
+      setErrorMsg(null);
+      await deleteSessionExercise(id);
+      window.location.reload();
+    } catch (e: any) {
+      setErrorMsg(e?.message || "Error al eliminar ejercicio");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <>
       <section className="space-y-3">
-        {/* Filtros */}
         <div className="rounded-2xl border bg-white p-3 md:p-4 shadow-sm space-y-3">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs text-gray-500">
                 {filtered.length} de {totalCount} ejercicios
               </p>
+              {errorMsg && (
+                <p className="mt-1 text-[11px] text-red-600">
+                  {errorMsg}
+                </p>
+              )}
             </div>
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
               <input
@@ -167,7 +227,7 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
           </div>
 
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            {/* Filtro por grupo: SOLO en Rutinas / Gym */}
+            {/* Filtro por grupo solo en Rutinas / Gym */}
             {mode === "ROUTINE" ? (
               <div className="flex flex-wrap gap-1.5">
                 <button
@@ -197,7 +257,6 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
                 ))}
               </div>
             ) : (
-              // Sesiones / Campo: sin chips Warmup/Campo/Gym
               <div className="text-[11px] text-gray-500">
                 Biblioteca de ejercicios de campo guardados desde las sesiones.
               </div>
@@ -226,7 +285,7 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
           </div>
         </div>
 
-        {/* Lista de ejercicios */}
+        {/* Lista */}
         <div className="rounded-2xl border bg-white shadow-sm max-h-[520px] overflow-auto">
           {filtered.length === 0 ? (
             <div className="p-4 text-sm text-gray-500">
@@ -234,74 +293,142 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
             </div>
           ) : (
             <ul className="divide-y divide-gray-100">
-              {filtered.map((ex) => (
-                <li key={ex.id} className="px-3 py-2.5 text-xs md:text-sm">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-gray-900 truncate">{ex.name}</p>
+              {filtered.map((ex) => {
+                const isEditing = mode === "SESSION" && editingId === ex.id;
 
-                      {/* Tags / chips debajo del nombre */}
-                      {mode === "ROUTINE" ? (
-                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
-                          <span
-                            className={`inline-flex items-center rounded-full px-2 py-0.5 border text-[10px] ${
-                              groupChipClasses[ex.group]
-                            }`}
+                return (
+                  <li key={ex.id} className="px-3 py-2.5 text-xs md:text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        {isEditing ? (
+                          <>
+                            <input
+                              className="mb-1 w-full rounded border px-2 py-1 text-xs"
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                            />
+                            <input
+                              className="mb-1 w-full rounded border px-2 py-1 text-xs"
+                              placeholder="Categoría"
+                              value={editZone}
+                              onChange={(e) => setEditZone(e.target.value)}
+                            />
+                            <input
+                              className="mb-1 w-full rounded border px-2 py-1 text-xs"
+                              placeholder="URL de video (opcional)"
+                              value={editVideoUrl}
+                              onChange={(e) => setEditVideoUrl(e.target.value)}
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <p className="font-medium text-gray-900 truncate">
+                              {ex.name}
+                            </p>
+                            {mode === "ROUTINE" ? (
+                              <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
+                                <span
+                                  className={`inline-flex items-center rounded-full px-2 py-0.5 border text-[10px] ${
+                                    groupChipClasses[ex.group]
+                                  }`}
+                                >
+                                  {groupLabels[ex.group]}
+                                </span>
+                                <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">
+                                  {ex.primaryZone}
+                                </span>
+                                {ex.tags.slice(0, 2).map((tag) => (
+                                  <span
+                                    key={tag}
+                                    className="inline-flex items-center rounded-full bg-gray-50 px-2 py-0.5"
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                                {ex.tags.length > 2 && (
+                                  <span className="text-[9px] text-gray-400">
+                                    +{ex.tags.length - 2} más
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
+                                {ex.primaryZone &&
+                                  ex.primaryZone !== "Sin categoría" && (
+                                    <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">
+                                      {ex.primaryZone}
+                                    </span>
+                                  )}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        {ex.videoUrl && !isEditing && (
+                          <button
+                            type="button"
+                            className="text-[11px] text-blue-600 hover:underline"
+                            onClick={() =>
+                              setVideoPreview({
+                                title: ex.name,
+                                zone: ex.zone,
+                                videoUrl: ex.videoUrl,
+                              })
+                            }
                           >
-                            {groupLabels[ex.group]}
-                          </span>
-                          <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">
-                            {ex.primaryZone}
-                          </span>
-                          {ex.tags.slice(0, 2).map((tag) => (
-                            <span
-                              key={tag}
-                              className="inline-flex items-center rounded-full bg-gray-50 px-2 py-0.5"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                          {ex.tags.length > 2 && (
-                            <span className="text-[9px] text-gray-400">
-                              +{ex.tags.length - 2} más
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        // Sesiones / Campo: solo categoría simple
-                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-gray-500">
-                          {ex.primaryZone && ex.primaryZone !== "Sin categoría" && (
-                            <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">
-                              {ex.primaryZone}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                            Ver video
+                          </button>
+                        )}
+                        <span className="text-[9px] text-gray-400">
+                          {new Date(ex.createdAt).toLocaleDateString()}
+                        </span>
 
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      {ex.videoUrl && (
-                        <button
-                          type="button"
-                          className="text-[11px] text-blue-600 hover:underline"
-                          onClick={() =>
-                            setVideoPreview({
-                              title: ex.name,
-                              zone: ex.zone,
-                              videoUrl: ex.videoUrl,
-                            })
-                          }
-                        >
-                          Ver video
-                        </button>
-                      )}
-                      <span className="text-[9px] text-gray-400">
-                        {new Date(ex.createdAt).toLocaleDateString()}
-                      </span>
+                        {mode === "SESSION" && (
+                          isEditing ? (
+                            <div className="flex gap-1 mt-1">
+                              <button
+                                type="button"
+                                onClick={() => handleSaveEdit(ex.id)}
+                                disabled={savingEdit}
+                                className="rounded bg-emerald-600 px-2 py-0.5 text-[10px] text-white"
+                              >
+                                {savingEdit ? "Guardando..." : "Guardar"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingId(null)}
+                                className="rounded bg-gray-200 px-2 py-0.5 text-[10px] text-gray-700"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex gap-1 mt-1">
+                              <button
+                                type="button"
+                                onClick={() => startEdit(ex)}
+                                className="rounded bg-gray-100 px-2 py-0.5 text-[10px] text-gray-700"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(ex.id)}
+                                disabled={deletingId === ex.id}
+                                className="rounded bg-red-50 px-2 py-0.5 text-[10px] text-red-600"
+                              >
+                                {deletingId === ex.id ? "Eliminando..." : "Eliminar"}
+                              </button>
+                            </div>
+                          )
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
