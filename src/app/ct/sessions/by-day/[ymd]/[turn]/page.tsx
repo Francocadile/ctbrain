@@ -295,15 +295,22 @@ export default function SessionTurnoPage() {
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">
                   {row}
                 </h2>
-                {id ? (
-                  <a
-                    href={`/ct/sessions/${id}?view=1`}
-                    className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50 no-print"
-                    title="Ver ejercicio de este bloque"
-                  >
-                    Ver ejercicio
-                  </a>
-                ) : null}
+                {id && (
+                  <div className="flex gap-2 no-print">
+                    <a
+                      href={`/ct/sessions/${id}?view=1`}
+                      className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
+                    >
+                      Ver ejercicio
+                    </a>
+                    <a
+                      href={`/ct/sessions/${id}`}
+                      className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
+                    >
+                      Editar ejercicios
+                    </a>
+                  </div>
+                )}
               </div>
               <div className="min-h-[120px] whitespace-pre-wrap leading-6 text-[13px]">
                 {text || <span className="text-gray-400 italic">—</span>}
