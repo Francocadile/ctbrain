@@ -3,7 +3,7 @@
 export type SessionMeta = {
   type?: string | null;
   space?: string | null;
-  players?: number | null;
+  players?: number | string | null;
   duration?: string | null;
   description?: string | null;
   imageUrl?: string | null;

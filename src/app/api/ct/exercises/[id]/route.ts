@@ -2,22 +2,26 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { dbScope } from "@/lib/dbScope";
 
-const sessionMetaSchema = z.object({
-  type: z.string().optional().nullable(),
-  space: z.string().optional().nullable(),
-  players: z.union([z.number(), z.string()]).optional().nullable(),
-  duration: z.string().optional().nullable(),
-  description: z.string().optional().nullable(),
-  imageUrl: z.string().optional().nullable(),
-  sessionId: z.string().optional().nullable(),
-});
+const sessionMetaSchema = z
+  .object({
+    type: z.string().optional().nullable(),
+    space: z.string().optional().nullable(),
+    // ✅ Aceptar número o string
+    players: z.union([z.number(), z.string()]).optional().nullable(),
+    duration: z.string().optional().nullable(),
+    description: z.string().optional().nullable(),
+    imageUrl: z.string().optional().nullable(),
+    sessionId: z.string().optional().nullable(),
+  })
+  .optional()
+  .nullable();
 
 const updateSchema = z.object({
   name: z.string().min(2, "Nombre demasiado corto").optional(),
   zone: z.string().optional().nullable(),
   videoUrl: z.string().url().optional().nullable(),
   originSessionId: z.string().optional().nullable(),
-  sessionMeta: sessionMetaSchema.optional().nullable(),
+  sessionMeta: sessionMetaSchema,
 });
 
 export async function PUT(

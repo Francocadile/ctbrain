@@ -4,24 +4,27 @@ import { dbScope } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
 
+const sessionMetaSchema = z
+  .object({
+    type: z.string().optional().nullable(),
+    space: z.string().optional().nullable(),
+    // ✅ Aceptar número o string
+    players: z.union([z.number(), z.string()]).optional().nullable(),
+    duration: z.string().optional().nullable(),
+    description: z.string().optional().nullable(),
+    imageUrl: z.string().optional().nullable(),
+    sessionId: z.string().optional().nullable(),
+  })
+  .optional()
+  .nullable();
+
 const createSchema = z.object({
   name: z.string().min(2, "Nombre demasiado corto"),
   zone: z.string().optional().nullable(),
   videoUrl: z.string().url().optional().nullable(),
   usage: z.enum(["ROUTINE", "SESSION"]).default("ROUTINE"),
   originSessionId: z.string().optional().nullable(),
-  sessionMeta: z
-    .object({
-      type: z.string().optional().nullable(),
-      space: z.string().optional().nullable(),
-      players: z.number().optional().nullable(),
-      duration: z.string().optional().nullable(),
-      description: z.string().optional().nullable(),
-      imageUrl: z.string().optional().nullable(),
-      sessionId: z.string().optional().nullable(),
-    })
-    .optional()
-    .nullable(),
+  sessionMeta: sessionMetaSchema,
 });
 
 // 👉 GET con filtro opcional originSessionId
