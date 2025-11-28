@@ -2,10 +2,22 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { dbScope } from "@/lib/dbScope";
 
+const sessionMetaSchema = z.object({
+  type: z.string().optional().nullable(),
+  space: z.string().optional().nullable(),
+  players: z.union([z.number(), z.string()]).optional().nullable(),
+  duration: z.string().optional().nullable(),
+  description: z.string().optional().nullable(),
+  imageUrl: z.string().optional().nullable(),
+  sessionId: z.string().optional().nullable(),
+});
+
 const updateSchema = z.object({
   name: z.string().min(2, "Nombre demasiado corto").optional(),
   zone: z.string().optional().nullable(),
   videoUrl: z.string().url().optional().nullable(),
+  originSessionId: z.string().optional().nullable(),
+  sessionMeta: sessionMetaSchema.optional().nullable(),
 });
 
 export async function PUT(
@@ -31,7 +43,7 @@ export async function PUT(
       return NextResponse.json({ error: "Ejercicio no encontrado" }, { status: 404 });
     }
 
-    const { name, zone, videoUrl } = parsed.data;
+  const { name, zone, videoUrl, originSessionId, sessionMeta } = parsed.data;
 
     const updated = await prisma.exercise.update({
       where: { id: existing.id },
@@ -39,6 +51,8 @@ export async function PUT(
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...(zone !== undefined ? { zone: zone?.trim() || null } : {}),
         ...(videoUrl !== undefined ? { videoUrl: videoUrl?.trim() || null } : {}),
+        ...(originSessionId !== undefined ? { originSessionId: originSessionId || null } : {}),
+        ...(sessionMeta !== undefined ? { sessionMeta: (sessionMeta ?? null) as any } : {}),
       },
     });
 

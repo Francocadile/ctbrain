@@ -4,34 +4,32 @@ import { dbScope } from "@/lib/dbScope";
 
 export const dynamic = "force-dynamic";
 
-// Snapshot de datos de la sesión: lo hacemos bien permisivo
-const sessionMetaSchema = z.object({
-  type: z.string().optional().nullable(),
-  space: z.string().optional().nullable(),
-  // puede venir como número o como string ("22")
-  players: z.union([z.number(), z.string()]).optional().nullable(),
-  duration: z.string().optional().nullable(),
-  description: z.string().optional().nullable(),
-  // no validamos como URL estricta, solo string opcional
-  imageUrl: z.string().optional().nullable(),
-  sessionId: z.string().optional().nullable(),
-});
-
 const createSchema = z.object({
   name: z.string().min(2, "Nombre demasiado corto"),
   zone: z.string().optional().nullable(),
   videoUrl: z.string().url().optional().nullable(),
   usage: z.enum(["ROUTINE", "SESSION"]).default("ROUTINE"),
   originSessionId: z.string().optional().nullable(),
-  sessionMeta: sessionMetaSchema.optional(),
+  sessionMeta: z
+    .object({
+      type: z.string().optional().nullable(),
+      space: z.string().optional().nullable(),
+      players: z.number().optional().nullable(),
+      duration: z.string().optional().nullable(),
+      description: z.string().optional().nullable(),
+      imageUrl: z.string().optional().nullable(),
+      sessionId: z.string().optional().nullable(),
+    })
+    .optional()
+    .nullable(),
 });
 
-// GET /api/ct/exercises
-// Soporta ?usage=ROUTINE | SESSION para filtrar ejercicios por origen.
+// 👉 GET con filtro opcional originSessionId
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const usageParam = url.searchParams.get("usage");
+    const originSessionId = url.searchParams.get("originSessionId");
 
     const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN"] as any });
 
@@ -41,6 +39,10 @@ export async function GET(req: Request) {
 
     if (usageParam === "ROUTINE" || usageParam === "SESSION") {
       where.usage = usageParam;
+    }
+
+    if (originSessionId) {
+      where.originSessionId = originSessionId;
     }
 
     const exercises = await prisma.exercise.findMany({

@@ -4,7 +4,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { getSessionById, updateSession, type SessionDTO } from "@/lib/api/sessions";
-import { createSessionExercise } from "@/lib/api/exercises";
+import {
+  createSessionExercise,
+  updateSessionExercise,
+  type SessionMeta,
+  type ExerciseDTO,
+} from "@/lib/api/exercises";
 import { listKinds, addKind as apiAddKind, replaceKinds } from "@/lib/settings";
 
 type TurnKey = "morning" | "afternoon";

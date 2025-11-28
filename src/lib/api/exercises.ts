@@ -50,7 +50,13 @@ export async function createSessionExercise(input: {
 // Actualiza un ejercicio de SESIÓN en la biblioteca
 export async function updateSessionExercise(
   id: string,
-  input: { name?: string; zone?: string | null; videoUrl?: string | null },
+  input: {
+    name?: string;
+    zone?: string | null;
+    videoUrl?: string | null;
+    originSessionId?: string | null;
+    sessionMeta?: SessionMeta | null;
+  },
 ): Promise<ExerciseDTO> {
   const res = await fetch(`/api/ct/exercises/${id}`, {
     method: "PUT",
