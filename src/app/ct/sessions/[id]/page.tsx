@@ -152,7 +152,12 @@ export default function SesionDetailEditorPage() {
         const json = await res.json();
         const list = Array.isArray((json as any)?.data) ? (json as any).data : json;
         const options = Array.isArray(list)
-          ? list.map((r: any) => ({ id: r.id as string, name: r.name as string }))
+          ? list.map((r: any) => ({
+              id: String(r.id),
+              // La API de /api/ct/routines expone `title` como nombre principal
+              // (ver src/app/api/ct/routines/route.ts), así que usamos ese campo.
+              name: (r.title as string) || (r.name as string) || "Rutina sin nombre",
+            }))
           : [];
         setRoutineOptions(options);
       } catch (err) {
