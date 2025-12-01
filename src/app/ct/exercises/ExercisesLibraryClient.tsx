@@ -169,15 +169,7 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
       setDeletingId(id);
       setErrorMsg(null);
       await deleteSessionExercise(id);
-      // Refresco optimista: filtramos localmente
-      const remaining = exercises.filter((e) => e.id !== id);
-      const updated = remaining.map((e) => {
-        const meta = deriveExerciseMeta(e.zone, mode);
-        return { ...e, ...meta };
-      });
-      // No podemos cambiar props, así que solo mostramos un toast.
-      // Para ver el cambio real, el usuario recarga la página.
-      alert("Ejercicio eliminado. Recarga la página para actualizar la lista.");
+      router.refresh();
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err?.message || "No se pudo eliminar el ejercicio");
