@@ -73,6 +73,12 @@ function decodeB64Json<T = any>(b64: string): T {
   }
 }
 
+function isVideoUrl(url: string | undefined | null) {
+  if (!url) return false;
+  const u = url.toLowerCase();
+  return u.includes("youtube.com") || u.includes("youtu.be") || u.includes("vimeo.com");
+}
+
 // ---------- helpers ----------
 function parseMarker(description?: string) {
   const text = (description || "").trimStart();
@@ -142,11 +148,11 @@ export default function SesionDetailEditorPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/ct/exercises?usage=ROUTINE", { cache: "no-store" });
+        const res = await fetch("/api/ct/routines", { cache: "no-store" });
         const json = await res.json();
         const list = Array.isArray((json as any)?.data) ? (json as any).data : json;
         const options = Array.isArray(list)
-          ? list.map((e: any) => ({ id: e.id as string, name: e.name as string }))
+          ? list.map((r: any) => ({ id: r.id as string, name: r.name as string }))
           : [];
         setRoutineOptions(options);
       } catch (err) {
@@ -203,7 +209,12 @@ export default function SesionDetailEditorPage() {
   const visiblePickerExercises = useMemo(() => {
     const term = pickerSearch.trim().toLowerCase();
     if (!term) return pickerExercises;
-    return pickerExercises.filter((ex) => (ex.name || "").toLowerCase().includes(term));
+    return pickerExercises.filter((ex) => {
+      const name = (ex.name || "").toLowerCase();
+      const type = (ex.sessionMeta?.type || "").toLowerCase();
+      const desc = (ex.sessionMeta?.description || "").toLowerCase();
+      return name.includes(term) || type.includes(term) || desc.includes(term);
+    });
   }, [pickerExercises, pickerSearch]);
 
   function updateExercise(idx: number, patch: Partial<Exercise>) {
@@ -366,6 +377,7 @@ export default function SesionDetailEditorPage() {
     try {
       setLoadingPicker(true);
       setErrorLibrary(null);
+      setPickerSearch("");
       setPickerIndex(idx);
 
       const res = await fetch("/api/ct/exercises?usage=SESSION", { cache: "no-store" });
@@ -646,7 +658,7 @@ export default function SesionDetailEditorPage() {
 
               <div className="space-y-2 md:col-span-2">
                 <div className="flex items-center justify-between print:hidden">
-                  <label className="text-[11px] text-gray-500">Imagen (URL)</label>
+                  <label className="text-[11px] text-gray-500">Imagen / video (URL)</label>
                   {!editing && <span className="text-[10px] text-gray-400">Bloqueado</span>}
                 </div>
                 <input
@@ -658,12 +670,23 @@ export default function SesionDetailEditorPage() {
                 />
                 {ex.imageUrl ? (
                   <div className="mt-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={ex.imageUrl}
-                      alt="Vista previa"
-                      className="max-h-80 rounded-lg border object-contain"
-                    />
+                    {isVideoUrl(ex.imageUrl) ? (
+                      <div className="aspect-video w-full rounded-lg border overflow-hidden">
+                        <iframe
+                          src={ex.imageUrl}
+                          className="w-full h-full"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      </div>
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={ex.imageUrl}
+                        alt="Vista previa"
+                        className="max-h-80 rounded-lg border object-contain"
+                      />
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -730,6 +753,11 @@ export default function SesionDetailEditorPage() {
                       onClick={() => applyLibraryExercise(exLib)}
                     >
                       <p className="font-medium text-gray-900">{exLib.name}</p>
+                      {exLib.sessionMeta?.type && (
+                        <p className="text-[11px] text-gray-500">
+                          Tipo: {exLib.sessionMeta.type}
+                        </p>
+                      )}
                       {exLib.sessionMeta?.description && (
                         <p className="text-[11px] text-gray-500 line-clamp-2">
                           {exLib.sessionMeta.description}
