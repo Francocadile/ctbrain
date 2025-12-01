@@ -14,6 +14,8 @@ const sessionMetaSchema = z
     description: z.string().optional().nullable(),
     imageUrl: z.string().optional().nullable(),
     sessionId: z.string().optional().nullable(),
+    routineId: z.string().optional().nullable(),
+    routineName: z.string().optional().nullable(),
   })
   .optional()
   .nullable();

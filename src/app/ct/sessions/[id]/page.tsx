@@ -22,6 +22,8 @@ type Exercise = {
   duration: string;
   description: string;
   imageUrl: string;
+  routineId?: string;
+  routineName?: string;
 };
 
 const EX_TAG = "[EXERCISES]";
@@ -96,6 +98,8 @@ function decodeExercises(desc: string | null | undefined): { prefix: string; exe
         duration: e.duration ?? "",
         description: e.description ?? "",
         imageUrl: e.imageUrl ?? "",
+        routineId: (e as any).routineId ?? "",
+        routineName: (e as any).routineName ?? "",
       }));
       return { prefix, exercises: fixed };
     }
@@ -123,14 +127,32 @@ export default function SesionDetailEditorPage() {
   const [prefix, setPrefix] = useState<string>("");
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [kinds, setKinds] = useState<string[]>([]);
+  const [routineOptions, setRoutineOptions] = useState<{ id: string; name: string }[]>([]);
   const [savingToLibrary, setSavingToLibrary] = useState(false);
   const [errorLibrary, setErrorLibrary] = useState<string | null>(null);
   const [pickerIndex, setPickerIndex] = useState<number | null>(null);
   const [pickerExercises, setPickerExercises] = useState<ExerciseDTO[]>([]);
   const [loadingPicker, setLoadingPicker] = useState(false);
+  const [pickerSearch, setPickerSearch] = useState("");
 
   useEffect(() => {
     (async () => setKinds(await listKinds()))();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/ct/exercises?usage=ROUTINE", { cache: "no-store" });
+        const json = await res.json();
+        const list = Array.isArray((json as any)?.data) ? (json as any).data : json;
+        const options = Array.isArray(list)
+          ? list.map((e: any) => ({ id: e.id as string, name: e.name as string }))
+          : [];
+        setRoutineOptions(options);
+      } catch (err) {
+        console.error("No se pudieron cargar las rutinas de fuerza", err);
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -177,6 +199,12 @@ export default function SesionDetailEditorPage() {
     [s?.description]
   );
   const displayRow = (marker.row || "").replace("ENTREN0", "ENTRENO");
+
+  const visiblePickerExercises = useMemo(() => {
+    const term = pickerSearch.trim().toLowerCase();
+    if (!term) return pickerExercises;
+    return pickerExercises.filter((ex) => (ex.name || "").toLowerCase().includes(term));
+  }, [pickerExercises, pickerSearch]);
 
   function updateExercise(idx: number, patch: Partial<Exercise>) {
     setExercises((prev) => {
@@ -294,6 +322,8 @@ export default function SesionDetailEditorPage() {
         description: (first as any).description ?? null,
         imageUrl: first.imageUrl ?? null,
         sessionId: s.id,
+        routineId: (first as any).routineId ?? null,
+        routineName: (first as any).routineName ?? null,
       };
 
       const res = await fetch(
@@ -375,6 +405,8 @@ export default function SesionDetailEditorPage() {
             (meta.imageUrl as string) ||
             exLib.videoUrl ||
             "",
+          routineId: (meta.routineId as string) || ex.routineId || "",
+          routineName: (meta.routineName as string) || ex.routineName || "",
         };
       })
     );
@@ -566,6 +598,42 @@ export default function SesionDetailEditorPage() {
               </div>
 
               <div className="space-y-2 md:col-span-2">
+                <label className="text-[11px] text-gray-500">
+                  Rutina de fuerza vinculada (opcional)
+                </label>
+                <select
+                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
+                  value={ex.routineId || ""}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    const selected = routineOptions.find((r) => r.id === value) || null;
+                    updateExercise(idx, {
+                      routineId: selected ? selected.id : "",
+                      routineName: selected ? selected.name : "",
+                    });
+                  }}
+                  disabled={!editing || routineOptions.length === 0}
+                >
+                  <option value="">— Sin rutina vinculada —</option>
+                  {routineOptions.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+                {routineOptions.length === 0 && (
+                  <p className="text-[10px] text-gray-400">
+                    No hay rutinas de fuerza cargadas todavía.
+                  </p>
+                )}
+                {!editing && ex.routineName && (
+                  <p className="text-[11px] text-gray-500">
+                    Rutina actual: {ex.routineName}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
                 <label className="text-[11px] text-gray-500">Descripción</label>
                 <textarea
                   className={`w-full rounded-md border px-2 py-1.5 text-sm min-h-[120px] ${roCls}`}
@@ -577,12 +645,12 @@ export default function SesionDetailEditorPage() {
               </div>
 
               <div className="space-y-2 md:col-span-2">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between print:hidden">
                   <label className="text-[11px] text-gray-500">Imagen (URL)</label>
                   {!editing && <span className="text-[10px] text-gray-400">Bloqueado</span>}
                 </div>
                 <input
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
+                  className={`w-full rounded-md border px-2 py-1.5 text-sm print:hidden ${roCls}`}
                   value={ex.imageUrl}
                   onChange={(e) => updateExercise(idx, { imageUrl: e.target.value })}
                   placeholder="https://..."
@@ -629,15 +697,32 @@ export default function SesionDetailEditorPage() {
                 Cerrar
               </button>
             </div>
+
+            {!loadingPicker && pickerExercises.length > 0 && (
+              <div className="mb-2">
+                <input
+                  type="text"
+                  className="w-full rounded-md border px-2 py-1.5 text-xs"
+                  placeholder="Buscar por nombre..."
+                  value={pickerSearch}
+                  onChange={(e) => setPickerSearch(e.target.value)}
+                />
+              </div>
+            )}
+
             {loadingPicker ? (
               <p className="text-xs text-gray-500">Cargando ejercicios...</p>
             ) : pickerExercises.length === 0 ? (
               <p className="text-xs text-gray-500">
                 No hay ejercicios en la biblioteca de Sesiones / Campo.
               </p>
+            ) : visiblePickerExercises.length === 0 ? (
+              <p className="text-xs text-gray-500">
+                No hay ejercicios que coincidan con la búsqueda.
+              </p>
             ) : (
               <ul className="max-h-64 overflow-auto divide-y divide-gray-100">
-                {pickerExercises.map((exLib) => (
+                {visiblePickerExercises.map((exLib) => (
                   <li key={exLib.id} className="py-1.5 text-xs">
                     <button
                       type="button"
@@ -697,6 +782,40 @@ export default function SesionDetailEditorPage() {
           /* === hoja A4 por ejercicio === */
           .print\\:page {
             page-break-after: always;
+          }
+
+          /* === ajustes de layout para impresión === */
+          #print-root section.print\:page {
+            margin-bottom: 6mm;
+            padding: 8px 10px !important;
+            border-width: 1px !important;
+            page-break-inside: avoid !important;
+          }
+
+          #print-root h1 {
+            font-size: 14px !important;
+            margin-bottom: 4px !important;
+          }
+
+          #print-root h2,
+          #print-root h3 {
+            font-size: 12px !important;
+          }
+
+          #print-root label {
+            font-size: 9px !important;
+          }
+
+          #print-root p,
+          #print-root input,
+          #print-root textarea {
+            font-size: 10px !important;
+            line-height: 1.3 !important;
+          }
+
+          #print-root img {
+            max-width: 100% !important;
+            height: auto !important;
           }
         }
       `}</style>

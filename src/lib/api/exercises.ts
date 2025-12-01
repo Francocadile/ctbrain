@@ -8,6 +8,8 @@ export type SessionMeta = {
   description?: string | null;
   imageUrl?: string | null;
   sessionId?: string | null;
+  routineId?: string | null;
+  routineName?: string | null;
 };
 
 export type ExerciseDTO = {
