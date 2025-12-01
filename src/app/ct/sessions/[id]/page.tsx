@@ -125,6 +125,9 @@ export default function SesionDetailEditorPage() {
   const [kinds, setKinds] = useState<string[]>([]);
   const [savingToLibrary, setSavingToLibrary] = useState(false);
   const [errorLibrary, setErrorLibrary] = useState<string | null>(null);
+  const [pickerIndex, setPickerIndex] = useState<number | null>(null);
+  const [pickerExercises, setPickerExercises] = useState<ExerciseDTO[]>([]);
+  const [loadingPicker, setLoadingPicker] = useState(false);
 
   useEffect(() => {
     (async () => setKinds(await listKinds()))();
@@ -173,6 +176,7 @@ export default function SesionDetailEditorPage() {
     () => parseMarker(typeof s?.description === "string" ? s?.description : ""),
     [s?.description]
   );
+  const displayRow = (marker.row || "").replace("ENTREN0", "ENTRENO");
 
   function updateExercise(idx: number, patch: Partial<Exercise>) {
     setExercises((prev) => {
@@ -205,7 +209,7 @@ export default function SesionDetailEditorPage() {
 
   function addKind() {
     if (isViewMode) return;
-    const n = prompt("Nuevo tipo de ejercicio:");
+    const n = prompt("Nuevo tipo de ejercicio (ej: Juego reducido MSG):");
     if (!n) return;
     const name = n.trim();
     if (!name) return;
@@ -327,6 +331,57 @@ export default function SesionDetailEditorPage() {
     }
   }
 
+  async function openLibraryPicker(idx: number) {
+    if (isViewMode) return;
+    try {
+      setLoadingPicker(true);
+      setErrorLibrary(null);
+      setPickerIndex(idx);
+
+      const res = await fetch("/api/ct/exercises?usage=SESSION", { cache: "no-store" });
+      const json = await res.json();
+      const list = Array.isArray((json as any)?.data) ? (json as any).data : json;
+      setPickerExercises(Array.isArray(list) ? list : []);
+    } catch (err: any) {
+      console.error(err);
+      setErrorLibrary(err?.message || "No se pudieron cargar los ejercicios de biblioteca");
+      setPickerExercises([]);
+    } finally {
+      setLoadingPicker(false);
+    }
+  }
+
+  function applyLibraryExercise(exLib: ExerciseDTO) {
+    if (pickerIndex === null) return;
+
+    setExercises((prev) =>
+      prev.map((ex, i) => {
+        if (i !== pickerIndex) return ex;
+
+        const meta = exLib.sessionMeta || {};
+
+        return {
+          ...ex,
+          title: exLib.name || "",
+          kind: (meta.type as string) || exLib.zone || "",
+          space: (meta.space as string) || "",
+          players:
+            meta.players != null
+              ? String(meta.players)
+              : ex.players || "",
+          duration: (meta.duration as string) || "",
+          description: (meta.description as string) || "",
+          imageUrl:
+            (meta.imageUrl as string) ||
+            exLib.videoUrl ||
+            "",
+        };
+      })
+    );
+
+    setPickerIndex(null);
+  }
+
   if (loading) return <div className="p-6 text-gray-500">Cargando…</div>;
   if (!s)
     return (
@@ -343,8 +398,7 @@ export default function SesionDetailEditorPage() {
       <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between print:hidden">
         <div>
           <h1 className="text-lg md:text-xl font-bold">
-            Editor de ejercicio(s) — {marker.row || "Bloque"} ·{" "}
-            {marker.turn === "morning" ? "Mañana" : marker.turn === "afternoon" ? "Tarde" : "—"}
+            Sesión: {displayRow || "Bloque"} · {"(" + (marker.turn === "morning" ? "Mañana" : marker.turn === "afternoon" ? "Tarde" : "—") + ")"}
           </h1>
           <p className="text-xs md:text-sm text-gray-500">
             Día: {marker.ymd || "—"} · Tipo: {s.type}
@@ -367,9 +421,6 @@ export default function SesionDetailEditorPage() {
           )}
           <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
             Dashboard
-          </a>
-          <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-            ✏️ Editor semanal
           </a>
 
           <button
@@ -409,13 +460,9 @@ export default function SesionDetailEditorPage() {
             className="rounded-2xl border bg-white shadow-sm overflow-hidden print:page"
           >
             <div className="flex items-center justify-between bg-gray-50 px-3 py-2 border-b">
-              <input
-                className={`text-[12px] font-semibold uppercase tracking-wide w-full max-w-[360px] ${roCls}`}
-                placeholder={`EJERCICIO #${idx + 1} — Título`}
-                value={ex.title}
-                onChange={(e) => updateExercise(idx, { title: e.target.value })}
-                disabled={!editing}
-              />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-700">
+                EJERCICIO #{idx + 1}
+              </span>
               {editing && (
                 <button
                   type="button"
@@ -428,6 +475,29 @@ export default function SesionDetailEditorPage() {
             </div>
 
             <div className="p-3 grid md:grid-cols-2 gap-3">
+              {editing && (
+                <div className="md:col-span-2 mb-1">
+                  <button
+                    type="button"
+                    className="text-[11px] text-blue-600 hover:underline"
+                    onClick={() => openLibraryPicker(idx)}
+                  >
+                    Usar ejercicio de biblioteca
+                  </button>
+                </div>
+              )}
+
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-[11px] text-gray-500">Título del ejercicio</label>
+                <input
+                  className="w-full rounded-md border px-2 py-1.5 text-sm"
+                  value={ex.title || ""}
+                  onChange={(e) => updateExercise(idx, { title: e.target.value })}
+                  placeholder="Ej: Activación con balón 6v6"
+                  disabled={!editing}
+                />
+              </div>
+
               {/* Tipo de ejercicio (desplegable persistente) */}
               <div className="space-y-2">
                 <label className="text-[11px] text-gray-500">Tipo de ejercicio</label>
@@ -450,7 +520,7 @@ export default function SesionDetailEditorPage() {
                     }}
                     disabled={!editing}
                   >
-                    <option value="">— Seleccionar —</option>
+                    <option value="">— Ej: Juego reducido MSG —</option>
                     {kinds.map((k) => (
                       <option key={k} value={k}>
                         {k}
@@ -545,6 +615,49 @@ export default function SesionDetailEditorPage() {
           </div>
         )}
       </div>
+
+      {pickerIndex !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-4 shadow-lg">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-semibold">Elegir ejercicio de biblioteca</h2>
+              <button
+                type="button"
+                className="text-xs text-gray-500 hover:underline"
+                onClick={() => setPickerIndex(null)}
+              >
+                Cerrar
+              </button>
+            </div>
+            {loadingPicker ? (
+              <p className="text-xs text-gray-500">Cargando ejercicios...</p>
+            ) : pickerExercises.length === 0 ? (
+              <p className="text-xs text-gray-500">
+                No hay ejercicios en la biblioteca de Sesiones / Campo.
+              </p>
+            ) : (
+              <ul className="max-h-64 overflow-auto divide-y divide-gray-100">
+                {pickerExercises.map((exLib) => (
+                  <li key={exLib.id} className="py-1.5 text-xs">
+                    <button
+                      type="button"
+                      className="w-full text-left"
+                      onClick={() => applyLibraryExercise(exLib)}
+                    >
+                      <p className="font-medium text-gray-900">{exLib.name}</p>
+                      {exLib.sessionMeta?.description && (
+                        <p className="text-[11px] text-gray-500 line-clamp-2">
+                          {exLib.sessionMeta.description}
+                        </p>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* estilos de impresión */}
       <style jsx global>{`
