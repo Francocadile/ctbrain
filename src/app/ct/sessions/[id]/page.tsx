@@ -230,17 +230,22 @@ export default function SesionDetailEditorPage() {
     })();
   }
 
+  async function persistSessionOnly() {
+    if (!s) return;
+    const newDescription = encodeExercises(prefix || (s.description as string) || "", exercises);
+    await updateSession(s.id, {
+      title: s.title ?? "",
+      description: newDescription,
+      date: s.date,
+    });
+  }
+
   async function saveAll() {
     if (isViewMode) return;
     if (!s) return;
     setSaving(true);
     try {
-      const newDescription = encodeExercises(prefix || (s.description as string) || "", exercises);
-      await updateSession(s.id, {
-        title: s.title ?? "",
-        description: newDescription,
-        date: s.date,
-      });
+      await persistSessionOnly();
 
       // Intento opcional de importar al backend (si el endpoint existe).
       importFromSession(s.id).catch(() => {});
@@ -261,22 +266,58 @@ export default function SesionDetailEditorPage() {
     try {
       setSavingToLibrary(true);
       setErrorLibrary(null);
+      await persistSessionOnly();
 
       const first = exercises[0];
-  const name = (first.title || first.kind || "Ejercicio sin nombre").trim();
-  const zone = (first.kind || "").trim() || null;
-  const videoUrl = (first.imageUrl || "").trim() || null;
+      const name = (first.title || first.kind || "Ejercicio sin nombre").trim();
+      const zone = (first.kind || "").trim() || null;
+      const videoUrl = (first.imageUrl || "").trim() || null;
+
+      const rawPlayers = (first as any).players ?? null;
+      let players: number | string | null = null;
+      if (typeof rawPlayers === "number") {
+        players = rawPlayers;
+      } else if (typeof rawPlayers === "string") {
+        const n = parseInt(rawPlayers.replace(/\D+/g, ""), 10);
+        players = Number.isFinite(n) ? n : rawPlayers;
+      }
+
       const sessionMeta = {
         type: first.kind ?? null,
         space: (first as any).space ?? null,
-        players: (first as any).players ?? null,
+        players,
         duration: (first as any).duration ?? null,
         description: (first as any).description ?? null,
         imageUrl: first.imageUrl ?? null,
         sessionId: s.id,
       };
 
-      await createSessionExercise({ name, zone, videoUrl, originSessionId: s.id, sessionMeta });
+      const res = await fetch(
+        `/api/ct/exercises?usage=SESSION&originSessionId=${encodeURIComponent(s.id)}`,
+        { cache: "no-store" }
+      );
+      const json = await res.json();
+      const list = Array.isArray((json as any)?.data) ? (json as any).data : json;
+      const existing = (Array.isArray(list) ? list[0] : null) as ExerciseDTO | null;
+
+      if (existing?.id) {
+        await updateSessionExercise(existing.id, {
+          name,
+          zone,
+          videoUrl,
+          originSessionId: s.id,
+          sessionMeta,
+        });
+      } else {
+        await createSessionExercise({
+          name,
+          zone,
+          videoUrl,
+          originSessionId: s.id,
+          sessionMeta,
+        });
+      }
+
       alert("Ejercicio guardado en la biblioteca de Sesiones / Campo");
     } catch (err: any) {
       console.error(err);
