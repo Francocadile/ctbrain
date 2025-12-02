@@ -10,18 +10,21 @@ import {
   type SessionDTO,
 } from "@/lib/api/sessions";
 
-// Reutilizamos los mismos tipos y helpers que en la vista CT
-
 type TurnKey = "morning" | "afternoon";
 
+// Bloques principales de contenido (copiados de CT)
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
+
+// Metadatos (arriba). Agregamos NOMBRE SESIÓN (copiados de CT)
 const META_ROWS = ["LUGAR", "HORA", "VIDEO", "NOMBRE SESIÓN"] as const;
 
-const DAYFLAG_TAG = "DAYFLAG";
-const MICRO_TAG = "MICRO";
+/* ====== Marcadores usados por el editor (copiados de CT) ====== */
+const DAYFLAG_TAG = "DAYFLAG"; // título: "PARTIDO|rival|logo" | "LIBRE" | ""
+const MICRO_TAG = "MICRO"; // título: "MD+1" | "MD+2" | ... | "MD" | "DESCANSO" | ""
 const dayFlagMarker = (turn: TurnKey) => `[${DAYFLAG_TAG}:${turn}]`;
 const microMarker = (turn: TurnKey) => `[${MICRO_TAG}:${turn}]`;
 
+/* ====== Helpers generales (copiados de CT) ====== */
 function cellMarker(turn: TurnKey, row: string) {
   return `[GRID:${turn}:${row}]`;
 }
@@ -46,6 +49,7 @@ function humanDateShort(ymd: string) {
   });
 }
 
+/* ====== Partido / Descanso (copiados de CT) ====== */
 type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
 type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string };
 
@@ -61,6 +65,7 @@ function parseDayFlagTitle(title?: string | null): DayFlag {
   return { kind: "NONE" };
 }
 
+/* ====== Intensidad (Microciclo) (copiados de CT) ====== */
 type MicroKey = "" | "MD+1" | "MD+2" | "MD-4" | "MD-3" | "MD-2" | "MD-1" | "MD" | "DESCANSO";
 function isMicro(s: SessionDTO, turn: TurnKey) {
   return typeof s.description === "string" && s.description.startsWith(microMarker(turn));
@@ -71,6 +76,7 @@ function parseMicroTitle(title?: string | null): MicroKey {
   return (allowed.has(t) ? (t as MicroKey) : "") as MicroKey;
 }
 function microChipClass(v: MicroKey) {
+  // Colores en línea con editor/dashboard
   switch (v) {
     case "MD+1":
       return "bg-blue-100 text-blue-900 border-blue-200";
