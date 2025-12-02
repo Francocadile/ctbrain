@@ -11,6 +11,7 @@ import {
   type ExerciseDTO,
 } from "@/lib/api/exercises";
 import { listKinds, addKind as apiAddKind, replaceKinds } from "@/lib/settings";
+import { SessionRoutinePanel, type LinkedRoutineDTO } from "./SessionRoutinePanel";
 
 type TurnKey = "morning" | "afternoon";
 
@@ -140,6 +141,7 @@ export default function SesionDetailEditorPage() {
   const [pickerExercises, setPickerExercises] = useState<ExerciseDTO[]>([]);
   const [loadingPicker, setLoadingPicker] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
+  const [linkedRoutines, setLinkedRoutines] = useState<LinkedRoutineDTO[]>([]);
 
   useEffect(() => {
     (async () => setKinds(await listKinds()))();
@@ -175,6 +177,43 @@ export default function SesionDetailEditorPage() {
         const sess: SessionDTO =
           (res as any)?.data ? (res as any).data : (res as unknown as SessionDTO);
         setS(sess);
+
+        // Cargar rutinas de fuerza vinculadas a esta sesión
+        try {
+          const relRes = await fetch(`/api/ct/routines`, { cache: "no-store" });
+          const relJson = await relRes.json();
+          const relData = Array.isArray((relJson as any)?.data) ? (relJson as any).data : relJson;
+
+          // Para cada rutina, consultamos si está vinculada a esta sesión
+          const routineList: { id: string; title: string }[] = Array.isArray(relData)
+            ? relData.map((r: any) => ({ id: String(r.id), title: (r.title as string) || "Rutina sin nombre" }))
+            : [];
+
+          const linked: LinkedRoutineDTO[] = [];
+          await Promise.all(
+            routineList.map(async (r) => {
+              try {
+                const linkRes = await fetch(`/api/ct/routines/${r.id}/sessions`, {
+                  cache: "no-store",
+                });
+                if (!linkRes.ok) return;
+                const linkJson = await linkRes.json();
+                const sessionIds: string[] = Array.isArray((linkJson as any)?.sessionIds)
+                  ? (linkJson as any).sessionIds
+                  : [];
+                if (sessionIds.includes(sess.id)) {
+                  linked.push({ id: r.id, title: r.title });
+                }
+              } catch (err) {
+                console.error("No se pudieron cargar las sesiones vinculadas para la rutina", r.id, err);
+              }
+            })
+          );
+
+          setLinkedRoutines(linked);
+        } catch (err) {
+          console.error("No se pudieron cargar las rutinas vinculadas a la sesión", err);
+        }
 
         const d = decodeExercises(sess?.description || "");
         setPrefix(d.prefix);
@@ -542,6 +581,13 @@ export default function SesionDetailEditorPage() {
           </button>
         </div>
       </header>
+
+      {/* Rutina de fuerza vinculada a la sesión */}
+      <SessionRoutinePanel
+        sessionId={s.id}
+        routines={linkedRoutines}
+        isViewMode={isViewMode}
+      />
 
       {/* Lista de ejercicios */}
       <div className="space-y-4">

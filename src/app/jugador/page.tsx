@@ -80,20 +80,32 @@ export default async function JugadorHomePage() {
     }),
   ]);
 
-  // Entrenamiento de hoy para el equipo del jugador
-  const today = new Date();
-  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  const rawRpeHistory = await prisma.rPEEntry.findMany({
+    where: { userId: session.user.id },
+    orderBy: { date: "desc" },
+    take: 7,
+  });
 
-  const training: Session | null = await (prisma as any).session.findFirst({
+  const rawWellnessHistory = await prisma.wellnessEntry.findMany({
+    where: { userId: session.user.id },
+    orderBy: { date: "desc" },
+    take: 7,
+  });
+
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const end = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7);
+
+  const upcomingSessions: Session[] = await (prisma as any).session.findMany({
     where: {
       teamId: player.teamId,
       date: {
-        gte: startOfDay,
-        lt: endOfDay,
+        gte: start,
+        lt: end,
       },
     },
-    orderBy: { date: "desc" },
+    orderBy: { date: "asc" },
+    take: 5,
   });
 
   const fakeMinutes = [90, 75, 30, 0, 90]; // TODO: conectar con módulo de partidos
@@ -114,6 +126,22 @@ export default async function JugadorHomePage() {
   }
 
   const wellnessToday = lastWellness && isToday(lastWellness.date) ? lastWellness : null;
+
+  const rpeHistory: RpeEntryDTO[] = rawRpeHistory.map((r) => ({
+    id: r.id,
+    date: r.date,
+    rpe: r.rpe,
+  }));
+
+  const wellnessHistory: WellnessEntryDTO[] = rawWellnessHistory.map((w) => ({
+    id: w.id,
+    date: w.date,
+    sleepQuality: w.sleepQuality ?? null,
+    fatigue: w.fatigue ?? null,
+    soreness: w.muscleSoreness ?? null,
+    stress: w.stress ?? null,
+    mood: w.mood ?? null,
+  }));
 
   // Rutinas visibles para el jugador: reutilizamos la misma lógica de visibilidad que en la página de detalle
   const routines = await prisma.routine.findMany({
@@ -139,6 +167,9 @@ export default async function JugadorHomePage() {
         <div className="max-w-3xl mx-auto space-y-6">
           <PlayerHomeHeader player={player} />
 
+          {/* Próximos entrenamientos del equipo */}
+          <PlayerHomeUpcomingSessions sessions={upcomingSessions} />
+
           {/* Primero las rutinas visibles para el jugador */}
           <PlayerHomeRoutines routines={routines} />
 
@@ -152,10 +183,193 @@ export default async function JugadorHomePage() {
             feedbacks={feedbacks}
           />
 
+          <PlayerHomeHistoryCard
+            rpeHistory={rpeHistory}
+            wellnessHistory={wellnessHistory}
+          />
+
           <PlayerHomeGpsCard />
         </div>
       </main>
     </RoleGate>
+  );
+}
+
+function PlayerHomeUpcomingSessions({ sessions }: { sessions: Session[] }) {
+  if (!sessions.length) {
+    return
+      <section className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Próximos entrenamientos
+          </h2>
+        </div>
+        <p className="text-sm text-gray-600">
+          Todavía no hay entrenamientos cargados para los próximos días.
+        </p>
+      </section>;
+  }
+
+  const [next, ...rest] = sessions;
+  const nextDate = new Date(next.date);
+
+  return (
+    <section className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          Próximos entrenamientos
+        </h2>
+      </div>
+
+      <div className="space-y-1">
+        <p className="text-[11px] font-semibold text-gray-500">Próximo entrenamiento</p>
+        <p className="text-sm font-medium text-gray-900">
+          {next.title || "(Sin título)"}
+        </p>
+        <p className="text-xs text-gray-600">
+          {nextDate.toLocaleDateString()} ·
+          {" "}
+          {nextDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        </p>
+      </div>
+
+      {rest.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold text-gray-500">Esta semana</p>
+          <ul className="space-y-1 text-xs">
+            {rest.map((s) => {
+              const d = new Date(s.date);
+              return (
+                <li
+                  key={s.id}
+                  className="flex items-center justify-between rounded-md border px-2 py-1 bg-gray-50"
+                >
+                  <span className="truncate">{s.title || "(Sin título)"}</span>
+                  <span className="shrink-0 text-[11px] text-gray-500">
+                    {d.toLocaleDateString()}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+type RpeEntryDTO = {
+  id: string;
+  date: Date;
+  rpe: number;
+};
+
+type WellnessEntryDTO = {
+  id: string;
+  date: Date;
+  sleepQuality: number | null;
+  fatigue: number | null;
+  soreness: number | null;
+  stress: number | null;
+  mood: number | null;
+};
+
+function PlayerHomeHistoryCard({
+  rpeHistory,
+  wellnessHistory,
+}: {
+  rpeHistory: RpeEntryDTO[];
+  wellnessHistory: WellnessEntryDTO[];
+}) {
+  if ((!rpeHistory || rpeHistory.length === 0) && (!wellnessHistory || wellnessHistory.length === 0)) {
+    return null;
+  }
+
+  const formatShortDate = (d: Date) =>
+    d.toLocaleDateString(undefined, { day: "2-digit", month: "2-digit" });
+
+  return (
+    <section className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          Historial reciente
+        </h2>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+        <div className="space-y-2">
+          <p className="font-semibold text-gray-700">RPE últimos días</p>
+          {(!rpeHistory || rpeHistory.length === 0) ? (
+            <p className="text-gray-500">Sin registros de RPE aún.</p>
+          ) : (
+            <ul className="space-y-1">
+              {rpeHistory.map((entry) => {
+                const d = new Date(entry.date);
+                return (
+                  <li
+                    key={entry.id}
+                    className="flex items-center justify-between rounded-md border px-2 py-1 bg-gray-50"
+                  >
+                    <span className="text-gray-600">
+                      {formatShortDate(d)}
+                    </span>
+                    <span className="font-medium text-gray-900">
+                      {entry.rpe}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="font-semibold text-gray-700">Wellness últimos días</p>
+            <Link
+              href="/jugador/wellness"
+              className="text-[11px] text-blue-600 hover:underline"
+            >
+              Ver más
+            </Link>
+          </div>
+          {!wellnessHistory || wellnessHistory.length === 0 ? (
+            <p className="text-gray-500">Sin registros de wellness aún.</p>
+          ) : (
+            <ul className="space-y-1">
+              {wellnessHistory.map((entry) => {
+                const d = new Date(entry.date);
+
+                const components: string[] = [];
+                if (entry.sleepQuality != null) components.push(`Sueño ${entry.sleepQuality}`);
+                if (entry.fatigue != null) components.push(`Fatiga ${entry.fatigue}`);
+                if (entry.soreness != null) components.push(`Dolor ${entry.soreness}`);
+                if (entry.stress != null) components.push(`Estrés ${entry.stress}`);
+                if (entry.mood != null) components.push(`Ánimo ${entry.mood}`);
+
+                return (
+                  <li
+                    key={entry.id}
+                    className="rounded-md border px-2 py-1 bg-gray-50"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">
+                        {d.toLocaleDateString(undefined, { day: "2-digit", month: "2-digit" })}
+                      </span>
+                    </div>
+                    {components.length > 0 && (
+                      <p className="mt-0.5 text-[11px] text-gray-700 line-clamp-2">
+                        {components.join(" · ")}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 

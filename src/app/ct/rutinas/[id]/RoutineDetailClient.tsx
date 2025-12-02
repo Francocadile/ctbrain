@@ -736,44 +736,65 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
         </div>
       )}
 
-      {/* Asignación a sesiones (oculta por ahora) */}
-      {false && (
-        <section className="rounded-xl border bg-white p-4 shadow-sm space-y-3">
-          <header className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Asignar a sesiones</h2>
+      {/* Sesiones vinculadas */}
+      <section className="rounded-xl border bg-white p-4 shadow-sm space-y-3">
+        <header className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold">Sesiones vinculadas</h2>
+            {!isViewMode && (
+              <p className="text-xs text-gray-500">
+                Asign E1 esta rutina a sesiones de tu planner.
+              </p>
+            )}
+          </div>
+          {!isViewMode && sessions.length > 0 && (
             <button
               type="button"
               className="text-xs rounded-md border px-3 py-1 hover:bg-gray-50"
               onClick={handleSaveSessions}
               disabled={isPending}
             >
-              Guardar asignación
+              Guardar asignaci F3n a sesiones
             </button>
-          </header>
-          {sessions.length === 0 ? (
-            <p className="text-sm text-gray-500">No hay sesiones recientes para mostrar.</p>
-          ) : (
-            <ul className="max-h-64 overflow-auto space-y-1 text-xs">
-              {sessions.map((s) => {
-                const d = new Date(s.date);
-                const label = `${d.toLocaleDateString()} — ${s.title || "(Sin nombre)"}`;
-                const checked = selectedSessionIds.includes(s.id);
+          )}
+        </header>
+
+        {sessions.length === 0 ? (
+          <p className="text-sm text-gray-500">
+            Esta rutina a FAn no est E1 asignada a ninguna sesi F3n.
+          </p>
+        ) : (
+          <ul className="max-h-64 overflow-auto space-y-1 text-xs">
+            {sessions.map((s) => {
+              const d = new Date(s.date);
+              const label = `${d.toLocaleDateString()}  ${s.title || "(Sin nombre)"}`;
+              const checked = selectedSessionIds.includes(s.id);
+
+              if (isViewMode) {
+                // Solo lectura: mostrar solo las sesiones ya vinculadas
+                if (!checked) return null;
                 return (
                   <li key={s.id} className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      className="h-3 w-3 rounded border-gray-300"
-                      checked={checked}
-                      onChange={() => toggleSession(s.id)}
-                    />
                     <span className="truncate">{label}</span>
                   </li>
                 );
-              })}
-            </ul>
-          )}
-        </section>
-      )}
+              }
+
+              return (
+                <li key={s.id} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    className="h-3 w-3 rounded border-gray-300"
+                    checked={checked}
+                    onChange={() => toggleSession(s.id)}
+                  />
+                  <span className="truncate">{label}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
