@@ -178,21 +178,64 @@ export default function SesionDetailEditorPage() {
 
         const d = decodeExercises(sess?.description || "");
         setPrefix(d.prefix);
-        setExercises(
-          d.exercises.length
-            ? d.exercises
-            : [
-                {
-                  title: "",
-                  kind: "",
-                  space: "",
-                  players: "",
-                  duration: "",
-                  description: "",
-                  imageUrl: "",
-                },
-              ]
-        );
+        if (d.exercises.length) {
+          setExercises(d.exercises);
+        } else if (isViewMode) {
+          // Modo solo lectura: si no hay ejercicios estructurados, intentamos usar la biblioteca.
+          try {
+            const resLib = await fetch(
+              `/api/ct/exercises?usage=SESSION&originSessionId=${encodeURIComponent(sess.id)}`,
+              { cache: "no-store" }
+            );
+            const jsonLib = await resLib.json();
+            const listLib = Array.isArray((jsonLib as any)?.data)
+              ? (jsonLib as any).data
+              : jsonLib;
+            const arr: ExerciseDTO[] = Array.isArray(listLib) ? listLib : [];
+
+            if (arr.length > 0) {
+              const mapped: Exercise[] = arr.map((exLib) => {
+                const meta = exLib.sessionMeta || {};
+                return {
+                  title: exLib.name || (meta.description as string) || "",
+                  kind: (meta.type as string) || exLib.zone || "",
+                  space: (meta.space as string) || "",
+                  players:
+                    meta.players != null
+                      ? String(meta.players)
+                      : "",
+                  duration: (meta.duration as string) || "",
+                  description: (meta.description as string) || "",
+                  imageUrl:
+                    (meta.imageUrl as string) ||
+                    exLib.videoUrl ||
+                    "",
+                  routineId: (meta.routineId as string) || "",
+                  routineName: (meta.routineName as string) || "",
+                };
+              });
+              setExercises(mapped);
+            } else {
+              setExercises([]);
+            }
+          } catch (err) {
+            console.error("No se pudieron cargar ejercicios desde la biblioteca para view mode", err);
+            setExercises([]);
+          }
+        } else {
+          // Modo edición: plantilla inicial para que el CT pueda empezar a cargar el ejercicio.
+          setExercises([
+            {
+              title: "",
+              kind: "",
+              space: "",
+              players: "",
+              duration: "",
+              description: "",
+              imageUrl: "",
+            },
+          ]);
+        }
 
   setEditing(!isViewMode);
       } catch (e) {

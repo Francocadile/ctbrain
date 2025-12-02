@@ -71,48 +71,51 @@ export async function POST(req: Request) {
 
   const body = await req.json();
   const parsed = createSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Datos inválidos", details: parsed.error.flatten() },
-        { status: 400 },
-      );
-    }
+  if (!parsed.success) {
+    return NextResponse.json(
+    { error: "Datos inválidos", details: parsed.error.flatten() },
+    { status: 400 },
+    );
+  }
 
   const { name, zone, videoUrl, usage, originSessionId, sessionMeta } = parsed.data;
-    const trimmedName = name.trim();
+  const trimmedName = name.trim();
 
-    // 👉 1) Si ya existe un ejercicio de este equipo con mismo nombre y uso,
-    // lo devolvemos y NO intentamos crear otro (evita el error de unique).
+  // 👉 Para usos DISTINTOS de "SESSION" (por ejemplo "ROUTINE"),
+  // mantenemos la idempotencia por nombre + teamId + usage.
+  if (usage !== "SESSION") {
     const existing = await prisma.exercise.findFirst({
-      where: {
-        name: trimmedName,
-        teamId: team.id,
-        usage: usage as any,
-      },
+    where: {
+      name: trimmedName,
+      teamId: team.id,
+      usage: usage as any,
+    },
     });
 
     if (existing) {
-      return NextResponse.json({ data: existing }, { status: 200 });
+    return NextResponse.json({ data: existing }, { status: 200 });
     }
+  }
 
-    // 👉 2) Si no existe, lo creamos normalmente
-    const created = await prisma.exercise.create({
-      data: {
-        name: trimmedName,
-        zone: zone?.trim() || null,
-        videoUrl: videoUrl?.trim() || null,
-        usage: usage as any,
-        teamId: team.id, // 👉 ejercicios de sesión siempre del equipo actual
-        // originSessionId se persiste desde el editor de sesiones
-        originSessionId: originSessionId ?? null,
-        sessionMeta: sessionMeta ? (sessionMeta as any) : null,
-      } as any,
-    });
+  // 👉 Para usage === "SESSION" NO aplicamos idempotencia por nombre.
+  // En todos los casos que llegan acá, creamos un nuevo ejercicio normalmente.
+  const created = await prisma.exercise.create({
+    data: {
+    name: trimmedName,
+    zone: zone?.trim() || null,
+    videoUrl: videoUrl?.trim() || null,
+    usage: usage as any,
+    teamId: team.id, // 👉 ejercicios de sesión siempre del equipo actual
+    // originSessionId se persiste desde el editor de sesiones
+    originSessionId: originSessionId ?? null,
+    sessionMeta: sessionMeta ? (sessionMeta as any) : null,
+    } as any,
+  });
 
-    return NextResponse.json({ data: created }, { status: 201 });
+  return NextResponse.json({ data: created }, { status: 201 });
   } catch (error: any) {
-    if (error instanceof Response) return error;
-    console.error("ct exercises create error", error);
-    return NextResponse.json({ error: error?.message || "Error" }, { status: 500 });
+  if (error instanceof Response) return error;
+  console.error("ct exercises create error", error);
+  return NextResponse.json({ error: error?.message || "Error" }, { status: 500 });
   }
 }
