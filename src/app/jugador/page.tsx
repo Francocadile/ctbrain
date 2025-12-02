@@ -21,6 +21,16 @@ type PlayerWithTeam = {
   team: Team | null;
 };
 
+function parseMarker(description?: string) {
+  const text = (description || "").trimStart();
+  const m = text.match(/^[\[]GRID:(morning|afternoon):(.+?)]\s*\|\s*(\d{4}-\d{2}-\d{2})/i);
+  return {
+    turn: (m?.[1] || "") as "morning" | "afternoon" | "",
+    row: m?.[2] || "",
+    ymd: m?.[3] || "",
+  };
+}
+
 function isToday(date: Date) {
   const today = new Date();
   return (
@@ -96,9 +106,7 @@ export default async function JugadorHomePage() {
   const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
 
-  const weekAhead = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7);
-
-  const [todaySession, upcomingSessions] = await Promise.all([
+  const [todaySession] = await Promise.all([
     (prisma as any).session.findFirst({
       where: {
         teamId: player.teamId,
@@ -109,18 +117,12 @@ export default async function JugadorHomePage() {
       },
       orderBy: { date: "asc" },
     }) as Promise<Session | null>,
-    (prisma as any).session.findMany({
-      where: {
-        teamId: player.teamId,
-        date: {
-          gte: startOfDay,
-          lt: weekAhead,
-        },
-      },
-      orderBy: { date: "asc" },
-      take: 5,
-    }) as Promise<Session[]>,
   ]);
+
+  const marker = todaySession ? parseMarker(todaySession.description as string | undefined) : null;
+  const todayYmd = marker?.ymd || startOfDay.toISOString().slice(0, 10);
+  const todayTurn: "morning" | "afternoon" =
+    marker?.turn === "morning" || marker?.turn === "afternoon" ? marker.turn : "morning";
 
   const fakeMinutes = [90, 75, 30, 0, 90]; // TODO: conectar con módulo de partidos
 
@@ -181,10 +183,11 @@ export default async function JugadorHomePage() {
         <div className="max-w-3xl mx-auto space-y-6">
           <PlayerHomeHeader player={player} />
 
-          {/* Próximos entrenamientos del equipo */}
-          <PlayerHomeUpcomingSessions
-            sessions={upcomingSessions}
+          {/* Entrenamiento de hoy */}
+          <PlayerHomeTodaySessionCard
             todaySession={todaySession}
+            todayYmd={todayYmd}
+            todayTurn={todayTurn}
           />
 
           {/* Primero las rutinas visibles para el jugador */}
@@ -212,93 +215,56 @@ export default async function JugadorHomePage() {
   );
 }
 
-function PlayerHomeUpcomingSessions({
-  sessions,
+function PlayerHomeTodaySessionCard({
   todaySession,
+  todayYmd,
+  todayTurn,
 }: {
-  sessions: Session[];
   todaySession: Session | null;
+  todayYmd: string;
+  todayTurn: "morning" | "afternoon";
 }) {
-  if (!sessions.length) {
+  if (!todaySession) {
     return (
       <section className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-            Próximos entrenamientos
-          </h2>
-        </div>
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          Entrenamiento de hoy
+        </h2>
         <p className="text-sm text-gray-600">
-          Todavía no hay entrenamientos cargados para los próximos días.
+          Todavía no hay un entrenamiento cargado para hoy.
         </p>
-        {todaySession && (
-          <div className="flex justify-end pt-2">
-            <Link
-              href={`/jugador/sesiones/${todaySession.id}`}
-              className="text-xs rounded-md border px-3 py-1.5 bg-black text-white hover:bg-gray-800"
-            >
-              Ver entrenamiento de hoy
-            </Link>
-          </div>
-        )}
       </section>
     );
   }
 
-  const [next, ...rest] = sessions;
-  const nextDate = new Date(next.date);
+  const d = new Date(todaySession.date);
 
   return (
     <section className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-          Próximos entrenamientos
+          Entrenamiento de hoy
         </h2>
       </div>
 
-      <div className="space-y-1">
-        <p className="text-[11px] font-semibold text-gray-500">Próximo entrenamiento</p>
-        <p className="text-sm font-medium text-gray-900">
-          {next.title || "(Sin título)"}
+      <div className="space-y-1 text-sm">
+        <p className="font-medium text-gray-900">
+          {todaySession.title || "Sesión sin título"}
         </p>
         <p className="text-xs text-gray-600">
-          {nextDate.toLocaleDateString()} ·
-          {" "}
-          {nextDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          {d.toLocaleDateString()} ·{" "}
+          {d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         </p>
       </div>
 
-      {rest.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-[11px] font-semibold text-gray-500">Esta semana</p>
-          <ul className="space-y-1 text-xs">
-            {rest.map((s) => {
-              const d = new Date(s.date);
-              return (
-                <li
-                  key={s.id}
-                  className="flex items-center justify-between rounded-md border px-2 py-1 bg-gray-50"
-                >
-                  <span className="truncate">{s.title || "(Sin título)"}</span>
-                  <span className="shrink-0 text-[11px] text-gray-500">
-                    {d.toLocaleDateString()}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
-
-      {todaySession && (
-        <div className="flex justify-end pt-2">
-          <Link
-            href={`/jugador/sesiones/${todaySession.id}`}
-            className="text-xs rounded-md border px-3 py-1.5 bg-black text-white hover:bg-gray-800"
-          >
-            Ver entrenamiento de hoy
-          </Link>
-        </div>
-      )}
+      <div className="flex justify-end">
+        <Link
+          href={`/jugador/sesiones/by-day/${todayYmd}/${todayTurn}`}
+          className="text-xs rounded-md border px-3 py-1.5 bg-black text-white hover:bg-gray-800"
+        >
+          Ver entrenamiento de hoy
+        </Link>
+      </div>
     </section>
   );
 }
