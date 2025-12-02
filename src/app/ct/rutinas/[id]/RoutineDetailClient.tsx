@@ -2,7 +2,7 @@
 
 import type { FocusEvent } from "react";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import VideoPlayerModal from "@/components/training/VideoPlayerModal";
 
 type RoutineHeaderDTO = {
@@ -108,6 +108,8 @@ type Props = {
 
 export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isViewMode = searchParams?.get("view") === "1";
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -487,16 +489,18 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {/* Flecha volver */}
-      <div className="mb-1">
-        <button
-          type="button"
-          className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
-          onClick={() => router.push("/ct/rutinas")}
-        >
-          <span className="text-lg">←</span>
-          <span>Volver a rutinas</span>
-        </button>
-      </div>
+      {!isViewMode && (
+        <div className="mb-1">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
+            onClick={() => router.push("/ct/rutinas")}
+          >
+            <span className="text-lg">←</span>
+            <span>Volver a rutinas</span>
+          </button>
+        </div>
+      )}
 
       {/* Cabecera simplificada */}
       <section className="mb-4 rounded-2xl border bg-white p-4 shadow-sm space-y-3">
@@ -508,6 +512,7 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
               value={header.title}
               onChange={(e) => handleFieldChange("title", e.target.value)}
               placeholder="Ej: Fuerza general, Activación, Gimnasio..."
+              disabled={isViewMode}
             />
           </div>
           <div className="space-y-1">
@@ -517,13 +522,14 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
               value={header.goal ?? ""}
               onChange={(e) => handleFieldChange("goal", e.target.value || null)}
               placeholder="Ej: Activación + fuerza general"
+              disabled={isViewMode}
             />
           </div>
         </div>
       </section>
 
       {/* Visibilidad para jugadores */}
-      <section className="rounded-xl border bg-white p-4 shadow-sm space-y-3">
+  <section className="rounded-xl border bg-white p-4 shadow-sm space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">Visibilidad para jugadores</h2>
         </div>
@@ -537,6 +543,7 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
                 e.target.value as "STAFF_ONLY" | "ALL_PLAYERS" | "SELECTED_PLAYERS",
               )
             }
+            disabled={isViewMode}
           >
             <option value="STAFF_ONLY">Solo staff</option>
             <option value="ALL_PLAYERS">Todos los jugadores del equipo</option>
@@ -544,7 +551,7 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
           </select>
         </div>
 
-        {header.shareMode === "SELECTED_PLAYERS" && (
+        {header.shareMode === "SELECTED_PLAYERS" && !isViewMode && (
           <div className="space-y-2">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <span className="text-xs text-gray-600">Visibilidad:</span>
@@ -604,6 +611,7 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
                         className="h-3 w-3 rounded border-gray-300"
                         checked={checked}
                         onChange={() => togglePlayer(p.id)}
+                        disabled={isViewMode}
                       />
                       <span className="truncate">{label}</span>
                     </label>
@@ -619,14 +627,16 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
       <section className="rounded-xl border bg-white p-4 shadow-sm space-y-4">
         <header className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">Bloques y ejercicios</h2>
-          <button
-            type="button"
-            className="text-xs rounded-md border px-3 py-1 hover:bg-gray-50"
-            onClick={handleAddBlock}
-            disabled={isPending}
-          >
-            Agregar bloque
-          </button>
+          {!isViewMode && (
+            <button
+              type="button"
+              className="text-xs rounded-md border px-3 py-1 hover:bg-gray-50"
+              onClick={handleAddBlock}
+              disabled={isPending}
+            >
+              Agregar bloque
+            </button>
+          )}
         </header>
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1.3fr)]">
@@ -642,19 +652,22 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
             onBlockNameChangeLocal={handleRenameBlockLocal}
             onRenameBlock={handleRenameBlock}
             onChangeBlockType={handleChangeBlockType}
+            readOnly={isViewMode}
           />
 
-          <ExerciseSelectorPanel
-            exercises={exercises}
-            selectedBlockId={selectedBlockId}
-            selectedItemId={selectedItemId}
-            onSelectForItem={selectExerciseForItem}
-            onAddToRoutine={addExerciseToRoutine}
-            onQuickPreview={(ex) => {
-              setQuickPreviewExercise(ex);
-              setIsPreviewOpen(true);
-            }}
-          />
+          {!isViewMode && (
+            <ExerciseSelectorPanel
+              exercises={exercises}
+              selectedBlockId={selectedBlockId}
+              selectedItemId={selectedItemId}
+              onSelectForItem={selectExerciseForItem}
+              onAddToRoutine={addExerciseToRoutine}
+              onQuickPreview={(ex) => {
+                setQuickPreviewExercise(ex);
+                setIsPreviewOpen(true);
+              }}
+            />
+          )}
 
           <RoutineItemEditor
             key={selectedItem?.id || "no-item"}
@@ -675,6 +688,7 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
               });
               setIsPreviewOpen(true);
             }}
+            readOnly={isViewMode}
           />
         </div>
 
@@ -709,16 +723,18 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
       </section>
 
       {/* Botón de guardado principal al final de la página */}
-      <div className="mt-6 flex justify-end">
-        <button
-          type="button"
-          onClick={() => startTransition(() => void handleSaveHeader())}
-          disabled={isPending}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-        >
-          {isPending ? "Guardando..." : "Guardar rutina"}
-        </button>
-      </div>
+      {!isViewMode && (
+        <div className="mt-6 flex justify-end">
+          <button
+            type="button"
+            onClick={() => startTransition(() => void handleSaveHeader())}
+            disabled={isPending}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            {isPending ? "Guardando..." : "Guardar rutina"}
+          </button>
+        </div>
+      )}
 
       {/* Asignación a sesiones (oculta por ahora) */}
       {false && (
@@ -781,6 +797,7 @@ type RoutineStructurePanelProps = {
     blockId: string,
     type: "WARMUP" | "MAIN" | "COOLDOWN" | "ACCESSORY" | null,
   ) => Promise<void> | void;
+  readOnly?: boolean;
 };
 
 function RoutineStructurePanel({
@@ -795,6 +812,7 @@ function RoutineStructurePanel({
   onBlockNameChangeLocal,
   onRenameBlock,
   onChangeBlockType,
+  readOnly,
 }: RoutineStructurePanelProps) {
   const BLOCK_COLORS = [
     "bg-emerald-700",
@@ -815,13 +833,15 @@ function RoutineStructurePanel({
           <p className="text-sm font-medium text-gray-900">{header.title}</p>
           {header.goal && <p className="text-xs text-gray-500">{header.goal}</p>}
         </div>
-        <button
-          type="button"
-          className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
-          onClick={onAddBlock}
-        >
-          + Bloque
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+            onClick={onAddBlock}
+          >
+            + Bloque
+          </button>
+        )}
       </div>
 
       <div className="space-y-3 max-h-[420px] overflow-auto pr-1">
@@ -873,6 +893,7 @@ function RoutineStructurePanel({
                       placeholder={`Bloque ${letter}`}
                       onChange={(e) => onBlockNameChangeLocal(block.id, e.target.value)}
                       onBlur={(e) => void onRenameBlock(block, e.target.value)}
+                      disabled={readOnly}
                     />
                     {header.goal && (
                       <span className="text-[10px] text-emerald-200 truncate">
@@ -901,6 +922,7 @@ function RoutineStructurePanel({
                                   | "ACCESSORY");
                           void onChangeBlockType(block.id, nextType);
                         }}
+                        disabled={readOnly}
                       >
                         <option value="">Sin tipo</option>
                         <option value="WARMUP">Warmup</option>
@@ -915,13 +937,15 @@ function RoutineStructurePanel({
                   <span className="text-emerald-50">
                     {typeLabel} · {items.length} ejercicios
                   </span>
-                  <button
-                    type="button"
-                    className="rounded border border-white/30 px-2 py-0.5 text-[10px] hover:bg-white/10"
-                    onClick={() => onAddItem(block.id)}
-                  >
-                    + Ejercicio
-                  </button>
+                  {!readOnly && (
+                    <button
+                      type="button"
+                      className="rounded border border-white/30 px-2 py-0.5 text-[10px] hover:bg-white/10"
+                      onClick={() => onAddItem(block.id)}
+                    >
+                      + Ejercicio
+                    </button>
+                  )}
                 </div>
               </header>
 
@@ -990,6 +1014,7 @@ type RoutineItemEditorProps = {
     name: string;
     videoUrl: string | null;
   }) => void;
+  readOnly?: boolean;
 };
 
 function RoutineItemEditor({
@@ -1001,6 +1026,7 @@ function RoutineItemEditor({
   onDuplicate,
   onMoveToBlock,
   onShowVideo,
+  readOnly,
 }: RoutineItemEditorProps) {
   const [pendingValues, setPendingValues] = useState<
     Partial<Record<keyof RoutineItemDTO, string | number | null>>
@@ -1115,22 +1141,24 @@ function RoutineItemEditor({
             )}
           </div>
         </div>
-        <div className="flex flex-col gap-1">
-          <button
-            type="button"
-            className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
-            onClick={() => onDuplicate(item.id)}
-          >
-            Duplicar
-          </button>
-          <button
-            type="button"
-            className="text-[11px] rounded-md border border-red-200 px-2 py-1 text-red-700 hover:bg-red-50"
-            onClick={() => onDelete(item.id)}
-          >
-            Eliminar
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="flex flex-col gap-1">
+            <button
+              type="button"
+              className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
+              onClick={() => onDuplicate(item.id)}
+            >
+              Duplicar
+            </button>
+            <button
+              type="button"
+              className="text-[11px] rounded-md border border-red-200 px-2 py-1 text-red-700 hover:bg-red-50"
+              onClick={() => onDelete(item.id)}
+            >
+              Eliminar
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="space-y-1 pt-1">
@@ -1145,6 +1173,7 @@ function RoutineItemEditor({
             scheduleSave("description", e.target.value);
           }}
           onBlur={handleBlur("description")}
+          disabled={readOnly}
         />
       </div>
 
@@ -1160,6 +1189,7 @@ function RoutineItemEditor({
             if (!blockId) return;
             await onMoveToBlock(item.id, blockId);
           }}
+          disabled={readOnly}
         >
           <option value="">Sin bloque</option>
           {blocks
@@ -1196,6 +1226,7 @@ function RoutineItemEditor({
               onLocalChange(item.id, { sets: e.target.value ? Number(e.target.value) : null })
             }
             onBlur={handleBlur("sets")}
+            disabled={readOnly}
           />
         </div>
         <div className="space-y-0.5">
@@ -1208,6 +1239,7 @@ function RoutineItemEditor({
               onLocalChange(item.id, { reps: e.target.value ? Number(e.target.value) : null })
             }
             onBlur={handleBlur("reps")}
+            disabled={readOnly}
           />
         </div>
         <div className="space-y-0.5">
@@ -1221,6 +1253,7 @@ function RoutineItemEditor({
               scheduleSave("load", e.target.value);
             }}
             onBlur={handleBlur("load")}
+            disabled={readOnly}
           />
         </div>
         <div className="space-y-0.5">
@@ -1234,6 +1267,7 @@ function RoutineItemEditor({
               scheduleSave("tempo", e.target.value);
             }}
             onBlur={handleBlur("tempo")}
+            disabled={readOnly}
           />
         </div>
         <div className="space-y-0.5">
@@ -1247,6 +1281,7 @@ function RoutineItemEditor({
               scheduleSave("rest", e.target.value);
             }}
             onBlur={handleBlur("rest")}
+            disabled={readOnly}
           />
         </div>
         <div className="space-y-0.5 sm:col-span-2">
@@ -1260,6 +1295,7 @@ function RoutineItemEditor({
               scheduleSave("notes", e.target.value);
             }}
             onBlur={handleBlur("notes")}
+            disabled={readOnly}
           />
         </div>
         <div className="space-y-0.5 sm:col-span-2">
@@ -1273,6 +1309,7 @@ function RoutineItemEditor({
               scheduleSave("athleteNotes", e.target.value);
             }}
             onBlur={handleBlur("athleteNotes")}
+            disabled={readOnly}
           />
         </div>
       </div>
