@@ -648,6 +648,18 @@ export default function SesionDetailEditorPage() {
                     Rutina actual: {ex.routineName}
                   </p>
                 )}
+                {ex.routineId && (
+                  <div className="mt-1 print:hidden">
+                    <a
+                      href={`/ct/rutinas/${ex.routineId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] text-blue-600 hover:underline"
+                    >
+                      Ver rutina
+                    </a>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2 md:col-span-2">
