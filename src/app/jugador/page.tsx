@@ -93,20 +93,34 @@ export default async function JugadorHomePage() {
   });
 
   const today = new Date();
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const end = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7);
+  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
 
-  const upcomingSessions: Session[] = await (prisma as any).session.findMany({
-    where: {
-      teamId: player.teamId,
-      date: {
-        gte: start,
-        lt: end,
+  const weekAhead = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7);
+
+  const [todaySession, upcomingSessions] = await Promise.all([
+    (prisma as any).session.findFirst({
+      where: {
+        teamId: player.teamId,
+        date: {
+          gte: startOfDay,
+          lt: endOfDay,
+        },
       },
-    },
-    orderBy: { date: "asc" },
-    take: 5,
-  });
+      orderBy: { date: "asc" },
+    }) as Promise<Session | null>,
+    (prisma as any).session.findMany({
+      where: {
+        teamId: player.teamId,
+        date: {
+          gte: startOfDay,
+          lt: weekAhead,
+        },
+      },
+      orderBy: { date: "asc" },
+      take: 5,
+    }) as Promise<Session[]>,
+  ]);
 
   const fakeMinutes = [90, 75, 30, 0, 90]; // TODO: conectar con módulo de partidos
 
@@ -168,7 +182,10 @@ export default async function JugadorHomePage() {
           <PlayerHomeHeader player={player} />
 
           {/* Próximos entrenamientos del equipo */}
-          <PlayerHomeUpcomingSessions sessions={upcomingSessions} />
+          <PlayerHomeUpcomingSessions
+            sessions={upcomingSessions}
+            todaySession={todaySession}
+          />
 
           {/* Primero las rutinas visibles para el jugador */}
           <PlayerHomeRoutines routines={routines} />
@@ -195,9 +212,15 @@ export default async function JugadorHomePage() {
   );
 }
 
-function PlayerHomeUpcomingSessions({ sessions }: { sessions: Session[] }) {
+function PlayerHomeUpcomingSessions({
+  sessions,
+  todaySession,
+}: {
+  sessions: Session[];
+  todaySession: Session | null;
+}) {
   if (!sessions.length) {
-    return
+    return (
       <section className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
@@ -207,7 +230,18 @@ function PlayerHomeUpcomingSessions({ sessions }: { sessions: Session[] }) {
         <p className="text-sm text-gray-600">
           Todavía no hay entrenamientos cargados para los próximos días.
         </p>
-      </section>;
+        {todaySession && (
+          <div className="flex justify-end pt-2">
+            <Link
+              href={`/jugador/sesiones/${todaySession.id}`}
+              className="text-xs rounded-md border px-3 py-1.5 bg-black text-white hover:bg-gray-800"
+            >
+              Ver entrenamiento de hoy
+            </Link>
+          </div>
+        )}
+      </section>
+    );
   }
 
   const [next, ...rest] = sessions;
@@ -252,6 +286,17 @@ function PlayerHomeUpcomingSessions({ sessions }: { sessions: Session[] }) {
               );
             })}
           </ul>
+        </div>
+      )}
+
+      {todaySession && (
+        <div className="flex justify-end pt-2">
+          <Link
+            href={`/jugador/sesiones/${todaySession.id}`}
+            className="text-xs rounded-md border px-3 py-1.5 bg-black text-white hover:bg-gray-800"
+          >
+            Ver entrenamiento de hoy
+          </Link>
         </div>
       )}
     </section>
