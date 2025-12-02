@@ -651,7 +651,7 @@ export default function SesionDetailEditorPage() {
                 {ex.routineId && (
                   <div className="mt-1 print:hidden">
                     <a
-                      href={`/ct/rutinas/${ex.routineId}?view=1`}
+                      href={`/ct/rutinas/${ex.routineId}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-[11px] text-blue-600 hover:underline"
