@@ -3,12 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import RoleGate from "@/components/auth/RoleGate";
-import {
-  getSessionsWeek,
-  getMonday,
-  toYYYYMMDDUTC,
-  type SessionDTO,
-} from "@/lib/api/sessions";
+import { type SessionDTO } from "@/lib/api/sessions";
 
 type TurnKey = "morning" | "afternoon";
 
@@ -120,15 +115,23 @@ export default async function JugadorSessionTurnoPage({ params, searchParams }: 
 
   if (!player) notFound();
 
-  // Cargar semana y filtrar solo sesiones del equipo del jugador
   const date = new Date(`${ymd}T00:00:00.000Z`);
-  const monday = getMonday(date);
-  const res = await getSessionsWeek({ start: toYYYYMMDDUTC(monday) });
+  const startOfDay = new Date(date.getTime());
+  const endOfDay = new Date(date.getTime());
+  endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
 
-  // La API de sesiones de la semana no incluye teamId en el DTO, así que confiamos
-  // en que el filtro por equipo ya se haya aplicado en el backend. Para el jugador,
-  // simplemente usamos todas las sesiones del día.
-  const daySessions: SessionDTO[] = res.days?.[ymd] || [];
+  const rawSessions = await prisma.session.findMany({
+    where: {
+      teamId: player.teamId,
+      date: {
+        gte: startOfDay,
+        lt: endOfDay,
+      },
+    },
+    orderBy: { date: "asc" },
+  });
+
+  const daySessions = rawSessions as unknown as SessionDTO[];
 
   const meta = (() => {
     const get = (row: (typeof META_ROWS)[number]) =>
