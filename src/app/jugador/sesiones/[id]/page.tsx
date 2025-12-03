@@ -58,8 +58,16 @@ export default async function JugadorSessionPage({ params }: { params: { id: str
     exercises = [];
   }
 
-  // Linked routines: for now, player sees only routines encoded per-exercise (routineId/routineName)
-  const linkedRoutines: LinkedRoutineDTO[] = [];
+  // Rutinas de fuerza vinculadas a la sesión (solo lectura para el jugador)
+  const sessionRoutines = await prisma.sessionRoutine.findMany({
+    where: { sessionId: session.id },
+    include: { routine: true },
+  });
+
+  const linkedRoutines: LinkedRoutineDTO[] = sessionRoutines.map((link) => ({
+    id: String(link.routine.id),
+    title: link.routine.title || "Rutina sin nombre",
+  }));
 
   return (
     <RoleGate allow={["JUGADOR"]}>
