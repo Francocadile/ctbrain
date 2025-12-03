@@ -34,7 +34,12 @@ export default async function JugadorRutinaDetallePage({
         {
           shareMode: "SELECTED_PLAYERS",
           sharedWithPlayers: {
-            some: { playerId: player.id },
+            some: {
+              OR: [
+                { playerId: player.id },
+                { playerId: session.user.id as string },
+              ],
+            },
           },
         },
       ],
