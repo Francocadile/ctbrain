@@ -13,7 +13,7 @@ export default async function JugadorRutinaDetallePage({
 }) {
   const session = await getServerSession(authOptions);
 
-  if (!session?.user?.id || session.user.role !== "JUGADOR") {
+  if (!session?.user?.id) {
     return redirect("/login");
   }
 
