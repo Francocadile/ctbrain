@@ -703,54 +703,6 @@ export default function SesionDetailEditorPage() {
               </div>
 
               <div className="space-y-2 md:col-span-2">
-                <label className="text-[11px] text-gray-500">
-                  Rutina de fuerza vinculada (opcional)
-                </label>
-                <select
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                  value={ex.routineId || ""}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    const selected = routineOptions.find((r) => r.id === value) || null;
-                    updateExercise(idx, {
-                      routineId: selected ? selected.id : "",
-                      routineName: selected ? selected.name : "",
-                    });
-                  }}
-                  disabled={!editing || routineOptions.length === 0}
-                >
-                  <option value="">— Sin rutina vinculada —</option>
-                  {routineOptions.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-                {routineOptions.length === 0 && (
-                  <p className="text-[10px] text-gray-400">
-                    No hay rutinas de fuerza cargadas todavía.
-                  </p>
-                )}
-                {!editing && ex.routineName && (
-                  <p className="text-[11px] text-gray-500">
-                    Rutina actual: {ex.routineName}
-                  </p>
-                )}
-                {ex.routineId && (
-                  <div className="mt-1 print:hidden">
-                    <a
-                      href={`/ct/rutinas/${ex.routineId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] text-blue-600 hover:underline"
-                    >
-                      Ver rutina
-                    </a>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
                 <label className="text-[11px] text-gray-500">Descripción</label>
                 <textarea
                   className={`w-full rounded-md border px-2 py-1.5 text-sm min-h-[120px] ${roCls}`}

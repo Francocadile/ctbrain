@@ -21,6 +21,28 @@ type PlayerWithTeam = {
   team: Team | null;
 };
 
+function getTodayInBuenosAires() {
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = fmt.formatToParts(now);
+  const year = Number(parts.find((p) => p.type === "year")?.value ?? "1970");
+  const month = Number(parts.find((p) => p.type === "month")?.value ?? "01");
+  const day = Number(parts.find((p) => p.type === "day")?.value ?? "01");
+
+  const start = new Date(Date.UTC(year, month - 1, day));
+  const end = new Date(Date.UTC(year, month - 1, day + 1));
+  return {
+    startOfDay: start,
+    endOfDay: end,
+    ymd: `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+  };
+}
+
 function parseMarker(description?: string) {
   const text = (description || "").trimStart();
   const m = text.match(/^[\[]GRID:(morning|afternoon):(.+?)]\s*\|\s*(\d{4}-\d{2}-\d{2})/i);
@@ -102,9 +124,7 @@ export default async function JugadorHomePage() {
     take: 7,
   });
 
-  const today = new Date();
-  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  const { startOfDay, endOfDay, ymd: todayYmdFromTz } = getTodayInBuenosAires();
 
   const [todaySession] = await Promise.all([
     (prisma as any).session.findFirst({
@@ -120,7 +140,7 @@ export default async function JugadorHomePage() {
   ]);
 
   const marker = todaySession ? parseMarker(todaySession.description as string | undefined) : null;
-  const todayYmd = marker?.ymd || startOfDay.toISOString().slice(0, 10);
+  const todayYmd = marker?.ymd || todayYmdFromTz;
   const todayTurn: "morning" | "afternoon" =
     marker?.turn === "morning" || marker?.turn === "afternoon" ? marker.turn : "morning";
 
