@@ -17,17 +17,24 @@ export default async function JugadorRutinaDetallePage({
     return redirect("/login");
   }
 
-  const userId = session.user.id as string;
+  const player = (await prisma.player.findFirst({
+    where: { userId: session.user.id },
+  } as any)) as any;
+
+  if (!player) {
+    return notFound();
+  }
 
   const routine = (await prisma.routine.findFirst({
     where: {
       id: params.id,
+      teamId: player.teamId ?? undefined,
       OR: [
         { shareMode: "ALL_PLAYERS" },
         {
           shareMode: "SELECTED_PLAYERS",
           sharedWithPlayers: {
-            some: { playerId: userId },
+            some: { playerId: player.id },
           },
         },
       ],
