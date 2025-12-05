@@ -26,6 +26,9 @@ type Exercise = {
   imageUrl: string;
   routineId?: string;
   routineName?: string;
+  // Si true, este bloque representa solo una rutina vinculada
+  // y los campos de ejercicio se consideran vacíos/ignorados.
+  isRoutineOnly?: boolean;
 };
 
 const EX_TAG = "[EXERCISES]";
@@ -363,7 +366,12 @@ export default function SesionDetailEditorPage() {
 
   async function persistSessionOnly() {
     if (!s) return;
-    const newDescription = encodeExercises(prefix || (s.description as string) || "", exercises);
+    // Al guardar la sesión, persistimos todos los bloques, incluidos los de solo rutina,
+    // para que el jugador pueda verlos en el plan del día.
+    const newDescription = encodeExercises(
+      prefix || (s.description as string) || "",
+      exercises
+    );
     await updateSession(s.id, {
       title: s.title ?? "",
       description: newDescription,
@@ -399,7 +407,14 @@ export default function SesionDetailEditorPage() {
       setErrorLibrary(null);
       await persistSessionOnly();
 
-      const first = exercises[0];
+  // Solo usamos ejercicios "reales" (no bloques solo-rutina)
+  const realExercises = exercises.filter((ex) => !ex.isRoutineOnly);
+      if (!realExercises.length) {
+        setErrorLibrary("No hay ejercicios de sesión para guardar en la biblioteca");
+        return;
+      }
+
+      const first = realExercises[0];
       const name = (first.title || first.kind || "Ejercicio sin nombre").trim();
       const zone = (first.kind || "").trim() || null;
       const videoUrl = (first.imageUrl || "").trim() || null;
@@ -615,139 +630,197 @@ export default function SesionDetailEditorPage() {
             <div className="p-3 grid md:grid-cols-2 gap-3">
               {editing && (
                 <div className="md:col-span-2 mb-1">
-                  <button
-                    type="button"
-                    className="text-[11px] text-blue-600 hover:underline"
-                    onClick={() => openLibraryPicker(idx)}
-                  >
-                    Usar ejercicio de biblioteca
-                  </button>
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    {!ex.isRoutineOnly && (
+                      <button
+                        type="button"
+                        className="text-[11px] text-blue-600 hover:underline"
+                        onClick={() => openLibraryPicker(idx)}
+                      >
+                        Usar ejercicio de biblioteca
+                      </button>
+                    )}
+
+                    <div className="ml-auto flex items-center gap-2">
+                      <label className="text-[11px] text-gray-500 whitespace-nowrap">
+                        Vincular rutina
+                      </label>
+                      <select
+                        className="rounded-md border px-2 py-1.5 text-[11px]"
+                        value={ex.routineId || ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (!v) {
+                            updateExercise(idx, {
+                              routineId: "",
+                              routineName: "",
+                              isRoutineOnly: false,
+                            });
+                            return;
+                          }
+                          const selected = linkedRoutines.find((r) => r.id === v);
+                          if (!selected) return;
+                          updateExercise(idx, {
+                            routineId: selected.id,
+                            routineName: selected.title,
+                            isRoutineOnly: true,
+                            title: "",
+                            kind: "",
+                            space: "",
+                            players: "",
+                            duration: "",
+                            description: "",
+                            imageUrl: "",
+                          });
+                        }}
+                      >
+                        <option value="">Sin rutina vinculada</option>
+                        {linkedRoutines.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
                 </div>
               )}
 
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-[11px] text-gray-500">Título del ejercicio</label>
-                <input
-                  className="w-full rounded-md border px-2 py-1.5 text-sm"
-                  value={ex.title || ""}
-                  onChange={(e) => updateExercise(idx, { title: e.target.value })}
-                  placeholder="Ej: Activación con balón 6v6"
-                  disabled={!editing}
-                />
-              </div>
-
-              {/* Tipo de ejercicio (desplegable persistente) */}
-              <div className="space-y-2">
-                <label className="text-[11px] text-gray-500">Tipo de ejercicio</label>
-                <div className="flex items-center gap-1">
-                  <select
-                    className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                    value={ex.kind || ""}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      if (v === "__add__") {
-                        const created = addKind();
-                        if (created) updateExercise(idx, { kind: created });
-                        return;
-                      }
-                      if (v === "__manage__") {
-                        manageKinds();
-                        return;
-                      }
-                      updateExercise(idx, { kind: v });
-                    }}
-                    disabled={!editing}
-                  >
-                    <option value="">— Ej: Juego reducido MSG —</option>
-                    {kinds.map((k) => (
-                      <option key={k} value={k}>
-                        {k}
-                      </option>
-                    ))}
-                    <option value="__add__">➕ Agregar…</option>
-                    <option value="__manage__">⚙️ Gestionar…</option>
-                  </select>
+              {ex.isRoutineOnly ? (
+                <div className="space-y-2 md:col-span-2">
+                  <p className="text-[11px] text-gray-500">
+                    Este bloque usa la rutina: <b>{ex.routineName || "Rutina sin nombre"}</b>
+                  </p>
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[11px] text-gray-500">Espacio</label>
-                <input
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                  value={ex.space}
-                  onChange={(e) => updateExercise(idx, { space: e.target.value })}
-                  placeholder="Mitad de cancha"
-                  disabled={!editing}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[11px] text-gray-500">N° de jugadores</label>
-                <input
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                  value={ex.players}
-                  onChange={(e) => updateExercise(idx, { players: e.target.value })}
-                  placeholder="22 jugadores"
-                  disabled={!editing}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[11px] text-gray-500">Duración</label>
-                <input
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                  value={ex.duration}
-                  onChange={(e) => updateExercise(idx, { duration: e.target.value })}
-                  placeholder="10 minutos"
-                  disabled={!editing}
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-[11px] text-gray-500">Descripción</label>
-                <textarea
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm min-h-[120px] ${roCls}`}
-                  value={ex.description}
-                  onChange={(e) => updateExercise(idx, { description: e.target.value })}
-                  placeholder="Consignas, series, repeticiones, variantes..."
-                  disabled={!editing}
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <div className="flex items-center justify-between print:hidden">
-                  <label className="text-[11px] text-gray-500">Imagen / video (URL)</label>
-                  {!editing && <span className="text-[10px] text-gray-400">Bloqueado</span>}
-                </div>
-                <input
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm print:hidden ${roCls}`}
-                  value={ex.imageUrl}
-                  onChange={(e) => updateExercise(idx, { imageUrl: e.target.value })}
-                  placeholder="https://..."
-                  disabled={!editing}
-                />
-                {ex.imageUrl ? (
-                  <div className="mt-2">
-                    {isVideoUrl(ex.imageUrl) ? (
-                      <div className="aspect-video w-full rounded-lg border overflow-hidden">
-                        <iframe
-                          src={ex.imageUrl}
-                          className="w-full h-full"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                        />
-                      </div>
-                    ) : (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={ex.imageUrl}
-                        alt="Vista previa"
-                        className="max-h-80 rounded-lg border object-contain"
-                      />
-                    )}
+              ) : (
+                <>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-[11px] text-gray-500">Título del ejercicio</label>
+                    <input
+                      className="w-full rounded-md border px-2 py-1.5 text-sm"
+                      value={ex.title || ""}
+                      onChange={(e) => updateExercise(idx, { title: e.target.value })}
+                      placeholder="Ej: Activación con balón 6v6"
+                      disabled={!editing}
+                    />
                   </div>
-                ) : null}
-              </div>
+
+                  {/* Tipo de ejercicio (desplegable persistente) */}
+                  <div className="space-y-2">
+                    <label className="text-[11px] text-gray-500">Tipo de ejercicio</label>
+                    <div className="flex items-center gap-1">
+                      <select
+                        className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
+                        value={ex.kind || ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v === "__add__") {
+                            const created = addKind();
+                            if (created) updateExercise(idx, { kind: created });
+                            return;
+                          }
+                          if (v === "__manage__") {
+                            manageKinds();
+                            return;
+                          }
+                          updateExercise(idx, { kind: v });
+                        }}
+                        disabled={!editing}
+                      >
+                        <option value="">— Ej: Juego reducido MSG —</option>
+                        {kinds.map((k) => (
+                          <option key={k} value={k}>
+                            {k}
+                          </option>
+                        ))}
+                        <option value="__add__">➕ Agregar…</option>
+                        <option value="__manage__">⚙️ Gestionar…</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[11px] text-gray-500">Espacio</label>
+                    <input
+                      className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
+                      value={ex.space}
+                      onChange={(e) => updateExercise(idx, { space: e.target.value })}
+                      placeholder="Mitad de cancha"
+                      disabled={!editing}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[11px] text-gray-500">N° de jugadores</label>
+                    <input
+                      className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
+                      value={ex.players}
+                      onChange={(e) => updateExercise(idx, { players: e.target.value })}
+                      placeholder="22 jugadores"
+                      disabled={!editing}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[11px] text-gray-500">Duración</label>
+                    <input
+                      className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
+                      value={ex.duration}
+                      onChange={(e) => updateExercise(idx, { duration: e.target.value })}
+                      placeholder="10 minutos"
+                      disabled={!editing}
+                    />
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-[11px] text-gray-500">Descripción</label>
+                    <textarea
+                      className={`w-full rounded-md border px-2 py-1.5 text-sm min-h-[120px] ${roCls}`}
+                      value={ex.description}
+                      onChange={(e) => updateExercise(idx, { description: e.target.value })}
+                      placeholder="Consignas, series, repeticiones, variantes..."
+                      disabled={!editing}
+                    />
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2">
+                    <div className="flex items-center justify-between print:hidden">
+                      <label className="text-[11px] text-gray-500">Imagen / video (URL)</label>
+                      {!editing && (
+                        <span className="text-[10px] text-gray-400">Bloqueado</span>
+                      )}
+                    </div>
+                    <input
+                      className={`w-full rounded-md border px-2 py-1.5 text-sm print:hidden ${roCls}`}
+                      value={ex.imageUrl}
+                      onChange={(e) => updateExercise(idx, { imageUrl: e.target.value })}
+                      placeholder="https://..."
+                      disabled={!editing}
+                    />
+                    {ex.imageUrl ? (
+                      <div className="mt-2">
+                        {isVideoUrl(ex.imageUrl) ? (
+                          <div className="aspect-video w-full rounded-lg border overflow-hidden">
+                            <iframe
+                              src={ex.imageUrl}
+                              className="w-full h-full"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              allowFullScreen
+                            />
+                          </div>
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={ex.imageUrl}
+                            alt="Vista previa"
+                            className="max-h-80 rounded-lg border object-contain"
+                          />
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                </>
+              )}
             </div>
           </section>
         ))}

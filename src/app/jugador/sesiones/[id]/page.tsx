@@ -49,6 +49,7 @@ export default async function JugadorSessionPage({ params }: { params: { id: str
           imageUrl: e.imageUrl ?? "",
           routineId: e.routineId ?? "",
           routineName: e.routineName ?? "",
+          isRoutineOnly: e.isRoutineOnly ?? false,
         }));
       }
     }

@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import RoleGate from "@/components/auth/RoleGate";
 import { type SessionDTO } from "@/lib/api/sessions";
+import { Buffer } from "buffer";
 
 type TurnKey = "morning" | "afternoon";
 
@@ -94,6 +95,50 @@ function microChipClass(v: MicroKey) {
   }
 }
 
+// ==== Decodificar ejercicios de una sesión (copiado de JugadorSessionPage) ====
+type SessionExercise = {
+  title: string;
+  kind?: string;
+  space?: string;
+  players?: string;
+  duration?: string;
+  description?: string;
+  imageUrl?: string;
+  routineId?: string;
+  routineName?: string;
+  isRoutineOnly?: boolean;
+};
+
+function decodeSessionExercisesFromDescription(
+  desc: string | null | undefined
+): SessionExercise[] {
+  try {
+    const text = (desc || "").trim();
+    const EX_TAG = "[EXERCISES]";
+    const idx = text.lastIndexOf(EX_TAG);
+    if (idx === -1) return [];
+    const rest = text.slice(idx + EX_TAG.length).trim();
+    const b64 = rest.split(/\s+/)[0] || "";
+    const raw = Buffer.from(b64, "base64").toString("utf-8");
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr.map((e: any) => ({
+      title: e.title ?? "",
+      kind: e.kind ?? "",
+      space: e.space ?? "",
+      players: e.players ?? "",
+      duration: e.duration ?? "",
+      description: e.description ?? "",
+      imageUrl: e.imageUrl ?? "",
+      routineId: e.routineId ?? "",
+      routineName: e.routineName ?? "",
+      isRoutineOnly: e.isRoutineOnly ?? false,
+    }));
+  } catch {
+    return [];
+  }
+}
+
 interface PageProps {
   params: { ymd: string; turn: TurnKey };
   searchParams?: { [key: string]: string | string[] | undefined };
@@ -157,7 +202,24 @@ export default async function JugadorSessionTurnoPage({ params, searchParams }: 
   const blocks = CONTENT_ROWS.map((row) => {
     const s = daySessions.find((it) => isCellOf(it, turn, row));
     const text = (s?.title || "").trim();
-    return { row, text, id: s?.id || "" };
+
+    let firstRoutineId: string | null = null;
+    let hasRoutineOnly = false;
+
+    if (s) {
+      const exs = decodeSessionExercisesFromDescription(s.description as any);
+      const routineEx = exs.find(
+        (e) =>
+          e.routineId &&
+          (e.isRoutineOnly || (!e.title && !e.description))
+      );
+      if (routineEx && routineEx.routineId) {
+        firstRoutineId = routineEx.routineId;
+        hasRoutineOnly = true;
+      }
+    }
+
+    return { row, text, id: s?.id || "", firstRoutineId, hasRoutineOnly };
   });
 
   return (
@@ -252,7 +314,7 @@ export default async function JugadorSessionTurnoPage({ params, searchParams }: 
           </div>
         ) : (
           <section className="space-y-3">
-            {blocks.map(({ row, text, id }) => (
+            {blocks.map(({ row, text, id, firstRoutineId, hasRoutineOnly }) => (
               <div
                 key={row}
                 className="rounded-2xl border bg-white shadow-sm p-3"
@@ -264,12 +326,21 @@ export default async function JugadorSessionTurnoPage({ params, searchParams }: 
                   </h2>
                   {id && (
                     <div className="flex gap-2 no-print">
-                      <a
-                        href={`/jugador/sesiones/${id}`}
-                        className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
-                      >
-                        Ver ejercicio
-                      </a>
+                      {hasRoutineOnly && firstRoutineId ? (
+                        <a
+                          href={`/jugador/rutinas/${firstRoutineId}`}
+                          className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
+                        >
+                          Ver rutina
+                        </a>
+                      ) : (
+                        <a
+                          href={`/jugador/sesiones/${id}`}
+                          className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
+                        >
+                          Ver ejercicio
+                        </a>
+                      )}
                     </div>
                   )}
                 </div>
