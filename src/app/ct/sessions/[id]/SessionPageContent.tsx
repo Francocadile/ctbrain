@@ -16,6 +16,7 @@ export type Exercise = {
   imageUrl: string;
   routineId?: string;
   routineName?: string;
+  isRoutineOnly?: boolean;
 };
 
 function isVideoUrl(url: string | undefined | null) {
@@ -91,103 +92,125 @@ export default function SessionPageContent({
             </div>
 
             <div className="p-3 grid md:grid-cols-2 gap-3">
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-[11px] text-gray-500">Título del ejercicio</label>
-                <input
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                  value={ex.title || ""}
-                  readOnly
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[11px] text-gray-500">Tipo de ejercicio</label>
-                <input
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                  value={ex.kind || ""}
-                  readOnly
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[11px] text-gray-500">Espacio</label>
-                <input
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                  value={ex.space}
-                  readOnly
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[11px] text-gray-500">N° de jugadores</label>
-                <input
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                  value={ex.players}
-                  readOnly
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[11px] text-gray-500">Duración</label>
-                <input
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                  value={ex.duration}
-                  readOnly
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-[11px] text-gray-500">Descripción</label>
-                <textarea
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm min-h-[120px] ${roCls}`}
-                  value={ex.description}
-                  readOnly
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <div className="flex items-center justify-between print:hidden">
-                  <label className="text-[11px] text-gray-500">Imagen / video (URL)</label>
+              {ex.isRoutineOnly ? (
+                <div className="space-y-2 md:col-span-2">
+                  <p className="text-[11px] text-gray-500">
+                    Este bloque usa la rutina: <b>{ex.routineName || "Rutina sin nombre"}</b>
+                  </p>
+                  {ex.routineId && (
+                    <div className="mt-1 print:hidden">
+                      <a
+                        href={`${routineLinkBasePath}/${ex.routineId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] text-blue-600 hover:underline"
+                      >
+                        Ver rutina
+                      </a>
+                    </div>
+                  )}
                 </div>
-                <input
-                  className={`w-full rounded-md border px-2 py-1.5 text-sm print:hidden ${roCls}`}
-                  value={ex.imageUrl}
-                  readOnly
-                />
-                {ex.imageUrl ? (
-                  <div className="mt-2">
-                    {isVideoUrl(ex.imageUrl) ? (
-                      <div className="aspect-video w-full rounded-lg border overflow-hidden">
-                        <iframe
-                          src={ex.imageUrl}
-                          className="w-full h-full"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                        />
-                      </div>
-                    ) : (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={ex.imageUrl}
-                        alt="Vista previa"
-                        className="max-h-80 rounded-lg border object-contain"
-                      />
-                    )}
+              ) : (
+                <>
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-[11px] text-gray-500">Título del ejercicio</label>
+                    <input
+                      className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
+                      value={ex.title || ""}
+                      readOnly
+                    />
                   </div>
-                ) : null}
-              </div>
 
-              {ex.routineId && (
-                <div className="mt-1 print:hidden">
-                  <a
-                    href={`${routineLinkBasePath}/${ex.routineId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] text-blue-600 hover:underline"
-                  >
-                    Ver rutina
-                  </a>
-                </div>
+                  <div className="space-y-2">
+                    <label className="text-[11px] text-gray-500">Tipo de ejercicio</label>
+                    <input
+                      className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
+                      value={ex.kind || ""}
+                      readOnly
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[11px] text-gray-500">Espacio</label>
+                    <input
+                      className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
+                      value={ex.space}
+                      readOnly
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[11px] text-gray-500">N° de jugadores</label>
+                    <input
+                      className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
+                      value={ex.players}
+                      readOnly
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[11px] text-gray-500">Duración</label>
+                    <input
+                      className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
+                      value={ex.duration}
+                      readOnly
+                    />
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-[11px] text-gray-500">Descripción</label>
+                    <textarea
+                      className={`w-full rounded-md border px-2 py-1.5 text-sm min-h-[120px] ${roCls}`}
+                      value={ex.description}
+                      readOnly
+                    />
+                  </div>
+
+                  <div className="space-y-2 md:col-span-2">
+                    <div className="flex items-center justify-between print:hidden">
+                      <label className="text-[11px] text-gray-500">Imagen / video (URL)</label>
+                    </div>
+                    <input
+                      className={`w-full rounded-md border px-2 py-1.5 text-sm print:hidden ${roCls}`}
+                      value={ex.imageUrl}
+                      readOnly
+                    />
+                    {ex.imageUrl ? (
+                      <div className="mt-2">
+                        {isVideoUrl(ex.imageUrl) ? (
+                          <div className="aspect-video w-full rounded-lg border overflow-hidden">
+                            <iframe
+                              src={ex.imageUrl}
+                              className="w-full h-full"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              allowFullScreen
+                            />
+                          </div>
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={ex.imageUrl}
+                            alt="Vista previa"
+                            className="max-h-80 rounded-lg border object-contain"
+                          />
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {ex.routineId && (
+                    <div className="mt-1 print:hidden">
+                      <a
+                        href={`${routineLinkBasePath}/${ex.routineId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] text-blue-600 hover:underline"
+                      >
+                        Ver rutina
+                      </a>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </section>

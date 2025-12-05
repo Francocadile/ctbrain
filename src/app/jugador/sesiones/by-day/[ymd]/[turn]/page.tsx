@@ -208,11 +208,25 @@ export default async function JugadorSessionTurnoPage({ params, searchParams }: 
 
     if (s) {
       const exs = decodeSessionExercisesFromDescription(s.description as any);
-      const routineEx = exs.find(
-        (e) =>
-          e.routineId &&
-          (e.isRoutineOnly || (!e.title && !e.description))
-      );
+      const routineEx = exs.find((e) => {
+        const hasRoutine = !!e.routineId;
+        const hasExerciseFields =
+          !!e.title?.trim() ||
+          !!e.kind?.trim() ||
+          !!e.description?.trim() ||
+          !!e.space?.trim() ||
+          !!e.players?.trim() ||
+          !!e.duration?.trim() ||
+          !!e.imageUrl?.trim();
+
+        if (!hasRoutine) return false;
+
+        // rutina pura = marcada como rutinaOnly o sin campos de ejercicio
+        if (e.isRoutineOnly) return true;
+        if (!hasExerciseFields) return true;
+
+        return false;
+      });
       if (routineEx && routineEx.routineId) {
         firstRoutineId = routineEx.routineId;
         hasRoutineOnly = true;

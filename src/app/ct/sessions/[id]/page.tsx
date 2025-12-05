@@ -111,11 +111,35 @@ function decodeExercises(desc: string | null | undefined): { prefix: string; exe
         imageUrl: e.imageUrl ?? "",
         routineId: (e as any).routineId ?? "",
         routineName: (e as any).routineName ?? "",
+        isRoutineOnly: (e as any).isRoutineOnly ?? false,
       }));
       return { prefix, exercises: fixed };
     }
   } catch {}
   return { prefix: text, exercises: [] };
+}
+
+function isRealExercise(ex: Exercise): boolean {
+  const hasRoutine = !!ex.routineId;
+  const hasExerciseFields =
+    !!ex.title?.trim() ||
+    !!ex.kind?.trim() ||
+    !!ex.description?.trim() ||
+    !!ex.space?.trim() ||
+    !!ex.players?.trim() ||
+    !!ex.duration?.trim() ||
+    !!ex.imageUrl?.trim();
+
+  // Bloques “solo rutina”: no van a la biblioteca
+  if (ex.isRoutineOnly) return false;
+
+  // Bloques que solo tienen rutina y nada más: también se excluyen
+  if (hasRoutine && !hasExerciseFields) return false;
+
+  // Bloques completamente vacíos: tampoco
+  if (!hasRoutine && !hasExerciseFields) return false;
+
+  return true;
 }
 
 function encodeExercises(prefix: string, exercises: Exercise[]) {
@@ -407,8 +431,7 @@ export default function SesionDetailEditorPage() {
       setErrorLibrary(null);
       await persistSessionOnly();
 
-  // Solo usamos ejercicios "reales" (no bloques solo-rutina)
-  const realExercises = exercises.filter((ex) => !ex.isRoutineOnly);
+      const realExercises = exercises.filter(isRealExercise);
       if (!realExercises.length) {
         setErrorLibrary("No hay ejercicios de sesión para guardar en la biblioteca");
         return;
