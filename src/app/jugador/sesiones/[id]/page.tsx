@@ -78,6 +78,7 @@ export default async function JugadorSessionPage({ params }: { params: { id: str
             exercises={exercises}
             linkedRoutines={linkedRoutines}
             isViewMode={true}
+            routineLinkBasePath="/jugador/rutinas"
           />
         </div>
       </main>

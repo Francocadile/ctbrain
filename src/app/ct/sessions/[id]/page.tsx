@@ -11,6 +11,7 @@ import {
   type ExerciseDTO,
 } from "@/lib/api/exercises";
 import { listKinds, addKind as apiAddKind, replaceKinds } from "@/lib/settings";
+import SessionPageContent from "./SessionPageContent";
 import { SessionRoutinePanel, type LinkedRoutineDTO } from "./SessionRoutinePanel";
 
 type TurnKey = "morning" | "afternoon";

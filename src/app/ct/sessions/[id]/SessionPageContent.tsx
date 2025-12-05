@@ -35,6 +35,7 @@ export type SessionPageContentProps = {
   exercises: Exercise[];
   linkedRoutines: LinkedRoutineDTO[];
   isViewMode: boolean;
+  routineLinkBasePath?: string; // NUEVO
 };
 
 export default function SessionPageContent({
@@ -42,6 +43,7 @@ export default function SessionPageContent({
   exercises,
   linkedRoutines,
   isViewMode,
+  routineLinkBasePath = "/ct/rutinas", // default para CT
 }: SessionPageContentProps) {
   const [editing, setEditing] = useState(!isViewMode);
 
@@ -174,6 +176,19 @@ export default function SessionPageContent({
                   </div>
                 ) : null}
               </div>
+
+              {ex.routineId && (
+                <div className="mt-1 print:hidden">
+                  <a
+                    href={`${routineLinkBasePath}/${ex.routineId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-blue-600 hover:underline"
+                  >
+                    Ver rutina
+                  </a>
+                </div>
+              )}
             </div>
           </section>
         ))}
