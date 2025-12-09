@@ -296,10 +296,10 @@ function PlayerHomeTodaySessionCard({
 
       <div className="flex justify-end">
         <Link
-          href={`/jugador/sesiones/by-day/${todayYmd}/${todayTurn}`}
+          href={`/jugador/sesiones/${todaySession.id}`}
           className="text-xs rounded-md border px-3 py-1.5 bg-black text-white hover:bg-gray-800"
         >
-          Ver entrenamiento de hoy
+          Ver sesión de hoy
         </Link>
       </div>
     </section>
