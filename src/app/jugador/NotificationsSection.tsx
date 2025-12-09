@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 type NotificationsSectionProps = {
   hasTodaySession: boolean;
@@ -73,14 +74,24 @@ export function NotificationsSection({
       )}
 
       {!loadingRival && (
-        <ul className="space-y-1 text-xs text-gray-700">
-          {items.map((msg, idx) => (
-            <li key={idx} className="flex items-start gap-1">
-              <span className="mt-[3px] h-1.5 w-1.5 rounded-full bg-blue-500" />
-              <span>{msg}</span>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="space-y-1 text-xs text-gray-700">
+            {items.map((msg, idx) => (
+              <li key={idx} className="flex items-start gap-1">
+                <span className="mt-[3px] h-1.5 w-1.5 rounded-full bg-blue-500" />
+                <span>{msg}</span>
+              </li>
+            ))}
+          </ul>
+
+          {hasRoutine && (
+            <div className="mt-2">
+              <Link href="/jugador/rutinas" className="text-xs text-blue-600 hover:underline">
+                Ver rutinas de fuerza
+              </Link>
+            </div>
+          )}
+        </>
       )}
     </section>
   );

@@ -2,6 +2,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   getSessionsWeek,
@@ -467,6 +468,44 @@ function DashboardSemanaInner() {
          zone={videoPreview?.zone ?? null}
          videoUrl={videoPreview?.videoUrl ?? null}
        />
+      {/* Accesos rápidos */}
+      <section className="no-print">
+        <div className="grid gap-3 md:grid-cols-3">
+          <Link
+            href="/ct/sessions"
+            className="rounded-2xl border bg-white p-3 shadow-sm hover:shadow-md transition flex flex-col justify-between"
+          >
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">Sesiones</h3>
+              <p className="mt-1 text-xs text-gray-600">
+                Ver y editar las sesiones planificadas.
+              </p>
+            </div>
+          </Link>
+          <Link
+            href="/ct/rutinas"
+            className="rounded-2xl border bg-white p-3 shadow-sm hover:shadow-md transition flex flex-col justify-between"
+          >
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">Rutinas</h3>
+              <p className="mt-1 text-xs text-gray-600">
+                Gestionar la biblioteca de rutinas de fuerza.
+              </p>
+            </div>
+          </Link>
+          <Link
+            href="/ct/rival"
+            className="rounded-2xl border bg-white p-3 shadow-sm hover:shadow-md transition flex flex-col justify-between"
+          >
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">Rival</h3>
+              <p className="mt-1 text-xs text-gray-600">
+                Cargar informes y videos del próximo rival.
+              </p>
+            </div>
+          </Link>
+        </div>
+      </section>
     </div>
   );
 }

@@ -115,6 +115,15 @@ export function RivalSection() {
               Ver video: {firstVideo.title}
             </a>
           )}
+
+          {report && (
+            <a
+              href="/jugador/rival"
+              className="text-xs text-blue-600 hover:underline mt-1 block"
+            >
+              Ver más del rival
+            </a>
+          )}
         </div>
       )}
     </section>
