@@ -63,59 +63,89 @@ export async function GET(req: Request) {
   }
 }
 
-// POST /api/ct/exercises
-// Crea un ejercicio en la biblioteca (por ahora lo usaremos para usage=SESSION).
 export async function POST(req: Request) {
   try {
-  const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN"] as any });
+    const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN"] as any });
 
-  const body = await req.json();
-  const parsed = createSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-    { error: "Datos inválidos", details: parsed.error.flatten() },
-    { status: 400 },
-    );
-  }
+    const body = await req.json();
+    const parsed = createSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Datos inválidos", details: parsed.error.flatten() },
+        { status: 400 },
+      );
+    }
 
-  const { name, zone, videoUrl, usage, originSessionId, sessionMeta } = parsed.data;
-  const trimmedName = name.trim();
+    const { name, zone, videoUrl, usage, originSessionId, sessionMeta } = parsed.data;
+    const trimmedName = name.trim();
 
-  // 👉 Para usos DISTINTOS de "SESSION" (por ejemplo "ROUTINE"),
-  // mantenemos la idempotencia por nombre + teamId + usage.
-  if (usage !== "SESSION") {
-    const existing = await prisma.exercise.findFirst({
-    where: {
-      name: trimmedName,
-      teamId: team.id,
-      usage: usage as any,
-    },
+    const effectiveOriginSessionId =
+      originSessionId ??
+      (sessionMeta && typeof sessionMeta === "object"
+        ? ((sessionMeta as any)?.sessionId ?? null)
+        : null);
+
+    // 🧠 CASO 1: ejercicios de sesión (usage === "SESSION")
+    // Si ya existe un ejercicio para esta sesión (originSessionId + teamId + usage),
+    // lo ACTUALIZAMOS en lugar de crear uno nuevo.
+    if (usage === "SESSION" && effectiveOriginSessionId) {
+      const existing = await prisma.exercise.findFirst({
+        where: {
+          teamId: team.id,
+          usage: usage as any,
+          originSessionId: effectiveOriginSessionId,
+        },
+      });
+
+      if (existing) {
+        const updated = await prisma.exercise.update({
+          where: { id: existing.id },
+          data: {
+            name: trimmedName,
+            zone: zone?.trim() || null,
+            videoUrl: videoUrl?.trim() || null,
+            originSessionId: effectiveOriginSessionId,
+            sessionMeta: sessionMeta ? (sessionMeta as any) : null,
+          } as any,
+        });
+
+        return NextResponse.json({ data: updated }, { status: 200 });
+      }
+    }
+
+    // 🧠 CASO 2: usos distintos de "SESSION" (ej: ROUTINE)
+    // Mantenemos la idempotencia por (name + teamId + usage).
+    if (usage !== "SESSION") {
+      const existing = await prisma.exercise.findFirst({
+        where: {
+          name: trimmedName,
+          teamId: team.id,
+          usage: usage as any,
+        },
+      });
+
+      if (existing) {
+        return NextResponse.json({ data: existing }, { status: 200 });
+      }
+    }
+
+    // 🧠 CASO 3: no se encontró nada que actualizar → creamos un ejercicio nuevo
+    const created = await prisma.exercise.create({
+      data: {
+        name: trimmedName,
+        zone: zone?.trim() || null,
+        videoUrl: videoUrl?.trim() || null,
+        usage: usage as any,
+        teamId: team.id,
+        originSessionId: effectiveOriginSessionId ?? null,
+        sessionMeta: sessionMeta ? (sessionMeta as any) : null,
+      } as any,
     });
 
-    if (existing) {
-    return NextResponse.json({ data: existing }, { status: 200 });
-    }
-  }
-
-  // 👉 Para usage === "SESSION" NO aplicamos idempotencia por nombre.
-  // En todos los casos que llegan acá, creamos un nuevo ejercicio normalmente.
-  const created = await prisma.exercise.create({
-    data: {
-    name: trimmedName,
-    zone: zone?.trim() || null,
-    videoUrl: videoUrl?.trim() || null,
-    usage: usage as any,
-    teamId: team.id, // 👉 ejercicios de sesión siempre del equipo actual
-    // originSessionId se persiste desde el editor de sesiones
-    originSessionId: originSessionId ?? null,
-    sessionMeta: sessionMeta ? (sessionMeta as any) : null,
-    } as any,
-  });
-
-  return NextResponse.json({ data: created }, { status: 201 });
+    return NextResponse.json({ data: created }, { status: 201 });
   } catch (error: any) {
-  if (error instanceof Response) return error;
-  console.error("ct exercises create error", error);
-  return NextResponse.json({ error: error?.message || "Error" }, { status: 500 });
+    if (error instanceof Response) return error;
+    console.error("ct exercises create error", error);
+    return NextResponse.json({ error: error?.message || "Error" }, { status: 500 });
   }
 }

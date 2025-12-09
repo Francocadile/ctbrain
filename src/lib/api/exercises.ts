@@ -31,11 +31,22 @@ export async function createSessionExercise(input: {
   originSessionId: string;
   sessionMeta?: SessionMeta | null;
 }): Promise<ExerciseDTO> {
+  const { originSessionId, sessionMeta, ...rest } = input;
+
+  const sessionId = originSessionId;
+
+  const enrichedSessionMeta: SessionMeta | null = {
+    ...(sessionMeta || {}),
+    sessionId: sessionId,
+  };
+
   const res = await fetch("/api/ct/exercises", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      ...input,
+      ...rest,
+      originSessionId: sessionId,
+      sessionMeta: enrichedSessionMeta,
       usage: "SESSION",
     }),
   });

@@ -6,7 +6,6 @@ import RoleGate from "@/components/auth/RoleGate";
 import SessionPageContent, {
   Exercise as CtExercise,
 } from "@/app/ct/sessions/[id]/SessionPageContent";
-import type { LinkedRoutineDTO } from "@/app/ct/sessions/[id]/SessionRoutinePanel";
 
 export default async function JugadorSessionPage({ params }: { params: { id: string } }) {
   const sessionAuth = await getServerSession(authOptions);
@@ -59,17 +58,6 @@ export default async function JugadorSessionPage({ params }: { params: { id: str
     exercises = [];
   }
 
-  // Rutinas de fuerza vinculadas a la sesión (solo lectura para el jugador)
-  const sessionRoutines = await prisma.sessionRoutine.findMany({
-    where: { sessionId: session.id },
-    include: { routine: true },
-  });
-
-  const linkedRoutines: LinkedRoutineDTO[] = sessionRoutines.map((link) => ({
-    id: String(link.routine.id),
-    title: link.routine.title || "Rutina sin nombre",
-  }));
-
   return (
     <RoleGate allow={["JUGADOR"]}>
       <main className="min-h-screen px-4 py-4 md:px-6 md:py-8">
@@ -77,9 +65,7 @@ export default async function JugadorSessionPage({ params }: { params: { id: str
           <SessionPageContent
             session={session as any}
             exercises={exercises}
-            linkedRoutines={linkedRoutines}
             isViewMode={true}
-            routineLinkBasePath="/jugador/rutinas"
           />
         </div>
       </main>

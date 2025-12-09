@@ -1,9 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { SessionDTO } from "@/lib/api/sessions";
-import type { ExerciseDTO } from "@/lib/api/exercises";
-import { SessionRoutinePanel, type LinkedRoutineDTO } from "./SessionRoutinePanel";
 
 // Types mirrored from page.tsx
 export type Exercise = {
@@ -34,27 +32,20 @@ function parseMarker(description?: string) {
 export type SessionPageContentProps = {
   session: SessionDTO;
   exercises: Exercise[];
-  linkedRoutines: LinkedRoutineDTO[];
   isViewMode: boolean;
-  routineLinkBasePath?: string; // NUEVO
 };
 
 export default function SessionPageContent({
   session,
   exercises,
-  linkedRoutines,
   isViewMode,
-  routineLinkBasePath = "/ct/rutinas", // default para CT
 }: SessionPageContentProps) {
-  const [editing, setEditing] = useState(!isViewMode);
-
   const marker = useMemo(
     () => parseMarker(typeof session?.description === "string" ? session?.description : ""),
     [session?.description]
   );
   const displayRow = (marker.row || "").replace("ENTREN0", "ENTRENO");
-
-  const roCls = editing ? "" : "bg-gray-50 text-gray-600 cursor-not-allowed";
+  const roCls = "bg-gray-50 text-gray-600 cursor-not-allowed";
 
   return (
     <div id="print-root" className="p-4 md:p-6 space-y-4 print:!p-2">
@@ -69,13 +60,6 @@ export default function SessionPageContent({
           </p>
         </div>
       </header>
-
-      {/* Rutina de fuerza vinculada a la sesión */}
-      <SessionRoutinePanel
-        sessionId={session.id}
-        routines={linkedRoutines}
-        isViewMode={isViewMode}
-      />
 
       {/* Lista de ejercicios */}
       <div className="space-y-4">
@@ -93,23 +77,7 @@ export default function SessionPageContent({
 
             <div className="p-3 grid md:grid-cols-2 gap-3">
               {ex.isRoutineOnly ? (
-                <div className="space-y-2 md:col-span-2">
-                  <p className="text-[11px] text-gray-500">
-                    Este bloque usa la rutina: <b>{ex.routineName || "Rutina sin nombre"}</b>
-                  </p>
-                  {ex.routineId && (
-                    <div className="mt-1 print:hidden">
-                      <a
-                        href={`${routineLinkBasePath}/${ex.routineId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[11px] text-blue-600 hover:underline"
-                      >
-                        Ver rutina
-                      </a>
-                    </div>
-                  )}
-                </div>
+                <div className="space-y-2 md:col-span-2" />
               ) : (
                 <>
                   <div className="space-y-2 md:col-span-2">
@@ -198,18 +166,7 @@ export default function SessionPageContent({
                     ) : null}
                   </div>
 
-                  {ex.routineId && (
-                    <div className="mt-1 print:hidden">
-                      <a
-                        href={`${routineLinkBasePath}/${ex.routineId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[11px] text-blue-600 hover:underline"
-                      >
-                        Ver rutina
-                      </a>
-                    </div>
-                  )}
+                  {/* En el editor moderno ya no mostramos vínculos directos a rutinas desde aquí. */}
                 </>
               )}
             </div>

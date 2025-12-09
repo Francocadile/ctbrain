@@ -185,8 +185,6 @@ model Session {
   // Ejercicios de biblioteca que se originaron en esta sesión/celda
   originExercises Exercise[]
 
-  routines SessionRoutine[]
-
   @@index([date])
   @@index([type])
   @@index([createdBy])
@@ -582,7 +580,6 @@ model Routine {
 
   items    RoutineItem[]
   blocks   RoutineBlock[]
-  sessions SessionRoutine[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -643,20 +640,6 @@ model RoutineItem {
 
   @@index([routineId])
   @@index([blockId])
-}
-
-model SessionRoutine {
-  id        String @id @default(cuid())
-  sessionId String
-  routineId String
-
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  routine Routine @relation(fields: [routineId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([sessionId, routineId])
 }
 
 model RoutinePlayerShare {

@@ -11,8 +11,6 @@ import {
   type ExerciseDTO,
 } from "@/lib/api/exercises";
 import { listKinds, addKind as apiAddKind, replaceKinds } from "@/lib/settings";
-import SessionPageContent from "./SessionPageContent";
-import { SessionRoutinePanel, type LinkedRoutineDTO } from "./SessionRoutinePanel";
 
 type TurnKey = "morning" | "afternoon";
 
@@ -163,38 +161,13 @@ export default function SesionDetailEditorPage() {
   const [prefix, setPrefix] = useState<string>("");
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [kinds, setKinds] = useState<string[]>([]);
-  const [routineOptions, setRoutineOptions] = useState<{ id: string; name: string }[]>([]);
-  const [savingToLibrary, setSavingToLibrary] = useState(false);
-  const [errorLibrary, setErrorLibrary] = useState<string | null>(null);
   const [pickerIndex, setPickerIndex] = useState<number | null>(null);
   const [pickerExercises, setPickerExercises] = useState<ExerciseDTO[]>([]);
   const [loadingPicker, setLoadingPicker] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
-  const [linkedRoutines, setLinkedRoutines] = useState<LinkedRoutineDTO[]>([]);
 
   useEffect(() => {
     (async () => setKinds(await listKinds()))();
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/ct/routines", { cache: "no-store" });
-        const json = await res.json();
-        const list = Array.isArray((json as any)?.data) ? (json as any).data : json;
-        const options = Array.isArray(list)
-          ? list.map((r: any) => ({
-              id: String(r.id),
-              // La API de /api/ct/routines expone `title` como nombre principal
-              // (ver src/app/api/ct/routines/route.ts), así que usamos ese campo.
-              name: (r.title as string) || (r.name as string) || "Rutina sin nombre",
-            }))
-          : [];
-        setRoutineOptions(options);
-      } catch (err) {
-        console.error("No se pudieron cargar las rutinas de fuerza", err);
-      }
-    })();
   }, []);
 
   useEffect(() => {
@@ -207,49 +180,13 @@ export default function SesionDetailEditorPage() {
           (res as any)?.data ? (res as any).data : (res as unknown as SessionDTO);
         setS(sess);
 
-        // Cargar rutinas de fuerza vinculadas a esta sesión
-        try {
-          const relRes = await fetch(`/api/ct/routines`, { cache: "no-store" });
-          const relJson = await relRes.json();
-          const relData = Array.isArray((relJson as any)?.data) ? (relJson as any).data : relJson;
-
-          // Para cada rutina, consultamos si está vinculada a esta sesión
-          const routineList: { id: string; title: string }[] = Array.isArray(relData)
-            ? relData.map((r: any) => ({ id: String(r.id), title: (r.title as string) || "Rutina sin nombre" }))
-            : [];
-
-          const linked: LinkedRoutineDTO[] = [];
-          await Promise.all(
-            routineList.map(async (r) => {
-              try {
-                const linkRes = await fetch(`/api/ct/routines/${r.id}/sessions`, {
-                  cache: "no-store",
-                });
-                if (!linkRes.ok) return;
-                const linkJson = await linkRes.json();
-                const sessionIds: string[] = Array.isArray((linkJson as any)?.sessionIds)
-                  ? (linkJson as any).sessionIds
-                  : [];
-                if (sessionIds.includes(sess.id)) {
-                  linked.push({ id: r.id, title: r.title });
-                }
-              } catch (err) {
-                console.error("No se pudieron cargar las sesiones vinculadas para la rutina", r.id, err);
-              }
-            })
-          );
-
-          setLinkedRoutines(linked);
-        } catch (err) {
-          console.error("No se pudieron cargar las rutinas vinculadas a la sesión", err);
-        }
-
         const d = decodeExercises(sess?.description || "");
         setPrefix(d.prefix);
         if (d.exercises.length) {
+          // Si hay ejercicios embebidos en la descripción, usamos solo esos
           setExercises(d.exercises);
         } else if (isViewMode) {
-          // Modo solo lectura: si no hay ejercicios estructurados, intentamos usar la biblioteca.
+          // Modo solo lectura: siempre consultamos la biblioteca por ejercicios de sesión.
           try {
             const resLib = await fetch(
               `/api/ct/exercises?usage=SESSION&originSessionId=${encodeURIComponent(sess.id)}`,
@@ -263,10 +200,25 @@ export default function SesionDetailEditorPage() {
 
             if (arr.length > 0) {
               const mapped: Exercise[] = arr.map((exLib) => {
-                const meta = exLib.sessionMeta || {};
+                const meta: SessionMeta | null | undefined = exLib.sessionMeta;
+                if (!meta) {
+                  // Sin sessionMeta: respetamos que hay ejercicios en biblioteca pero mostramos campos vacíos.
+                  return {
+                    title: "",
+                    kind: "",
+                    space: "",
+                    players: "",
+                    duration: "",
+                    description: "",
+                    imageUrl: "",
+                    routineId: "",
+                    routineName: "",
+                  };
+                }
+
                 return {
-                  title: exLib.name || (meta.description as string) || "",
-                  kind: (meta.type as string) || exLib.zone || "",
+                  title: exLib.name || "",
+                  kind: (meta.type as string) || "",
                   space: (meta.space as string) || "",
                   players:
                     meta.players != null
@@ -332,8 +284,6 @@ export default function SesionDetailEditorPage() {
       return name.includes(term) || type.includes(term) || desc.includes(term);
     });
   }, [pickerExercises, pickerSearch]);
-  // NOTA: linkedRoutines y routineOptions se mantienen para compatibilidad de datos,
-  // pero ya no se usan en la UI del editor de ejercicios.
 
   function updateExercise(idx: number, patch: Partial<Exercise>) {
     setExercises((prev) => {
@@ -406,84 +356,73 @@ export default function SesionDetailEditorPage() {
     });
   }
 
-  // Si venimos de un flujo externo que quiere vincular una rutina a un bloque concreto,
-  // por ejemplo /ct/sessions/[id]?linkRoutine=<RID>&block=<N>, actualizamos ese bloque
-  // a modo solo-rutina y persistimos la sesión.
-  useEffect(() => {
-    if (!s) return;
-    const linkRoutine = searchParams.get("linkRoutine");
-    const blockParam = searchParams.get("block");
-    if (!linkRoutine || blockParam == null) return;
-
-    const blockIndex = Number(blockParam);
-    if (!Number.isFinite(blockIndex) || blockIndex < 0) return;
-
-    // Evitar reprocesar si ya está aplicado
-    const current = exercises[blockIndex];
-    if (current && current.routineId === linkRoutine && current.isRoutineOnly) {
-      return;
-    }
-
-    (async () => {
-      try {
-        const res = await fetch(`/api/ct/routines/${encodeURIComponent(linkRoutine)}`);
-        if (!res.ok) return;
-        const json = await res.json();
-        const data: any = (json as any)?.data || json;
-        const routineTitle: string = data?.title || "Rutina sin nombre";
-
-        setExercises((prev) => {
-          const next = [...prev];
-          const ex: Exercise = next[blockIndex] || {
-            title: "",
-            kind: "",
-            space: "",
-            players: "",
-            duration: "",
-            description: "",
-            imageUrl: "",
-          };
-          next[blockIndex] = {
-            ...ex,
-            title: "",
-            kind: "",
-            space: "",
-            players: "",
-            duration: "",
-            description: "",
-            imageUrl: "",
-            routineId: linkRoutine,
-            routineName: routineTitle,
-            isRoutineOnly: true,
-          };
-          return next;
-        });
-
-        // Persistimos la sesión con la rutina vinculada
-        await persistSessionOnly();
-
-        // Limpiar los params de la URL para evitar repetir la operación si el usuario recarga
-        const sp = new URLSearchParams(searchParams.toString());
-        sp.delete("linkRoutine");
-        sp.delete("block");
-        const qs = sp.toString();
-        const base = `/ct/sessions/${encodeURIComponent(id)}`;
-        router.replace(qs ? `${base}?${qs}` : base);
-      } catch (err) {
-        console.error("No se pudo vincular la rutina desde linkRoutine", err);
-      }
-    })();
-  }, [s, exercises, id, router, searchParams]);
+  // Nota: el flujo antiguo de linkRoutine en la URL fue eliminado.
 
   async function saveAll() {
     if (isViewMode) return;
     if (!s) return;
     setSaving(true);
     try {
+      // 1) Persistimos la sesión con la descripción actualizada
       await persistSessionOnly();
 
-      // Intento opcional de importar al backend (si el endpoint existe).
-      importFromSession(s.id).catch(() => {});
+      // 2) Extraemos el primer ejercicio real del editor
+      const realExercises = exercises.filter(isRealExercise);
+      if (realExercises.length > 0) {
+        const first = realExercises[0];
+
+        const name = (first.title || first.kind || "Ejercicio sin nombre").trim();
+        const zone = (first.kind || "").trim() || null;
+        const videoUrl = (first.imageUrl || "").trim() || null;
+
+        const rawPlayers = (first as any).players ?? null;
+        let players: number | string | null = null;
+        if (typeof rawPlayers === "number") {
+          players = rawPlayers;
+        } else if (typeof rawPlayers === "string") {
+          const n = parseInt(rawPlayers.replace(/\D+/g, ""), 10);
+          players = Number.isFinite(n) ? n : rawPlayers;
+        }
+
+        const sessionMeta = {
+          type: first.kind ?? null,
+          space: (first as any).space ?? null,
+          players,
+          duration: (first as any).duration ?? null,
+          description: (first as any).description ?? null,
+          imageUrl: first.imageUrl ?? null,
+          sessionId: s.id,
+          routineId: (first as any).routineId ?? null,
+          routineName: (first as any).routineName ?? null,
+        };
+
+        // 3) Upsert automático en la biblioteca de ejercicios de Sesión
+        const res = await fetch(
+          `/api/ct/exercises?usage=SESSION&originSessionId=${encodeURIComponent(s.id)}`,
+          { cache: "no-store" }
+        );
+        const json = await res.json();
+        const list = Array.isArray((json as any)?.data) ? (json as any).data : json;
+        const existing = (Array.isArray(list) ? list[0] : null) as ExerciseDTO | null;
+
+        if (existing?.id) {
+          await updateSessionExercise(existing.id, {
+            name,
+            zone,
+            videoUrl,
+            originSessionId: s.id,
+            sessionMeta,
+          });
+        } else {
+          await createSessionExercise({
+            name,
+            zone,
+            videoUrl,
+            originSessionId: s.id,
+            sessionMeta,
+          });
+        }
+      }
 
       setEditing(false);
       alert("Guardado");
@@ -495,86 +434,10 @@ export default function SesionDetailEditorPage() {
     }
   }
 
-  async function handleSaveToSessionLibrary() {
-    if (!s || isViewMode) return;
-    if (!exercises.length) return;
-    try {
-      setSavingToLibrary(true);
-      setErrorLibrary(null);
-      await persistSessionOnly();
-
-      const realExercises = exercises.filter(isRealExercise);
-      if (!realExercises.length) {
-        setErrorLibrary("No hay ejercicios de sesión para guardar en la biblioteca");
-        return;
-      }
-
-      const first = realExercises[0];
-      const name = (first.title || first.kind || "Ejercicio sin nombre").trim();
-      const zone = (first.kind || "").trim() || null;
-      const videoUrl = (first.imageUrl || "").trim() || null;
-
-      const rawPlayers = (first as any).players ?? null;
-      let players: number | string | null = null;
-      if (typeof rawPlayers === "number") {
-        players = rawPlayers;
-      } else if (typeof rawPlayers === "string") {
-        const n = parseInt(rawPlayers.replace(/\D+/g, ""), 10);
-        players = Number.isFinite(n) ? n : rawPlayers;
-      }
-
-      const sessionMeta = {
-        type: first.kind ?? null,
-        space: (first as any).space ?? null,
-        players,
-        duration: (first as any).duration ?? null,
-        description: (first as any).description ?? null,
-        imageUrl: first.imageUrl ?? null,
-        sessionId: s.id,
-        routineId: (first as any).routineId ?? null,
-        routineName: (first as any).routineName ?? null,
-      };
-
-      const res = await fetch(
-        `/api/ct/exercises?usage=SESSION&originSessionId=${encodeURIComponent(s.id)}`,
-        { cache: "no-store" }
-      );
-      const json = await res.json();
-      const list = Array.isArray((json as any)?.data) ? (json as any).data : json;
-      const existing = (Array.isArray(list) ? list[0] : null) as ExerciseDTO | null;
-
-      if (existing?.id) {
-        await updateSessionExercise(existing.id, {
-          name,
-          zone,
-          videoUrl,
-          originSessionId: s.id,
-          sessionMeta,
-        });
-      } else {
-        await createSessionExercise({
-          name,
-          zone,
-          videoUrl,
-          originSessionId: s.id,
-          sessionMeta,
-        });
-      }
-
-      alert("Ejercicio guardado en la biblioteca de Sesiones / Campo");
-    } catch (err: any) {
-      console.error(err);
-      setErrorLibrary(err?.message || "No se pudo guardar en la biblioteca");
-    } finally {
-      setSavingToLibrary(false);
-    }
-  }
-
   async function openLibraryPicker(idx: number) {
     if (isViewMode) return;
     try {
       setLoadingPicker(true);
-      setErrorLibrary(null);
       setPickerSearch("");
       setPickerIndex(idx);
 
@@ -584,7 +447,6 @@ export default function SesionDetailEditorPage() {
       setPickerExercises(Array.isArray(list) ? list : []);
     } catch (err: any) {
       console.error(err);
-      setErrorLibrary(err?.message || "No se pudieron cargar los ejercicios de biblioteca");
       setPickerExercises([]);
     } finally {
       setLoadingPicker(false);
@@ -644,9 +506,6 @@ export default function SesionDetailEditorPage() {
           <p className="text-xs md:text-sm text-gray-500">
             Día: {marker.ymd || "—"} · Tipo: {s.type}
           </p>
-          {errorLibrary && (
-            <p className="mt-1 text-[11px] text-red-600">{errorLibrary}</p>
-          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -663,15 +522,6 @@ export default function SesionDetailEditorPage() {
           <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
             Dashboard
           </a>
-
-          <button
-            type="button"
-            onClick={handleSaveToSessionLibrary}
-            disabled={savingToLibrary}
-            className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
-          >
-            {savingToLibrary ? "Guardando..." : "Guardar en biblioteca"}
-          </button>
 
           {editing ? (
             <button onClick={saveAll} disabled={saving} className="hidden">
@@ -691,19 +541,6 @@ export default function SesionDetailEditorPage() {
           </button>
         </div>
       </header>
-
-      {/* COPILOT: AJUSTAR VISIBILIDAD DE SessionRoutinePanel (RUTINA DE FUERZA)
-       *
-       * Solo mostramos el bloque de "Rutina de fuerza" para sesiones de tipo GYM.
-       * Para sesiones de campo (GENERAL, etc.) no tiene sentido mostrarlo.
-       */}
-  {s.type === "FUERZA" && (
-        <SessionRoutinePanel
-          sessionId={s.id}
-          routines={linkedRoutines}
-          isViewMode={isViewMode}
-        />
-      )}
 
       {/* Lista de ejercicios de la sesión (campo) */}
       {exercises.length > 0 && (
