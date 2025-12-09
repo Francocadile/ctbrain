@@ -19,6 +19,7 @@ model Team {
   players            Player[]
   routines           Routine[]
   exercises          Exercise[]
+  rivalReports       RivalReport[]
 }
 
 // prisma/schema.prisma
@@ -221,6 +222,21 @@ model Rival {
   @@unique([teamId, name])
   @@index([teamId])
   @@index([nextMatchDate])
+}
+
+model RivalReport {
+  id          String   @id @default(cuid())
+  teamId      String
+  matchDate   DateTime
+  rivalName   String
+  competition String?
+  notes       String?
+  videos      Json? // lista de videos [{title, url}]
+
+  team Team @relation(fields: [teamId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model PlayerFeedback {

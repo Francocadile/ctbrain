@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import RoleGate from "@/components/auth/RoleGate";
+import { NotificationsSection } from "./NotificationsSection";
+import { RivalSection } from "./RivalSection";
 import type { Session, Team } from "@prisma/client";
 
 type PlayerWithTeam = {
@@ -124,26 +126,6 @@ export default async function JugadorHomePage() {
     take: 7,
   });
 
-  const { startOfDay, endOfDay, ymd: todayYmdFromTz } = getTodayInBuenosAires();
-
-  const [todaySession] = await Promise.all([
-    (prisma as any).session.findFirst({
-      where: {
-        teamId: player.teamId,
-        date: {
-          gte: startOfDay,
-          lt: endOfDay,
-        },
-      },
-      orderBy: { date: "asc" },
-    }) as Promise<Session | null>,
-  ]);
-
-  const marker = todaySession ? parseMarker(todaySession.description as string | undefined) : null;
-  const todayYmd = marker?.ymd || todayYmdFromTz;
-  const todayTurn: "morning" | "afternoon" =
-    marker?.turn === "morning" || marker?.turn === "afternoon" ? marker.turn : "morning";
-
   const fakeMinutes = [90, 75, 30, 0, 90]; // TODO: conectar con módulo de partidos
 
   let rpeLabel = "No cargado";
@@ -202,6 +184,29 @@ export default async function JugadorHomePage() {
     take: 5,
   } as any);
 
+  const { startOfDay, endOfDay, ymd: todayYmdFromTz } = getTodayInBuenosAires();
+
+  const [todaySession] = await Promise.all([
+    (prisma as any).session.findFirst({
+      where: {
+        teamId: player.teamId,
+        date: {
+          gte: startOfDay,
+          lt: endOfDay,
+        },
+      },
+      orderBy: { date: "asc" },
+    }) as Promise<Session | null>,
+  ]);
+
+  const marker = todaySession ? parseMarker(todaySession.description as string | undefined) : null;
+  const todayYmd = marker?.ymd || todayYmdFromTz;
+  const todayTurn: "morning" | "afternoon" =
+    marker?.turn === "morning" || marker?.turn === "afternoon" ? marker.turn : "morning";
+
+  const hasTodaySession = !!todaySession;
+  const hasRoutine = Array.isArray(routines) && routines.length > 0;
+
   return (
     <RoleGate allow={["JUGADOR"]}>
       <main className="min-h-screen px-4 py-4 md:px-6 md:py-8">
@@ -209,11 +214,18 @@ export default async function JugadorHomePage() {
           <PlayerHomeHeader player={player} />
 
           {/* Entrenamiento de hoy */}
+          <NotificationsSection
+            hasTodaySession={hasTodaySession}
+            hasRoutine={hasRoutine}
+          />
+
           <PlayerHomeTodaySessionCard
             todaySession={todaySession}
             todayYmd={todayYmd}
             todayTurn={todayTurn}
           />
+
+          <RivalSection />
 
           {/* Primero las rutinas visibles para el jugador */}
           <PlayerHomeRoutines routines={routines} />

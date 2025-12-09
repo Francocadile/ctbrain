@@ -35,14 +35,13 @@ function parseVideoValue(v: string | null | undefined): { label: string; url: st
   return { label: label || "", url: url || "" };
 }
 
-function humanDateShort(ymd: string) {
-  const d = new Date(`${ymd}T00:00:00.000Z`);
-  return d.toLocaleDateString(undefined, {
-    weekday: "short",
-    day: "2-digit",
-    month: "2-digit",
-    timeZone: "UTC",
-  });
+const WEEKDAY_ES = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"] as const;
+
+function formatSessionHeaderDate(ymd: string) {
+  const date = new Date(`${ymd}T00:00:00.000Z`);
+  const weekday = WEEKDAY_ES[date.getUTCDay()];
+  const [year, month, day] = ymd.split("-");
+  return `${weekday}, ${day}/${month}`;
 }
 
 /* ====== Partido / Descanso (copiados de CT) ====== */
@@ -242,7 +241,7 @@ export default async function JugadorSessionTurnoPage({ params, searchParams }: 
         <header className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2 flex-wrap">
             <div className="text-sm text-gray-500">
-              {humanDateShort(ymd)}, {turn === "morning" ? "Mañana" : "Tarde"}
+              {formatSessionHeaderDate(ymd)}, {turn === "morning" ? "Mañana" : "Tarde"}
             </div>
             <span className={`text-[10px] px-2 py-0.5 rounded border ${microChipClass(micro)}`}>
               {micro || "—"}

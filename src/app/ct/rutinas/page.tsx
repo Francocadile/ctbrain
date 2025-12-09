@@ -1,6 +1,7 @@
 import { dbScope } from "@/lib/dbScope";
 import { NewRoutineButton } from "./NewRoutineButton";
 import { RoutineActions } from "./RoutineActions";
+import { CTRoutinesFromSessionBanner } from "./RoutinesFromSessionBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -17,8 +18,16 @@ type RoutineListItem = {
   updatedAt: string;
 };
 
-export default async function CTRoutinesPage() {
+export default async function CTRoutinesPage({
+  searchParams,
+}: {
+  searchParams: { [key: string]: string | string[] | undefined };
+}) {
   const { prisma, team } = await dbScope();
+
+  const fromSession = (searchParams?.fromSession as string) || "";
+  const blockParam = searchParams?.block as string | undefined;
+  const blockIndex = blockParam != null ? Number(blockParam) : NaN;
 
   const routines = await prisma.routine.findMany({
     where: { teamId: team.id },
@@ -48,12 +57,13 @@ export default async function CTRoutinesPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      <CTRoutinesFromSessionBanner fromSession={fromSession} blockIndex={blockIndex} />
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Rutinas</h1>
           <p className="text-sm text-gray-500">Listado de rutinas creadas para este equipo.</p>
         </div>
-        <NewRoutineButton />
+        <NewRoutineButton fromSession={fromSession} blockIndex={blockIndex} />
       </header>
 
       {rows.length === 0 ? (
@@ -100,7 +110,11 @@ export default async function CTRoutinesPage() {
                   </div>
                 </div>
 
-                <RoutineActions routineId={routine.id} />
+                <RoutineActions
+                  routineId={routine.id}
+                  fromSession={fromSession}
+                  blockIndex={blockIndex}
+                />
               </article>
             </li>
           ))}

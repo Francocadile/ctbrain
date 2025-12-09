@@ -1,9 +1,15 @@
 "use client";
 
 import { useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
-export function NewRoutineButton() {
+export function NewRoutineButton({
+  fromSession,
+  blockIndex,
+}: {
+  fromSession?: string;
+  blockIndex?: number;
+} = {}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -22,7 +28,14 @@ export function NewRoutineButton() {
       const id = json?.data?.id as string | undefined;
       if (id) {
         startTransition(() => {
-          router.push(`/ct/rutinas/${id}`);
+          let url = `/ct/rutinas/${id}`;
+          if (fromSession && typeof blockIndex === "number" && blockIndex >= 0) {
+            const sp = new URLSearchParams();
+            sp.set("fromSession", fromSession);
+            sp.set("block", String(blockIndex));
+            url += `?${sp.toString()}`;
+          }
+          router.push(url);
         });
       }
     } catch (e) {

@@ -130,6 +130,10 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
   const [quickPreviewExercise, setQuickPreviewExercise] = useState<ExerciseDTO | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
+  const fromSession = searchParams?.get("fromSession") || "";
+  const blockParam = searchParams?.get("block") || "";
+  const blockIndex = blockParam ? Number(blockParam) : NaN;
+
   useEffect(() => {
     setLocalBlocks(blocks);
   }, [blocks]);
@@ -180,6 +184,72 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
       startTransition(() => {
         router.refresh();
       });
+
+      // Si venimos desde una sesión y hay bloque definido, vinculamos automáticamente la rutina.
+      if (fromSession && Number.isFinite(blockIndex) && blockIndex >= 0) {
+        try {
+          const res = await fetch(`/api/sessions/${encodeURIComponent(fromSession)}`);
+          if (res.ok) {
+            const json = await res.json();
+            const sess = (json as any)?.data || json;
+            const desc: string = sess?.description || "";
+
+            // Reutilizamos el formato [EXERCISES] base64 igual que en el editor de sesión.
+            const EX_TAG = "[EXERCISES]";
+            const text = desc.trimEnd();
+            const idx = text.lastIndexOf(EX_TAG);
+            let prefix = text;
+            let exercises: any[] = [];
+
+            if (idx !== -1) {
+              prefix = text.slice(0, idx).trimEnd();
+              const rest = text.slice(idx + EX_TAG.length).trim();
+              const b64 = rest.split(/\s+/)[0] || "";
+              try {
+                const raw = Buffer.from(b64, "base64").toString("utf-8");
+                const arr = JSON.parse(raw);
+                if (Array.isArray(arr)) exercises = arr;
+              } catch {
+                exercises = [];
+              }
+            }
+
+            if (!exercises.length) {
+              exercises = [{}];
+            }
+
+            const ex = exercises[blockIndex] || {};
+            exercises[blockIndex] = {
+              ...ex,
+              title: "",
+              kind: "",
+              space: "",
+              players: "",
+              duration: "",
+              description: "",
+              imageUrl: "",
+              routineId: header.id,
+              routineName: header.title || "Nueva rutina",
+              isRoutineOnly: true,
+            };
+
+            const jsonStr = JSON.stringify(exercises);
+            const b64New = Buffer.from(jsonStr, "utf-8").toString("base64");
+            const newDescription = `${prefix}\n\n${EX_TAG} ${b64New}`;
+
+            await patchJSON(`/api/sessions/${encodeURIComponent(fromSession)}`, {
+              title: sess.title,
+              description: newDescription,
+              date: sess.date,
+            });
+
+            // Redirigir de vuelta al editor de sesión
+            router.push(`/ct/sessions/${encodeURIComponent(fromSession)}`);
+          }
+        } catch (err) {
+          console.error("No se pudo vincular rutina a sesión desde RoutineDetailClient", err);
+        }
+      }
     } catch (e: any) {
       setError(e?.message || "No se pudo actualizar la cabecera");
     }

@@ -4,7 +4,15 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import Link from "next/link";
 
-export function RoutineActions({ routineId }: { routineId: string }) {
+export function RoutineActions({
+  routineId,
+  fromSession,
+  blockIndex,
+}: {
+  routineId: string;
+  fromSession?: string;
+  blockIndex?: number;
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -36,7 +44,16 @@ export function RoutineActions({ routineId }: { routineId: string }) {
   return (
     <div className="mt-3 flex justify-end gap-2">
       <Link
-        href={`/ct/rutinas/${routineId}`}
+        href={(() => {
+          let url = `/ct/rutinas/${routineId}`;
+          if (fromSession && typeof blockIndex === "number" && blockIndex >= 0) {
+            const sp = new URLSearchParams();
+            sp.set("fromSession", fromSession);
+            sp.set("block", String(blockIndex));
+            url += `?${sp.toString()}`;
+          }
+          return url;
+        })()}
         className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
       >
         Editar
