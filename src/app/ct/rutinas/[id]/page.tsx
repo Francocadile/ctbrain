@@ -19,11 +19,7 @@ export default async function CTRoutineDetailPage({
       sharedWithPlayers: {
         select: { playerId: true },
       },
-      sessions: {
-        include: {
-          session: true,
-        },
-      },
+      //  sessions: ... eliminado porque no existe esa relacin en el modelo
     },
   } as any)) as any;
 
