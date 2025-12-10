@@ -12,7 +12,7 @@ export default function TestPlayersPage() {
   const [err, setErr] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    fetch("/api/med/users/players", { cache: "no-store" })
+    fetch("/api/medico/users/players", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : Promise.reject(r.statusText)))
       .then((data: Row[]) => setRows(data))
       .catch((e) => setErr(String(e)));

@@ -126,7 +126,38 @@ export default async function JugadorHomePage() {
     take: 7,
   });
 
+  const lastClinical = await prisma.clinicalEntry.findFirst({
+    where: { userId: session.user.id },
+    orderBy: { date: "desc" },
+  });
+
   const fakeMinutes = [90, 75, 30, 0, 90]; // TODO: conectar con módulo de partidos
+
+  let clinicalLabel = "Sin parte médico";
+  let clinicalClass = "text-gray-500";
+  if (lastClinical) {
+    switch (lastClinical.status) {
+      case "BAJA":
+        clinicalLabel = "Baja";
+        clinicalClass = "text-red-600";
+        break;
+      case "REINTEGRO":
+        clinicalLabel = "Reintegro";
+        clinicalClass = "text-amber-600";
+        break;
+      case "LIMITADA":
+        clinicalLabel = "Limitada";
+        clinicalClass = "text-amber-600";
+        break;
+      case "ALTA":
+        clinicalLabel = "Alta médica";
+        clinicalClass = "text-green-600";
+        break;
+      default:
+        clinicalLabel = String(lastClinical.status || "Parte médico");
+        clinicalClass = "text-gray-700";
+    }
+  }
 
   let rpeLabel = "No cargado";
   let rpeClass = "text-gray-500";
@@ -238,6 +269,8 @@ export default async function JugadorHomePage() {
             wellnessToday={wellnessToday}
             fakeMinutes={fakeMinutes}
             feedbacks={feedbacks}
+            clinicalLabel={clinicalLabel}
+            clinicalClass={clinicalClass}
           />
 
           <PlayerHomeHistoryCard
@@ -467,6 +500,8 @@ type PlayerHomeTodayStatusProps = {
   wellnessToday: any;
   fakeMinutes: number[];
   feedbacks: any[];
+  clinicalLabel: string;
+  clinicalClass: string;
 };
 
 function PlayerHomeTodayStatus({
@@ -476,12 +511,14 @@ function PlayerHomeTodayStatus({
   wellnessToday,
   fakeMinutes,
   feedbacks,
+  clinicalLabel,
+  clinicalClass,
 }: PlayerHomeTodayStatusProps) {
   const hasRpeToday = lastRpe && isToday(lastRpe.date);
 
   return (
     <section className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         {/* RPE hoy */}
         <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
           <div className="flex items-center justify-between gap-2">
@@ -554,7 +591,7 @@ function PlayerHomeTodayStatus({
           )}
         </div>
 
-        {/* Feedback reciente */}
+  {/* Feedback reciente */}
         <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
             Feedback reciente
@@ -578,6 +615,25 @@ function PlayerHomeTodayStatus({
               ))}
             </ul>
           )}
+        </div>
+
+        {/* Estado médico */}
+        <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Estado médico
+          </h2>
+          <p className={`text-sm font-semibold ${clinicalClass}`}>
+            {clinicalLabel}
+          </p>
+          <p className="mt-1 text-xs text-gray-500">
+            Último parte médico cargado por el cuerpo médico.
+          </p>
+          <Link
+            href="/jugador/salud"
+            className="inline-flex items-center text-[11px] text-blue-600 hover:underline mt-2"
+          >
+            Ver detalle
+          </Link>
         </div>
       </div>
 

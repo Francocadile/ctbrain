@@ -157,7 +157,7 @@ function CtInjuriesInner() {
     setLoadingRows(true);
     setErrRows(null);
     try {
-      const res = await fetch(`/api/med/clinical?date=${date}`, {
+  const res = await fetch(`/api/medico/clinical?date=${date}`, {
         cache: "no-store",
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -183,7 +183,7 @@ function CtInjuriesInner() {
     setErrAn(null);
     try {
       const res = await fetch(
-        `/api/med/clinical/analytics?start=${start}&end=${end}`,
+        `/api/medico/clinical/analytics?start=${start}&end=${end}`,
         { cache: "no-store" }
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

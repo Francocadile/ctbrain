@@ -21,6 +21,8 @@ export default function ScoutingListPage({ params }: { params: { categoria: stri
   const [rows, setRows] = useState<ScoutingPlayer[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
+  const [estadoFilter, setEstadoFilter] = useState<"TODOS" | "ACTIVO" | "WATCHLIST" | "DESCARTADO">("TODOS");
+  const [savingEstadoId, setSavingEstadoId] = useState<string | null>(null);
 
   // form mínimo
   const [newRow, setNewRow] = useState<{
@@ -40,7 +42,7 @@ export default function ScoutingListPage({ params }: { params: { categoria: stri
       const c = cs.find(x => x.slug === slug) ?? null;
       setCat(c);
       if (c) {
-        const players = await listPlayers({ categoriaId: c.id });
+        const players = await listPlayers({ categoriaId: c.id, estado: estadoFilter === "TODOS" ? undefined : estadoFilter });
         setRows(players);
       } else {
         setRows([]);
@@ -49,7 +51,7 @@ export default function ScoutingListPage({ params }: { params: { categoria: stri
       setLoading(false);
     }
   }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [slug]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [slug, estadoFilter]);
 
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -61,13 +63,14 @@ export default function ScoutingListPage({ params }: { params: { categoria: stri
   }, [q, rows]);
 
   function exportCsv() {
-    const headers = ["Nombre", "Posición", "Club", "Contacto", "Video", "Estado", "Actualizado"];
+    const headers = ["Nombre", "Posición", "Club", "Contacto", "Video", "Estado", "Rating", "Actualizado"];
     const lines = filtered.map(r => {
       const pos = (r.positions || []).join("/");
       const contacto = r.agentPhone || r.playerPhone || r.agentEmail || r.playerEmail || "";
       const video = (r.videos || [])[0] || "";
       const upd = r.updatedAt ? new Date(r.updatedAt).toLocaleDateString() : "";
-      return [r.fullName, pos, r.club || "", contacto, video, r.estado, upd].map(x => `"${(x ?? "").toString().replace(/"/g, '""')}"`).join(",");
+      const rating = (r as any).rating ?? "";
+      return [r.fullName, pos, r.club || "", contacto, video, r.estado, rating, upd].map(x => `"${(x ?? "").toString().replace(/"/g, '""')}"`).join(",");
     });
     const csv = [headers.join(","), ...lines].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -107,6 +110,52 @@ export default function ScoutingListPage({ params }: { params: { categoria: stri
     await load();
   }
 
+  async function handleChangeEstado(row: ScoutingPlayer, nuevo: "ACTIVO" | "WATCHLIST" | "DESCARTADO") {
+    if (!cat) return;
+    if (row.estado === nuevo) return;
+
+    const prevEstado = row.estado;
+    setSavingEstadoId(row.id);
+    // feedback optimista
+    setRows(prev => prev.map(r => (r.id === row.id ? { ...r, estado: nuevo } : r)));
+
+    try {
+      const payload = {
+        id: row.id,
+        fullName: row.fullName,
+        positions: row.positions ?? [],
+        club: row.club ?? null,
+        estado: nuevo,
+        categoriaId: row.categoriaId ?? cat.id,
+        agentName: row.agentName ?? null,
+        agentPhone: row.agentPhone ?? null,
+        agentEmail: row.agentEmail ?? null,
+        playerPhone: row.playerPhone ?? null,
+        playerEmail: row.playerEmail ?? null,
+        instagram: row.instagram ?? null,
+        videos: row.videos ?? [],
+        notes: row.notes ?? null,
+        rating: row.rating ?? null,
+        tags: row.tags ?? [],
+      } as const;
+
+      const updated = await upsertPlayer(payload as any);
+      if (!updated) {
+        throw new Error("Respuesta vacía al actualizar jugador");
+      }
+
+      // aseguramos estado sincronizado con respuesta
+      setRows(prev => prev.map(r => (r.id === updated.id ? { ...r, ...updated } : r)));
+    } catch (e: any) {
+      console.error("Error al cambiar estado de scouting player", e);
+      alert(e?.message || "No se pudo actualizar el estado");
+      // revertir en memoria
+      setRows(prev => prev.map(r => (r.id === row.id ? { ...r, estado: prevEstado } : r)));
+    } finally {
+      setSavingEstadoId(current => (current === row.id ? null : current));
+    }
+  }
+
   return (
     <Container>
       <div className="flex items-center justify-between mb-4">
@@ -121,6 +170,35 @@ export default function ScoutingListPage({ params }: { params: { categoria: stri
         <div className="flex gap-2">
           <Link href={"/ct/scouting" as Route} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">← Volver</Link>
           <button onClick={exportCsv} className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Exportar CSV</button>
+        </div>
+      </div>
+
+      {/* Filtros de estado */}
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <div className="flex flex-wrap gap-1">
+          {([
+            { key: "TODOS", label: "Todos" },
+            { key: "ACTIVO", label: "Activo" },
+            { key: "WATCHLIST", label: "Watchlist" },
+            { key: "DESCARTADO", label: "Descartado" },
+          ] as const).map((opt) => (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => setEstadoFilter(opt.key)}
+              className={
+                "px-2.5 py-1 rounded-full text-[11px] border transition " +
+                (estadoFilter === opt.key
+                  ? "bg-black text-white border-black"
+                  : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50")
+              }
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <div className="text-[11px] text-gray-500">
+          Mostrando: {estadoFilter === "TODOS" ? "Todos" : estadoFilter} ({filtered.length})
         </div>
       </div>
 
@@ -187,7 +265,44 @@ export default function ScoutingListPage({ params }: { params: { categoria: stri
                       <a className="underline text-emerald-700 break-all" href={r.videos[0]} target="_blank">Ver</a>
                     ) : "—"}
                   </td>
-                  <td className="px-3 py-2">{r.estado}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2 text-[11px]">
+                      <span
+                        className={
+                          "inline-flex items-center rounded-full px-2 py-0.5 border text-[10px] " +
+                          (r.estado === "ACTIVO"
+                            ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                            : r.estado === "WATCHLIST"
+                            ? "bg-amber-50 border-amber-200 text-amber-800"
+                            : "bg-red-50 border-red-200 text-red-800")
+                        }
+                      >
+                        {r.estado === "ACTIVO"
+                          ? "Activo"
+                          : r.estado === "WATCHLIST"
+                          ? "Watchlist"
+                          : "Descartado"}
+                      </span>
+                      <select
+                        className="rounded-md border px-1.5 py-0.5 text-[11px] bg-white disabled:opacity-50"
+                        value={r.estado}
+                        disabled={savingEstadoId === r.id}
+                        onChange={(e) =>
+                          handleChangeEstado(
+                            r,
+                            e.target.value as "ACTIVO" | "WATCHLIST" | "DESCARTADO"
+                          )
+                        }
+                      >
+                        <option value="ACTIVO">Activo</option>
+                        <option value="WATCHLIST">Watchlist</option>
+                        <option value="DESCARTADO">Descartado</option>
+                      </select>
+                      {savingEstadoId === r.id && (
+                        <span className="text-[10px] text-gray-400">Guardando...</span>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center justify-end gap-2">
                       <Link

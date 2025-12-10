@@ -1,8 +1,6 @@
 // src/app/med/injuries/page.tsx
 "use client";
 
-export const dynamic = "force-dynamic";
-
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import HelpTip from "@/components/HelpTip";
@@ -22,7 +20,7 @@ export default function MedInjuriesPage() {
         <p className="mt-2 text-xs text-gray-500">
           Atajo:{" "}
           <a
-            href="/api/med/users/players"
+            href="/api/medico/users/players"
             className="underline"
             target="_blank"
             rel="noreferrer"

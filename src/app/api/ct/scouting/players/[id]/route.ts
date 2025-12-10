@@ -19,27 +19,11 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   try {
     const { prisma, team } = await dbScope({ req });
     const body = await req.json();
-    let categoriaAction: Prisma.ScoutingPlayerUpdateInput["categoria"] = undefined;
-    if (typeof body.categoriaId === "string" && body.categoriaId.trim()) {
-      const categoriaId = body.categoriaId.trim();
-      const category = await prisma.scoutingCategory.findFirst({
-        where: scopedWhere(team.id, { id: categoriaId }) as any,
-        select: { id: true },
-      });
-      if (!category) {
-        return NextResponse.json({ error: "Categoría inválida" }, { status: 400 });
-      }
-      categoriaAction = { connect: { id: categoriaId } };
-    } else if (body.categoriaId === null) {
-      categoriaAction = { disconnect: true };
-    }
-
     const dataPatch: Prisma.ScoutingPlayerUpdateInput = {
       fullName: typeof body.fullName === "string" ? body.fullName : undefined,
       positions: Array.isArray(body.positions) ? body.positions : undefined,
       club: body.club ?? undefined,
       estado: body.estado ?? undefined,
-      categoria: categoriaAction,
 
       agentName: body.agentName ?? undefined,
       agentPhone: body.agentPhone ?? undefined,

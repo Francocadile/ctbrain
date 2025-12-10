@@ -49,9 +49,12 @@ function NewEpisodeInner() {
       setLoading(true);
       setErr(null);
       try {
-        const res = await fetch(`/api/med/clinical/${encodeURIComponent(fromId)}`, {
-          cache: "no-store",
-        });
+        const res = await fetch(
+          `/api/medico/clinical/${encodeURIComponent(fromId)}`,
+          {
+            cache: "no-store",
+          }
+        );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = (await res.json()) as Episode;
 
