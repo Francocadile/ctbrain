@@ -6,7 +6,6 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { getSessionById, updateSession, type SessionDTO } from "@/lib/api/sessions";
 import {
   createSessionExercise,
-  updateSessionExercise,
   type SessionMeta,
   type ExerciseDTO,
 } from "@/lib/api/exercises";
@@ -363,7 +362,7 @@ export default function SesionDetailEditorPage() {
     if (!s) return;
     setSaving(true);
     try {
-      // 1) Persistimos la sesión con la descripción actualizada
+  // 1) Persistimos la sesión con la descripción actualizada (fuente de verdad para el jugador)
       await persistSessionOnly();
 
       // 2) Extraemos el primer ejercicio real del editor
@@ -397,31 +396,14 @@ export default function SesionDetailEditorPage() {
         };
 
         // 3) Upsert automático en la biblioteca de ejercicios de Sesión
-        const res = await fetch(
-          `/api/ct/exercises?usage=SESSION&originSessionId=${encodeURIComponent(s.id)}`,
-          { cache: "no-store" }
-        );
-        const json = await res.json();
-        const list = Array.isArray((json as any)?.data) ? (json as any).data : json;
-        const existing = (Array.isArray(list) ? list[0] : null) as ExerciseDTO | null;
-
-        if (existing?.id) {
-          await updateSessionExercise(existing.id, {
-            name,
-            zone,
-            videoUrl,
-            originSessionId: s.id,
-            sessionMeta,
-          });
-        } else {
-          await createSessionExercise({
-            name,
-            zone,
-            videoUrl,
-            originSessionId: s.id,
-            sessionMeta,
-          });
-        }
+        //    Delegamos completamente la decisión crear/actualizar al backend (POST /api/ct/exercises).
+        await createSessionExercise({
+          name,
+          zone,
+          videoUrl,
+          originSessionId: s.id,
+          sessionMeta,
+        });
       }
 
       setEditing(false);
