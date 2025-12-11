@@ -1,5 +1,5 @@
-// Exercise type is defined locally in the CT session editor page.
-// We re-declare the shape here to avoid importing from a client component.
+// src/lib/sessions/encodeDecodeExercises.ts
+
 export type Exercise = {
   title: string;
   kind: string;
@@ -13,71 +13,115 @@ export type Exercise = {
   isRoutineOnly?: boolean;
 };
 
-/* =========================
-   Base64 helpers (Unicode-safe)
-   ========================= */
-function encodeB64Json(value: unknown) {
-  const json = JSON.stringify(value);
-  try {
-    // Navegador: unicode-safe
-    // encodeURIComponent -> escape -> btoa
-    // (catch por si el ambiente no soporta escape/unescape)
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    return btoa(unescape(encodeURIComponent(json)));
-  } catch {
-    return btoa(json);
-  }
-}
-
-function decodeB64Json<T = any>(b64: string): T {
-  try {
-    // Navegador: unicode-safe
-    // atob -> unescape-reverse -> decodeURIComponent -> JSON.parse
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    const s = decodeURIComponent(escape(atob(b64)));
-    return JSON.parse(s) as T;
-  } catch {
-    const s = atob(b64);
-    return JSON.parse(s) as T;
-  }
-}
-
 const EX_TAG = "[EXERCISES]";
 
+/**
+ * Helpers base64 que funcionan tanto en browser como en Node (server).
+ */
+function toBase64(str: string): string {
+  // Node / server
+  if (typeof Buffer !== "undefined") {
+    return Buffer.from(str, "utf8").toString("base64");
+  }
+  // Browser
+  if (typeof btoa !== "undefined") {
+    // encodeURIComponent para soportar unicode
+    // eslint-disable-next-line no-undef
+    return btoa(unescape(encodeURIComponent(str)));
+  }
+  throw new Error("No base64 encoder available");
+}
+
+function fromBase64(b64: string): string {
+  // Node / server
+  if (typeof Buffer !== "undefined") {
+    return Buffer.from(b64, "base64").toString("utf8");
+  }
+  // Browser
+  if (typeof atob !== "undefined") {
+    // eslint-disable-next-line no-undef
+    const decoded = atob(b64);
+    try {
+      // Intento revertir el unescape/encodeURIComponent
+      // eslint-disable-next-line no-undef
+      return decodeURIComponent(escape(decoded));
+    } catch {
+      return decoded;
+    }
+  }
+  throw new Error("No base64 decoder available");
+}
+
+function encodeB64Json(value: unknown): string {
+  const json = JSON.stringify(value ?? []);
+  return toBase64(json);
+}
+
+function decodeB64Json<T = unknown>(b64: string): T {
+  const json = fromBase64(b64);
+  return JSON.parse(json) as T;
+}
+
+/**
+ * Extrae ejercicios embebidos desde Session.description.
+ * Devuelve el texto "prefix" (lo que ve el jugador) y el array de ejercicios.
+ */
 export function decodeExercises(
   desc: string | null | undefined
 ): { prefix: string; exercises: Exercise[] } {
   const text = (desc || "").trimEnd();
+  if (!text) return { prefix: "", exercises: [] };
+
   const idx = text.lastIndexOf(EX_TAG);
-  if (idx === -1) return { prefix: text, exercises: [] };
+  if (idx === -1) {
+    return { prefix: text, exercises: [] };
+  }
+
   const prefix = text.slice(0, idx).trimEnd();
   const rest = text.slice(idx + EX_TAG.length).trim();
   const b64 = rest.split(/\s+/)[0] || "";
+
+  if (!b64) {
+    return { prefix, exercises: [] };
+  }
+
   try {
-    const arr = decodeB64Json<Partial<Exercise>[]>(b64);
-    if (Array.isArray(arr)) {
-      const fixed = arr.map((e) => ({
-        title: e.title ?? "",
-        kind: e.kind ?? "",
-        space: e.space ?? "",
-        players: e.players ?? "",
-        duration: e.duration ?? "",
-        description: e.description ?? "",
-        imageUrl: e.imageUrl ?? "",
-        routineId: (e as any).routineId ?? "",
-        routineName: (e as any).routineName ?? "",
-        isRoutineOnly: (e as any).isRoutineOnly ?? false,
-      }));
-      return { prefix, exercises: fixed as Exercise[] };
+    const raw = decodeB64Json<Partial<Exercise>[]>(b64);
+    if (!Array.isArray(raw)) {
+      return { prefix, exercises: [] };
     }
-  } catch {}
-  return { prefix: text, exercises: [] };
+
+    const exercises: Exercise[] = raw.map((e) => ({
+      title: e.title ?? "",
+      kind: e.kind ?? "",
+      space: e.space ?? "",
+      players: e.players ?? "",
+      duration: e.duration ?? "",
+      description: e.description ?? "",
+      imageUrl: e.imageUrl ?? "",
+      routineId: (e as any)?.routineId ?? "",
+      routineName: (e as any)?.routineName ?? "",
+      isRoutineOnly: (e as any)?.isRoutineOnly ?? false,
+    }));
+
+    return { prefix, exercises };
+  } catch (err) {
+    console.error("decodeExercises: failed to parse exercises", err);
+    // En caso de error, devolvemos solo el texto para no romper el server.
+    return { prefix: text, exercises: [] };
+  }
 }
 
-export function encodeExercises(prefix: string, exercises: Exercise[]) {
-  const b64 = encodeB64Json(exercises);
+/**
+ * Embebe los ejercicios al final del texto (lo que ya hace CT).
+ */
+export function encodeExercises(prefix: string, exercises: Exercise[]): string {
   const safePrefix = (prefix || "").trimEnd();
+  if (!exercises || !exercises.length) {
+    // Si no hay ejercicios, no agregamos el tag.
+    return safePrefix;
+  }
+
+  const b64 = encodeB64Json(exercises);
   return `${safePrefix}\n\n${EX_TAG} ${b64}`;
 }
