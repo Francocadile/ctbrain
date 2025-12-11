@@ -1,7 +1,7 @@
 // src/app/ct/sessions/by-day/[ymd]/[turn]/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import {
   getSessionsWeek,
@@ -9,6 +9,7 @@ import {
   toYYYYMMDDUTC,
   type SessionDTO,
 } from "@/lib/api/sessions";
+import SessionDayView, { SessionDayBlock } from "@/components/sessions/SessionDayView";
 
 type TurnKey = "morning" | "afternoon";
 
@@ -110,13 +111,6 @@ export default function SessionTurnoPage() {
     }
   `;
 
-  const blockRefs = {
-    "PRE ENTREN0": useRef<HTMLDivElement | null>(null),
-    "FÍSICO": useRef<HTMLDivElement | null>(null),
-    "TÉCNICO–TÁCTICO": useRef<HTMLDivElement | null>(null),
-    "COMPENSATORIO": useRef<HTMLDivElement | null>(null),
-  } as const;
-
   useEffect(() => {
     async function load() {
       if (!ymd) return;
@@ -138,10 +132,11 @@ export default function SessionTurnoPage() {
   }, [ymd]);
 
   useEffect(() => {
-    const key = (focus || "") as typeof CONTENT_ROWS[number];
-    const ref = key && (blockRefs as any)[key]?.current;
-    if (ref) ref.scrollIntoView({ behavior: "smooth", block: "start" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!focus) return;
+    const el = document.querySelector<HTMLElement>(`[data-row-key="${focus}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   }, [focus]);
 
   // Meta (incluye nombre de sesión)
@@ -169,155 +164,74 @@ export default function SessionTurnoPage() {
   }, [daySessions, turn]);
 
   // Bloques
-  const blocks = useMemo(() => {
-    return CONTENT_ROWS.map((row) => {
-      const s = daySessions.find((it) => isCellOf(it, turn, row));
-      const text = (s?.title || "").trim();
-      return { row, text, id: s?.id || "" };
-    });
-  }, [daySessions, turn]);
+  const header = useMemo(
+    () => ({
+      name: meta.name,
+      place: meta.lugar,
+      time: meta.hora,
+      videoUrl: meta.video.url || null,
+      microLabel: micro || null,
+    }),
+    [meta.name, meta.lugar, meta.hora, meta.video.url, micro]
+  );
 
-  return (
-    <div className="p-4 space-y-4 print-root">
-      <style jsx global>{printCSS}</style>
+  const viewBlocks: SessionDayBlock[] = useMemo(
+    () =>
+      CONTENT_ROWS.map((rowLabel) => {
+        const cell = daySessions.find((s) => isCellOf(s, turn, rowLabel));
+        return {
+          rowKey: rowLabel,
+          rowLabel,
+          title: (cell?.title || "").trim(),
+          sessionId: cell?.id || "",
+        };
+      }),
+    [daySessions, turn]
+  );
 
-      <header className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="text-sm text-gray-500">
-            {formatSessionHeaderDate(ymd)}, {turn === "morning" ? "Mañana" : "Tarde"}
-          </div>
-          <span className={`text-[10px] px-2 py-0.5 rounded border ${microChipClass(micro)}`}>
-            {micro || "—"}
-          </span>
-          {meta.name ? (
-            <span className="text-sm text-gray-700">· <b>{meta.name}</b></span>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-2 no-print">
-          <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-            ← Dashboard
-          </a>
-          <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-            ✏️ Editor
-          </a>
-          <button
-            onClick={() => window.print()}
-            className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
-          >
-            🖨 Imprimir
-          </button>
-        </div>
-      </header>
-
-      {/* Meta */}
-      <section className="rounded-2xl border bg-white shadow-sm overflow-hidden">
-        <div className="bg-emerald-50 text-emerald-900 font-semibold px-3 py-2 border-b uppercase tracking-wide text-[12px]">
-          Detalles
-        </div>
-        <div className="grid md:grid-cols-4 gap-2 p-3 text-sm">
-          <div>
-            <div className="text-[11px] text-gray-500">Nombre de sesión</div>
-            <div className="font-medium">
-              {meta.name || <span className="text-gray-400">—</span>}
+  // Si es día libre, mostramos solo el mensaje de descanso en lugar de bloques
+  if (dayFlag.kind === "LIBRE") {
+    return (
+      <div className="p-4 space-y-4 print-root">
+        <style jsx global>{printCSS}</style>
+        <header className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="text-sm text-gray-500">
+              {formatSessionHeaderDate(ymd)}, {turn === "morning" ? "Mañana" : "Tarde"}
             </div>
+            <span className={`text-[10px] px-2 py-0.5 rounded border ${microChipClass(micro)}`}>
+              {micro || "—"}
+            </span>
           </div>
-          <div>
-            <div className="text-[11px] text-gray-500">Lugar</div>
-            <div className="font-medium">
-              {meta.lugar || <span className="text-gray-400">—</span>}
-            </div>
+          <div className="flex items-center gap-2 no-print">
+            <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+              ← Dashboard
+            </a>
+            <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+              ✏️ Editor
+            </a>
+            <button
+              onClick={() => window.print()}
+              className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
+            >
+              🖨 Imprimir
+            </button>
           </div>
-          <div>
-            <div className="text-[11px] text-gray-500">Hora</div>
-            <div className="font-medium">
-              {meta.hora || <span className="text-gray-400">—</span>}
-            </div>
-          </div>
-          <div>
-            <div className="text-[11px] text-gray-500">Video</div>
-            {meta.video.url ? (
-              <a
-                href={meta.video.url}
-                target="_blank"
-                rel="noreferrer"
-                className="underline text-emerald-700"
-                title={meta.video.label || "Video"}
-              >
-                {meta.video.label || "Video"}
-              </a>
-            ) : (
-              <span className="text-gray-400">—</span>
-            )}
-          </div>
-
-          {/* Partido (solo si corresponde) */}
-          {dayFlag.kind === "PARTIDO" && (
-            <>
-              <div className="md:col-span-2">
-                <div className="text-[11px] text-gray-500">Rival</div>
-                <div className="font-medium">
-                  {dayFlag.rival || <span className="text-gray-400">—</span>}
-                </div>
-              </div>
-              <div className="md:col-span-2">
-                <div className="text-[11px] text-gray-500">Logo</div>
-                {dayFlag.logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={dayFlag.logoUrl}
-                    alt="Logo rival"
-                    className="h-10 w-auto object-contain rounded border bg-white"
-                  />
-                ) : (
-                  <span className="text-gray-400">—</span>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      </section>
-
-      {/* Descanso => no mostrar bloques */}
-      {dayFlag.kind === "LIBRE" ? (
+        </header>
         <div className="rounded-2xl border bg-white shadow-sm p-10 text-center text-gray-700 font-semibold">
           DESCANSO
         </div>
-      ) : (
-        <section className="space-y-3">
-          {blocks.map(({ row, text, id }) => (
-            <div
-              key={row}
-              ref={blockRefs[row]}
-              className="rounded-2xl border bg-white shadow-sm p-3"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">
-                  {row}
-                </h2>
-                {id && (
-                  <div className="flex gap-2 no-print">
-                    <a
-                      href={`/ct/sessions/${id}?view=1`}
-                      className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
-                    >
-                      Ver ejercicio
-                    </a>
-                    <a
-                      href={`/ct/sessions/${id}`}
-                      className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
-                    >
-                      Editar ejercicios
-                    </a>
-                  </div>
-                )}
-              </div>
-              <div className="min-h-[120px] whitespace-pre-wrap leading-6 text-[13px]">
-                {text || <span className="text-gray-400 italic">—</span>}
-              </div>
-            </div>
-          ))}
-        </section>
-      )}
-    </div>
+      </div>
+    );
+  }
+
+  return (
+    <SessionDayView
+      date={ymd}
+      turn={turn}
+      header={header}
+      blocks={viewBlocks}
+      mode="ct"
+    />
   );
 }

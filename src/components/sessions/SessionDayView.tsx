@@ -1,0 +1,193 @@
+"use client";
+
+import React, { useMemo, useRef, useEffect } from "react";
+
+export type SessionDayBlock = {
+  rowKey: string; // ej: "PRE ENTREN0", "FÍSICO"
+  rowLabel: string; // label visible
+  title: string; // contenido del bloque
+  sessionId: string; // id de la Session
+};
+
+type SessionDayViewProps = {
+  date: string; // YYYY-MM-DD
+  turn: "morning" | "afternoon";
+  header: {
+    name: string;
+    place?: string | null;
+    time?: string | null;
+    videoUrl?: string | null;
+    microLabel?: string | null;
+  };
+  blocks: SessionDayBlock[];
+  mode: "ct" | "player";
+};
+
+const WEEKDAY_ES = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"] as const;
+
+function formatSessionHeaderDate(ymd: string) {
+  const date = new Date(`${ymd}T00:00:00.000Z`);
+  const weekday = WEEKDAY_ES[date.getUTCDay()];
+  const [year, month, day] = ymd.split("-");
+  return `${weekday}, ${day}/${month}`;
+}
+
+export default function SessionDayView({
+  date,
+  turn,
+  header,
+  blocks,
+  mode,
+}: SessionDayViewProps) {
+  const printCSS = `
+    @page { size: A4 portrait; margin: 10mm; }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body * { visibility: hidden !important; }
+      .print-root, .print-root * { visibility: visible !important; }
+      .print-root { position: absolute; inset: 0; margin: 0; }
+      .no-print { display: none !important; }
+      a[href]:after { content: ""; }
+    }
+  `;
+
+  const blockRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const weekdayLabel = useMemo(() => formatSessionHeaderDate(date), [date]);
+
+  useEffect(() => {
+    // En este componente no manejamos focus por now; el scroll se puede hacer fuera si se requiere.
+  }, []);
+
+  return (
+    <div className="p-4 space-y-4 print-root">
+      <style jsx global>{printCSS}</style>
+
+      <header className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="text-sm text-gray-500">
+            {weekdayLabel}, {turn === "morning" ? "Mañana" : "Tarde"}
+          </div>
+          {header.microLabel ? (
+            <span className="text-[10px] px-2 py-0.5 rounded border bg-gray-50 text-gray-700 border-gray-200">
+              {header.microLabel}
+            </span>
+          ) : null}
+          {header.name ? (
+            <span className="text-sm text-gray-700">
+              · <b>{header.name}</b>
+            </span>
+          ) : null}
+        </div>
+        {mode === "ct" && (
+          <div className="flex items-center gap-2 no-print">
+            <a
+              href="/ct/dashboard"
+              className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
+            >
+              ← Dashboard
+            </a>
+            <a
+              href="/ct/plan-semanal"
+              className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
+            >
+              ✏️ Editor
+            </a>
+            <button
+              onClick={() => window.print()}
+              className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
+            >
+              🖨 Imprimir
+            </button>
+          </div>
+        )}
+      </header>
+
+      {/* Meta / Detalles */}
+  <section className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+        <div className="bg-emerald-50 text-emerald-900 font-semibold px-3 py-2 border-b uppercase tracking-wide text-[12px]">
+          Detalles
+        </div>
+        <div className="grid md:grid-cols-4 gap-2 p-3 text-sm">
+          <div>
+            <div className="text-[11px] text-gray-500">Nombre de sesión</div>
+            <div className="font-medium">
+              {header.name || <span className="text-gray-400">—</span>}
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] text-gray-500">Lugar</div>
+            <div className="font-medium">
+              {header.place || <span className="text-gray-400">—</span>}
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] text-gray-500">Hora</div>
+            <div className="font-medium">
+              {header.time || <span className="text-gray-400">—</span>}
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] text-gray-500">Video</div>
+            {header.videoUrl ? (
+              <a
+                href={header.videoUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="underline text-emerald-700"
+                title={header.name || "Video"}
+              >
+                {header.name || "Video"}
+              </a>
+            ) : (
+              <span className="text-gray-400">—</span>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Bloques */}
+      <section className="space-y-3">
+        {blocks.map((block) => (
+          <div
+            key={block.rowKey}
+            ref={(el) => {
+              blockRefs.current[block.rowKey] = el;
+            }}
+            className="rounded-2xl border bg-white shadow-sm p-3"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">
+                {block.rowLabel}
+              </h2>
+              {block.sessionId && mode === "ct" && (
+                <div className="flex gap-2 no-print">
+                  <a
+                    href={`/ct/sessions/${block.sessionId}?view=1`}
+                    className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
+                  >
+                    Ver ejercicio
+                  </a>
+                  <a
+                    href={`/ct/sessions/${block.sessionId}`}
+                    className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
+                  >
+                    Editar ejercicios
+                  </a>
+                </div>
+              )}
+              {/* En modo jugador no mostramos acciones de edición ni links adicionales por ahora */}
+            </div>
+            <div className="min-h-[120px] whitespace-pre-wrap leading-6 text-[13px]">
+              {block.title ? (
+                block.title
+              ) : (
+                <span className="text-gray-400 italic">—</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </section>
+    </div>
+  );
+}

@@ -217,6 +217,8 @@ export default async function JugadorHomePage() {
 
   const { startOfDay, endOfDay, ymd: todayYmdFromTz } = getTodayInBuenosAires();
 
+  const todayBase = getTodayInBuenosAires();
+
   const [todaySession] = await Promise.all([
     (prisma as any).session.findFirst({
       where: {
@@ -234,6 +236,24 @@ export default async function JugadorHomePage() {
   const todayYmd = marker?.ymd || todayYmdFromTz;
   const todayTurn: "morning" | "afternoon" =
     marker?.turn === "morning" || marker?.turn === "afternoon" ? marker.turn : "morning";
+
+  let sessionName: string | null = null;
+  if (todaySession) {
+    const nameSession = await (prisma as any).session.findFirst({
+      where: {
+        teamId: player.teamId,
+        date: {
+          gte: todayBase.startOfDay,
+          lt: todayBase.endOfDay,
+        },
+        description: {
+          startsWith: `[GRID:${todayTurn}:NOMBRE SESIÓN]`,
+        },
+      },
+      orderBy: { date: "asc" },
+    }) as Session | null;
+    sessionName = nameSession?.title ? nameSession.title.trim() : null;
+  }
 
   const hasTodaySession = !!todaySession;
   const hasRoutine = Array.isArray(routines) && routines.length > 0;
@@ -254,6 +274,7 @@ export default async function JugadorHomePage() {
             todaySession={todaySession}
             todayYmd={todayYmd}
             todayTurn={todayTurn}
+            sessionName={sessionName}
           />
 
           <RivalSection />
@@ -289,10 +310,12 @@ function PlayerHomeTodaySessionCard({
   todaySession,
   todayYmd,
   todayTurn,
+  sessionName,
 }: {
   todaySession: Session | null;
   todayYmd: string;
   todayTurn: "morning" | "afternoon";
+  sessionName: string | null;
 }) {
   if (!todaySession) {
     return (
@@ -319,8 +342,13 @@ function PlayerHomeTodaySessionCard({
 
       <div className="space-y-1 text-sm">
         <p className="font-medium text-gray-900">
-          {todaySession.title || "Sesión sin título"}
+          {sessionName || "Sesión sin título"}
         </p>
+        {todaySession?.title && (
+          <p className="text-xs text-gray-500">
+            {todaySession.title}
+          </p>
+        )}
         <p className="text-xs text-gray-600">
           {d.toLocaleDateString()} ·{" "}
           {d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -329,7 +357,7 @@ function PlayerHomeTodaySessionCard({
 
       <div className="flex justify-end">
         <Link
-          href={`/jugador/sesiones/${todaySession.id}`}
+          href={`/jugador/sesiones/by-day/${todayYmd}/${todayTurn}`}
           className="text-xs rounded-md border px-3 py-1.5 bg-black text-white hover:bg-gray-800"
         >
           Ver sesión de hoy
