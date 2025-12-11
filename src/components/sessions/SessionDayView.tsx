@@ -79,28 +79,6 @@ export default function SessionDayView({
             </span>
           ) : null}
         </div>
-        {mode === "ct" && (
-          <div className="flex items-center gap-2 no-print">
-            <a
-              href="/ct/dashboard"
-              className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
-            >
-              ← Dashboard
-            </a>
-            <a
-              href="/ct/plan-semanal"
-              className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
-            >
-              ✏️ Editor
-            </a>
-            <button
-              onClick={() => window.print()}
-              className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
-            >
-              🖨 Imprimir
-            </button>
-          </div>
-        )}
       </header>
 
       {/* Meta / Detalles */}
@@ -160,23 +138,34 @@ export default function SessionDayView({
               <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">
                 {block.rowLabel}
               </h2>
-              {block.sessionId && mode === "ct" && (
+
+              {block.sessionId && (
                 <div className="flex gap-2 no-print">
-                  <a
-                    href={`/ct/sessions/${block.sessionId}?view=1`}
-                    className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
-                  >
-                    Ver ejercicio
-                  </a>
-                  <a
-                    href={`/ct/sessions/${block.sessionId}`}
-                    className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
-                  >
-                    Editar ejercicios
-                  </a>
+                  {mode === "ct" ? (
+                    <>
+                      <a
+                        href={`/ct/sessions/${block.sessionId}?view=1`}
+                        className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
+                      >
+                        Ver ejercicio
+                      </a>
+                      <a
+                        href={`/ct/sessions/${block.sessionId}`}
+                        className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
+                      >
+                        Editar ejercicios
+                      </a>
+                    </>
+                  ) : mode === "player" ? (
+                    <a
+                      href={`/jugador/sesiones/${block.sessionId}`}
+                      className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
+                    >
+                      Ver ejercicio
+                    </a>
+                  ) : null}
                 </div>
               )}
-              {/* En modo jugador no mostramos acciones de edición ni links adicionales por ahora */}
             </div>
             <div className="min-h-[120px] whitespace-pre-wrap leading-6 text-[13px]">
               {block.title ? (

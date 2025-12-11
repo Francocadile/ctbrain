@@ -2,73 +2,76 @@ import { getServerSession } from "next-auth";
 import { redirect, notFound } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
-import RoleGate from "@/components/auth/RoleGate";
-import SessionPageContent, {
-  Exercise as CtExercise,
-} from "@/app/ct/sessions/[id]/SessionPageContent";
+import SessionDetailView, {
+  type SessionDetailExercise,
+} from "@/components/sessions/SessionDetailView";
+import { decodeExercises } from "@/app/ct/sessions/[id]/page";
 
 export default async function JugadorSessionPage({ params }: { params: { id: string } }) {
   const sessionAuth = await getServerSession(authOptions);
-  if (!sessionAuth?.user || sessionAuth.user.role !== "JUGADOR") {
+
+  if (!sessionAuth?.user) {
     redirect("/login");
+  }
+
+  if (sessionAuth.user.role !== "JUGADOR") {
+    redirect("/");
   }
 
   const player = await prisma.player.findFirst({
     where: { userId: sessionAuth.user.id },
-    include: { team: true },
+    select: { id: true, teamId: true },
   });
 
-  if (!player) notFound();
-
-  const session = await prisma.session.findFirst({
-    where: { id: params.id, teamId: player.teamId },
-  });
-
-  if (!session) notFound();
-
-  let exercises: CtExercise[] = [];
-  try {
-    const text = (session.description || "").trim();
-    // reuse the same EX_TAG marker logic as CT: [EXERCISES] <b64>
-    const EX_TAG = "[EXERCISES]";
-    const idx = text.lastIndexOf(EX_TAG);
-    if (idx !== -1) {
-      const rest = text.slice(idx + EX_TAG.length).trim();
-      const b64 = rest.split(/\s+/)[0] || "";
-      const raw = Buffer.from(b64, "base64").toString("utf-8");
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) {
-        exercises = arr.map((e: any) => ({
-          title: e.title ?? "",
-          kind: e.kind ?? "",
-          space: e.space ?? "",
-          players: e.players ?? "",
-          duration: e.duration ?? "",
-          description: e.description ?? "",
-          imageUrl: e.imageUrl ?? "",
-          routineId: e.routineId ?? "",
-          routineName: e.routineName ?? "",
-          isRoutineOnly: e.isRoutineOnly ?? false,
-        }));
-      }
-    }
-    // En el modelo actual no hay relación directa session.exercises; si no hay ejercicios
-    // decodificados, simplemente dejamos la lista vacía.
-  } catch {
-    exercises = [];
+  if (!player) {
+    notFound();
   }
 
+  const session = await prisma.session.findFirst({
+    where: {
+      id: params.id,
+      teamId: player.teamId,
+    },
+  });
+
+  if (!session) {
+    notFound();
+  }
+
+  const { exercises } = decodeExercises(session.description as any) as {
+    exercises: SessionDetailExercise[];
+    prefix: string;
+  };
+
+  const safeSession = JSON.parse(JSON.stringify(session));
+
   return (
-    <RoleGate allow={["JUGADOR"]}>
-      <main className="min-h-screen px-4 py-4 md:px-6 md:py-8">
-        <div className="max-w-3xl mx-auto">
-          <SessionPageContent
-            session={session as any}
-            exercises={exercises}
-            isViewMode={true}
-          />
-        </div>
-      </main>
-    </RoleGate>
+    <main className="min-h-screen bg-gray-50 px-4 py-4 md:px-6 md:py-8">
+      <div className="max-w-3xl mx-auto">
+        <SessionDetailView
+          session={safeSession as any}
+          exercises={exercises}
+          markerRow={""}
+          markerTurn={""}
+          markerYmd={""}
+          isViewMode={true}
+          mode="player"
+          editing={false}
+          roCls="bg-gray-50 text-gray-600 cursor-not-allowed"
+          updateExercise={() => {}}
+          addExercise={() => {}}
+          removeExercise={() => {}}
+          isVideoUrl={() => false}
+          openLibraryPicker={() => {}}
+          pickerIndex={null}
+          loadingPicker={false}
+          pickerExercises={[]}
+          visiblePickerExercises={[]}
+          pickerSearch=""
+          setPickerSearch={() => {}}
+          setPickerIndex={() => {}}
+        />
+      </div>
+    </main>
   );
 }

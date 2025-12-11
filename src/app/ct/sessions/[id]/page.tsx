@@ -10,6 +10,7 @@ import {
   type ExerciseDTO,
 } from "@/lib/api/exercises";
 import { listKinds, addKind as apiAddKind, replaceKinds } from "@/lib/settings";
+import SessionDetailView from "@/components/sessions/SessionDetailView";
 
 type TurnKey = "morning" | "afternoon";
 
@@ -88,7 +89,7 @@ function parseMarker(description?: string) {
   return { turn: (m?.[1] || "") as TurnKey | "", row: m?.[2] || "", ymd: m?.[3] || "" };
 }
 
-function decodeExercises(desc: string | null | undefined): { prefix: string; exercises: Exercise[] } {
+export function decodeExercises(desc: string | null | undefined): { prefix: string; exercises: Exercise[] } {
   const text = (desc || "").trimEnd();
   const idx = text.lastIndexOf(EX_TAG);
   if (idx === -1) return { prefix: text, exercises: [] };
@@ -271,8 +272,6 @@ export default function SesionDetailEditorPage() {
     () => parseMarker(typeof s?.description === "string" ? s?.description : ""),
     [s?.description]
   );
-  const displayRow = (marker.row || "").replace("ENTREN0", "ENTRENO");
-
   const visiblePickerExercises = useMemo(() => {
     const term = pickerSearch.trim().toLowerCase();
     if (!term) return pickerExercises;
@@ -478,323 +477,33 @@ export default function SesionDetailEditorPage() {
 
   const roCls = editing ? "" : "bg-gray-50 text-gray-600 cursor-not-allowed";
   return (
-    <div id="print-root" className="p-4 md:p-6 space-y-4 print:!p-2">
-      {/* Header */}
-      <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between print:hidden">
-        <div>
-          <h1 className="text-lg md:text-xl font-bold">
-            Sesión: {displayRow || "Bloque"} · {"(" + (marker.turn === "morning" ? "Mañana" : marker.turn === "afternoon" ? "Tarde" : "—") + ")"}
-          </h1>
-          <p className="text-xs md:text-sm text-gray-500">
-            Día: {marker.ymd || "—"} · Tipo: {s.type}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {marker.ymd && marker.turn && (
-            <a
-              href={`/ct/sessions/by-day/${marker.ymd}/${marker.turn}?focus=${encodeURIComponent(
-                marker.row || ""
-              )}`}
-              className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
-            >
-              ← Volver a sesión
-            </a>
-          )}
-          <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-            Dashboard
-          </a>
-          {editing ? (
-            <button
-              onClick={saveAll}
-              disabled={saving}
-              className="px-3 py-1.5 rounded-xl text-xs font-medium text-white bg-gray-900 hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? "Guardando" : "Guardar"}
-            </button>
-          ) : (
-            <button
-              onClick={() => setEditing(true)}
-              className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
-            >
-               Editar
-            </button>
-          )}
-          <button
-            onClick={() => window.print()}
-            className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
-            title="Imprimir"
-          >
-            🖨️ Imprimir
-          </button>
-        </div>
-      </header>
-
-      {/* Lista de ejercicios de la sesión (campo) */}
-      {exercises.length > 0 && (
-        <div className="space-y-4">
-          {exercises.map((ex, idx) => (
-            <section
-              id={`ex-${idx}`}
-              key={idx}
-              className="rounded-2xl border bg-white shadow-sm overflow-hidden print:page"
-            >
-              <div className="flex items-center justify-between bg-gray-50 px-3 py-2 border-b">
-                <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-700">
-                  EJERCICIO #{idx + 1}
-                </span>
-                {editing && !isViewMode && (
-                  <button
-                    type="button"
-                    onClick={() => removeExercise(idx)}
-                    className="ml-2 text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50"
-                  >
-                    Eliminar
-                  </button>
-                )}
-              </div>
-
-              <div className="p-3 grid md:grid-cols-2 gap-3">
-                {editing && !isViewMode && (
-                  <div className="md:col-span-2 mb-1">
-                    <div className="flex items-center justify-between gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        className="text-[11px] text-blue-600 hover:underline"
-                        onClick={() => openLibraryPicker(idx)}
-                      >
-                        Usar ejercicio de biblioteca
-                      </button>
-                    </div>
-                  </div>
-                )}
-                <>
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="text-[11px] text-gray-500">Título del ejercicio</label>
-                      <input
-                        className="w-full rounded-md border px-2 py-1.5 text-sm"
-                        value={ex.title || ""}
-                        onChange={(e) => {
-                          if (!editing || isViewMode) return;
-                          updateExercise(idx, { title: e.target.value });
-                        }}
-                        placeholder="Ej: Activación con balón 6v6"
-                        disabled={!editing || isViewMode}
-                      />
-                    </div>
-
-                    {/* Tipo de ejercicio (desplegable persistente) */}
-                    <div className="space-y-2">
-                      <label className="text-[11px] text-gray-500">Tipo de ejercicio</label>
-                      <div className="flex items-center gap-1">
-                        <select
-                          className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                          value={ex.kind || ""}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            if (v === "__add__") {
-                              const created = addKind();
-                              if (created) updateExercise(idx, { kind: created });
-                              return;
-                            }
-                            if (v === "__manage__") {
-                              manageKinds();
-                              return;
-                            }
-                            updateExercise(idx, { kind: v });
-                          }}
-                          disabled={!editing || isViewMode}
-                        >
-                          <option value="">— Ej: Juego reducido MSG —</option>
-                          {kinds.map((k) => (
-                            <option key={k} value={k}>
-                              {k}
-                            </option>
-                          ))}
-                          <option value="__add__">➕ Agregar…</option>
-                          <option value="__manage__">⚙️ Gestionar…</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[11px] text-gray-500">Espacio</label>
-                      <input
-                        className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                        value={ex.space}
-                        onChange={(e) => {
-                          if (!editing || isViewMode) return;
-                          updateExercise(idx, { space: e.target.value });
-                        }}
-                        placeholder="Mitad de cancha"
-                        disabled={!editing || isViewMode}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[11px] text-gray-500">N° de jugadores</label>
-                      <input
-                        className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                        value={ex.players}
-                        onChange={(e) => {
-                          if (!editing || isViewMode) return;
-                          updateExercise(idx, { players: e.target.value });
-                        }}
-                        placeholder="22 jugadores"
-                        disabled={!editing || isViewMode}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[11px] text-gray-500">Duración</label>
-                      <input
-                        className={`w-full rounded-md border px-2 py-1.5 text-sm ${roCls}`}
-                        value={ex.duration}
-                        onChange={(e) => {
-                          if (!editing || isViewMode) return;
-                          updateExercise(idx, { duration: e.target.value });
-                        }}
-                        placeholder="10 minutos"
-                        disabled={!editing || isViewMode}
-                      />
-                    </div>
-
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="text-[11px] text-gray-500">Descripción</label>
-                      <textarea
-                        className={`w-full rounded-md border px-2 py-1.5 text-sm min-h-[120px] ${roCls}`}
-                        value={ex.description}
-                        onChange={(e) => {
-                          if (!editing || isViewMode) return;
-                          updateExercise(idx, { description: e.target.value });
-                        }}
-                        placeholder="Consignas, series, repeticiones, variantes..."
-                        disabled={!editing || isViewMode}
-                      />
-                    </div>
-
-                    <div className="space-y-2 md:col-span-2">
-                      <div className="flex items-center justify-between print:hidden">
-                        <label className="text-[11px] text-gray-500">Imagen / video (URL)</label>
-                        {!editing && (
-                          <span className="text-[10px] text-gray-400">Bloqueado</span>
-                        )}
-                      </div>
-                      <input
-                        className={`w-full rounded-md border px-2 py-1.5 text-sm print:hidden ${roCls}`}
-                        value={ex.imageUrl}
-                        onChange={(e) => {
-                          if (!editing || isViewMode) return;
-                          updateExercise(idx, { imageUrl: e.target.value });
-                        }}
-                        placeholder="https://..."
-                        disabled={!editing || isViewMode}
-                      />
-                      {ex.imageUrl ? (
-                        <div className="mt-2">
-                          {isVideoUrl(ex.imageUrl) ? (
-                            <div className="aspect-video w-full rounded-lg border overflow-hidden">
-                              <iframe
-                                src={ex.imageUrl}
-                                className="w-full h-full"
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                allowFullScreen
-                              />
-                            </div>
-                          ) : (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={ex.imageUrl}
-                              alt="Vista previa"
-                              className="max-h-80 rounded-lg border object-contain"
-                            />
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-                  </>
-              </div>
-            </section>
-          ))}
-
-          {editing && !isViewMode && (
-            <div className="print:hidden">
-              <button
-                type="button"
-                onClick={addExercise}
-                className="rounded-xl border px-3 py-1.5 text-xs hover:bg-gray-50"
-              >
-                + Agregar ejercicio
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {pickerIndex !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-4 shadow-lg">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold">Elegir ejercicio de biblioteca</h2>
-              <button
-                type="button"
-                className="text-xs text-gray-500 hover:underline"
-                onClick={() => setPickerIndex(null)}
-              >
-                Cerrar
-              </button>
-            </div>
-
-            {!loadingPicker && pickerExercises.length > 0 && (
-              <div className="mb-2">
-                <input
-                  type="text"
-                  className="w-full rounded-md border px-2 py-1.5 text-xs"
-                  placeholder="Buscar por nombre..."
-                  value={pickerSearch}
-                  onChange={(e) => setPickerSearch(e.target.value)}
-                />
-              </div>
-            )}
-
-            {loadingPicker ? (
-              <p className="text-xs text-gray-500">Cargando ejercicios...</p>
-            ) : pickerExercises.length === 0 ? (
-              <p className="text-xs text-gray-500">
-                No hay ejercicios en la biblioteca de Sesiones / Campo.
-              </p>
-            ) : visiblePickerExercises.length === 0 ? (
-              <p className="text-xs text-gray-500">
-                No hay ejercicios que coincidan con la búsqueda.
-              </p>
-            ) : (
-              <ul className="max-h-64 overflow-auto divide-y divide-gray-100">
-                {visiblePickerExercises.map((exLib) => (
-                  <li key={exLib.id} className="py-1.5 text-xs">
-                    <button
-                      type="button"
-                      className="w-full text-left"
-                      onClick={() => applyLibraryExercise(exLib)}
-                    >
-                      <p className="font-medium text-gray-900">{exLib.name}</p>
-                      {exLib.sessionMeta?.type && (
-                        <p className="text-[11px] text-gray-500">
-                          Tipo: {exLib.sessionMeta.type}
-                        </p>
-                      )}
-                      {exLib.sessionMeta?.description && (
-                        <p className="text-[11px] text-gray-500 line-clamp-2">
-                          {exLib.sessionMeta.description}
-                        </p>
-                      )}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
+    <>
+      <SessionDetailView
+        session={s}
+        exercises={exercises}
+        markerRow={marker.row}
+        markerTurn={marker.turn}
+        markerYmd={marker.ymd}
+        isViewMode={isViewMode}
+        mode="ct"
+        onSaveAll={saveAll}
+        saving={saving}
+        editing={editing}
+        setEditing={setEditing}
+        roCls={roCls}
+        updateExercise={updateExercise}
+        addExercise={addExercise}
+        removeExercise={removeExercise}
+        isVideoUrl={isVideoUrl}
+        openLibraryPicker={openLibraryPicker}
+        pickerIndex={pickerIndex}
+        loadingPicker={loadingPicker}
+        pickerExercises={pickerExercises}
+        visiblePickerExercises={visiblePickerExercises}
+        pickerSearch={pickerSearch}
+        setPickerSearch={setPickerSearch}
+        setPickerIndex={setPickerIndex}
+      />
 
       {/* estilos de impresión */}
       <style jsx global>{`
@@ -871,7 +580,7 @@ export default function SesionDetailEditorPage() {
           }
         }
       `}</style>
-    </div>
+    </>
   );
 }
 
