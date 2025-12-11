@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth";
 import SessionDetailView, {
   type SessionDetailExercise,
 } from "@/components/sessions/SessionDetailView";
-import { decodeExercises } from "@/app/ct/sessions/[id]/page";
+import { decodeExercises } from "@/lib/sessions/encodeDecodeExercises";
 
 export default async function JugadorSessionPage({ params }: { params: { id: string } }) {
   const sessionAuth = await getServerSession(authOptions);
@@ -38,10 +38,14 @@ export default async function JugadorSessionPage({ params }: { params: { id: str
     notFound();
   }
 
-  const { exercises } = decodeExercises(session.description as any) as {
-    exercises: SessionDetailExercise[];
-    prefix: string;
-  };
+  let exercises: SessionDetailExercise[] = [];
+  try {
+    const decoded = decodeExercises(session.description as any);
+    exercises = decoded.exercises as any;
+  } catch (e) {
+    // Si hay error de parseo, dejamos exercises = [] y no rompemos el server
+    console.error("Failed to decode exercises for player session", e);
+  }
 
   const safeSession = JSON.parse(JSON.stringify(session));
 
