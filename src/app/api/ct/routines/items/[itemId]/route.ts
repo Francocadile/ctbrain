@@ -20,9 +20,9 @@ export async function PATCH(req: Request, { params }: { params: { itemId: string
       return new NextResponse("item not found", { status: 404 });
     }
 
-    const body = await req.json();
+  const body = await req.json();
 
-    const data: any = {};
+  const data: any = {};
 
     if (typeof body?.title === "string") {
       const t = body.title.trim();
@@ -41,7 +41,20 @@ export async function PATCH(req: Request, { params }: { params: { itemId: string
 
     if (typeof body?.blockId === "string") {
       const bid = body.blockId.trim();
-      data.blockId = bid || null;
+      if (!bid) {
+        data.blockId = null;
+      } else {
+        const block = await prisma.routineBlock.findFirst({
+          where: { id: bid, routineId: existing.routine.id },
+        });
+        if (!block) {
+          return NextResponse.json(
+            { error: "Bloque inválido para esta rutina" },
+            { status: 400 },
+          );
+        }
+        data.blockId = bid;
+      }
     }
 
     if (typeof body?.exerciseName === "string") {

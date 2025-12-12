@@ -31,9 +31,22 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     const order = typeof body?.order === "number" ? body.order : 0;
 
-    const blockId = typeof body?.blockId === "string" && body.blockId.trim()
-      ? body.blockId.trim()
-      : undefined;
+    const rawBlockId = typeof body?.blockId === "string" ? body.blockId.trim() : "";
+    let blockId: string | undefined;
+    if (rawBlockId) {
+      const block = await prisma.routineBlock.findFirst({
+        where: { id: rawBlockId, routineId: routine.id },
+      });
+      if (!block) {
+        return NextResponse.json(
+          { error: "Bloque inválido para esta rutina" },
+          { status: 400 },
+        );
+      }
+      blockId = rawBlockId;
+    } else {
+      blockId = undefined;
+    }
 
     const exerciseName =
       typeof body?.exerciseName === "string" ? body.exerciseName.trim() || null : null;

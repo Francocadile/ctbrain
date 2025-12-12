@@ -5,6 +5,8 @@ import prisma from "@/lib/prisma";
 
 import SessionDetailView from "@/components/sessions/SessionDetailView";
 import { decodeExercises } from "@/lib/sessions/encodeDecodeExercises";
+import type { RoutineSummary } from "@/lib/sessions/routineSummary";
+import { getRoutineSummaryForTeam } from "@/lib/sessions/routineSummary";
 
 export default async function JugadorSessionPage({ params }: { params: { id: string } }) {
   const sessionAuth = await getServerSession(authOptions);
@@ -43,9 +45,32 @@ export default async function JugadorSessionPage({ params }: { params: { id: str
 
   // Decodificar ejercicios, ultra defensivo
   let exercises: any[] = [];
+  let routineSummaries: Record<string, RoutineSummary> = {};
   try {
     const decoded = decodeExercises(plainSession.description as any);
     exercises = decoded.exercises as any;
+    const routineIds = Array.from(
+      new Set(
+        (decoded.exercises || [])
+          .map((ex: any) => (ex.routineId || "").trim())
+          .filter((rid: string) => !!rid)
+      )
+    );
+
+    if (routineIds.length > 0) {
+      const entries: [string, RoutineSummary | null][] = await Promise.all(
+        routineIds.map(async (rid) => [
+          rid,
+          await getRoutineSummaryForTeam(rid, player.teamId),
+        ])
+      );
+
+      const map: Record<string, RoutineSummary> = {};
+      for (const [rid, summary] of entries) {
+        if (summary) map[rid] = summary;
+      }
+      routineSummaries = map;
+    }
   } catch (e) {
     console.error("Failed to decode exercises for player session", e);
   }
@@ -61,6 +86,7 @@ export default async function JugadorSessionPage({ params }: { params: { id: str
           markerYmd=""
           isViewMode={true}
           mode="player"
+          routineSummaries={routineSummaries}
           editing={false}
           roCls="bg-gray-50 text-gray-600 cursor-not-allowed"
           pickerIndex={null}

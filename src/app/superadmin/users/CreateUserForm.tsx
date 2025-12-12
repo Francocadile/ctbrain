@@ -18,7 +18,10 @@ export default function CreateUserForm({ teams }: { teams: any[] }) {
     setMsg(null);
     const res = await fetch("/api/superadmin/users", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-CT-CSRF": "1",
+      },
       body: JSON.stringify({ name, email, role, teamId, password }),
     });
     if (res.ok) {

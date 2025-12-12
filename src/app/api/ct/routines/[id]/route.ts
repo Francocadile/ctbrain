@@ -22,7 +22,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     });
 
     if (!routine) {
-      return new NextResponse("routine not found", { status: 404 });
+      return NextResponse.json({ error: "Rutina no encontrada" }, { status: 404 });
     }
 
     const data = {
@@ -79,7 +79,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       where: { id, teamId: team.id },
     });
     if (!existing) {
-      return new NextResponse("routine not found", { status: 404 });
+      return NextResponse.json({ error: "Rutina no encontrada" }, { status: 404 });
     }
 
     const body = await req.json();
@@ -133,24 +133,24 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       ? body.playerIds.filter((x: unknown): x is string => typeof x === "string" && (x as string).trim().length > 0)
       : undefined;
 
-    const result = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
       const updated = await tx.routine.update({
         where: { id: existing.id },
         data,
       });
 
       if (shareMode && (shareMode === "STAFF_ONLY" || shareMode === "ALL_PLAYERS")) {
-        await (tx as any).routinePlayerShare.deleteMany({
+        await tx.routinePlayerShare.deleteMany({
           where: { routineId: updated.id },
         });
       }
 
       if (shareMode === "SELECTED_PLAYERS") {
         if (!playerIds || playerIds.length === 0) {
-          throw new NextResponse("playerIds requerido para SELECTED_PLAYERS", { status: 400 });
+          throw new Error("playerIds requerido para SELECTED_PLAYERS");
         }
 
-        const validPlayers = await tx.user.findMany({
+  const validPlayers = await tx.user.findMany({
           where: {
             id: { in: playerIds },
             role: "JUGADOR",
@@ -164,12 +164,12 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         const validIds = new Set(validPlayers.map((p) => p.id));
         const filteredIds = playerIds.filter((pid) => validIds.has(pid));
 
-        await (tx as any).routinePlayerShare.deleteMany({
+        await tx.routinePlayerShare.deleteMany({
           where: { routineId: updated.id },
         });
 
         if (filteredIds.length > 0) {
-          await (tx as any).routinePlayerShare.createMany({
+          await tx.routinePlayerShare.createMany({
             data: filteredIds.map((pid) => ({ routineId: updated.id, playerId: pid })),
             skipDuplicates: true,
           });

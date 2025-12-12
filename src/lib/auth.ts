@@ -104,17 +104,40 @@ export const authOptions: NextAuthOptions = {
           isApproved,
           teamIds = [],
           currentTeamId = null,
+          passwordChangedAt = null,
         } = user as any;
         token.role = role;
         token.isApproved = isApproved;
         token.teamIds = teamIds;
         // Si no hay currentTeamId pero hay teamIds, asignar el primero
-        token.currentTeamId = currentTeamId ?? (teamIds.length > 0 ? teamIds[0] : null);
+        token.currentTeamId =
+          currentTeamId ?? (teamIds.length > 0 ? teamIds[0] : null);
+        // Al iniciar sesión, grabamos passwordChangedAt en el token
+        token.passwordChangedAt = passwordChangedAt
+          ? new Date(passwordChangedAt).getTime()
+          : 0;
       } else {
         token.teamIds = (token.teamIds as string[] | undefined) ?? [];
         token.currentTeamId =
           (token.currentTeamId as string | null | undefined) ?? null;
       }
+
+      // En requests posteriores, verificamos si la contraseña cambió
+      if (token?.sub) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.sub },
+        } as any);
+
+        const current = dbUser?.passwordChangedAt
+          ? new Date((dbUser as any).passwordChangedAt).getTime()
+          : 0;
+
+        // Si la fecha en DB es mayor, invalidamos el token
+        if (current > ((token as any).passwordChangedAt || 0)) {
+          return {} as any;
+        }
+      }
+
       return token;
     },
 

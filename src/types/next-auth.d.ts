@@ -30,5 +30,6 @@ declare module "next-auth/jwt" {
     // arrays opcionales con los equipos a los que pertenece el usuario
     teamIds?: string[];
     currentTeamId?: string | null;
+    passwordChangedAt?: number;
   }
 }

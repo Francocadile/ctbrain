@@ -17,6 +17,8 @@ import {
   decodeExercises,
   type Exercise,
 } from "@/lib/sessions/encodeDecodeExercises";
+import type { RoutineSummary } from "@/lib/sessions/routineSummary";
+import { dbScope } from "@/lib/dbScope";
 
 type TurnKey = "morning" | "afternoon";
 
@@ -91,6 +93,9 @@ export default function SesionDetailEditorPage() {
   const [prefix, setPrefix] = useState<string>("");
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [kinds, setKinds] = useState<string[]>([]);
+  const [routineSummaries, setRoutineSummaries] = useState<
+    Record<string, RoutineSummary>
+  >({});
   const [pickerIndex, setPickerIndex] = useState<number | null>(null);
   const [pickerExercises, setPickerExercises] = useState<ExerciseDTO[]>([]);
   const [loadingPicker, setLoadingPicker] = useState(false);
@@ -185,6 +190,42 @@ export default function SesionDetailEditorPage() {
               imageUrl: "",
             },
           ]);
+        }
+
+        // ==== summaries de rutinas, si aplica ====
+        try {
+          const routineIds = Array.from(
+            new Set(
+              (d.exercises || [])
+                .map((ex) => ex.routineId?.trim())
+                .filter((rid): rid is string => !!rid)
+            )
+          );
+
+          if (routineIds.length > 0) {
+            const { team } = await dbScope();
+            const { getRoutineSummaryForTeam } = await import(
+              "@/lib/sessions/routineSummary"
+            );
+
+            const entries: [string, RoutineSummary | null][] = await Promise.all(
+              routineIds.map(async (rid) => [
+                rid,
+                await getRoutineSummaryForTeam(rid, team.id),
+              ])
+            );
+
+            const map: Record<string, RoutineSummary> = {};
+            for (const [rid, summary] of entries) {
+              if (summary) map[rid] = summary;
+            }
+            setRoutineSummaries(map);
+          } else {
+            setRoutineSummaries({});
+          }
+        } catch (err) {
+          console.error("No se pudieron cargar summaries de rutina para la sesión", err);
+          setRoutineSummaries({});
         }
 
         setEditing(!isViewMode);
@@ -437,6 +478,7 @@ export default function SesionDetailEditorPage() {
         markerYmd={marker.ymd}
         isViewMode={isViewMode}
         mode="ct"
+  routineSummaries={routineSummaries}
         onSaveAll={saveAll}
         saving={saving}
         editing={editing}

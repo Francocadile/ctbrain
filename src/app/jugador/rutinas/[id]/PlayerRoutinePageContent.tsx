@@ -97,6 +97,7 @@ function PlayerRoutineItemCard({
   onShowVideo?: (preview: { title: string; zone?: string | null; videoUrl?: string | null }) => void;
 }) {
   const name = item.exerciseName || item.title;
+  const noteToShow = item.athleteNotes ?? item.notes;
 
   return (
     <article className="rounded-lg border bg-white px-3 py-2 text-xs space-y-2">
@@ -133,13 +134,13 @@ function PlayerRoutineItemCard({
         {item.rest && <PlayerRoutineParam label="Descanso" value={item.rest} />}
       </div>
 
-      {(item.athleteNotes || item.notes) && (
+      {noteToShow && (
         <div className="pt-1 border-t mt-2">
           <p className="text-[10px] font-medium text-gray-500 mb-0.5">
             Indicaciones
           </p>
           <p className="text-[11px] text-gray-700 whitespace-pre-line">
-            {item.athleteNotes || item.notes}
+            {noteToShow}
           </p>
         </div>
       )}

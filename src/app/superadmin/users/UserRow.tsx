@@ -32,7 +32,10 @@ export default function UserRow({ user, teams }: { user: SuperadminUserRow; team
     setError(null);
     const res = await fetch("/api/superadmin/users", {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-CT-CSRF": "1",
+      },
       body: JSON.stringify({
         id: user.id,
         name,
@@ -57,7 +60,10 @@ export default function UserRow({ user, teams }: { user: SuperadminUserRow; team
     setError(null);
     const res = await fetch("/api/superadmin/users", {
       method: "DELETE",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-CT-CSRF": "1",
+      },
       body: JSON.stringify({ id: user.id }),
     });
     if (res.ok) {

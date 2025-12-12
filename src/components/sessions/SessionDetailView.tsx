@@ -2,6 +2,7 @@
 
 import React from "react";
 import { type SessionDTO } from "@/lib/api/sessions";
+import type { RoutineSummary } from "@/lib/sessions/routineSummary";
 
 export type SessionDetailExercise = {
   title: string;
@@ -24,6 +25,7 @@ export type SessionDetailViewProps = {
   markerYmd: string;
   isViewMode: boolean;
   mode: "ct" | "player";
+  routineSummaries?: Record<string, RoutineSummary>;
   onSaveAll?: () => void;
   saving?: boolean;
   editing: boolean;
@@ -44,6 +46,123 @@ export type SessionDetailViewProps = {
   setPickerIndex?: (value: number | null) => void;
 };
 
+function RoutineInlineView({
+  summary,
+  mode,
+}: {
+  summary: RoutineSummary;
+  mode: "ct" | "player";
+}) {
+  const showCtNotes = mode === "ct";
+
+  return (
+    <div className="mt-2 rounded-xl bg-gray-50 border border-dashed border-gray-200 p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="text-[11px] font-semibold text-gray-700">
+            Rutina: {summary.title}
+          </p>
+          {summary.goal && (
+            <p className="text-[10px] text-gray-500 line-clamp-2">
+              Objetivo: {summary.goal}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {summary.blocks.map((b) => (
+        <div key={b.id} className="mt-2 space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] font-medium text-gray-800">
+              {b.name}
+              {b.type ? ` · ${b.type}` : ""}
+            </p>
+            {b.description && (
+              <p className="text-[10px] text-gray-500 line-clamp-1">
+                {b.description}
+              </p>
+            )}
+          </div>
+
+          {b.items.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse text-[10px]">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-100">
+                    <th className="px-2 py-1 text-left font-semibold text-gray-600">
+                      Ejercicio
+                    </th>
+                    <th className="px-2 py-1 text-left font-semibold text-gray-600">
+                      Series
+                    </th>
+                    <th className="px-2 py-1 text-left font-semibold text-gray-600">
+                      Reps
+                    </th>
+                    <th className="px-2 py-1 text-left font-semibold text-gray-600">
+                      Carga
+                    </th>
+                    <th className="px-2 py-1 text-left font-semibold text-gray-600">
+                      Tempo
+                    </th>
+                    <th className="px-2 py-1 text-left font-semibold text-gray-600">
+                      Descanso
+                    </th>
+                    {showCtNotes && (
+                      <th className="px-2 py-1 text-left font-semibold text-gray-600">
+                        Notas CT
+                      </th>
+                    )}
+                    <th className="px-2 py-1 text-left font-semibold text-gray-600">
+                      Notas jugador
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {b.items.map((it) => {
+                    const noteToShow =
+                      mode === "player"
+                        ? it.athleteNotes ?? it.notes
+                        : it.notes;
+                    const athleteNote = it.athleteNotes ?? null;
+                    return (
+                      <tr key={it.id} className="border-b border-gray-100">
+                        <td className="px-2 py-1 text-gray-800">{it.title}</td>
+                        <td className="px-2 py-1 text-gray-700">
+                          {it.sets ?? "-"}
+                        </td>
+                        <td className="px-2 py-1 text-gray-700">
+                          {it.reps ?? "-"}
+                        </td>
+                        <td className="px-2 py-1 text-gray-700">
+                          {it.load ?? "-"}
+                        </td>
+                        <td className="px-2 py-1 text-gray-700">
+                          {it.tempo ?? "-"}
+                        </td>
+                        <td className="px-2 py-1 text-gray-700">
+                          {it.rest ?? "-"}
+                        </td>
+                        {showCtNotes && (
+                          <td className="px-2 py-1 text-gray-700 max-w-[160px] whitespace-pre-line">
+                            {noteToShow ?? "-"}
+                          </td>
+                        )}
+                        <td className="px-2 py-1 text-gray-700 max-w-[160px] whitespace-pre-line">
+                          {athleteNote ?? "-"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function SessionDetailView({
   session: s,
   exercises,
@@ -52,6 +171,7 @@ export default function SessionDetailView({
   markerYmd,
   isViewMode,
   mode,
+  routineSummaries,
   onSaveAll,
   saving = false,
   editing,
@@ -296,6 +416,14 @@ export default function SessionDetailView({
                       </div>
                     ) : null}
                   </div>
+                  {ex.routineId && routineSummaries?.[ex.routineId] && (
+                    <div className="md:col-span-2 mt-3 border-t pt-2">
+                      <RoutineInlineView
+                        summary={routineSummaries[ex.routineId]}
+                        mode={mode}
+                      />
+                    </div>
+                  )}
                 </>
               </div>
             </section>
