@@ -112,6 +112,8 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
   const isViewMode = searchParams?.get("view") === "1";
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   const [header, setHeader] = useState<RoutineHeaderDTO>(routine);
   const [localBlocks, setLocalBlocks] = useState<RoutineBlockDTO[]>(blocks);
@@ -554,6 +556,62 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
     setSelectedItemId(itemId);
   }
 
+  async function handleSyncSessions() {
+    try {
+      setSyncing(true);
+      setSyncMessage(null);
+
+      // 1) Obtener en qué sesiones está vinculada esta rutina
+      const resGet = await fetch(`/api/ct/routines/${routine.id}/sessions`, {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (!resGet.ok) {
+        throw new Error("No se pudieron leer las sesiones vinculadas");
+      }
+
+      const data = await resGet.json().catch(() => ({} as any));
+      const sessionIds: string[] = Array.isArray(data.sessionIds)
+        ? data.sessionIds
+        : [];
+
+      if (!sessionIds.length) {
+        setSyncMessage("La rutina no está vinculada a ninguna sesión.");
+        return;
+      }
+
+      // 2) Re-enviar los mismos sessionIds por PUT para forzar recalculo del snapshot
+      const resPut = await fetch(`/api/ct/routines/${routine.id}/sessions`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ sessionIds }),
+      });
+
+      if (!resPut.ok) {
+        throw new Error("No se pudo sincronizar la rutina en las sesiones");
+      }
+
+      const jsonPut = await resPut.json().catch(() => ({} as any));
+      const count = Array.isArray(jsonPut.sessionIds)
+        ? jsonPut.sessionIds.length
+        : sessionIds.length;
+
+      setSyncMessage(
+        `Rutina sincronizada en ${count} sesión${count === 1 ? "" : "es"}.`,
+      );
+    } catch (err: any) {
+      console.error("Error al sincronizar rutina en sesiones", err);
+      setSyncMessage(
+        err?.message || "Error al sincronizar rutina en sesiones.",
+      );
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -572,29 +630,49 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
         </div>
       )}
 
-      {/* Cabecera simplificada */}
+      {/* Cabecera + sincronización */}
       <section className="mb-4 rounded-2xl border bg-white p-4 shadow-sm space-y-3">
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-gray-700">Nombre de la rutina</label>
-            <input
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              value={header.title}
-              onChange={(e) => handleFieldChange("title", e.target.value)}
-              placeholder="Ej: Fuerza general, Activación, Gimnasio..."
-              disabled={isViewMode}
-            />
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="grid gap-3 md:grid-cols-2 flex-1">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-700">Nombre de la rutina</label>
+              <input
+                className="w-full rounded-md border px-3 py-2 text-sm"
+                value={header.title}
+                onChange={(e) => handleFieldChange("title", e.target.value)}
+                placeholder="Ej: Fuerza general, Activación, Gimnasio..."
+                disabled={isViewMode}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-gray-700">Objetivo</label>
+              <input
+                className="w-full rounded-md border px-3 py-2 text-sm"
+                value={header.goal ?? ""}
+                onChange={(e) => handleFieldChange("goal", e.target.value || null)}
+                placeholder="Ej: Activación + fuerza general"
+                disabled={isViewMode}
+              />
+            </div>
           </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-gray-700">Objetivo</label>
-            <input
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              value={header.goal ?? ""}
-              onChange={(e) => handleFieldChange("goal", e.target.value || null)}
-              placeholder="Ej: Activación + fuerza general"
-              disabled={isViewMode}
-            />
-          </div>
+
+          {!isViewMode && (
+            <div className="flex flex-col items-start gap-2 md:items-end md:min-w-[220px]">
+              <button
+                type="button"
+                onClick={handleSyncSessions}
+                disabled={syncing}
+                className="inline-flex items-center rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-60"
+              >
+                {syncing ? "Sincronizando..." : "Sincronizar en sesiones"}
+              </button>
+              {syncMessage && (
+                <p className="text-xs text-gray-500 max-w-xs text-left md:text-right">
+                  {syncMessage}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </section>
 
