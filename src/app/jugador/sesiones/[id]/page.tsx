@@ -5,7 +5,6 @@ import prisma from "@/lib/prisma";
 
 import SessionDetailView from "@/components/sessions/SessionDetailView";
 import { decodeExercises } from "@/lib/sessions/encodeDecodeExercises";
-import { getSessionById } from "@/lib/api/sessions";
 
 export default async function JugadorSessionPage({ params }: { params: { id: string } }) {
   const sessionAuth = await getServerSession(authOptions);
@@ -27,24 +26,27 @@ export default async function JugadorSessionPage({ params }: { params: { id: str
     notFound();
   }
 
-  const sessionRes = await getSessionById(params.id);
-  const session = sessionRes?.data as any;
+  // Leer la sesión directo desde Prisma, filtrando por teamId del jugador
+  const session = await prisma.session.findFirst({
+    where: {
+      id: params.id,
+      teamId: player.teamId,
+    },
+  });
 
-  if (!sessionRes || !session) {
+  if (!session) {
     notFound();
   }
 
-  // Seguridad multi-equipo: que la sesión sea del mismo team que el jugador
-  if ((session as any).teamId && (session as any).teamId !== player.teamId) {
-    notFound();
-  }
+  // Normalizar a objeto plano serializable (dates → string, etc.)
+  const plainSession = JSON.parse(JSON.stringify(session));
 
+  // Decodificar ejercicios, ultra defensivo
   let exercises: any[] = [];
   try {
-    const decoded = decodeExercises(session.description as any);
+    const decoded = decodeExercises(plainSession.description as any);
     exercises = decoded.exercises as any;
   } catch (e) {
-    // Si hay error de parseo, dejamos exercises = [] y no rompemos el server
     console.error("Failed to decode exercises for player session", e);
   }
 
@@ -52,7 +54,7 @@ export default async function JugadorSessionPage({ params }: { params: { id: str
     <main className="min-h-screen bg-gray-50 px-4 py-4 md:px-6 md:py-8">
       <div className="max-w-3xl mx-auto">
         <SessionDetailView
-          session={session as any}
+          session={plainSession as any}
           exercises={exercises}
           markerRow=""
           markerTurn=""
