@@ -344,7 +344,15 @@ export default function SesionDetailEditorPage() {
     }
   }
 
-  async function openLibraryPicker(idx: number) {
+  async function openLibraryPicker(arg: number | ExerciseDTO) {
+    // Si me pasan un ejercicio de biblioteca, aplico y cierro el modal
+    if (typeof arg !== "number") {
+      applyLibraryExercise(arg);
+      return;
+    }
+
+    const idx = arg;
+
     if (isViewMode) return;
     try {
       setLoadingPicker(true);
