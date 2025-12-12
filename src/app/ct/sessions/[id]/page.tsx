@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { getSessionById, updateSession, type SessionDTO } from "@/lib/api/sessions";
 import {
   createSessionExercise,
+  updateSessionExercise,
   type SessionMeta,
   type ExerciseDTO,
 } from "@/lib/api/exercises";
@@ -293,16 +294,14 @@ export default function SesionDetailEditorPage() {
   // 1) Persistimos la sesión con la descripción actualizada (fuente de verdad para el jugador)
       await persistSessionOnly();
 
-      // 2) Extraemos el primer ejercicio real del editor
+      // 2) Sincronizamos los ejercicios reales con la biblioteca de Sesión
       const realExercises = exercises.filter(isRealExercise);
-      if (realExercises.length > 0) {
-        const first = realExercises[0];
+      for (const ex of realExercises) {
+        const name = (ex.title || ex.kind || "Ejercicio sin nombre").trim();
+        const zone = (ex.space || ex.kind || "").trim() || null;
+        const videoUrl = (ex.imageUrl || "").trim() || null;
 
-        const name = (first.title || first.kind || "Ejercicio sin nombre").trim();
-        const zone = (first.kind || "").trim() || null;
-        const videoUrl = (first.imageUrl || "").trim() || null;
-
-        const rawPlayers = (first as any).players ?? null;
+        const rawPlayers = (ex as any).players ?? null;
         let players: number | string | null = null;
         if (typeof rawPlayers === "number") {
           players = rawPlayers;
@@ -311,27 +310,40 @@ export default function SesionDetailEditorPage() {
           players = Number.isFinite(n) ? n : rawPlayers;
         }
 
-        const sessionMeta = {
-          type: first.kind ?? null,
-          space: (first as any).space ?? null,
+        const sessionMeta: SessionMeta = {
+          type: ex.kind || "",
+          space: ex.space || "",
           players,
-          duration: (first as any).duration ?? null,
-          description: (first as any).description ?? null,
-          imageUrl: first.imageUrl ?? null,
+          duration: ex.duration || "",
+          description: ex.description || "",
+          imageUrl: ex.imageUrl || "",
           sessionId: s.id,
-          routineId: (first as any).routineId ?? null,
-          routineName: (first as any).routineName ?? null,
+          routineId: ex.routineId || null,
+          routineName: ex.routineName || null,
         };
 
-        // 3) Upsert automático en la biblioteca de ejercicios de Sesión
-        //    Delegamos completamente la decisión crear/actualizar al backend (POST /api/ct/exercises).
-        await createSessionExercise({
-          name,
-          zone,
-          videoUrl,
-          originSessionId: s.id,
-          sessionMeta,
-        });
+        if (ex.libraryExerciseId) {
+          // Ya existe en biblioteca → UPDATE
+          await updateSessionExercise(ex.libraryExerciseId, {
+            name,
+            zone,
+            videoUrl,
+            originSessionId: s.id,
+            sessionMeta,
+          });
+        } else {
+          // Nuevo ejercicio → CREATE
+          const created = await createSessionExercise({
+            name,
+            zone,
+            videoUrl,
+            originSessionId: s.id,
+            sessionMeta,
+          });
+
+          // Actualizar el estado local con el id creado
+          ex.libraryExerciseId = created.id;
+        }
       }
 
       setEditing(false);
@@ -395,6 +407,7 @@ export default function SesionDetailEditorPage() {
       routineId: (meta as any).routineId || "",
       routineName: (meta as any).routineName || "",
       isRoutineOnly: false,
+      libraryExerciseId: exLib.id,
     };
 
     setExercises((prev) =>

@@ -11,6 +11,7 @@ export type Exercise = {
   routineId?: string;
   routineName?: string;
   isRoutineOnly?: boolean;
+  libraryExerciseId?: string;
 };
 
 const EX_TAG = "[EXERCISES]";
@@ -102,6 +103,7 @@ export function decodeExercises(
       routineId: (e as any)?.routineId ?? "",
       routineName: (e as any)?.routineName ?? "",
       isRoutineOnly: (e as any)?.isRoutineOnly ?? false,
+      libraryExerciseId: (e as any)?.libraryExerciseId ?? "",
     }));
 
     return { prefix, exercises };
