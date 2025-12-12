@@ -29,18 +29,19 @@ export type SessionDetailViewProps = {
   editing: boolean;
   setEditing?: (value: boolean) => void;
   roCls: string;
-  updateExercise: (idx: number, patch: Partial<SessionDetailExercise>) => void;
-  addExercise: () => void;
-  removeExercise: (idx: number) => void;
-  isVideoUrl: (url: string | undefined | null) => boolean;
-  openLibraryPicker: (idx: number) => void;
-  pickerIndex: number | null;
-  loadingPicker: boolean;
-  pickerExercises: any[];
-  visiblePickerExercises: any[];
-  pickerSearch: string;
-  setPickerSearch: (value: string) => void;
-  setPickerIndex: (value: number | null) => void;
+  // CT-only props: opcionales para permitir modo jugador read-only
+  updateExercise?: (idx: number, patch: Partial<SessionDetailExercise>) => void;
+  addExercise?: () => void;
+  removeExercise?: (idx: number) => void;
+  isVideoUrl?: (url: string | undefined | null) => boolean;
+  openLibraryPicker?: (idxOrEx: any) => void;
+  pickerIndex?: number | null;
+  loadingPicker?: boolean;
+  pickerExercises?: any[];
+  visiblePickerExercises?: any[];
+  pickerSearch?: string;
+  setPickerSearch?: (value: string) => void;
+  setPickerIndex?: (value: number | null) => void;
 };
 
 export default function SessionDetailView({
@@ -141,7 +142,7 @@ export default function SessionDetailView({
                 <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-700">
                   EJERCICIO #{idx + 1}
                 </span>
-                {mode === "ct" && editing && !isViewMode && (
+                {mode === "ct" && editing && !isViewMode && removeExercise && (
                   <button
                     type="button"
                     onClick={() => removeExercise(idx)}
@@ -153,7 +154,7 @@ export default function SessionDetailView({
               </div>
 
               <div className="p-3 grid md:grid-cols-2 gap-3">
-                {mode === "ct" && editing && !isViewMode && (
+                {mode === "ct" && editing && !isViewMode && openLibraryPicker && (
                   <div className="md:col-span-2 mb-1">
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <button
@@ -174,7 +175,7 @@ export default function SessionDetailView({
                       value={ex.title || ""}
                       onChange={(e) => {
                         if (!editing || isViewMode || mode !== "ct") return;
-                        updateExercise(idx, { title: e.target.value });
+                        updateExercise && updateExercise(idx, { title: e.target.value });
                       }}
                       placeholder="Ej: Activación con balón 6v6"
                       disabled={!editing || isViewMode || mode !== "ct"}
@@ -190,7 +191,7 @@ export default function SessionDetailView({
                         value={ex.kind}
                         onChange={(e) => {
                           if (!editing || isViewMode || mode !== "ct") return;
-                          updateExercise(idx, { kind: e.target.value });
+                          updateExercise && updateExercise(idx, { kind: e.target.value });
                         }}
                         placeholder="Ej: Juego reducido MSG"
                         disabled={!editing || isViewMode || mode !== "ct"}
@@ -205,7 +206,7 @@ export default function SessionDetailView({
                       value={ex.space}
                       onChange={(e) => {
                         if (!editing || isViewMode || mode !== "ct") return;
-                        updateExercise(idx, { space: e.target.value });
+                        updateExercise && updateExercise(idx, { space: e.target.value });
                       }}
                       placeholder="Mitad de cancha"
                       disabled={!editing || isViewMode || mode !== "ct"}
@@ -219,7 +220,7 @@ export default function SessionDetailView({
                       value={ex.players}
                       onChange={(e) => {
                         if (!editing || isViewMode || mode !== "ct") return;
-                        updateExercise(idx, { players: e.target.value });
+                        updateExercise && updateExercise(idx, { players: e.target.value });
                       }}
                       placeholder="22 jugadores"
                       disabled={!editing || isViewMode || mode !== "ct"}
@@ -233,7 +234,7 @@ export default function SessionDetailView({
                       value={ex.duration}
                       onChange={(e) => {
                         if (!editing || isViewMode || mode !== "ct") return;
-                        updateExercise(idx, { duration: e.target.value });
+                        updateExercise && updateExercise(idx, { duration: e.target.value });
                       }}
                       placeholder="10 minutos"
                       disabled={!editing || isViewMode || mode !== "ct"}
@@ -247,7 +248,7 @@ export default function SessionDetailView({
                       value={ex.description}
                       onChange={(e) => {
                         if (!editing || isViewMode || mode !== "ct") return;
-                        updateExercise(idx, { description: e.target.value });
+                        updateExercise && updateExercise(idx, { description: e.target.value });
                       }}
                       placeholder="Consignas, series, repeticiones, variantes..."
                       disabled={!editing || isViewMode || mode !== "ct"}
@@ -267,7 +268,7 @@ export default function SessionDetailView({
                         value={ex.imageUrl}
                         onChange={(e) => {
                           if (!editing || isViewMode || mode !== "ct") return;
-                          updateExercise(idx, { imageUrl: e.target.value });
+                          updateExercise && updateExercise(idx, { imageUrl: e.target.value });
                         }}
                         placeholder="https://..."
                         disabled={!editing || isViewMode || mode !== "ct"}
@@ -275,7 +276,7 @@ export default function SessionDetailView({
                     )}
                     {ex.imageUrl ? (
                       <div className="mt-2">
-                        {isVideoUrl(ex.imageUrl) ? (
+                        {isVideoUrl && isVideoUrl(ex.imageUrl) ? (
                           <div className="aspect-video w-full rounded-lg border overflow-hidden">
                             <iframe
                               src={ex.imageUrl}
@@ -314,7 +315,7 @@ export default function SessionDetailView({
         </div>
       )}
 
-      {mode === "ct" && pickerIndex !== null && (
+  {mode === "ct" && pickerIndex !== null && setPickerIndex && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="w-full max-w-lg rounded-2xl bg-white p-4 shadow-lg">
             <div className="flex items-center justify-between mb-2">
@@ -328,36 +329,36 @@ export default function SessionDetailView({
               </button>
             </div>
 
-            {!loadingPicker && pickerExercises.length > 0 && (
+            {!loadingPicker && pickerExercises && pickerExercises.length > 0 && (
               <div className="mb-2">
                 <input
                   type="text"
                   className="w-full rounded-md border px-2 py-1.5 text-xs"
                   placeholder="Buscar por nombre..."
-                  value={pickerSearch}
-                  onChange={(e) => setPickerSearch(e.target.value)}
+                  value={pickerSearch || ""}
+                  onChange={(e) => setPickerSearch && setPickerSearch(e.target.value)}
                 />
               </div>
             )}
 
             {loadingPicker ? (
               <p className="text-xs text-gray-500">Cargando ejercicios...</p>
-            ) : pickerExercises.length === 0 ? (
+            ) : !pickerExercises || pickerExercises.length === 0 ? (
               <p className="text-xs text-gray-500">
                 No hay ejercicios en la biblioteca de Sesiones / Campo.
               </p>
-            ) : visiblePickerExercises.length === 0 ? (
+            ) : !visiblePickerExercises || visiblePickerExercises.length === 0 ? (
               <p className="text-xs text-gray-500">
                 No hay ejercicios que coincidan con la búsqueda.
               </p>
             ) : (
               <ul className="max-h-64 overflow-auto divide-y divide-gray-100">
-                {visiblePickerExercises.map((exLib) => (
+                {visiblePickerExercises?.map((exLib) => (
                   <li key={exLib.id} className="py-1.5 text-xs">
                     <button
                       type="button"
                       className="w-full text-left"
-                      onClick={() => openLibraryPicker(exLib)}
+                      onClick={() => openLibraryPicker && openLibraryPicker(exLib)}
                     >
                       <p className="font-medium text-gray-900">{exLib.name}</p>
                       {exLib.sessionMeta?.type && (

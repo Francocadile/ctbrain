@@ -1,11 +1,11 @@
-import { getServerSession } from "next-auth";
 import { redirect, notFound } from "next/navigation";
-import prisma from "@/lib/prisma";
+import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import SessionDetailView, {
-  type SessionDetailExercise,
-} from "@/components/sessions/SessionDetailView";
+import prisma from "@/lib/prisma";
+
+import SessionDetailView from "@/components/sessions/SessionDetailView";
 import { decodeExercises } from "@/lib/sessions/encodeDecodeExercises";
+import { getSessionById } from "@/lib/api/sessions";
 
 export default async function JugadorSessionPage({ params }: { params: { id: string } }) {
   const sessionAuth = await getServerSession(authOptions);
@@ -27,18 +27,19 @@ export default async function JugadorSessionPage({ params }: { params: { id: str
     notFound();
   }
 
-  const session = await prisma.session.findFirst({
-    where: {
-      id: params.id,
-      teamId: player.teamId,
-    },
-  });
+  const sessionRes = await getSessionById(params.id);
+  const session = sessionRes?.data as any;
 
-  if (!session) {
+  if (!sessionRes || !session) {
     notFound();
   }
 
-  let exercises: SessionDetailExercise[] = [];
+  // Seguridad multi-equipo: que la sesión sea del mismo team que el jugador
+  if ((session as any).teamId && (session as any).teamId !== player.teamId) {
+    notFound();
+  }
+
+  let exercises: any[] = [];
   try {
     const decoded = decodeExercises(session.description as any);
     exercises = decoded.exercises as any;
@@ -47,33 +48,24 @@ export default async function JugadorSessionPage({ params }: { params: { id: str
     console.error("Failed to decode exercises for player session", e);
   }
 
-  const safeSession = JSON.parse(JSON.stringify(session));
-
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-4 md:px-6 md:py-8">
       <div className="max-w-3xl mx-auto">
         <SessionDetailView
-          session={safeSession as any}
+          session={session as any}
           exercises={exercises}
-          markerRow={""}
-          markerTurn={""}
-          markerYmd={""}
+          markerRow=""
+          markerTurn=""
+          markerYmd=""
           isViewMode={true}
           mode="player"
           editing={false}
           roCls="bg-gray-50 text-gray-600 cursor-not-allowed"
-          updateExercise={() => {}}
-          addExercise={() => {}}
-          removeExercise={() => {}}
-          isVideoUrl={() => false}
-          openLibraryPicker={() => {}}
           pickerIndex={null}
           loadingPicker={false}
           pickerExercises={[]}
           visiblePickerExercises={[]}
           pickerSearch=""
-          setPickerSearch={() => {}}
-          setPickerIndex={() => {}}
         />
       </div>
     </main>
