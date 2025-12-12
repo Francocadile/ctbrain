@@ -3,6 +3,7 @@
 import React from "react";
 import { type SessionDTO } from "@/lib/api/sessions";
 import type { RoutineSummary } from "@/lib/sessions/routineSummary";
+import type { SessionRoutineSnapshot } from "@/lib/sessions/sessionRoutineSnapshot";
 
 export type SessionDetailExercise = {
   title: string;
@@ -26,6 +27,7 @@ export type SessionDetailViewProps = {
   isViewMode: boolean;
   mode: "ct" | "player";
   routineSummaries?: Record<string, RoutineSummary>;
+  routineSnapshot?: SessionRoutineSnapshot | null;
   onSaveAll?: () => void;
   saving?: boolean;
   editing: boolean;
@@ -48,29 +50,112 @@ export type SessionDetailViewProps = {
 
 function RoutineInlineView({
   summary,
+  snapshotItems,
   mode,
 }: {
-  summary: RoutineSummary;
+  summary: RoutineSummary | null;
+  snapshotItems?: {
+    id: string;
+    blockName: string | null;
+    blockType: string | null;
+    title: string;
+    sets: number | null;
+    reps: number | null;
+    load: string | null;
+    tempo: string | null;
+    rest: string | null;
+    notes: string | null;
+    athleteNotes: string | null;
+    order: number;
+  }[] | null;
   mode: "ct" | "player";
 }) {
   const showCtNotes = mode === "ct";
 
+  const itemsByBlock: Array<{
+    id: string;
+    name: string;
+    type: string | null;
+    description: string | null;
+    items: {
+      id: string;
+      title: string;
+      sets: number | null;
+      reps: number | null;
+      load: string | null;
+      tempo: string | null;
+      rest: string | null;
+      notes: string | null;
+      athleteNotes: string | null;
+    }[];
+  }> = [];
+
+  if (snapshotItems && snapshotItems.length > 0) {
+    const grouped: Record<string, (typeof itemsByBlock)[number]> = {};
+    snapshotItems.forEach((it) => {
+      const key = `${it.blockName ?? ""}::${it.blockType ?? ""}`;
+      if (!grouped[key]) {
+        grouped[key] = {
+          id: key,
+          name: it.blockName ?? "Bloque",
+          type: it.blockType ?? null,
+          description: null,
+          items: [],
+        };
+      }
+      grouped[key].items.push({
+        id: it.id,
+        title: it.title,
+        sets: it.sets,
+        reps: it.reps,
+        load: it.load,
+        tempo: it.tempo,
+        rest: it.rest,
+        notes: it.notes,
+        athleteNotes: it.athleteNotes,
+      });
+    });
+    itemsByBlock.push(...Object.values(grouped));
+  } else if (summary) {
+    summary.blocks.forEach((b) => {
+      itemsByBlock.push({
+        id: b.id,
+        name: b.name,
+        type: b.type ?? null,
+        description: b.description ?? null,
+        items: b.items.map((it) => ({
+          id: it.id,
+          title: it.title,
+          sets: it.sets,
+          reps: it.reps,
+          load: it.load,
+          tempo: it.tempo,
+          rest: it.rest,
+          notes: it.notes,
+          athleteNotes: it.athleteNotes,
+        })),
+      });
+    });
+  }
+
   return (
     <div className="mt-2 rounded-xl bg-gray-50 border border-dashed border-gray-200 p-3 space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <p className="text-[11px] font-semibold text-gray-700">
-            Rutina: {summary.title}
-          </p>
-          {summary.goal && (
-            <p className="text-[10px] text-gray-500 line-clamp-2">
-              Objetivo: {summary.goal}
+      {summary && (
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-[11px] font-semibold text-gray-700">
+              Rutina: {summary.title}
             </p>
-          )}
+            {summary.goal && (
+              <p className="text-[10px] text-gray-500 line-clamp-2">
+                Objetivo: {summary.goal}
+              </p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {summary.blocks.map((b) => (
+      {itemsByBlock.map((b) => (
         <div key={b.id} className="mt-2 space-y-1">
           <div className="flex items-center justify-between gap-2">
             <p className="text-[11px] font-medium text-gray-800">
@@ -172,6 +257,7 @@ export default function SessionDetailView({
   isViewMode,
   mode,
   routineSummaries,
+  routineSnapshot,
   onSaveAll,
   saving = false,
   editing,
@@ -420,6 +506,10 @@ export default function SessionDetailView({
                     <div className="md:col-span-2 mt-3 border-t pt-2">
                       <RoutineInlineView
                         summary={routineSummaries[ex.routineId]}
+                        snapshotItems={
+                          routineSnapshot?.itemsByRoutine?.[ex.routineId]
+                            ?.items ?? null
+                        }
                         mode={mode}
                       />
                     </div>

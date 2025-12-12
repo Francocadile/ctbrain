@@ -7,6 +7,8 @@ import SessionDetailView from "@/components/sessions/SessionDetailView";
 import { decodeExercises } from "@/lib/sessions/encodeDecodeExercises";
 import type { RoutineSummary } from "@/lib/sessions/routineSummary";
 import { getRoutineSummaryForTeam } from "@/lib/sessions/routineSummary";
+import type { SessionRoutineSnapshot } from "@/lib/sessions/sessionRoutineSnapshot";
+import { getSessionRoutineSnapshot } from "@/lib/sessions/sessionRoutineSnapshot";
 
 export default async function JugadorSessionPage({ params }: { params: { id: string } }) {
   const sessionAuth = await getServerSession(authOptions);
@@ -46,6 +48,7 @@ export default async function JugadorSessionPage({ params }: { params: { id: str
   // Decodificar ejercicios, ultra defensivo
   let exercises: any[] = [];
   let routineSummaries: Record<string, RoutineSummary> = {};
+  let routineSnapshot: SessionRoutineSnapshot | null = null;
   try {
     const decoded = decodeExercises(plainSession.description as any);
     exercises = decoded.exercises as any;
@@ -71,6 +74,17 @@ export default async function JugadorSessionPage({ params }: { params: { id: str
       }
       routineSummaries = map;
     }
+
+    // snapshot de rutina, si existe
+    try {
+      routineSnapshot = await getSessionRoutineSnapshot(plainSession.id as string);
+    } catch (err) {
+      console.error(
+        "Failed to load routine snapshot for player session",
+        err
+      );
+      routineSnapshot = null;
+    }
   } catch (e) {
     console.error("Failed to decode exercises for player session", e);
   }
@@ -87,6 +101,7 @@ export default async function JugadorSessionPage({ params }: { params: { id: str
           isViewMode={true}
           mode="player"
           routineSummaries={routineSummaries}
+          routineSnapshot={routineSnapshot}
           editing={false}
           roCls="bg-gray-50 text-gray-600 cursor-not-allowed"
           pickerIndex={null}

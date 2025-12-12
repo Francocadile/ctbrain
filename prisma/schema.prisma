@@ -188,11 +188,44 @@ model Session {
   // Ejercicios de biblioteca que se originaron en esta sesión/celda
   originExercises Exercise[]
 
+  // Snapshot de rutinas vinculadas a esta sesión
+  routineSnapshots SessionRoutineItem[]
+
   @@index([date])
   @@index([type])
   @@index([createdBy])
   @@index([teamId])
   @@index([teamId, date])
+}
+
+model SessionRoutineItem {
+  id        String  @id @default(cuid())
+
+  sessionId String
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  routineId     String?
+  routineItemId String?
+
+  blockName String?
+  blockType String?
+
+  title        String
+  sets         Int?
+  reps         Int?
+  load         String?
+  tempo        String?
+  rest         String?
+  notes        String?
+  athleteNotes String?
+
+  order Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sessionId])
+  @@index([routineId])
 }
 
 model Rival {

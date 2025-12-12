@@ -19,6 +19,8 @@ import {
 } from "@/lib/sessions/encodeDecodeExercises";
 import type { RoutineSummary } from "@/lib/sessions/routineSummary";
 import { dbScope } from "@/lib/dbScope";
+import type { SessionRoutineSnapshot } from "@/lib/sessions/sessionRoutineSnapshot";
+import { getSessionRoutineSnapshot } from "@/lib/sessions/sessionRoutineSnapshot";
 
 type TurnKey = "morning" | "afternoon";
 
@@ -96,6 +98,9 @@ export default function SesionDetailEditorPage() {
   const [routineSummaries, setRoutineSummaries] = useState<
     Record<string, RoutineSummary>
   >({});
+  const [routineSnapshot, setRoutineSnapshot] = useState<
+    SessionRoutineSnapshot | null
+  >(null);
   const [pickerIndex, setPickerIndex] = useState<number | null>(null);
   const [pickerExercises, setPickerExercises] = useState<ExerciseDTO[]>([]);
   const [loadingPicker, setLoadingPicker] = useState(false);
@@ -113,7 +118,7 @@ export default function SesionDetailEditorPage() {
         const res = await getSessionById(id);
         const sess: SessionDTO =
           (res as any)?.data ? (res as any).data : (res as unknown as SessionDTO);
-        setS(sess);
+  setS(sess);
 
         const d = decodeExercises(sess?.description || "");
         setPrefix(d.prefix);
@@ -192,7 +197,7 @@ export default function SesionDetailEditorPage() {
           ]);
         }
 
-        // ==== summaries de rutinas, si aplica ====
+  // ==== summaries de rutinas, si aplica ====
         try {
           const routineIds = Array.from(
             new Set(
@@ -226,6 +231,18 @@ export default function SesionDetailEditorPage() {
         } catch (err) {
           console.error("No se pudieron cargar summaries de rutina para la sesión", err);
           setRoutineSummaries({});
+        }
+
+        // ==== snapshot de rutina, si existe ====
+        try {
+          const snap = await getSessionRoutineSnapshot(sess.id);
+          setRoutineSnapshot(snap);
+        } catch (err) {
+          console.error(
+            "No se pudo cargar el snapshot de rutina para la sesión",
+            err
+          );
+          setRoutineSnapshot(null);
         }
 
         setEditing(!isViewMode);
@@ -478,7 +495,8 @@ export default function SesionDetailEditorPage() {
         markerYmd={marker.ymd}
         isViewMode={isViewMode}
         mode="ct"
-  routineSummaries={routineSummaries}
+        routineSummaries={routineSummaries}
+        routineSnapshot={routineSnapshot}
         onSaveAll={saveAll}
         saving={saving}
         editing={editing}
