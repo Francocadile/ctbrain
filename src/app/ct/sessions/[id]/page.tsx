@@ -366,34 +366,35 @@ export default function SesionDetailEditorPage() {
   function applyLibraryExercise(exLib: ExerciseDTO) {
     if (pickerIndex === null) return;
 
+    const meta = exLib.sessionMeta || {};
+
+    const rawPlayers = (meta as any).players ?? "";
+    let players = "";
+    if (typeof rawPlayers === "number") {
+      players = String(rawPlayers);
+    } else if (typeof rawPlayers === "string") {
+      players = rawPlayers;
+    }
+
+    const patched: Exercise = {
+      title: exLib.name || "",
+      kind: (meta as any).type || "",
+      space: (meta as any).space || exLib.zone || "",
+      players,
+      duration: (meta as any).duration || "",
+      description: (meta as any).description || "",
+      imageUrl: (meta as any).imageUrl || exLib.videoUrl || "",
+      routineId: (meta as any).routineId || "",
+      routineName: (meta as any).routineName || "",
+      isRoutineOnly: false,
+    };
+
     setExercises((prev) =>
-      prev.map((ex, i) => {
-        if (i !== pickerIndex) return ex;
-
-        const meta = exLib.sessionMeta || {};
-
-        return {
-          ...ex,
-          title: exLib.name || "",
-          kind: (meta.type as string) || exLib.zone || "",
-          space: (meta.space as string) || "",
-          players:
-            meta.players != null
-              ? String(meta.players)
-              : ex.players || "",
-          duration: (meta.duration as string) || "",
-          description: (meta.description as string) || "",
-          imageUrl:
-            (meta.imageUrl as string) ||
-            exLib.videoUrl ||
-            "",
-          routineId: (meta.routineId as string) || ex.routineId || "",
-          routineName: (meta.routineName as string) || ex.routineName || "",
-        };
-      })
+      prev.map((e, idx) => (idx === pickerIndex ? { ...e, ...patched } : e))
     );
 
     setPickerIndex(null);
+    setPickerSearch("");
   }
 
   if (loading) return <div className="p-6 text-gray-500">Cargando…</div>;
