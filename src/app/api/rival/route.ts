@@ -1,14 +1,32 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { getCurrentTeamId } from "@/lib/sessionScope";
+import { Role } from "@prisma/client";
 
+// Listado y guardado de informes de rival para el equipo actual.
+// GET: lectura para staff ampliado (CT, ADMIN, MEDICO, DIRECTIVO, SUPERADMIN).
+// POST: escritura limitada a CT/ADMIN/SUPERADMIN.
 export async function GET() {
-  const session = await auth();
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
+  }
 
-  const teamId =
-    session?.user?.currentTeamId ??
-    (Array.isArray(session?.user?.teamIds) ? session?.user?.teamIds[0] : null);
+  const role = session.user.role as Role | undefined;
+  const allowedReaders = new Set<Role>([
+    Role.ADMIN,
+    Role.CT,
+    Role.MEDICO,
+    Role.DIRECTIVO,
+    Role.SUPERADMIN,
+  ]);
+  if (!role || !allowedReaders.has(role)) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
 
+  const teamId = getCurrentTeamId(session);
   if (!teamId) {
     return NextResponse.json([], { status: 200 });
   }
@@ -22,14 +40,20 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
+  }
 
-  const teamId =
-    session?.user?.currentTeamId ??
-    (Array.isArray(session?.user?.teamIds) ? session?.user?.teamIds[0] : null);
+  const role = session.user.role as Role | undefined;
+  const allowedWriters = new Set<Role>([Role.ADMIN, Role.CT, Role.SUPERADMIN]);
+  if (!role || !allowedWriters.has(role)) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
 
-  if (!session?.user || !teamId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const teamId = getCurrentTeamId(session);
+  if (!teamId) {
+    return NextResponse.json({ error: "TEAM_REQUIRED" }, { status: 428 });
   }
 
   const data = await req.json();

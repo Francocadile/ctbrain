@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { checkRateLimit } from "./src/lib/rateLimit";
+import { assertCsrf } from "./src/lib/security/csrf";
 
 // ✅ Solo protegemos rutas del CT (y lo que definas explícito)
 const CT_PATHS = [/^\/ct(?:\/:|$)/, /^\/api\/sessions(?:\/:|$)/];
@@ -41,7 +42,8 @@ export async function middleware(req: NextRequest) {
     const { ok } = checkRateLimit({ key, limit: 10, windowMs: 60_000 });
 
     if (!ok) {
-      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+      const res = NextResponse.json({ error: "Too many requests" }, { status: 429 });
+      return withSecurityHeaders(res);
     }
   }
 
@@ -54,31 +56,36 @@ export async function middleware(req: NextRequest) {
     isMutatingMethod &&
     (isSignupRoute || isAccountPasswordRoute || isSuperadminUsersMutateRoute)
   ) {
-    const csrfHeader =
-      req.headers.get("x-ct-csrf") ?? req.headers.get("X-CT-CSRF");
-
-    if (!csrfHeader) {
-      return NextResponse.json(
-        { error: "CSRF token missing" },
-        { status: 403 },
-      );
+    try {
+      assertCsrf(req);
+    } catch (err: any) {
+      if (err?.status === 403 && err?.message?.includes("CSRF")) {
+        const res = NextResponse.json({ error: "CSRF" }, { status: 403 });
+        return withSecurityHeaders(res);
+      }
+      throw err;
     }
   }
 
   // ✅ Whitelist explícito para la API de jugadores (la necesitan MÉDICO y CT)
   if (pathname.startsWith("/api/users/players")) {
-    return NextResponse.next();
+    const res = NextResponse.next();
+    return withSecurityHeaders(res);
   }
 
   const needsCT = CT_PATHS.some((r) => r.test(pathname));
-  if (!needsCT) return NextResponse.next();
+  if (!needsCT) {
+    const res = NextResponse.next();
+    return withSecurityHeaders(res);
+  }
 
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
   if (!token) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("callbackUrl", pathname);
-    return NextResponse.redirect(url);
+    const res = NextResponse.redirect(url);
+    return withSecurityHeaders(res);
   }
 
   const role = (token as any).role;
@@ -89,10 +96,28 @@ export async function middleware(req: NextRequest) {
       role === "MEDICO" ? "/medico" :
       role === "JUGADOR" ? "/player" :
       role === "DIRECTIVO" ? "/directivo" : "/";
-    return NextResponse.redirect(url);
+    const res = NextResponse.redirect(url);
+    return withSecurityHeaders(res);
   }
 
-  return NextResponse.next();
+  const res = NextResponse.next();
+  return withSecurityHeaders(res);
+}
+
+function withSecurityHeaders(res: NextResponse): NextResponse {
+  res.headers.set("X-Content-Type-Options", "nosniff");
+  res.headers.set("X-Frame-Options", "SAMEORIGIN");
+  res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.headers.set("X-XSS-Protection", "0");
+
+  if (process.env.NODE_ENV === "production") {
+    res.headers.set(
+      "Strict-Transport-Security",
+      "max-age=63072000; includeSubDomains; preload",
+    );
+  }
+
+  return res;
 }
 
 // ✅ Sacamos '/api/users/:path*' del matcher

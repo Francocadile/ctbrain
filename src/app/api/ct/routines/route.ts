@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { dbScope, scopedFindManyArgs } from "@/lib/dbScope";
+import { assertCsrf, handleCsrfError } from "@/lib/security/csrf";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,7 @@ export async function GET(req: Request) {
 // POST /api/ct/routines -> crear rutina { title, description, goal, visibility, notesForAthlete }
 export async function POST(req: Request) {
   try {
+    assertCsrf(req);
     const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN"] as any });
     const body = await req.json();
 
@@ -83,7 +85,7 @@ export async function POST(req: Request) {
       },
     });
 
-    const data = {
+  const data = {
       id: row.id,
       title: row.title,
       description: row.description ?? null,
@@ -96,6 +98,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ data }, { status: 201 });
   } catch (error: any) {
+    const csrf = handleCsrfError(error);
+    if (csrf) return csrf;
     if (error instanceof Response) return error;
     console.error("ct routines create error", error);
     return NextResponse.json({ error: error?.message || "Error" }, { status: 500 });
