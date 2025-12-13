@@ -4,7 +4,7 @@
 
 /* Opcional: estilos base mínimos */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 }
 html, body, #__next {
   height: 100%;
