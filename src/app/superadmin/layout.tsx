@@ -16,7 +16,7 @@ export default async function SuperadminLayout({ children }: { children: React.R
             <div className="h-8 w-8 rounded-lg bg-black text-white grid place-items-center font-extrabold">
               SA
             </div>
-            <div className="font-semibold">CTBrain · Superadmin</div>
+            <div className="font-semibold">OPENBASE · Superadmin</div>
           </div>
 
           <div className="flex items-center gap-4 text-sm">

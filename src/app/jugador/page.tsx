@@ -85,7 +85,7 @@ export default async function JugadorHomePage() {
       <RoleGate allow={["JUGADOR"]}>
         <main className="min-h-screen px-4 py-6 md:px-6 md:py-8 flex items-center justify-center">
           <div className="max-w-md rounded-2xl border bg-white p-6 text-center shadow-sm">
-            <h1 className="text-lg font-semibold mb-2">Bienvenido a CTBrain</h1>
+            <h1 className="text-lg font-semibold mb-2">Bienvenido a OPENBASE</h1>
             <p className="text-sm text-gray-600">
               Tu perfil de jugador todavía no está configurado. Avisá a tu cuerpo técnico para que complete tus datos.
             </p>

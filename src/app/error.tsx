@@ -22,7 +22,7 @@ export default function GlobalError({ error, reset }: ErrorProps) {
           <h1 className="text-xl font-semibold">Algo salió mal</h1>
           <p className="text-sm text-slate-300">
             Se produjo un error inesperado. Si el problema persiste, avisá al
-            staff de CTBrain.
+            staff de OPENBASE.
           </p>
           {error?.digest && (
             <p className="text-xs text-slate-500">

@@ -22,7 +22,7 @@ export default async function AdminLayout({
             <div className="h-8 w-8 rounded-lg bg-black text-white grid place-items-center font-extrabold">
               CT
             </div>
-            <div className="font-semibold">CTBrain · Admin</div>
+            <div className="font-semibold">OPENBASE · Admin</div>
           </div>
 
           <div className="flex items-center gap-4 text-sm">
