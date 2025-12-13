@@ -665,26 +665,22 @@ function PlayerHomeTodayStatus({
         </div>
       </div>
 
-      {/* Minutos últimos 5 partidos (historial rápido) */}
-      <section className="rounded-2xl border bg-white p-4 shadow-sm">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
-          Minutos últimos 5 partidos
+      {/* Datos de carga y GPS (placeholder) */}
+      <section className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+          Datos de carga y GPS
         </h2>
-        {/* TODO: conectar con módulo de partidos */}
-        <ul className="mt-2 space-y-1 text-xs text-gray-700">
-          {fakeMinutes.map((m, idx) => (
-            <li key={idx} className="flex items-center gap-2">
-              <span className="w-10 shrink-0 text-gray-500">J{idx + 1}</span>
-              <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-blue-500"
-                  style={{ width: `${(m / 90) * 100}%` }}
-                />
-              </div>
-              <span className="w-10 shrink-0 text-right">{m}'</span>
-            </li>
-          ))}
+        <p className="text-sm text-gray-600">
+          Este módulo aún no está disponible.
+        </p>
+        <ul className="list-disc list-inside text-xs text-gray-600 space-y-1">
+          <li>Minutos jugados</li>
+          <li>Carga de entrenamiento</li>
+          <li>Datos GPS (distancia, sprints, aceleraciones)</li>
         </ul>
+        <p className="mt-2 text-[11px] text-gray-400 uppercase tracking-wide">
+          En construcción
+        </p>
       </section>
     </section>
   );
@@ -787,33 +783,5 @@ function PlayerHomeRoutines({ routines }: { routines: any[] }) {
 }
 
 function PlayerHomeGpsCard() {
-  return (
-    <section className="rounded-2xl border bg-white p-4 shadow-sm">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-        GPS & Carga
-      </h2>
-      {/* TODO: conectar con modelo GPS cuando esté listo */}
-      <p className="text-sm text-gray-600 mb-3">
-        GPS & Carga (próximamente conectado a los archivos XLS del club).
-      </p>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-        <div>
-          <p className="text-gray-500">Distancia total</p>
-          <p className="text-sm font-semibold">7.800 m</p>
-        </div>
-        <div>
-          <p className="text-gray-500">Alta intensidad</p>
-          <p className="text-sm font-semibold">900 m</p>
-        </div>
-        <div>
-          <p className="text-gray-500">Sprints</p>
-          <p className="text-sm font-semibold">18</p>
-        </div>
-        <div>
-          <p className="text-gray-500">Aceleraciones</p>
-          <p className="text-sm font-semibold">42</p>
-        </div>
-      </div>
-    </section>
-  );
+  return null;
 }
