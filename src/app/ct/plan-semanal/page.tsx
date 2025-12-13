@@ -885,8 +885,10 @@ function PlanSemanalInner() {
       ) : loading ? (
         <div className="text-gray-500">Cargando semana…</div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
-          <TurnEditor turn={activeTurn} />
+        <div className="w-full overflow-x-auto rounded-2xl border bg-white shadow-sm">
+          <div className="inline-block min-w-[900px] md:min-w-full">
+            <TurnEditor turn={activeTurn} />
+          </div>
         </div>
       )}
 

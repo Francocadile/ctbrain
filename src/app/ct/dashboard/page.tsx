@@ -403,11 +403,12 @@ function DashboardSemanaInner() {
         </header>
       )}
 
-       {loadingWeek ? (
+      {loadingWeek ? (
         <div className="text-gray-500">Cargando…</div>
       ) : (
         <div className="rounded-2xl border bg-white shadow-sm">
-          <div className="p-3">
+          <div className="p-3 w-full overflow-x-auto">
+            <div className="inline-block min-w-[900px] md:min-w-full">
             {/* DETALLES */}
             <div className="mb-2">
               <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-0.5 border rounded-md uppercase tracking-wide text-[11px] inline-block">
@@ -457,6 +458,7 @@ function DashboardSemanaInner() {
               {orderedDays.map((ymd) => (
                 <DayCard key={`card-${ymd}`} ymd={ymd} />
               ))}
+            </div>
             </div>
           </div>
         </div>

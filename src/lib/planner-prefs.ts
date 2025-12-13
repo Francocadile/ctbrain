@@ -11,14 +11,17 @@ export async function fetchRowLabels(): Promise<RowLabels> {
 export async function saveRowLabels(labels: RowLabels): Promise<void> {
   const r = await fetch("/api/planner/labels", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-CT-CSRF": "1" },
     body: JSON.stringify({ rowLabels: labels }),
   });
   if (!r.ok) throw new Error("save rowLabels failed");
 }
 
 export async function resetRowLabels(): Promise<void> {
-  const r = await fetch("/api/planner/labels", { method: "DELETE" });
+  const r = await fetch("/api/planner/labels", {
+    method: "DELETE",
+    headers: { "X-CT-CSRF": "1" },
+  });
   if (!r.ok) throw new Error("reset rowLabels failed");
 }
 
@@ -39,7 +42,7 @@ export async function savePlacesFromTextarea(text: string): Promise<string[]> {
 
   const r = await fetch("/api/planner/labels", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-CT-CSRF": "1" },
     body: JSON.stringify({ places: names }),
   });
   if (!r.ok) throw new Error("save places failed");

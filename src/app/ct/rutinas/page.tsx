@@ -58,7 +58,7 @@ export default async function CTRoutinesPage({
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <CTRoutinesFromSessionBanner fromSession={fromSession} blockIndex={blockIndex} />
-      <header className="flex items-center justify-between">
+      <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Rutinas</h1>
           <p className="text-sm text-gray-500">Listado de rutinas creadas para este equipo.</p>

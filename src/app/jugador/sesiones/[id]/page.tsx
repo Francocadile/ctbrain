@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -91,7 +92,16 @@ export default async function JugadorSessionPage({ params }: { params: { id: str
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-4 md:px-6 md:py-8">
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-3xl mx-auto space-y-4">
+        <div>
+          <Link
+            href="/jugador"
+            className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900 hover:underline"
+          >
+            <span className="mr-1">←</span>
+            <span>Volver</span>
+          </Link>
+        </div>
         <SessionDetailView
           session={plainSession as any}
           exercises={exercises}

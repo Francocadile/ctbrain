@@ -40,10 +40,36 @@ export default function CTLayout({ children }: { children: React.ReactNode }) {
   const isActive = (prefix: string) =>
     pathname === prefix || pathname?.startsWith(prefix + "/");
 
+  const [menuOpen, setMenuOpen] = React.useState(false);
+
   return (
-    <div className="min-h-screen flex bg-gray-50">
+    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
+      {/* Header mobile (solo en sm) */}
+      <header className="md:hidden border-b bg-white px-3 py-2 flex items-center justify-between gap-2">
+        <TeamSwitcher className="max-w-[65%]" />
+        <button
+          type="button"
+          className="rounded-md border px-2 py-1 text-xs font-medium hover:bg-gray-50"
+          onClick={() => setMenuOpen((v) => !v)}
+        >
+          ☰ Menú
+        </button>
+      </header>
+
+      {/* Fondo oscuro cuando el menú está abierto (solo mobile) */}
+      {menuOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-30 md:hidden"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-64 shrink-0 border-r bg-white p-3 space-y-3">
+      <aside
+        className={`bg-white border-r p-3 space-y-3 w-64 shrink-0 z-40 ${
+          menuOpen ? "fixed inset-y-0 left-0 md:static md:block" : "hidden md:block"
+        }`}
+      >
         <TeamSwitcher className="w-full" />
         <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
           INICIO

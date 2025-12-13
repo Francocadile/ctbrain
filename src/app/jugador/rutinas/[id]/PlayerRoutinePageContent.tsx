@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import VideoPlayerModal from "@/components/training/VideoPlayerModal";
 
 function PlayerRoutineHeader({ routine }: { routine: any }) {
@@ -182,6 +183,15 @@ export default function PlayerRoutinePageContent({
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-8">
+      <div>
+        <Link
+          href="/jugador"
+          className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900 hover:underline"
+        >
+          <span className="mr-1">←</span>
+          <span>Volver</span>
+        </Link>
+      </div>
       <PlayerRoutineHeader routine={routine} />
 
       <div className="space-y-4">

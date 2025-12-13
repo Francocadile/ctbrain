@@ -7,11 +7,14 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+  "build": "next build",
     "start": "next start",
-    "lint": "echo \"lint no configurado todavía\"",
+  "lint": "next lint",
+  "lint:fix": "next lint --fix",
     "typecheck": "tsc --noEmit",
-    "test": "echo \"no hay tests automatizados aún\" && exit 0",
+  "test": "vitest",
+  "test:run": "vitest run",
+  "test:watch": "vitest --watch",
     "postinstall": "prisma generate",
     "prepare": "echo \"skipping husky on CI\"",
     "db:push": "prisma db push",
@@ -44,8 +47,17 @@
   "devDependencies": {
     "@types/bcryptjs": "^3.0.0",
     "@types/papaparse": "5.3.14",
+  "@typescript-eslint/eslint-plugin": "^7.0.0",
+  "@typescript-eslint/parser": "^7.0.0",
+  "eslint": "^8.57.0",
+  "eslint-config-next": "14.2.5",
+    "eslint-plugin-import": "^2.29.0",
     "prisma": "5.19.1",
-    "tsx": "4.19.2"
+    "tsx": "4.19.2",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.0.1",
+    "jsdom": "^26.0.0",
+    "vitest": "^2.1.4"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
