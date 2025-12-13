@@ -77,17 +77,7 @@ export default function LoginClient() {
             </button>
           </form>
 
-          {/* CTA a signup */}
-          <div className="mt-6 flex items-center justify-between">
-            <p className="text-sm text-gray-600">¿No tenés cuenta?</p>
-            <a
-              href="/signup"
-              className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-gray-50"
-              title="Crear una cuenta"
-            >
-              Crear una cuenta
-            </a>
-          </div>
+          {/* Signup público deshabilitado: se quita el CTA a /signup */}
         </section>
       </div>
     </main>
