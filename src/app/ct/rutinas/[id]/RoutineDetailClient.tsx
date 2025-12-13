@@ -1220,6 +1220,24 @@ function RoutineItemEditor({
       value = raw ? Number(raw) : null;
     }
 
+    // Para Series/Reps guardamos de inmediato sin debounce para evitar perder cambios
+    // si luego se dispara un router.refresh() desde otras acciones (p.ej. Guardar rutina).
+    if (field === "sets" || field === "reps") {
+      setPendingValues((prev) => ({ ...prev, [field]: value as any }));
+      (async () => {
+        try {
+          await onSaveField(item.id, field, value);
+        } finally {
+          setPendingValues((prev) => {
+            const next = { ...prev };
+            delete next[field];
+            return next;
+          });
+        }
+      })();
+      return;
+    }
+
   const original = (item as any)[field] ?? null;
     if (value === original) {
       setPendingValues((prev) => {

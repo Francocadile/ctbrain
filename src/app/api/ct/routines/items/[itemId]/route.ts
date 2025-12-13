@@ -67,11 +67,11 @@ export async function PATCH(req: Request, { params }: { params: { itemId: string
       data.exerciseId = v || null;
     }
 
-    if (typeof body?.sets === "number") {
+    if (typeof body?.sets === "number" || body?.sets === null) {
       data.sets = body.sets;
     }
 
-    if (typeof body?.reps === "number") {
+    if (typeof body?.reps === "number" || body?.reps === null) {
       data.reps = body.reps;
     }
 
