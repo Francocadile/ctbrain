@@ -2,7 +2,10 @@ import "./globals.css";
 import Providers from "./providers";
 
 export const metadata = {
-  title: "ctbrain",
+  title: {
+    default: "OPENBASE",
+    template: "%s — OPENBASE",
+  },
   description: "App",
 };
 
