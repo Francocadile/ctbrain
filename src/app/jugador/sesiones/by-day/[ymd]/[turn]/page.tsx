@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
+import Link from "next/link";
 import SessionDayView, { SessionDayBlock } from "@/components/sessions/SessionDayView";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
@@ -99,14 +100,25 @@ export default async function JugadorSessionDayPage({
   });
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      <SessionDayView
-        date={params.ymd}
-        turn={params.turn}
-        header={header}
-        blocks={viewBlocks}
-        mode="player"
-      />
+    <main className="min-h-screen bg-gray-50 px-4 py-4 md:px-6 md:py-8">
+      <div className="max-w-3xl mx-auto space-y-4">
+        <div>
+          <Link
+            href="/jugador"
+            className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900 hover:underline"
+          >
+            <span className="mr-1">←</span>
+            <span>Volver</span>
+          </Link>
+        </div>
+        <SessionDayView
+          date={params.ymd}
+          turn={params.turn}
+          header={header}
+          blocks={viewBlocks}
+          mode="player"
+        />
+      </div>
     </main>
   );
 }

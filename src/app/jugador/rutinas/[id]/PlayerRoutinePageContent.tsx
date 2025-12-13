@@ -124,12 +124,8 @@ function PlayerRoutineItemCard({
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1">
-        {item.sets != null && (
-          <PlayerRoutineParam label="Series" value={item.sets} />
-        )}
-        {item.reps != null && (
-          <PlayerRoutineParam label="Reps" value={item.reps} />
-        )}
+        <PlayerRoutineParam label="Series" value={item.sets ?? "—"} />
+        <PlayerRoutineParam label="Reps" value={item.reps ?? "—"} />
         {item.load && <PlayerRoutineParam label="Carga" value={item.load} />}
         {item.tempo && <PlayerRoutineParam label="Tempo" value={item.tempo} />}
         {item.rest && <PlayerRoutineParam label="Descanso" value={item.rest} />}
