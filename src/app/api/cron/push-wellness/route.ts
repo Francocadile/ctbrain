@@ -14,10 +14,6 @@ export async function POST(req: Request) {
     const tokens = await prisma.deviceToken.findMany({
       where: {
         isActive: true,
-        user: {
-          role: "JUGADOR",
-          isApproved: true,
-        },
       },
       select: {
         pushToken: true,
@@ -27,6 +23,8 @@ export async function POST(req: Request) {
     if (!tokens.length) {
       return NextResponse.json({ ok: true, count: 0 });
     }
+
+    console.log("/api/cron/push-wellness: found tokens", tokens.length);
 
     const { invalidTokens, successCount, failureCount } = await sendPushBatch({
       tokens: tokens.map((t) => t.pushToken),
@@ -38,6 +36,15 @@ export async function POST(req: Request) {
         type: "wellness",
       },
     });
+
+    console.log(
+      "/api/cron/push-wellness: sent",
+      successCount,
+      "ok,",
+      failureCount,
+      "failed, invalid:",
+      invalidTokens.length,
+    );
 
     if (invalidTokens.length) {
       await prisma.deviceToken.updateMany({
