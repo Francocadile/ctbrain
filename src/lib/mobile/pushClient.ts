@@ -65,6 +65,16 @@ async function setupPush() {
 
     console.log("[mobile-push] Initializing push notifications on", platform);
 
+    console.log(
+      "[mobile-push] isPluginAvailable(PushNotifications)=",
+      Capacitor.isPluginAvailable("PushNotifications")
+    );
+
+    console.log(
+      "[mobile-push] Capacitor.Plugins keys=",
+      Object.keys((Capacitor as any).Plugins || {})
+    );
+
     let permStatus = await PushNotifications.checkPermissions();
     console.log("[mobile-push] Current permission status", permStatus);
 
