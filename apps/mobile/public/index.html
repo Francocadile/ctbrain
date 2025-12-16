@@ -21,11 +21,46 @@
           console.log("[bootstrap] hasCap=", !!window.Capacitor, "isNative=", window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
           // registrar push si existe
-          var Push = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications;
+          var Push =
+            window.Capacitor &&
+            window.Capacitor.Plugins &&
+            window.Capacitor.Plugins.PushNotifications;
           console.log("[bootstrap] hasPush=", !!Push);
 
           if (Push) {
             try {
+              Push.addListener("registration", async function (token) {
+                try {
+                  console.log(
+                    "[bootstrap] token",
+                    token && token.value
+                  );
+
+                  await fetch("https://openbase.work/api/devices", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    // NO usar credentials include (no hay sesión todavía)
+                    body: JSON.stringify({
+                      token: token && token.value,
+                      platform: "android",
+                    }),
+                  });
+
+                  console.log("[bootstrap] posted /api/devices");
+                } catch (e) {
+                  console.log("[bootstrap] post error", e);
+                } finally {
+                  console.log("[bootstrap] redirect");
+                  window.location.replace("https://openbase.work/login");
+                }
+              });
+
+              Push.addListener("registrationError", function (err) {
+                console.log("[bootstrap] registrationError", err);
+                console.log("[bootstrap] redirect");
+                window.location.replace("https://openbase.work/login");
+              });
+
               var perm = await Push.requestPermissions();
               console.log("[bootstrap] perm", perm);
               await Push.register();
@@ -34,10 +69,6 @@
               console.log("[bootstrap] push error", e);
             }
           }
-
-          // redirigir a la web remota
-          console.log("[bootstrap] redirect");
-          window.location.replace("https://openbase.work/login");
         } catch (e) {
           console.log("[bootstrap] fatal", e);
           window.location.replace("https://openbase.work/login");
