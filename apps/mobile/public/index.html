@@ -36,17 +36,28 @@
                     token && token.value
                   );
 
-                  await fetch("https://openbase.work/api/devices", {
+                  var Http =
+                    window.Capacitor &&
+                    window.Capacitor.Plugins &&
+                    window.Capacitor.Plugins.CapacitorHttp;
+
+                  if (!Http) {
+                    console.log("[bootstrap] missing CapacitorHttp");
+                    throw new Error("missing CapacitorHttp");
+                  }
+
+                  var res = await Http.request({
                     method: "POST",
+                    url: "https://openbase.work/api/devices",
                     headers: { "Content-Type": "application/json" },
-                    // NO usar credentials include (no hay sesión todavía)
-                    body: JSON.stringify({
+                    data: {
                       token: token && token.value,
                       platform: "android",
-                    }),
+                    },
                   });
 
-                  console.log("[bootstrap] posted /api/devices");
+                  console.log("[bootstrap] post status", res && res.status);
+                  console.log("[bootstrap] post data", res && res.data);
                 } catch (e) {
                   console.log("[bootstrap] post error", e);
                 } finally {
