@@ -28,7 +28,11 @@ export async function sendPushBatch(input: PushPayload): Promise<PushResult> {
   }
 
   const tokens = Array.from(new Set(input.tokens.filter(Boolean)));
+  console.log("[push] sendPushBatch: incoming tokens=", input.tokens.length);
+  console.log("[push] sendPushBatch: unique non-empty tokens=", tokens.length);
+
   if (!tokens.length) {
+    console.log("[push] sendPushBatch: no tokens after filtering, aborting");
     return { successCount: 0, failureCount: 0, invalidTokens: [] };
   }
 
@@ -39,6 +43,11 @@ export async function sendPushBatch(input: PushPayload): Promise<PushResult> {
 
   for (let i = 0; i < tokens.length; i += batchSize) {
     const slice = tokens.slice(i, i + batchSize);
+
+    console.log("[push] sendPushBatch: sending batch", {
+      offset: i,
+      batchSize: slice.length,
+    });
 
     const res = await fetch("https://fcm.googleapis.com/fcm/send", {
       method: "POST",
@@ -81,6 +90,21 @@ export async function sendPushBatch(input: PushPayload): Promise<PushResult> {
       } else {
         successCount++;
       }
+    });
+  }
+  console.log("[push] sendPushBatch: done", {
+    tokens: tokens.length,
+    successCount,
+    failureCount,
+    invalidTokens: invalidTokens.length,
+  });
+
+  // Por consistencia, si hubo tokens, success+failure debería igualar tokens
+  if (tokens.length > 0 && successCount + failureCount !== tokens.length) {
+    console.warn("[push] sendPushBatch: inconsistent counts", {
+      tokens: tokens.length,
+      successCount,
+      failureCount,
     });
   }
 
