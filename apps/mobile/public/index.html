@@ -48,12 +48,13 @@
 
                   var res = await Http.request({
                     method: "POST",
-                    url: "https://openbase.work/api/devices",
+                    url: "https://www.openbase.work/api/devices",
                     headers: { "Content-Type": "application/json" },
                     data: {
                       token: token && token.value,
                       platform: "android",
                     },
+                    disableRedirects: true,
                   });
 
                   console.log("[bootstrap] post status", res && res.status);
