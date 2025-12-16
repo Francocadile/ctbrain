@@ -1,0 +1,15 @@
+{
+  "appId": "com.openbase.mobile",
+  "appName": "openbase-mobile",
+  "webDir": "public",
+  "bundledWebRuntime": false,
+  "server": {
+  "url": "https://openbase.work/login",
+  "cleartext": false,
+  "allowNavigation": [
+    "openbase.work",
+    "www.openbase.work",
+    "*.openbase.work"
+  ]
+  }
+}

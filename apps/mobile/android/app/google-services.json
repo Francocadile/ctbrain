@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "402069062580",
+    "project_id": "openbase-92819",
+    "storage_bucket": "openbase-92819.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:402069062580:android:69cd42002d7af3f5b328e1",
+        "android_client_info": {
+          "package_name": "com.openbase.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCaAVhuROKqMYG0inJm58YOsdAhEsjKnvc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
