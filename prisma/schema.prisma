@@ -583,9 +583,9 @@ model TeamVideo {
 }
 
 model DeviceToken {
-  id     String @id @default(cuid())
-  user   User   @relation(fields: [userId], references: [id])
-  userId String
+  id     String  @id @default(cuid())
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String?
 
   team   Team?   @relation(fields: [teamId], references: [id])
   teamId String?

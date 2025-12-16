@@ -48,8 +48,11 @@
 
                   var res = await Http.request({
                     method: "POST",
-                    url: "https://www.openbase.work/api/devices",
-                    headers: { "Content-Type": "application/json" },
+                    url: "https://www.openbase.work/api/devices/bootstrap",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "x-device-bootstrap-secret": "DEV_BOOTSTRAP_SECRET_LOCAL_TEST",
+                    },
                     data: {
                       token: token && token.value,
                       platform: "android",
