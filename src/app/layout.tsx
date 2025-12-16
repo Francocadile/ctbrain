@@ -22,68 +22,35 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             __html: `
 (function () {
   try {
-    if (typeof window === "undefined") return;
+    // Marcar como no listo por defecto
+    window.__CAP_READY__ = false;
 
-    var ua = navigator.userAgent || "";
-    var isAppUA = ua.includes("Capacitor") || ua.includes("com.openbase.mobile");
-    if (!isAppUA) return;
-
-    console.log("[mobile-push] loader start");
-
-  // Flag global para indicar que capacitor.js terminó de cargar
-  (window as any).__CAP_READY__ = false;
-
-    function injectCapacitorJs() {
-      if (typeof window === "undefined") return Promise.resolve();
-
-      var w = window;
-      if (w.Capacitor && w.Capacitor.Plugins) {
-        console.log("[mobile-push] capacitor bridge already present");
-        console.log("[mobile-push] hasBridge=", !!(w && w.Capacitor && w.Capacitor.Plugins));
-        console.log(
-          "[mobile-push] hasPush=",
-          !!(w && w.Capacitor && w.Capacitor.Plugins && w.Capacitor.Plugins.PushNotifications)
-        );
-        return Promise.resolve();
-      }
-
-      var addScript = function (src) {
-        return new Promise(function (resolve, reject) {
-          var s = document.createElement("script");
-          s.src = src;
-          s.onload = function () {
-            console.log("[mobile-push] loaded "+ src);
-            (window as any).__CAP_READY__ = true;
-            resolve();
-          };
-          s.onerror = function () {
-            console.warn("[mobile-push] failed "+ src);
-            reject(new Error("failed " + src));
-          };
-          document.head.appendChild(s);
-        });
-      };
-
-      return addScript("capacitor://localhost/capacitor.js")
-        .catch(function () { return addScript("/capacitor.js"); })
-        .catch(function () { return undefined; })
-        .then(function () {
-          var w2 = window;
-          console.log(
-            "[mobile-push] hasBridge=",
-            !!(w2 && w2.Capacitor && w2.Capacitor.Plugins)
-          );
-          console.log(
-            "[mobile-push] hasPush=",
-            !!(w2 && w2.Capacitor && w2.Capacitor.Plugins && w2.Capacitor.Plugins.PushNotifications)
-          );
-        });
+    function addScript(src) {
+      return new Promise(function (resolve, reject) {
+        var s = document.createElement('script');
+        s.src = src;
+        s.onload = function () { resolve(); };
+        s.onerror = function () { reject(new Error('failed ' + src)); };
+        document.head.appendChild(s);
+      });
     }
 
-    // Disparar inyección de capacitor.js; setupPush se encargará del resto
-    injectCapacitorJs();
+    function alreadyReady() {
+      return !!(window.Capacitor && (window.Capacitor.Plugins || window.CapacitorNative));
+    }
+
+    if (alreadyReady()) {
+      window.__CAP_READY__ = true;
+      return;
+    }
+
+    addScript('capacitor://localhost/capacitor.js')
+      .catch(function () { return addScript('/capacitor.js'); })
+      .then(function () { window.__CAP_READY__ = true; })
+      .catch(function () { window.__CAP_READY__ = false; });
   } catch (e) {
-    console.warn("[mobile-push] loader error", e);
+    window.__CAP_READY__ = false;
+    console.log('[mobile-push] loader exception', e);
   }
 })();
     `,
