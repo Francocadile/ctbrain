@@ -13,11 +13,9 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function waitForNativeBridge() {
-  for (let i = 0; i < 25; i++) {
-    const Cap = getCap();
-    const hasNative = !!(window as any)?.CapacitorNative;
-    if (Cap && hasNative) return true;
+async function waitForCapReady() {
+  for (let i = 0; i < 50; i++) {
+    if ((window as any).__CAP_READY__ && (window as any).Capacitor) return true;
     await sleep(200);
   }
   return false;
@@ -26,9 +24,15 @@ async function waitForNativeBridge() {
 export async function setupPush() {
   console.log("[mobile-push] boot");
 
-  const ok = await waitForNativeBridge();
+  const ok = await waitForCapReady();
   const Cap = getCap();
 
+  console.log(
+    "[mobile-push] capReady=",
+    (window as any).__CAP_READY__,
+    "cap=",
+    !!(window as any).Capacitor
+  );
   console.log("[mobile-push] hasCap=", !!Cap, "hasNative=", !!(window as any)?.CapacitorNative);
   console.log("[mobile-push] platform=", Cap?.getPlatform?.(), "isNative=", Cap?.isNativePlatform?.());
 

@@ -17,7 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-white text-gray-900">
         <Script
           id="capacitor-bridge-loader"
-          strategy="afterInteractive"
+          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: `
 (function () {
@@ -29,6 +29,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     if (!isAppUA) return;
 
     console.log("[mobile-push] loader start");
+
+  // Flag global para indicar que capacitor.js terminó de cargar
+  (window as any).__CAP_READY__ = false;
 
     function injectCapacitorJs() {
       if (typeof window === "undefined") return Promise.resolve();
@@ -50,6 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           s.src = src;
           s.onload = function () {
             console.log("[mobile-push] loaded "+ src);
+            (window as any).__CAP_READY__ = true;
             resolve();
           };
           s.onerror = function () {
