@@ -22,32 +22,36 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             __html: `
       (function () {
         try {
-          if (typeof window === 'undefined') return;
+          if (typeof window === "undefined") return;
 
-          // Si ya existe, listo
-          if (window.Capacitor) {
-            console.log('[mobile-push] Capacitor already present');
+          var ua = navigator.userAgent || "";
+          var isAppUA = ua.includes("Capacitor") || ua.includes("com.openbase.mobile");
+
+          if (!isAppUA) return;
+
+          var hasPush =
+            window.Capacitor &&
+            window.Capacitor.Plugins &&
+            window.Capacitor.Plugins.PushNotifications;
+
+          if (hasPush) {
+            console.log("[mobile-push] PushNotifications already available");
             return;
           }
 
-          // Detectar app por user-agent (Capacitor suele agregarlo)
-          var ua = navigator.userAgent || '';
-          var isApp = ua.includes('Capacitor') || ua.includes('com.openbase.mobile');
-
-          if (!isApp) return;
-
-          var s = document.createElement('script');
-          s.src = 'capacitor://localhost/capacitor.js';
+          console.log("[mobile-push] Loading capacitor.js (force)");
+          var s = document.createElement("script");
+          s.src = "capacitor://localhost/capacitor.js";
           s.async = true;
           s.onload = function () {
-            console.log('[mobile-push] capacitor.js loaded');
+            console.log("[mobile-push] capacitor.js loaded");
           };
           s.onerror = function (e) {
-            console.log('[mobile-push] capacitor.js failed', e);
+            console.warn("[mobile-push] capacitor.js failed to load", e);
           };
           document.head.appendChild(s);
         } catch (e) {
-          console.log('[mobile-push] loader error', e);
+          console.warn("[mobile-push] loader error", e);
         }
       })();
     `,
