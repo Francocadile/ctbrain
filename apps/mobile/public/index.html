@@ -1,9 +1,48 @@
 <!doctype html>
-<html lang="es">
+<html>
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>OPENBASE</title>
+    <script src="capacitor.js"></script>
   </head>
-  <body>OPENBASE</body>
+  <body>
+    <script>
+      (async function () {
+        try {
+          console.log("[bootstrap] start");
+
+          // esperar bridge nativo (máx ~5s)
+          for (var i = 0; i < 50; i++) {
+            if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) break;
+            await new Promise(function (r) { setTimeout(r, 100); });
+          }
+
+          console.log("[bootstrap] hasCap=", !!window.Capacitor, "isNative=", window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+
+          // registrar push si existe
+          var Push = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.PushNotifications;
+          console.log("[bootstrap] hasPush=", !!Push);
+
+          if (Push) {
+            try {
+              var perm = await Push.requestPermissions();
+              console.log("[bootstrap] perm", perm);
+              await Push.register();
+              console.log("[bootstrap] registered");
+            } catch (e) {
+              console.log("[bootstrap] push error", e);
+            }
+          }
+
+          // redirigir a la web remota
+          console.log("[bootstrap] redirect");
+          window.location.replace("https://openbase.work/login");
+        } catch (e) {
+          console.log("[bootstrap] fatal", e);
+          window.location.replace("https://openbase.work/login");
+        }
+      })();
+    </script>
+  </body>
 </html>

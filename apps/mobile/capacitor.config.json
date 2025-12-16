@@ -4,12 +4,11 @@
   "webDir": "public",
   "bundledWebRuntime": false,
   "server": {
-  "url": "https://openbase.work/login",
-  "cleartext": false,
-  "allowNavigation": [
-    "openbase.work",
-    "www.openbase.work",
-    "*.openbase.work"
-  ]
+    "cleartext": false,
+    "allowNavigation": [
+      "openbase.work",
+      "www.openbase.work",
+      "*.openbase.work"
+    ]
   }
 }
