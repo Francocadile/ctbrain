@@ -36,12 +36,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     s.async = true;
 
     s.onload = function () {
-      var hasPush =
-        window.Capacitor &&
-        window.Capacitor.Plugins &&
-        window.Capacitor.Plugins.PushNotifications;
+      var cap = window.Capacitor;
 
-      console.log("[mobile-push] capacitor.js loaded, hasPush=", !!hasPush);
+      var available =
+        cap &&
+        typeof cap.isPluginAvailable === "function" &&
+        cap.isPluginAvailable("PushNotifications");
+
+      console.log("[mobile-push] loader pluginAvailable=", available);
+
+      if (available) {
+        console.log(
+          "[mobile-push] PushNotifications available (native), skipping loader"
+        );
+      }
+
+      console.log("[mobile-push] capacitor.js loaded");
       window.__CAP_READY__ = true;
     };
 
