@@ -20,40 +20,40 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           strategy="afterInteractive"
           dangerouslySetInnerHTML={{
             __html: `
-      (function () {
-        try {
-          if (typeof window === "undefined") return;
+(function () {
+  try {
+    if (typeof window === "undefined") return;
 
-          var ua = navigator.userAgent || "";
-          var isAppUA = ua.includes("Capacitor") || ua.includes("com.openbase.mobile");
+    var ua = navigator.userAgent || "";
+    var isAppUA = ua.includes("Capacitor") || ua.includes("com.openbase.mobile");
+    if (!isAppUA) return;
 
-          if (!isAppUA) return;
+    console.log("[mobile-push] loader start");
 
-          var hasPush =
-            window.Capacitor &&
-            window.Capacitor.Plugins &&
-            window.Capacitor.Plugins.PushNotifications;
+    // Siempre forzamos cargar capacitor.js en la app
+    var s = document.createElement("script");
+    s.src = "capacitor://localhost/capacitor.js";
+    s.async = true;
 
-          if (hasPush) {
-            console.log("[mobile-push] PushNotifications already available");
-            return;
-          }
+    s.onload = function () {
+      var hasPush =
+        window.Capacitor &&
+        window.Capacitor.Plugins &&
+        window.Capacitor.Plugins.PushNotifications;
 
-          console.log("[mobile-push] Loading capacitor.js (force)");
-          var s = document.createElement("script");
-          s.src = "capacitor://localhost/capacitor.js";
-          s.async = true;
-          s.onload = function () {
-            console.log("[mobile-push] capacitor.js loaded");
-          };
-          s.onerror = function (e) {
-            console.warn("[mobile-push] capacitor.js failed to load", e);
-          };
-          document.head.appendChild(s);
-        } catch (e) {
-          console.warn("[mobile-push] loader error", e);
-        }
-      })();
+      console.log("[mobile-push] capacitor.js loaded, hasPush=", !!hasPush);
+      window.__CAP_READY__ = true;
+    };
+
+    s.onerror = function (e) {
+      console.warn("[mobile-push] capacitor.js failed to load", e);
+    };
+
+    document.head.appendChild(s);
+  } catch (e) {
+    console.warn("[mobile-push] loader error", e);
+  }
+})();
     `,
           }}
         />
