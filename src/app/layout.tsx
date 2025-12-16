@@ -30,36 +30,54 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
     console.log("[mobile-push] loader start");
 
-    // Siempre forzamos cargar capacitor.js en la app
-    var s = document.createElement("script");
-    s.src = "capacitor://localhost/capacitor.js";
-    s.async = true;
+    function injectCapacitorJs() {
+      if (typeof window === "undefined") return Promise.resolve();
 
-    s.onload = function () {
-      var cap = window.Capacitor;
-
-      var available =
-        cap &&
-        typeof cap.isPluginAvailable === "function" &&
-        cap.isPluginAvailable("PushNotifications");
-
-      console.log("[mobile-push] loader pluginAvailable=", available);
-
-      if (available) {
+      var w = window;
+      if (w.Capacitor && w.Capacitor.Plugins) {
+        console.log("[mobile-push] capacitor bridge already present");
+        console.log("[mobile-push] hasBridge=", !!(w && w.Capacitor && w.Capacitor.Plugins));
         console.log(
-          "[mobile-push] PushNotifications available (native), skipping loader"
+          "[mobile-push] hasPush=",
+          !!(w && w.Capacitor && w.Capacitor.Plugins && w.Capacitor.Plugins.PushNotifications)
         );
+        return Promise.resolve();
       }
 
-      console.log("[mobile-push] capacitor.js loaded");
-      window.__CAP_READY__ = true;
-    };
+      var addScript = function (src) {
+        return new Promise(function (resolve, reject) {
+          var s = document.createElement("script");
+          s.src = src;
+          s.onload = function () {
+            console.log("[mobile-push] loaded "+ src);
+            resolve();
+          };
+          s.onerror = function () {
+            console.warn("[mobile-push] failed "+ src);
+            reject(new Error("failed " + src));
+          };
+          document.head.appendChild(s);
+        });
+      };
 
-    s.onerror = function (e) {
-      console.warn("[mobile-push] capacitor.js failed to load", e);
-    };
+      return addScript("capacitor://localhost/capacitor.js")
+        .catch(function () { return addScript("/capacitor.js"); })
+        .catch(function () { return undefined; })
+        .then(function () {
+          var w2 = window;
+          console.log(
+            "[mobile-push] hasBridge=",
+            !!(w2 && w2.Capacitor && w2.Capacitor.Plugins)
+          );
+          console.log(
+            "[mobile-push] hasPush=",
+            !!(w2 && w2.Capacitor && w2.Capacitor.Plugins && w2.Capacitor.Plugins.PushNotifications)
+          );
+        });
+    }
 
-    document.head.appendChild(s);
+    // Disparar inyección de capacitor.js; setupPush se encargará del resto
+    injectCapacitorJs();
   } catch (e) {
     console.warn("[mobile-push] loader error", e);
   }

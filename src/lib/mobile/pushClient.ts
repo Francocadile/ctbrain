@@ -67,6 +67,17 @@ async function setupPush() {
       Capacitor.getPlatform()
     );
 
+    // Aseguramos que el bridge de Capacitor esté cargado antes de continuar.
+    const w = window as any;
+    console.log(
+      "[mobile-push] hasBridge before setup=",
+      !!(w && w.Capacitor && w.Capacitor.Plugins)
+    );
+    console.log(
+      "[mobile-push] hasPush before setup=",
+      !!(w && w.Capacitor && w.Capacitor.Plugins && w.Capacitor.Plugins.PushNotifications)
+    );
+
     const PushNotifications = await getPushBridge();
     if (!PushNotifications) {
       console.error("[mobile-push] PushNotifications bridge missing (after wait)");
