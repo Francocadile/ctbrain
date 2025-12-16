@@ -1,23 +1,38 @@
 "use client";
 
 import { useEffect } from "react";
-import { Capacitor, registerPlugin } from "@capacitor/core";
 
 // Evitar doble ejecución por StrictMode / remounts en React
 let didRun = false;
 
-const PushNotifications = registerPlugin<any>("PushNotifications");
+function getCap() {
+  return (window as any)?.Capacitor;
+}
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function waitForNativeBridge() {
+  for (let i = 0; i < 25; i++) {
+    const Cap = getCap();
+    const hasNative = !!(window as any)?.CapacitorNative;
+    if (Cap && hasNative) return true;
+    await sleep(200);
+  }
+  return false;
+}
 
 export async function setupPush() {
   console.log("[mobile-push] boot");
-  console.log(
-    "[mobile-push] isNativePlatform=",
-    Capacitor.isNativePlatform(),
-    "platform=",
-    Capacitor.getPlatform()
-  );
 
-  if (!Capacitor.isNativePlatform()) return;
+  const ok = await waitForNativeBridge();
+  const Cap = getCap();
+
+  console.log("[mobile-push] hasCap=", !!Cap, "hasNative=", !!(window as any)?.CapacitorNative);
+  console.log("[mobile-push] platform=", Cap?.getPlatform?.(), "isNative=", Cap?.isNativePlatform?.());
+
+  if (!ok || !Cap?.isNativePlatform?.()) return;
 
   if (didRun) {
     console.log("[mobile-push] already initialized, skipping");
@@ -25,14 +40,25 @@ export async function setupPush() {
   }
   didRun = true;
 
+  // IMPORTANT: usar el proxy desde window.Capacitor
+  const Push = Cap?.Plugins?.PushNotifications;
+
+  console.log("[mobile-push] plugins keys=", Object.keys(Cap?.Plugins ?? {}));
+  console.log("[mobile-push] hasPush=", !!Push);
+
+  if (!Push) {
+    console.error("[mobile-push] PushNotifications proxy missing on window.Capacitor");
+    return;
+  }
+
   try {
-    const perm = await PushNotifications.requestPermissions();
+    const perm = await Push.requestPermissions();
     console.log("[mobile-push] perm", perm);
 
-    await PushNotifications.register();
+    await Push.register();
     console.log("[mobile-push] registering…");
 
-    await PushNotifications.addListener("registration", async (token: any) => {
+    Push.addListener("registration", async (token: any) => {
       console.log("[mobile-push] token", token?.value);
 
       await fetch("/api/devices", {
@@ -40,15 +66,15 @@ export async function setupPush() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           token: token?.value,
-          platform: Capacitor.getPlatform(),
+          platform: Cap.getPlatform(),
         }),
       });
 
       console.log("[mobile-push] posted /api/devices");
     });
 
-    await PushNotifications.addListener("registrationError", (err: any) => {
-      console.error("[mobile-push] registration error", err);
+    Push.addListener("registrationError", (err: any) => {
+      console.error("[mobile-push] registrationError", err);
     });
   } catch (e) {
     console.error("[mobile-push] setupPush failed", e);
