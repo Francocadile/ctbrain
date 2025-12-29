@@ -17,13 +17,15 @@ export function NewRoutineButton({
     try {
       const res = await fetch("/api/ct/routines", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-CT-CSRF": "1",
+        },
         body: JSON.stringify({ title: "Nueva rutina" }),
       });
 
       if (!res.ok) {
         const text = await res.text();
-        // Feedback visible para errores de API (permisos, CSRF, etc.)
         alert(text || `No se pudo crear la rutina (status ${res.status})`);
         throw new Error(text || `No se pudo crear la rutina (status ${res.status})`);
       }
@@ -32,8 +34,8 @@ export function NewRoutineButton({
       const id = json?.data?.id as string | undefined;
 
       if (!id) {
-        alert("La API creó la rutina pero no devolvió data.id (respuesta inesperada).");
-        console.error("Unexpected response shape:", json);
+        alert("La rutina se creó pero no se recibió un ID válido.");
+        console.error("Respuesta inesperada:", json);
         return;
       }
 
@@ -49,8 +51,7 @@ export function NewRoutineButton({
       });
     } catch (e: any) {
       console.error(e);
-      // Fallback visible por si el error no pasó por res.ok
-      alert(e?.message || "Error creando rutina.");
+      alert(e?.message || "Error creando la rutina.");
     }
   }
 
