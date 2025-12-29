@@ -80,6 +80,16 @@ async function postJSON(url: string, body: unknown) {
   if (!res.ok) throw new Error(await res.text());
 }
 
+async function postJSONReturn<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return (await res.json()) as T;
+}
+
 async function deleteJSON(url: string) {
   const res = await fetch(url, { method: "DELETE" });
   if (!res.ok) throw new Error(await res.text());
@@ -121,8 +131,9 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
   const [quickPreviewExercise, setQuickPreviewExercise] = useState<ExerciseDTO | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
-  type PanelMode = "structure-only" | "with-library" | "with-editor";
-  const [panelMode, setPanelMode] = useState<PanelMode>("structure-only");
+  // Nuevo layout: paneles controlados por booleanos
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
 
   const fromSession = searchParams?.get("fromSession") || "";
   const blockParam = searchParams?.get("block") || "";
@@ -283,7 +294,8 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
   function handleAddItem(blockId: string) {
     setSelectedBlockId(blockId);
     setSelectedItemId(null);
-    setPanelMode("with-library");
+    setIsLibraryOpen(true);
+    setIsEditorOpen(false);
   }
 
   const { byBlock, unassigned } = useMemo(() => {
@@ -476,7 +488,7 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
         exerciseName: exercise.name ?? item.exerciseName ?? null,
         videoUrl: exercise.videoUrl ?? item.videoUrl ?? null,
       });
-      setPanelMode("with-editor");
+      setIsEditorOpen(true);
       startTransition(() => router.refresh());
     } catch (err) {
       console.error(err);
@@ -484,31 +496,50 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
     }
   }
 
+  type CreateRoutineItemResponse = {
+    data: {
+      id: string;
+      blockId: string | null;
+      order: number;
+    };
+  };
+
   async function addExerciseToRoutine(exercise: ExerciseDTO) {
     if (!selectedBlockId) {
       setError("Seleccioná primero un bloque en la columna izquierda");
       return;
     }
     setError(null);
+
     try {
       const itemsInBlock = localItems.filter((it) => it.blockId === selectedBlockId);
       const nextOrder =
         itemsInBlock.length > 0 ? Math.max(...itemsInBlock.map((it) => it.order)) + 1 : 1;
 
-      await postJSON(`/api/ct/routines/${header.id}/items`, {
-        title: exercise.name,
-        description: "",
-        blockId: selectedBlockId,
-        exerciseId: exercise.id,
-        exerciseName: exercise.name,
-        order: nextOrder,
-        videoUrl: exercise.videoUrl ?? null,
-      });
+      const created = await postJSONReturn<CreateRoutineItemResponse>(
+        `/api/ct/routines/${header.id}/items`,
+        {
+          title: exercise.name,
+          description: "",
+          blockId: selectedBlockId,
+          exerciseId: exercise.id,
+          exerciseName: exercise.name,
+          order: nextOrder,
+          videoUrl: exercise.videoUrl ?? null,
+        },
+      );
+
+      const createdId = created?.data?.id;
+      if (createdId) {
+        setSelectedItemId(createdId);
+        setIsEditorOpen(true);
+      }
+
+      setIsLibraryOpen(false);
     } catch (err) {
       console.error(err);
       setError("No se pudo agregar el ejercicio a la rutina");
     } finally {
-      setPanelMode("with-editor");
       startTransition(() => router.refresh());
     }
   }
@@ -522,7 +553,7 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
   function handleSelectItem(blockId: string | null, itemId: string | null) {
     setSelectedBlockId(blockId);
     setSelectedItemId(itemId);
-    setPanelMode("with-editor");
+    setIsEditorOpen(true);
   }
 
   async function handleSyncSessions() {
@@ -741,22 +772,10 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
       </section>
 
       {/* Bloques e items – nuevo layout 3 columnas */}
-      <section className="rounded-xl border bg-white p-4 shadow-sm space-y-4">
+      <section className="rounded-xl border bg-white p-4 shadow-sm space-y-4 relative">
         <header className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">Bloques y ejercicios</h2>
           <div className="flex items-center gap-2">
-            {!isViewMode && panelMode !== "structure-only" && (
-              <button
-                type="button"
-                className="rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-gray-50"
-                onClick={() => {
-                  setPanelMode("structure-only");
-                  setSelectedItemId(null);
-                }}
-              >
-                Cerrar
-              </button>
-            )}
             {!isViewMode && (
               <button
                 type="button"
@@ -770,63 +789,172 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
           </div>
         </header>
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1.3fr)]">
-          {/* Columna 1: siempre visible */}
-          <RoutineStructurePanel
-            header={header}
-            blocks={localBlocks}
-            byBlock={byBlock}
-            selectedBlockId={selectedBlockId}
-            selectedItemId={selectedItemId}
-            onSelectItem={handleSelectItem}
-            onAddBlock={handleAddBlock}
-            onAddItem={handleAddItem}
-            onBlockNameChangeLocal={handleRenameBlockLocal}
-            onRenameBlock={handleRenameBlock}
-            onChangeBlockType={handleChangeBlockType}
-            readOnly={isViewMode}
-          />
-
-          {/* Columna 2: biblioteca, solo si no es viewMode y panelMode !== structure-only */}
-          {!isViewMode && panelMode !== "structure-only" && (
-            <ExerciseSelectorPanel
-              exercises={exercises}
+        {/* Layout principal: Bloques dominan el ancho; panel lateral/drawer para biblioteca/editor */}
+        <div className="relative">
+          <div className="pr-0 lg:pr-80 transition-all">
+            <RoutineStructurePanel
+              header={header}
+              blocks={localBlocks}
+              byBlock={byBlock}
               selectedBlockId={selectedBlockId}
               selectedItemId={selectedItemId}
-              onSelectForItem={selectExerciseForItem}
-              onAddToRoutine={addExerciseToRoutine}
-              onQuickPreview={(ex) => {
-                setQuickPreviewExercise(ex);
-                setIsPreviewOpen(true);
-              }}
-            />
-          )}
-
-          {/* Columna 3: editor, solo en modo with-editor */}
-          {panelMode === "with-editor" && (
-            <RoutineItemEditor
-              key={selectedItem?.id || "no-item"}
-              item={selectedItem}
-              blocks={localBlocks}
-              onLocalChange={updateLocalItem}
-              onSaveField={saveItemField}
-              onDelete={deleteItem}
-              onDuplicate={duplicateItem}
-              onMoveToBlock={moveItemToBlock}
-              onShowVideo={({ id, name, videoUrl }) => {
-                if (!videoUrl) return;
-                setQuickPreviewExercise({
-                  id,
-                  name,
-                  zone: null,
-                  videoUrl,
-                });
-                setIsPreviewOpen(true);
-              }}
+              onSelectItem={handleSelectItem}
+              onAddBlock={handleAddBlock}
+              onAddItem={handleAddItem}
+              onBlockNameChangeLocal={handleRenameBlockLocal}
+              onRenameBlock={handleRenameBlock}
+              onChangeBlockType={handleChangeBlockType}
               readOnly={isViewMode}
             />
+          </div>
+
+          {/* Panel lateral derecho en desktop */}
+          {!isViewMode && (isLibraryOpen || isEditorOpen) && (
+            <div className="hidden lg:block absolute inset-y-0 right-0 w-80 border-l bg-white shadow-lg px-3 py-3 space-y-3">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                  {isEditorOpen
+                    ? "Editor de ejercicio"
+                    : (() => {
+                        if (!selectedBlockId) return "Biblioteca de ejercicios";
+                        const blockIndex = localBlocks.findIndex((b) => b.id === selectedBlockId);
+                        const letter = blockIndex >= 0 ? String.fromCharCode(65 + blockIndex) : "?";
+                        const block = localBlocks.find((b) => b.id === selectedBlockId) || null;
+                        const name = block?.name || `Bloque ${letter}`;
+                        return `Biblioteca — agregar a ${name}`;
+                      })()}
+                </p>
+                <button
+                  type="button"
+                  className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
+                  onClick={() => {
+                    setIsLibraryOpen(false);
+                    setIsEditorOpen(false);
+                    setSelectedItemId(null);
+                  }}
+                >
+                  Cerrar
+                </button>
+              </div>
+
+              {isLibraryOpen && !isEditorOpen && (
+                <ExerciseSelectorPanel
+                  exercises={exercises}
+                  selectedBlockId={selectedBlockId}
+                  selectedItemId={selectedItemId}
+                  onSelectForItem={selectExerciseForItem}
+                  onAddToRoutine={addExerciseToRoutine}
+                  onQuickPreview={(ex) => {
+                    setQuickPreviewExercise(ex);
+                    setIsPreviewOpen(true);
+                  }}
+                />
+              )}
+
+              {isEditorOpen && (
+                <RoutineItemEditor
+                  key={selectedItem?.id || "no-item"}
+                  item={selectedItem}
+                  blocks={localBlocks}
+                  onLocalChange={updateLocalItem}
+                  onSaveField={saveItemField}
+                  onDelete={async (id) => {
+                    await deleteItem(id);
+                    setIsEditorOpen(false);
+                    setSelectedItemId(null);
+                  }}
+                  onDuplicate={duplicateItem}
+                  onMoveToBlock={moveItemToBlock}
+                  onShowVideo={({ id, name, videoUrl }) => {
+                    if (!videoUrl) return;
+                    setQuickPreviewExercise({
+                      id,
+                      name,
+                      zone: null,
+                      videoUrl,
+                    });
+                    setIsPreviewOpen(true);
+                  }}
+                  readOnly={isViewMode}
+                />
+              )}
+            </div>
           )}
         </div>
+
+        {/* Drawer mobile para biblioteca/editor */}
+        {!isViewMode && (isLibraryOpen || isEditorOpen) && (
+          <div className="lg:hidden fixed inset-x-0 bottom-0 z-30 bg-white border-t shadow-2xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between px-3 py-2 border-b bg-gray-50">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+                {isEditorOpen
+                  ? "Editor de ejercicio"
+                  : (() => {
+                      if (!selectedBlockId) return "Biblioteca de ejercicios";
+                      const blockIndex = localBlocks.findIndex((b) => b.id === selectedBlockId);
+                      const letter = blockIndex >= 0 ? String.fromCharCode(65 + blockIndex) : "?";
+                      const block = localBlocks.find((b) => b.id === selectedBlockId) || null;
+                      const name = block?.name || `Bloque ${letter}`;
+                      return `Biblioteca — agregar a ${name}`;
+                    })()}
+              </p>
+              <button
+                type="button"
+                className="text-[11px] rounded-md border px-2 py-1 bg-white hover:bg-gray-50"
+                onClick={() => {
+                  setIsLibraryOpen(false);
+                  setIsEditorOpen(false);
+                  setSelectedItemId(null);
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-3 space-y-3">
+              {isLibraryOpen && !isEditorOpen && (
+                <ExerciseSelectorPanel
+                  exercises={exercises}
+                  selectedBlockId={selectedBlockId}
+                  selectedItemId={selectedItemId}
+                  onSelectForItem={selectExerciseForItem}
+                  onAddToRoutine={addExerciseToRoutine}
+                  onQuickPreview={(ex) => {
+                    setQuickPreviewExercise(ex);
+                    setIsPreviewOpen(true);
+                  }}
+                />
+              )}
+
+              {isEditorOpen && (
+                <RoutineItemEditor
+                  key={selectedItem?.id || "no-item"}
+                  item={selectedItem}
+                  blocks={localBlocks}
+                  onLocalChange={updateLocalItem}
+                  onSaveField={saveItemField}
+                  onDelete={async (id) => {
+                    await deleteItem(id);
+                    setIsEditorOpen(false);
+                    setSelectedItemId(null);
+                  }}
+                  onDuplicate={duplicateItem}
+                  onMoveToBlock={moveItemToBlock}
+                  onShowVideo={({ id, name, videoUrl }) => {
+                    if (!videoUrl) return;
+                    setQuickPreviewExercise({
+                      id,
+                      name,
+                      zone: null,
+                      videoUrl,
+                    });
+                    setIsPreviewOpen(true);
+                  }}
+                  readOnly={isViewMode}
+                />
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Ejercicios sin bloque (unassigned) */}
         {unassigned.length > 0 && (
