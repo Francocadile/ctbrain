@@ -131,9 +131,10 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
   const [quickPreviewExercise, setQuickPreviewExercise] = useState<ExerciseDTO | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
-  // Nuevo layout: paneles controlados por booleanos
-  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  // Nuevo layout: panel inline por bloque
+  type InlineMode = "none" | "pick" | "edit";
+  const [inlineMode, setInlineMode] = useState<InlineMode>("none");
+  const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
 
   const fromSession = searchParams?.get("fromSession") || "";
   const blockParam = searchParams?.get("block") || "";
@@ -293,9 +294,9 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
 
   function handleAddItem(blockId: string) {
     setSelectedBlockId(blockId);
+    setActiveBlockId(blockId);
     setSelectedItemId(null);
-    setIsLibraryOpen(true);
-    setIsEditorOpen(false);
+    setInlineMode("pick");
   }
 
   const { byBlock, unassigned } = useMemo(() => {
@@ -488,21 +489,13 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
         exerciseName: exercise.name ?? item.exerciseName ?? null,
         videoUrl: exercise.videoUrl ?? item.videoUrl ?? null,
       });
-      setIsEditorOpen(true);
+      setInlineMode("edit");
       startTransition(() => router.refresh());
     } catch (err) {
       console.error(err);
       setError("No se pudo actualizar el ejercicio");
     }
   }
-
-  type CreateRoutineItemResponse = {
-    data: {
-      id: string;
-      blockId: string | null;
-      order: number;
-    };
-  };
 
   async function addExerciseToRoutine(exercise: ExerciseDTO) {
     if (!selectedBlockId) {
@@ -515,6 +508,13 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
       const itemsInBlock = localItems.filter((it) => it.blockId === selectedBlockId);
       const nextOrder =
         itemsInBlock.length > 0 ? Math.max(...itemsInBlock.map((it) => it.order)) + 1 : 1;
+      type CreateRoutineItemResponse = {
+        data: {
+          id: string;
+          blockId: string | null;
+          order: number;
+        };
+      };
 
       const created = await postJSONReturn<CreateRoutineItemResponse>(
         `/api/ct/routines/${header.id}/items`,
@@ -532,10 +532,8 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
       const createdId = created?.data?.id;
       if (createdId) {
         setSelectedItemId(createdId);
-        setIsEditorOpen(true);
+        setInlineMode("edit");
       }
-
-      setIsLibraryOpen(false);
     } catch (err) {
       console.error(err);
       setError("No se pudo agregar el ejercicio a la rutina");
@@ -552,8 +550,9 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
 
   function handleSelectItem(blockId: string | null, itemId: string | null) {
     setSelectedBlockId(blockId);
+    setActiveBlockId(blockId);
     setSelectedItemId(itemId);
-    setIsEditorOpen(true);
+    setInlineMode("edit");
   }
 
   async function handleSyncSessions() {
@@ -771,8 +770,8 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
         )}
       </section>
 
-      {/* Bloques e items – nuevo layout 3 columnas */}
-      <section className="rounded-xl border bg-white p-4 shadow-sm space-y-4 relative">
+  {/* Bloques e items – layout inline por bloque */}
+  <section className="rounded-xl border bg-white p-4 shadow-sm space-y-4">
         <header className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">Bloques y ejercicios</h2>
           <div className="flex items-center gap-2">
@@ -789,172 +788,43 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
           </div>
         </header>
 
-        {/* Layout principal: Bloques dominan el ancho; panel lateral/drawer para biblioteca/editor */}
-        <div className="relative">
-          <div className="pr-0 lg:pr-80 transition-all">
-            <RoutineStructurePanel
-              header={header}
-              blocks={localBlocks}
-              byBlock={byBlock}
-              selectedBlockId={selectedBlockId}
-              selectedItemId={selectedItemId}
-              onSelectItem={handleSelectItem}
-              onAddBlock={handleAddBlock}
-              onAddItem={handleAddItem}
-              onBlockNameChangeLocal={handleRenameBlockLocal}
-              onRenameBlock={handleRenameBlock}
-              onChangeBlockType={handleChangeBlockType}
-              readOnly={isViewMode}
-            />
-          </div>
-
-          {/* Panel lateral derecho en desktop */}
-          {!isViewMode && (isLibraryOpen || isEditorOpen) && (
-            <div className="hidden lg:block absolute inset-y-0 right-0 w-80 border-l bg-white shadow-lg px-3 py-3 space-y-3">
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                  {isEditorOpen
-                    ? "Editor de ejercicio"
-                    : (() => {
-                        if (!selectedBlockId) return "Biblioteca de ejercicios";
-                        const blockIndex = localBlocks.findIndex((b) => b.id === selectedBlockId);
-                        const letter = blockIndex >= 0 ? String.fromCharCode(65 + blockIndex) : "?";
-                        const block = localBlocks.find((b) => b.id === selectedBlockId) || null;
-                        const name = block?.name || `Bloque ${letter}`;
-                        return `Biblioteca — agregar a ${name}`;
-                      })()}
-                </p>
-                <button
-                  type="button"
-                  className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
-                  onClick={() => {
-                    setIsLibraryOpen(false);
-                    setIsEditorOpen(false);
-                    setSelectedItemId(null);
-                  }}
-                >
-                  Cerrar
-                </button>
-              </div>
-
-              {isLibraryOpen && !isEditorOpen && (
-                <ExerciseSelectorPanel
-                  exercises={exercises}
-                  selectedBlockId={selectedBlockId}
-                  selectedItemId={selectedItemId}
-                  onSelectForItem={selectExerciseForItem}
-                  onAddToRoutine={addExerciseToRoutine}
-                  onQuickPreview={(ex) => {
-                    setQuickPreviewExercise(ex);
-                    setIsPreviewOpen(true);
-                  }}
-                />
-              )}
-
-              {isEditorOpen && (
-                <RoutineItemEditor
-                  key={selectedItem?.id || "no-item"}
-                  item={selectedItem}
-                  blocks={localBlocks}
-                  onLocalChange={updateLocalItem}
-                  onSaveField={saveItemField}
-                  onDelete={async (id) => {
-                    await deleteItem(id);
-                    setIsEditorOpen(false);
-                    setSelectedItemId(null);
-                  }}
-                  onDuplicate={duplicateItem}
-                  onMoveToBlock={moveItemToBlock}
-                  onShowVideo={({ id, name, videoUrl }) => {
-                    if (!videoUrl) return;
-                    setQuickPreviewExercise({
-                      id,
-                      name,
-                      zone: null,
-                      videoUrl,
-                    });
-                    setIsPreviewOpen(true);
-                  }}
-                  readOnly={isViewMode}
-                />
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Drawer mobile para biblioteca/editor */}
-        {!isViewMode && (isLibraryOpen || isEditorOpen) && (
-          <div className="lg:hidden fixed inset-x-0 bottom-0 z-30 bg-white border-t shadow-2xl max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between px-3 py-2 border-b bg-gray-50">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
-                {isEditorOpen
-                  ? "Editor de ejercicio"
-                  : (() => {
-                      if (!selectedBlockId) return "Biblioteca de ejercicios";
-                      const blockIndex = localBlocks.findIndex((b) => b.id === selectedBlockId);
-                      const letter = blockIndex >= 0 ? String.fromCharCode(65 + blockIndex) : "?";
-                      const block = localBlocks.find((b) => b.id === selectedBlockId) || null;
-                      const name = block?.name || `Bloque ${letter}`;
-                      return `Biblioteca — agregar a ${name}`;
-                    })()}
-              </p>
-              <button
-                type="button"
-                className="text-[11px] rounded-md border px-2 py-1 bg-white hover:bg-gray-50"
-                onClick={() => {
-                  setIsLibraryOpen(false);
-                  setIsEditorOpen(false);
-                  setSelectedItemId(null);
-                }}
-              >
-                Cerrar
-              </button>
-            </div>
-            <div className="flex-1 overflow-auto p-3 space-y-3">
-              {isLibraryOpen && !isEditorOpen && (
-                <ExerciseSelectorPanel
-                  exercises={exercises}
-                  selectedBlockId={selectedBlockId}
-                  selectedItemId={selectedItemId}
-                  onSelectForItem={selectExerciseForItem}
-                  onAddToRoutine={addExerciseToRoutine}
-                  onQuickPreview={(ex) => {
-                    setQuickPreviewExercise(ex);
-                    setIsPreviewOpen(true);
-                  }}
-                />
-              )}
-
-              {isEditorOpen && (
-                <RoutineItemEditor
-                  key={selectedItem?.id || "no-item"}
-                  item={selectedItem}
-                  blocks={localBlocks}
-                  onLocalChange={updateLocalItem}
-                  onSaveField={saveItemField}
-                  onDelete={async (id) => {
-                    await deleteItem(id);
-                    setIsEditorOpen(false);
-                    setSelectedItemId(null);
-                  }}
-                  onDuplicate={duplicateItem}
-                  onMoveToBlock={moveItemToBlock}
-                  onShowVideo={({ id, name, videoUrl }) => {
-                    if (!videoUrl) return;
-                    setQuickPreviewExercise({
-                      id,
-                      name,
-                      zone: null,
-                      videoUrl,
-                    });
-                    setIsPreviewOpen(true);
-                  }}
-                  readOnly={isViewMode}
-                />
-              )}
-            </div>
-          </div>
-        )}
+        <RoutineStructurePanel
+          header={header}
+          blocks={localBlocks}
+          byBlock={byBlock}
+          selectedBlockId={selectedBlockId}
+          selectedItemId={selectedItemId}
+          activeBlockId={activeBlockId}
+          inlineMode={inlineMode}
+          exercises={exercises}
+          selectedItem={selectedItem}
+          onSelectItem={handleSelectItem}
+          onAddBlock={handleAddBlock}
+          onAddItem={handleAddItem}
+          onBlockNameChangeLocal={handleRenameBlockLocal}
+          onRenameBlock={handleRenameBlock}
+          onChangeBlockType={handleChangeBlockType}
+          onCloseInlinePanel={() => {
+            setInlineMode("none");
+            setActiveBlockId(null);
+          }}
+          onQuickPreview={(ex) => {
+            setQuickPreviewExercise(ex);
+            setIsPreviewOpen(true);
+          }}
+          onAddExerciseToRoutine={addExerciseToRoutine}
+          onLocalChangeItem={updateLocalItem}
+          onSaveItemField={saveItemField}
+          onDeleteItem={async (id) => {
+            await deleteItem(id);
+            setInlineMode("none");
+            setActiveBlockId(null);
+            setSelectedItemId(null);
+          }}
+          onDuplicateItem={duplicateItem}
+          onMoveItemToBlock={moveItemToBlock}
+          readOnly={isViewMode}
+        />
 
         {/* Ejercicios sin bloque (unassigned) */}
         {unassigned.length > 0 && (
@@ -1014,6 +884,10 @@ type RoutineStructurePanelProps = {
   byBlock: Record<string, RoutineItemDTO[]>;
   selectedBlockId: string | null;
   selectedItemId: string | null;
+  activeBlockId: string | null;
+  inlineMode: "none" | "pick" | "edit";
+  exercises: ExerciseDTO[];
+  selectedItem: RoutineItemDTO | null;
   onSelectItem: (blockId: string | null, itemId: string | null) => void;
   onAddBlock: () => void;
   onAddItem: (blockId: string) => void;
@@ -1023,6 +897,18 @@ type RoutineStructurePanelProps = {
     blockId: string,
     type: "WARMUP" | "MAIN" | "COOLDOWN" | "ACCESSORY" | null,
   ) => Promise<void> | void;
+  onCloseInlinePanel: () => void;
+  onQuickPreview: (exercise: ExerciseDTO) => void;
+  onAddExerciseToRoutine: (exercise: ExerciseDTO) => Promise<void>;
+  onLocalChangeItem: (itemId: string, partial: Partial<RoutineItemDTO>) => void;
+  onSaveItemField: (
+    itemId: string,
+    field: keyof RoutineItemDTO,
+    value: unknown,
+  ) => Promise<void>;
+  onDeleteItem: (itemId: string) => Promise<void>;
+  onDuplicateItem: (itemId: string) => Promise<void>;
+  onMoveItemToBlock: (itemId: string, blockId: string) => Promise<void>;
   readOnly?: boolean;
 };
 
@@ -1032,12 +918,24 @@ function RoutineStructurePanel({
   byBlock,
   selectedBlockId,
   selectedItemId,
+  activeBlockId,
+  inlineMode,
+  exercises,
+  selectedItem,
   onSelectItem,
   onAddBlock,
   onAddItem,
   onBlockNameChangeLocal,
   onRenameBlock,
   onChangeBlockType,
+  onCloseInlinePanel,
+  onQuickPreview,
+  onAddExerciseToRoutine,
+  onLocalChangeItem,
+  onSaveItemField,
+  onDeleteItem,
+  onDuplicateItem,
+  onMoveItemToBlock,
   readOnly,
 }: RoutineStructurePanelProps) {
   const BLOCK_COLORS = [
@@ -1175,7 +1073,7 @@ function RoutineStructurePanel({
                 </div>
               </header>
 
-              {/* Lista de ejercicios */}
+              {/* Lista de ejercicios con layout tipo timeline */}
               <div className="px-3 py-2 space-y-1.5">
                 {items.length === 0 ? (
                   <p className="text-[11px] text-gray-400">
@@ -1186,35 +1084,132 @@ function RoutineStructurePanel({
                     const isSelected = selectedItemId === it.id;
                     const name = it.exerciseName || it.title || "Ejercicio sin nombre";
 
+                    // Construimos el resumen de parámetros
+                    const summaryParts: string[] = [];
+                    if (it.sets != null && it.reps != null) {
+                      summaryParts.push(`${it.sets} x ${it.reps}`);
+                    } else if (it.sets != null) {
+                      summaryParts.push(`${it.sets} series`);
+                    } else if (it.reps != null) {
+                      summaryParts.push(`${it.reps} reps`);
+                    }
+                    if (it.load) summaryParts.push(it.load);
+                    if (it.rest) summaryParts.push(it.rest);
+                    if (it.tempo) summaryParts.push(`tempo ${it.tempo}`);
+
+                    const hasParams = summaryParts.length > 0;
+                    const summaryText = hasParams
+                      ? summaryParts.join(" · ")
+                      : "Sin parámetros";
+
                     return (
                       <button
                         key={it.id}
                         type="button"
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-left text-[11px] flex items-center justify-between gap-2 ${
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-left text-[11px] ${
                           isSelected
                             ? "border-emerald-500 bg-emerald-50"
                             : "border-gray-200 hover:border-emerald-400 hover:bg-emerald-50/40"
                         }`}
                         onClick={() => onSelectItem(block.id, it.id)}
                       >
-                        <div className="flex items-start gap-2 flex-1 min-w-0">
-                          <span className="mt-[2px] text-[10px] font-semibold text-gray-500">
-                            #{index + 1}
-                          </span>
-                          <div className="flex flex-col min-w-0">
-                            <span className="truncate font-medium text-gray-900">
-                              {name}
-                            </span>
+                        <div className="relative flex gap-3">
+                          {/* Columna timeline */}
+                          <div className="relative flex flex-col items-center">
+                            <div
+                              className={`h-2.5 w-2.5 rounded-full border-2 ${
+                                isSelected
+                                  ? "border-emerald-500 bg-emerald-500"
+                                  : "border-emerald-400 bg-white"
+                              }`}
+                            />
+                            {index < items.length - 1 && (
+                              <div className="absolute top-2.5 bottom-0 w-px bg-emerald-200" />
+                            )}
+                          </div>
+
+                          {/* Contenido del ejercicio */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-[10px] font-semibold text-gray-400">
+                                  #{index + 1}
+                                </span>
+                                <span className="truncate font-medium text-gray-900">
+                                  {name}
+                                </span>
+                              </div>
+                              <span className="shrink-0 text-[10px] text-gray-400">
+                                #{it.order}
+                              </span>
+                            </div>
+
+                            <div
+                              className={`mt-0.5 text-[10px] ${
+                                hasParams ? "text-gray-500" : "text-gray-400"
+                              }`}
+                            >
+                              {summaryText}
+                            </div>
                           </div>
                         </div>
-                        <span className="shrink-0 text-[10px] text-gray-400">
-                          #{it.order}
-                        </span>
                       </button>
                     );
                   })
                 )}
               </div>
+
+              {/* Panel inline debajo del bloque activo */}
+              {!readOnly && activeBlockId === block.id && inlineMode !== "none" && (
+                <div className="border-t px-3 py-3 bg-gray-50 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+                      {inlineMode === "pick"
+                        ? `Agregar ejercicio a ${derivedName}`
+                        : "Editar ejercicio"}
+                    </p>
+                    <button
+                      type="button"
+                      className="text-[11px] rounded-md border px-2 py-1 bg-white hover:bg-gray-50"
+                      onClick={onCloseInlinePanel}
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+
+                  {inlineMode === "pick" && (
+                    <ExerciseSelectorPanel
+                      exercises={exercises}
+                      selectedBlockId={block.id}
+                      selectedItemId={selectedItemId}
+                      onAddToRoutine={onAddExerciseToRoutine}
+                      onQuickPreview={onQuickPreview}
+                    />
+                  )}
+
+                  {inlineMode === "edit" && selectedItem && (
+                    <RoutineItemEditor
+                      key={selectedItem.id}
+                      item={selectedItem}
+                      blocks={blocks}
+                      onLocalChange={onLocalChangeItem}
+                      onSaveField={onSaveItemField}
+                      onDelete={onDeleteItem}
+                      onDuplicate={onDuplicateItem}
+                      onMoveToBlock={onMoveItemToBlock}
+                      onShowVideo={({ id, name, videoUrl }) => {
+                        onQuickPreview({
+                          id,
+                          name,
+                          zone: null,
+                          videoUrl,
+                        });
+                      }}
+                      readOnly={readOnly}
+                    />
+                  )}
+                </div>
+              )}
             </article>
           );
         })}
@@ -1727,8 +1722,13 @@ function ExerciseSelectorPanel({
         </p>
       )}
 
+      {/* Condición para mostrar resultados: query >= 2 o filtros activos */}
       <div className="space-y-2 max-h-[420px] overflow-auto pr-1">
-        {filtered.length === 0 ? (
+        {search.trim().length < 2 && groupFilter === "all" && zoneFilter === "all" ? (
+          <p className="text-[11px] text-gray-500">
+            Buscá por nombre o filtrá por tipo/zona para ver ejercicios.
+          </p>
+        ) : filtered.length === 0 ? (
           <p className="text-[11px] text-gray-400">No hay ejercicios que coincidan con la búsqueda.</p>
         ) : (
           filtered.map((ex) => {
