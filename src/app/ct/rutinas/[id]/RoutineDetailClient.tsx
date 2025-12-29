@@ -402,9 +402,9 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
   ) {
     setError(null);
 
-    const payload: { type: string | null } = {
-      type: type ?? null,
-    };
+    const payload: { type: string } = {
+	  type: type ?? "",
+	};
 
     // Actualizamos optimistamente en local
     setLocalBlocks((prev) =>
@@ -416,9 +416,6 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
       startTransition(() => router.refresh());
     } catch (err) {
       console.error(err);
-      // TEMP: mostrar error real de backend (p.ej. CSRF)
-      // eslint-disable-next-line no-alert
-      alert((err as any)?.message || String(err));
       setError("No se pudo actualizar el tipo de bloque");
     }
   }
