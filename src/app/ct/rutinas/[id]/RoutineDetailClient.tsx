@@ -396,30 +396,6 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
     );
   }
 
-  async function handleChangeBlockType(
-    blockId: string,
-    type: "WARMUP" | "MAIN" | "COOLDOWN" | "ACCESSORY" | null,
-  ) {
-    setError(null);
-
-    const payload: { type: string } = {
-	  type: type ?? "",
-	};
-
-    // Actualizamos optimistamente en local
-    setLocalBlocks((prev) =>
-      prev.map((blk) => (blk.id === blockId ? { ...blk, type } : blk)),
-    );
-
-    try {
-      await patchJSON(`/api/ct/routines/blocks/${blockId}`, payload);
-      startTransition(() => router.refresh());
-    } catch (err) {
-      console.error(err);
-      setError("No se pudo actualizar el tipo de bloque");
-    }
-  }
-
   // Item seleccionado derivado del estado
   const selectedItem: RoutineItemDTO | null =
     selectedItemId ? localItems.find((it) => it.id === selectedItemId) ?? null : null;
@@ -898,18 +874,6 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
   <section className="rounded-xl border bg-white p-4 shadow-sm space-y-4">
         <header className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">Bloques y ejercicios</h2>
-          <div className="flex items-center gap-2">
-            {!isViewMode && (
-              <button
-                type="button"
-                className="text-xs rounded-md border px-3 py-1 hover:bg-gray-50"
-                onClick={handleAddBlock}
-                disabled={isPending}
-              >
-                Agregar bloque
-              </button>
-            )}
-          </div>
         </header>
 
         <RoutineStructurePanel
@@ -930,7 +894,6 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
           onAddItem={handleAddItem}
           onBlockNameChangeLocal={handleRenameBlockLocal}
           onRenameBlock={handleRenameBlock}
-          onChangeBlockType={handleChangeBlockType}
           onDragStartItem={handleDragStart}
           onDragOverItem={handleDragOver}
           onDropItem={handleDrop}
@@ -1027,10 +990,6 @@ type RoutineStructurePanelProps = {
   onAddItem: (blockId: string) => void;
   onBlockNameChangeLocal: (blockId: string, name: string) => void;
   onRenameBlock: (b: RoutineBlockDTO, name: string) => Promise<void> | void;
-  onChangeBlockType: (
-    blockId: string,
-    type: "WARMUP" | "MAIN" | "COOLDOWN" | "ACCESSORY" | null,
-  ) => Promise<void> | void;
   onDragStartItem: (blockId: string, itemId: string, e: React.DragEvent) => void;
   onDragOverItem: (blockId: string, itemId: string, e: React.DragEvent) => void;
   onDropItem: (blockId: string, itemId: string, e: React.DragEvent) => void;
@@ -1068,7 +1027,6 @@ function RoutineStructurePanel({
   onAddItem,
   onBlockNameChangeLocal,
   onRenameBlock,
-  onChangeBlockType,
   onDragStartItem,
   onDragOverItem,
   onDropItem,
@@ -1105,7 +1063,7 @@ function RoutineStructurePanel({
         {!readOnly && (
           <button
             type="button"
-            className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+              className="rounded-md border px-3 py-1 text-xs font-medium bg-white hover:bg-gray-50"
             onClick={onAddBlock}
           >
             + Bloque
@@ -1130,17 +1088,6 @@ function RoutineStructurePanel({
             !block.name || block.name === "Bloque nuevo"
               ? `Bloque ${letter}`
               : block.name;
-
-          const typeLabel: string =
-            block.type === "WARMUP"
-              ? "Warmup"
-              : block.type === "MAIN"
-              ? "Main"
-              : block.type === "COOLDOWN"
-              ? "Cooldown"
-              : block.type === "ACCESSORY"
-              ? "Accessory"
-              : "Sin tipo";
 
           return (
             <article
@@ -1169,43 +1116,12 @@ function RoutineStructurePanel({
                         {header.goal}
                       </span>
                     )}
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <span className="text-[10px] text-emerald-100">Tipo:</span>
-                      <select
-                        className="rounded border border-white/30 bg-white/10 px-1.5 py-0.5 text-[10px] text-white focus:outline-none focus:ring-1 focus:ring-emerald-200"
-                        value={block.type ?? ""}
-                        onChange={(e) => {
-                          const value = e.target.value as
-                            | "WARMUP"
-                            | "MAIN"
-                            | "COOLDOWN"
-                            | "ACCESSORY"
-                            | "";
-                          const nextType =
-                            value === ""
-                              ? null
-                              : (value as
-                                  | "WARMUP"
-                                  | "MAIN"
-                                  | "COOLDOWN"
-                                  | "ACCESSORY");
-                          void onChangeBlockType(block.id, nextType);
-                        }}
-                        disabled={readOnly}
-                      >
-                        <option value="">Sin tipo</option>
-                        <option value="WARMUP">Warmup</option>
-                        <option value="MAIN">Main</option>
-                        <option value="COOLDOWN">Cooldown</option>
-                        <option value="ACCESSORY">Accessory</option>
-                      </select>
-                    </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 text-[10px]">
-                  <span className="text-emerald-50">
-                    {typeLabel} · {items.length} ejercicios
-                  </span>
+                  <p className="text-[10px] text-white/80">
+                    {items.length} ejercicios
+                  </p>
                   {!readOnly && (
                     <button
                       type="button"
