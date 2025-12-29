@@ -121,6 +121,9 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
   const [quickPreviewExercise, setQuickPreviewExercise] = useState<ExerciseDTO | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
+  type PanelMode = "structure-only" | "with-library" | "with-editor";
+  const [panelMode, setPanelMode] = useState<PanelMode>("structure-only");
+
   const fromSession = searchParams?.get("fromSession") || "";
   const blockParam = searchParams?.get("block") || "";
   const blockIndex = blockParam ? Number(blockParam) : NaN;
@@ -280,6 +283,7 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
   function handleAddItem(blockId: string) {
     setSelectedBlockId(blockId);
     setSelectedItemId(null);
+    setPanelMode("with-library");
   }
 
   const { byBlock, unassigned } = useMemo(() => {
@@ -472,6 +476,7 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
         exerciseName: exercise.name ?? item.exerciseName ?? null,
         videoUrl: exercise.videoUrl ?? item.videoUrl ?? null,
       });
+      setPanelMode("with-editor");
       startTransition(() => router.refresh());
     } catch (err) {
       console.error(err);
@@ -503,6 +508,7 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
       console.error(err);
       setError("No se pudo agregar el ejercicio a la rutina");
     } finally {
+      setPanelMode("with-editor");
       startTransition(() => router.refresh());
     }
   }
@@ -516,6 +522,7 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
   function handleSelectItem(blockId: string | null, itemId: string | null) {
     setSelectedBlockId(blockId);
     setSelectedItemId(itemId);
+    setPanelMode("with-editor");
   }
 
   async function handleSyncSessions() {
@@ -735,21 +742,36 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
 
       {/* Bloques e items – nuevo layout 3 columnas */}
       <section className="rounded-xl border bg-white p-4 shadow-sm space-y-4">
-        <header className="flex items-center justify-between">
+        <header className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold">Bloques y ejercicios</h2>
-          {!isViewMode && (
-            <button
-              type="button"
-              className="text-xs rounded-md border px-3 py-1 hover:bg-gray-50"
-              onClick={handleAddBlock}
-              disabled={isPending}
-            >
-              Agregar bloque
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {!isViewMode && panelMode !== "structure-only" && (
+              <button
+                type="button"
+                className="rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-gray-50"
+                onClick={() => {
+                  setPanelMode("structure-only");
+                  setSelectedItemId(null);
+                }}
+              >
+                Cerrar
+              </button>
+            )}
+            {!isViewMode && (
+              <button
+                type="button"
+                className="text-xs rounded-md border px-3 py-1 hover:bg-gray-50"
+                onClick={handleAddBlock}
+                disabled={isPending}
+              >
+                Agregar bloque
+              </button>
+            )}
+          </div>
         </header>
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1.3fr)]">
+          {/* Columna 1: siempre visible */}
           <RoutineStructurePanel
             header={header}
             blocks={localBlocks}
@@ -765,7 +787,8 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
             readOnly={isViewMode}
           />
 
-          {!isViewMode && (
+          {/* Columna 2: biblioteca, solo si no es viewMode y panelMode !== structure-only */}
+          {!isViewMode && panelMode !== "structure-only" && (
             <ExerciseSelectorPanel
               exercises={exercises}
               selectedBlockId={selectedBlockId}
@@ -779,27 +802,30 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
             />
           )}
 
-          <RoutineItemEditor
-            key={selectedItem?.id || "no-item"}
-            item={selectedItem}
-            blocks={localBlocks}
-            onLocalChange={updateLocalItem}
-            onSaveField={saveItemField}
-            onDelete={deleteItem}
-            onDuplicate={duplicateItem}
-            onMoveToBlock={moveItemToBlock}
-            onShowVideo={({ id, name, videoUrl }) => {
-              if (!videoUrl) return;
-              setQuickPreviewExercise({
-                id,
-                name,
-                zone: null,
-                videoUrl,
-              });
-              setIsPreviewOpen(true);
-            }}
-            readOnly={isViewMode}
-          />
+          {/* Columna 3: editor, solo en modo with-editor */}
+          {panelMode === "with-editor" && (
+            <RoutineItemEditor
+              key={selectedItem?.id || "no-item"}
+              item={selectedItem}
+              blocks={localBlocks}
+              onLocalChange={updateLocalItem}
+              onSaveField={saveItemField}
+              onDelete={deleteItem}
+              onDuplicate={duplicateItem}
+              onMoveToBlock={moveItemToBlock}
+              onShowVideo={({ id, name, videoUrl }) => {
+                if (!videoUrl) return;
+                setQuickPreviewExercise({
+                  id,
+                  name,
+                  zone: null,
+                  videoUrl,
+                });
+                setIsPreviewOpen(true);
+              }}
+              readOnly={isViewMode}
+            />
+          )}
         </div>
 
         {/* Ejercicios sin bloque (unassigned) */}
