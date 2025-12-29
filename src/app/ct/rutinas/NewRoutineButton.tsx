@@ -20,27 +20,37 @@ export function NewRoutineButton({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: "Nueva rutina" }),
       });
+
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(text || "No se pudo crear la rutina");
+        // Feedback visible para errores de API (permisos, CSRF, etc.)
+        alert(text || `No se pudo crear la rutina (status ${res.status})`);
+        throw new Error(text || `No se pudo crear la rutina (status ${res.status})`);
       }
+
       const json = await res.json();
       const id = json?.data?.id as string | undefined;
-      if (id) {
-        startTransition(() => {
-          let url = `/ct/rutinas/${id}`;
-          if (fromSession && typeof blockIndex === "number" && blockIndex >= 0) {
-            const sp = new URLSearchParams();
-            sp.set("fromSession", fromSession);
-            sp.set("block", String(blockIndex));
-            url += `?${sp.toString()}`;
-          }
-          router.push(url);
-        });
+
+      if (!id) {
+        alert("La API creó la rutina pero no devolvió data.id (respuesta inesperada).");
+        console.error("Unexpected response shape:", json);
+        return;
       }
-    } catch (e) {
+
+      startTransition(() => {
+        let url = `/ct/rutinas/${id}`;
+        if (fromSession && typeof blockIndex === "number" && blockIndex >= 0) {
+          const sp = new URLSearchParams();
+          sp.set("fromSession", fromSession);
+          sp.set("block", String(blockIndex));
+          url += `?${sp.toString()}`;
+        }
+        router.push(url);
+      });
+    } catch (e: any) {
       console.error(e);
-      // En un futuro podemos usar useToast; por ahora, log silencioso.
+      // Fallback visible por si el error no pasó por res.ok
+      alert(e?.message || "Error creando rutina.");
     }
   }
 
