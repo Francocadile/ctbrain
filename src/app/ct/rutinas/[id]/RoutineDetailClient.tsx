@@ -136,6 +136,11 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
   const [inlineMode, setInlineMode] = useState<InlineMode>("none");
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
 
+  // Estado para drag & drop dentro de cada bloque
+  const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
+  const [draggingBlockId, setDraggingBlockId] = useState<string | null>(null);
+  const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
+
   const fromSession = searchParams?.get("fromSession") || "";
   const blockParam = searchParams?.get("block") || "";
   const blockIndex = blockParam ? Number(blockParam) : NaN;
@@ -549,10 +554,113 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
   }
 
   function handleSelectItem(blockId: string | null, itemId: string | null) {
+    // Toggle: si clickeo el mismo item ya abierto en modo edición, cierro editor
+    if (
+      blockId === activeBlockId &&
+      itemId &&
+      itemId === selectedItemId &&
+      inlineMode === "edit"
+    ) {
+      setInlineMode("none");
+      setSelectedItemId(null);
+      return;
+    }
+
     setSelectedBlockId(blockId);
     setActiveBlockId(blockId);
     setSelectedItemId(itemId);
-    setInlineMode("edit");
+    setInlineMode(itemId ? "edit" : "none");
+  }
+
+  // Drag & drop intra-bloque: handlers y persistencia
+  function handleDragStart(blockId: string, itemId: string, e: React.DragEvent) {
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = "move";
+    }
+    setDraggingItemId(itemId);
+    setDraggingBlockId(blockId);
+    setDragOverItemId(null);
+  }
+
+  function handleDragOver(blockId: string, itemId: string, e: React.DragEvent) {
+    e.preventDefault();
+    if (!draggingItemId) return;
+    if (draggingBlockId !== blockId) return;
+    if (draggingItemId === itemId) return;
+    setDragOverItemId(itemId);
+  }
+
+  async function handleDropWithinBlock(
+    blockId: string,
+    draggingId: string,
+    overId: string,
+  ) {
+    // Validaciones básicas
+    if (draggingBlockId !== blockId) return;
+    if (draggingId === overId) return;
+
+    // Tomamos snapshot actual de items del bloque
+    const itemsInBlock = localItems
+      .filter((it) => it.blockId === blockId)
+      .sort((a, b) => a.order - b.order);
+
+    const draggingIndex = itemsInBlock.findIndex((it) => it.id === draggingId);
+    const overIndex = itemsInBlock.findIndex((it) => it.id === overId);
+    if (draggingIndex === -1 || overIndex === -1) return;
+
+    const reordered = [...itemsInBlock];
+    const [moved] = reordered.splice(draggingIndex, 1);
+    reordered.splice(overIndex, 0, moved);
+
+    // Reasignamos order 1..N
+    const updatedWithOrder = reordered.map((it, idx) => ({
+      ...it,
+      order: idx + 1,
+    }));
+
+    // Construimos nuevo localItems
+    const updatedLocalItems = localItems.map((it) => {
+      if (it.blockId !== blockId) return it;
+      const updated = updatedWithOrder.find((u) => u.id === it.id);
+      return updated ?? it;
+    });
+
+    // Actualizamos UI inmediatamente
+    setLocalItems(updatedLocalItems);
+
+    // Persistimos solo los que cambiaron order
+    const patches = updatedWithOrder.filter((updated) => {
+      const original = itemsInBlock.find((it) => it.id === updated.id);
+      return original && original.order !== updated.order;
+    });
+
+    try {
+      await Promise.all(
+        patches.map((it) =>
+          patchJSON(`/api/ct/routines/items/${it.id}`, { order: it.order }),
+        ),
+      );
+      startTransition(() => router.refresh());
+    } catch (err) {
+      console.error("Error al reordenar ejercicios", err);
+      setError("No se pudo reordenar los ejercicios");
+    } finally {
+      setDraggingItemId(null);
+      setDraggingBlockId(null);
+      setDragOverItemId(null);
+    }
+  }
+
+  function handleDrop(blockId: string, overId: string, e: React.DragEvent) {
+    e.preventDefault();
+    if (!draggingItemId) return;
+    void handleDropWithinBlock(blockId, draggingItemId, overId);
+  }
+
+  function handleDragEnd() {
+    setDraggingItemId(null);
+    setDraggingBlockId(null);
+    setDragOverItemId(null);
   }
 
   async function handleSyncSessions() {
@@ -798,12 +906,19 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
           inlineMode={inlineMode}
           exercises={exercises}
           selectedItem={selectedItem}
+          draggingItemId={draggingItemId}
+          draggingBlockId={draggingBlockId}
+          dragOverItemId={dragOverItemId}
           onSelectItem={handleSelectItem}
           onAddBlock={handleAddBlock}
           onAddItem={handleAddItem}
           onBlockNameChangeLocal={handleRenameBlockLocal}
           onRenameBlock={handleRenameBlock}
           onChangeBlockType={handleChangeBlockType}
+          onDragStartItem={handleDragStart}
+          onDragOverItem={handleDragOver}
+          onDropItem={handleDrop}
+          onDragEndItem={handleDragEnd}
           onCloseInlinePanel={() => {
             setInlineMode("none");
             setActiveBlockId(null);
@@ -888,6 +1003,9 @@ type RoutineStructurePanelProps = {
   inlineMode: "none" | "pick" | "edit";
   exercises: ExerciseDTO[];
   selectedItem: RoutineItemDTO | null;
+  draggingItemId: string | null;
+  draggingBlockId: string | null;
+  dragOverItemId: string | null;
   onSelectItem: (blockId: string | null, itemId: string | null) => void;
   onAddBlock: () => void;
   onAddItem: (blockId: string) => void;
@@ -897,6 +1015,10 @@ type RoutineStructurePanelProps = {
     blockId: string,
     type: "WARMUP" | "MAIN" | "COOLDOWN" | "ACCESSORY" | null,
   ) => Promise<void> | void;
+  onDragStartItem: (blockId: string, itemId: string, e: React.DragEvent) => void;
+  onDragOverItem: (blockId: string, itemId: string, e: React.DragEvent) => void;
+  onDropItem: (blockId: string, itemId: string, e: React.DragEvent) => void;
+  onDragEndItem: () => void;
   onCloseInlinePanel: () => void;
   onQuickPreview: (exercise: ExerciseDTO) => void;
   onAddExerciseToRoutine: (exercise: ExerciseDTO) => Promise<void>;
@@ -922,12 +1044,19 @@ function RoutineStructurePanel({
   inlineMode,
   exercises,
   selectedItem,
+  draggingItemId,
+  draggingBlockId,
+  dragOverItemId,
   onSelectItem,
   onAddBlock,
   onAddItem,
   onBlockNameChangeLocal,
   onRenameBlock,
   onChangeBlockType,
+  onDragStartItem,
+  onDragOverItem,
+  onDropItem,
+  onDragEndItem,
   onCloseInlinePanel,
   onQuickPreview,
   onAddExerciseToRoutine,
@@ -1084,6 +1213,9 @@ function RoutineStructurePanel({
                     const isSelected = selectedItemId === it.id;
                     const name = it.exerciseName || it.title || "Ejercicio sin nombre";
 
+                    const isDropTarget =
+                      draggingBlockId === block.id && dragOverItemId === it.id;
+
                     // Construimos el resumen de parámetros
                     const summaryParts: string[] = [];
                     if (it.sets != null && it.reps != null) {
@@ -1103,57 +1235,86 @@ function RoutineStructurePanel({
                       : "Sin parámetros";
 
                     return (
-                      <button
+                      <div
                         key={it.id}
-                        type="button"
-                        className={`w-full rounded-lg border px-2.5 py-1.5 text-left text-[11px] ${
+                        className={`w-full rounded-lg border px-2.5 py-1.5 text-[11px] ${
                           isSelected
                             ? "border-emerald-500 bg-emerald-50"
                             : "border-gray-200 hover:border-emerald-400 hover:bg-emerald-50/40"
+                        } ${
+                          isDropTarget && !isSelected
+                            ? "ring-2 ring-emerald-300 ring-offset-1"
+                            : ""
                         }`}
-                        onClick={() => onSelectItem(block.id, it.id)}
                       >
-                        <div className="relative flex gap-3">
-                          {/* Columna timeline */}
-                          <div className="relative flex flex-col items-center">
-                            <div
-                              className={`h-2.5 w-2.5 rounded-full border-2 ${
-                                isSelected
-                                  ? "border-emerald-500 bg-emerald-500"
-                                  : "border-emerald-400 bg-white"
-                              }`}
-                            />
-                            {index < items.length - 1 && (
-                              <div className="absolute top-2.5 bottom-0 w-px bg-emerald-200" />
-                            )}
-                          </div>
-
-                          {/* Contenido del ejercicio */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className="text-[10px] font-semibold text-gray-400">
-                                  #{index + 1}
-                                </span>
-                                <span className="truncate font-medium text-gray-900">
-                                  {name}
-                                </span>
-                              </div>
-                              <span className="shrink-0 text-[10px] text-gray-400">
-                                #{it.order}
-                              </span>
-                            </div>
-
-                            <div
-                              className={`mt-0.5 text-[10px] ${
-                                hasParams ? "text-gray-500" : "text-gray-400"
-                              }`}
+                        <div className="flex gap-2 items-stretch">
+                          {/* Handle de drag (único draggable) */}
+                          {!readOnly && (
+                            <button
+                              type="button"
+                              className="flex items-center justify-center w-5 cursor-grab text-gray-400 hover:text-gray-600"
+                              draggable={true}
+                              onDragStart={(e) => onDragStartItem(block.id, it.id, e)}
+                              onDragOver={(e) => onDragOverItem(block.id, it.id, e)}
+                              onDrop={(e) => onDropItem(block.id, it.id, e)}
+                              onDragEnd={onDragEndItem}
                             >
-                              {summaryText}
+                              <span className="inline-flex flex-col gap-[2px]">
+                                <span className="h-[2px] w-3 bg-gray-300 rounded" />
+                                <span className="h-[2px] w-3 bg-gray-300 rounded" />
+                              </span>
+                            </button>
+                          )}
+
+                          {/* Botón para seleccionar / togglear editor */}
+                          <button
+                            type="button"
+                            className="flex-1 text-left"
+                            onClick={() => onSelectItem(block.id, it.id)}
+                          >
+                            <div className="relative flex gap-3">
+                              {/* Columna timeline */}
+                              <div className="relative flex flex-col items-center">
+                                <div
+                                  className={`h-2.5 w-2.5 rounded-full border-2 ${
+                                    isSelected
+                                      ? "border-emerald-500 bg-emerald-500"
+                                      : "border-emerald-400 bg-white"
+                                  }`}
+                                />
+                                {index < items.length - 1 && (
+                                  <div className="absolute top-2.5 bottom-0 w-px bg-emerald-200" />
+                                )}
+                              </div>
+
+                              {/* Contenido del ejercicio */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="text-[10px] font-semibold text-gray-400">
+                                      #{index + 1}
+                                    </span>
+                                    <span className="truncate font-medium text-gray-900">
+                                      {name}
+                                    </span>
+                                  </div>
+                                  <span className="shrink-0 text-[10px] text-gray-400">
+                                    #{it.order}
+                                  </span>
+                                </div>
+
+                                <div
+                                  className={`mt-0.5 text-[10px] ${
+                                    hasParams ? "text-gray-500" : "text-gray-400"
+                                  }`}
+                                >
+                                  {summaryText}
+                                </div>
+                              </div>
                             </div>
-                          </div>
+                          </button>
                         </div>
-                      </button>
+                      </div>
                     );
                   })
                 )}
@@ -1188,23 +1349,11 @@ function RoutineStructurePanel({
                   )}
 
                   {inlineMode === "edit" && selectedItem && (
-                    <RoutineItemEditor
+                    <RoutineItemEditorLite
                       key={selectedItem.id}
                       item={selectedItem}
-                      blocks={blocks}
                       onLocalChange={onLocalChangeItem}
                       onSaveField={onSaveItemField}
-                      onDelete={onDeleteItem}
-                      onDuplicate={onDuplicateItem}
-                      onMoveToBlock={onMoveItemToBlock}
-                      onShowVideo={({ id, name, videoUrl }) => {
-                        onQuickPreview({
-                          id,
-                          name,
-                          zone: null,
-                          videoUrl,
-                        });
-                      }}
                       readOnly={readOnly}
                     />
                   )}
@@ -1215,6 +1364,141 @@ function RoutineStructurePanel({
         })}
       </div>
     </section>
+  );
+}
+
+type RoutineItemEditorLiteProps = {
+  item: RoutineItemDTO | null;
+  onLocalChange: (itemId: string, partial: Partial<RoutineItemDTO>) => void;
+  onSaveField: (
+    itemId: string,
+    field: keyof RoutineItemDTO,
+    value: unknown,
+  ) => Promise<void>;
+  readOnly?: boolean;
+};
+
+function RoutineItemEditorLite({
+  item,
+  onLocalChange,
+  onSaveField,
+  readOnly,
+}: RoutineItemEditorLiteProps) {
+  const [pendingValues, setPendingValues] = useState<
+    Partial<Record<keyof RoutineItemDTO, string | number | null>>
+  >({});
+
+  if (!item) {
+    return (
+      <div className="rounded-lg border bg-gray-50 p-4 text-sm text-gray-500 flex items-center justify-center h-full">
+        Seleccioná un ejercicio en la columna izquierda para editar sus parámetros.
+      </div>
+    );
+  }
+
+  async function saveImmediate(field: keyof RoutineItemDTO, raw: string) {
+    if (!item) return;
+    let value: unknown = raw || null;
+    if (field === "sets" || field === "reps") {
+      value = raw ? Number(raw) : null;
+    }
+    setPendingValues((prev) => ({ ...prev, [field]: value as any }));
+    try {
+      await onSaveField(item.id, field, value);
+    } finally {
+      setPendingValues((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+    }
+  }
+
+  const handleBlur =
+    (field: keyof RoutineItemDTO) =>
+    async (e: FocusEvent<HTMLInputElement>) => {
+      await saveImmediate(field, e.target.value);
+    };
+
+  return (
+    <div className="rounded-lg border bg-white p-3 space-y-3 shadow-sm h-full">
+      <div className="space-y-1">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+          Parámetros básicos
+        </p>
+        <p className="text-sm font-medium text-gray-900">
+          {getItemDisplayName(item)}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-1">
+        <div className="space-y-0.5">
+          <label className="block text-[10px] text-gray-500">Series</label>
+          <input
+            type="number"
+            className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            defaultValue={item.sets ?? ""}
+            onChange={(e) =>
+              onLocalChange(item.id, { sets: e.target.value ? Number(e.target.value) : null })
+            }
+            onBlur={handleBlur("sets")}
+            disabled={readOnly}
+          />
+        </div>
+        <div className="space-y-0.5">
+          <label className="block text-[10px] text-gray-500">Reps</label>
+          <input
+            type="number"
+            className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            defaultValue={item.reps ?? ""}
+            onChange={(e) =>
+              onLocalChange(item.id, { reps: e.target.value ? Number(e.target.value) : null })
+            }
+            onBlur={handleBlur("reps")}
+            disabled={readOnly}
+          />
+        </div>
+        <div className="space-y-0.5">
+          <label className="block text-[10px] text-gray-500">Carga</label>
+          <input
+            type="text"
+            className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            defaultValue={item.load ?? ""}
+            onChange={(e) => {
+              onLocalChange(item.id, { load: e.target.value || null });
+            }}
+            onBlur={handleBlur("load")}
+            disabled={readOnly}
+          />
+        </div>
+        <div className="space-y-0.5">
+          <label className="block text-[10px] text-gray-500">Tempo</label>
+          <input
+            type="text"
+            className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            defaultValue={item.tempo ?? ""}
+            onChange={(e) => {
+              onLocalChange(item.id, { tempo: e.target.value || null });
+            }}
+            onBlur={handleBlur("tempo")}
+            disabled={readOnly}
+          />
+        </div>
+        <div className="space-y-0.5">
+          <label className="block text-[10px] text-gray-500">Descanso</label>
+          <input
+            type="text"
+            className="w-full rounded-md border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+            defaultValue={item.rest ?? ""}
+            onChange={(e) => {
+              onLocalChange(item.id, { rest: e.target.value || null });
+            }}
+            onBlur={handleBlur("rest")}
+            disabled={readOnly}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
 
