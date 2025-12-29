@@ -62,10 +62,20 @@ function getItemDisplayName(item: RoutineItemDTO): string {
   return item.exerciseName || item.title || "Ejercicio sin nombre";
 }
 
+function getCsrfHeader(): Record<string, string> {
+  if (typeof document === "undefined") return {};
+  // Para este proyecto usamos el esquema de CSRF validado por assertCsrf (X-CT-CSRF)
+  // En el middleware/csrf.test se acepta "1" o "ctb" como valores válidos.
+  return { "X-CT-CSRF": "1" };
+}
+
 async function patchJSON(url: string, body: unknown) {
   const res = await fetch(url, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...getCsrfHeader(),
+    },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(await res.text());
@@ -74,7 +84,10 @@ async function patchJSON(url: string, body: unknown) {
 async function postJSON(url: string, body: unknown) {
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...getCsrfHeader(),
+    },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(await res.text());
@@ -83,7 +96,10 @@ async function postJSON(url: string, body: unknown) {
 async function postJSONReturn<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...getCsrfHeader(),
+    },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(await res.text());
@@ -400,6 +416,9 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
       startTransition(() => router.refresh());
     } catch (err) {
       console.error(err);
+      // TEMP: mostrar error real de backend (p.ej. CSRF)
+      // eslint-disable-next-line no-alert
+      alert((err as any)?.message || String(err));
       setError("No se pudo actualizar el tipo de bloque");
     }
   }
