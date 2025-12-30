@@ -21,6 +21,10 @@ model Team {
   exercises          Exercise[]
   rivalReports       RivalReport[]
   deviceTokens       DeviceToken[]
+
+  // Planner por bloques
+  blockPlanWeeks BlockPlanWeek[]
+  blockCategories BlockCategory[]
 }
 
 // prisma/schema.prisma
@@ -156,6 +160,9 @@ model User {
   routineShares   RoutinePlayerShare[]
   resetTokens     PasswordResetToken[]
   deviceTokens    DeviceToken[]
+
+  // Planner por bloques (semanas creadas por este usuario)
+  createdBlockPlanWeeks BlockPlanWeek[]
 }
 
 model UserTeam {
@@ -401,6 +408,84 @@ model PlannerPrefs {
 
   @@unique([userId, teamId])
   @@index([teamId])
+}
+
+// ========= Planner por bloques =========
+
+model BlockPlanWeek {
+  id        String   @id @default(cuid())
+  teamId    String
+  weekStart DateTime
+  createdById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team    Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  days BlockPlanDay[]
+
+  @@unique([teamId, weekStart])
+  @@index([teamId, weekStart])
+}
+
+model BlockPlanDay {
+  id      String   @id @default(cuid())
+  weekId  String
+  date    DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  week   BlockPlanWeek @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  blocks BlockPlanBlock[]
+
+  @@unique([weekId, date])
+  @@index([date])
+  @@index([weekId, date])
+}
+
+model BlockCategory {
+  id      String   @id @default(cuid())
+  teamId  String
+  key     String
+  label   String
+  color   String?
+  order   Int
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team   Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  blocks BlockPlanBlock[]
+
+  @@unique([teamId, key])
+  @@index([teamId, order])
+  @@index([teamId, isActive])
+}
+
+model BlockPlanBlock {
+  id      String   @id @default(cuid())
+  dayId   String
+  categoryId String
+
+  order   Int
+  title   String?
+  notes   String?
+  intensity String?
+  linkedSessionId String?
+  linkedRoutineId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  day     BlockPlanDay @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  category BlockCategory @relation(fields: [categoryId], references: [id])
+
+  @@index([dayId, order])
+  @@index([categoryId])
 }
 
 // ========= Clínico =========
