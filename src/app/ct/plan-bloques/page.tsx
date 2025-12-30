@@ -140,6 +140,8 @@ export default function BlockPlannerPage() {
     [categories],
   );
 
+  const hasActiveCategories = activeCategories.length > 0;
+
   async function ensureWeekExists() {
     setLoading(true);
     setError(null);
@@ -261,6 +263,22 @@ export default function BlockPlannerPage() {
           </button>
         </div>
       </header>
+
+      {hasWeek && !hasActiveCategories && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs md:text-sm text-amber-900 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+          <span>
+            No hay categorías activas para esta semana. Podés inicializarlas con el set por defecto.
+          </span>
+          <button
+            type="button"
+            className="inline-flex items-center justify-center rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+            onClick={ensureWeekExists}
+            disabled={loading}
+          >
+            Inicializar categorías
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
