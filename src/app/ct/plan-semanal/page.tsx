@@ -12,22 +12,6 @@ import {
   toYYYYMMDDUTC,
   type SessionDTO,
 } from "@/lib/api/sessions";
-import { COL_LABEL_W, CONTENT_ROWS, DAY_MIN_W, META_ROWS, SESSION_NAME_ROW, type PaneKey, type TurnKey } from "@/lib/planner-constants";
-import {
-  DayFlagKind,
-  type DayFlag,
-  MICRO_CHOICES,
-  type MicroKey,
-  cellMarker,
-  dayFlagMarker,
-  isCellOf,
-  isDayFlag,
-  isMicrocycle,
-  microMarker,
-  parseDayFlagTitle,
-  parseMicroTitle,
-  buildDayFlagTitle,
-} from "@/lib/planner-markers";
 import PlannerActionsBar from "./PlannerActionsBar";
 import PlannerMatchLink from "@/components/PlannerMatchLink";
 import VideoPlayerModal from "@/components/training/VideoPlayerModal";
@@ -43,8 +27,89 @@ export default function Page() {
 }
 
 /* =========================================================
-   Utils
+   Constantes de layout (tamaños coherentes con dashboard)
 ========================================================= */
+const COL_LABEL_W = 120;
+const DAY_MIN_W = 120;
+
+/* =========================================================
+   Tipos y filas
+========================================================= */
+type TurnKey = "morning" | "afternoon";
+type PaneKey = "editor" | "tools";
+
+const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
+const SESSION_NAME_ROW = "NOMBRE SESIÓN";
+const META_ROWS = [SESSION_NAME_ROW, "LUGAR", "HORA", "VIDEO"] as const;
+
+/* ===== Estado del día (tipo) ===== */
+type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
+type DayFlag = { kind: DayFlagKind; rivalId?: string; rival?: string; logoUrl?: string };
+const DAYFLAG_TAG = "DAYFLAG";
+const dayFlagMarker = (turn: TurnKey) => `[${DAYFLAG_TAG}:${turn}]`;
+const isDayFlag = (s: SessionDTO, turn: TurnKey) =>
+  typeof s.description === "string" && s.description.startsWith(dayFlagMarker(turn));
+
+/** Compat: acepta formato nuevo (PARTIDO|id|name|logo) y viejo (PARTIDO|name|logo) */
+function parseDayFlagTitle(title?: string | null): DayFlag {
+  const raw = (title || "").trim();
+  if (!raw) return { kind: "NONE" };
+  const parts = raw.split("|").map((x) => (x || "").trim());
+  const kind = parts[0];
+  if (kind === "PARTIDO") {
+    if (parts.length >= 4) {
+      const [, id, name, logo] = parts;
+      return { kind: "PARTIDO", rivalId: id || undefined, rival: name || "", logoUrl: logo || "" };
+    }
+    if (parts.length >= 3) {
+      const [, name, logo] = parts;
+      return { kind: "PARTIDO", rival: name || "", logoUrl: logo || "" };
+    }
+    return { kind: "PARTIDO" };
+  }
+  if (kind === "LIBRE") return { kind: "LIBRE" };
+  return { kind: "NONE" };
+}
+
+function sanitizePipes(s?: string | null) {
+  const t = (s || "").trim();
+  return t.replace(/\|/g, "/");
+}
+
+/** Siempre guarda en formato NUEVO: PARTIDO|<id>|<name>|<logo> (vacíos si no hay) */
+function buildDayFlagTitle(df: DayFlag): string {
+  if (df.kind === "PARTIDO") {
+    const id = (df.rivalId || "").trim();
+    const name = sanitizePipes(df.rival);
+    const logo = sanitizePipes(df.logoUrl);
+    return `PARTIDO|${id}|${name}|${logo}`;
+  }
+  if (df.kind === "LIBRE") return "LIBRE";
+  return "";
+}
+
+/* ===== MICROCICLO (intensidad) ===== */
+type MicroKey = "" | "MD+1" | "MD+2" | "MD-4" | "MD-3" | "MD-2" | "MD-1" | "MD" | "DESCANSO";
+const MICRO_TAG = "MICRO";
+const MICRO_CHOICES: Array<{ value: MicroKey; colorClass: string }> = [
+  { value: "",        colorClass: "" },
+  { value: "MD+1",    colorClass: "bg-blue-50" },
+  { value: "MD+2",    colorClass: "bg-yellow-50" },
+  { value: "MD-4",    colorClass: "bg-red-50" },
+  { value: "MD-3",    colorClass: "bg-orange-50" },
+  { value: "MD-2",    colorClass: "bg-green-50" },
+  { value: "MD-1",    colorClass: "bg-gray-50" },
+  { value: "MD",      colorClass: "bg-amber-50" },
+  { value: "DESCANSO",colorClass: "bg-gray-100" },
+];
+const microMarker = (turn: TurnKey) => `[${MICRO_TAG}:${turn}]`;
+const isMicrocycle = (s: SessionDTO, turn: TurnKey) =>
+  typeof s.description === "string" && s.description.startsWith(microMarker(turn));
+function parseMicroTitle(title?: string | null): MicroKey {
+  const t = (title || "").trim();
+  if (!t) return "";
+  return (MICRO_CHOICES.find((c) => c.value === t)?.value || "") as MicroKey;
+}
 
 /* =========================================================
    Utils
@@ -67,6 +132,12 @@ function computeISOForSlot(dayYmd: string, turn: TurnKey) {
   const base = new Date(`${dayYmd}T00:00:00.000Z`);
   base.setUTCHours(turn === "morning" ? 9 : 15, 0, 0, 0);
   return base.toISOString();
+}
+function cellMarker(turn: TurnKey, row: string) {
+  return `[GRID:${turn}:${row}]`;
+}
+function isCellOf(s: SessionDTO, turn: TurnKey, row: string) {
+  return typeof s.description === "string" && s.description.startsWith(cellMarker(turn, row));
 }
 function parseVideoValue(v: string | null | undefined): { label: string; url: string } {
   const raw = (v || "").trim();
