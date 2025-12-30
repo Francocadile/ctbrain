@@ -220,8 +220,6 @@ export default function BlockPlannerPage() {
           body: JSON.stringify(payload),
         },
       );
-
-      await loadWeekAndCategories(baseMonday);
     } catch (e: any) {
       console.error(e);
       alert(e?.message || "No se pudo actualizar el bloque");
@@ -339,7 +337,7 @@ export default function BlockPlannerPage() {
                           {/* Header del accordion */}
                           <button
                             type="button"
-                            className="flex items-center justify-between w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs hover:bg-gray-100"
+                            className="flex h-9 items-center justify-between w-full rounded-md border border-gray-200 bg-gray-50 px-2 text-xs hover:bg-gray-100"
                             onClick={() =>
                               setOpenBlockByDay((prev) => ({
                                 ...prev,
@@ -396,7 +394,7 @@ export default function BlockPlannerPage() {
                               />
 
                               <textarea
-                                className="min-h-[70px] w-full rounded-md border px-1.5 py-1 text-xs bg-white"
+                                className="min-h-[60px] w-full rounded-md border px-1.5 py-1 text-xs bg-white"
                                 placeholder="Notas..."
                                 defaultValue={block.notes ?? ""}
                                 onBlur={(e) =>
