@@ -175,6 +175,27 @@ export async function POST(req: Request) {
       });
     }
 
+    // Seed automático de categorías por defecto si el equipo aún no tiene ninguna
+    const categoriesCount = await prisma.blockCategory.count({
+      where: { teamId: team.id },
+    });
+
+    if (categoriesCount === 0) {
+      await prisma.blockCategory.createMany({
+        data: [
+          { teamId: team.id, key: "ESPECIFICO", label: "Específico", order: 1, isActive: true, color: null },
+          { teamId: team.id, key: "CONDITIONING", label: "Conditioning", order: 2, isActive: true, color: null },
+          { teamId: team.id, key: "TOP_SPEED", label: "Top Speed", order: 3, isActive: true, color: null },
+          { teamId: team.id, key: "COD", label: "COD", order: 4, isActive: true, color: null },
+          { teamId: team.id, key: "FUERZA", label: "Fuerza", order: 5, isActive: true, color: null },
+          { teamId: team.id, key: "TECNICA", label: "Técnica", order: 6, isActive: true, color: null },
+          { teamId: team.id, key: "RECUPERACION", label: "Recuperación", order: 7, isActive: true, color: null },
+          { teamId: team.id, key: "OTRO", label: "Otro", order: 8, isActive: true, color: null },
+        ],
+        skipDuplicates: true,
+      });
+    }
+
     const fullWeek = await prisma.blockPlanWeek.findUnique({
       where: { id: week.id },
       include: {
