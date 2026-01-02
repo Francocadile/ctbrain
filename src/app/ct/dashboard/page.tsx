@@ -290,33 +290,22 @@ function DashboardSemanaInner() {
               {humanDayUTC(ymd)}
             </div>
 
-            {/* Fila 1, col 2: MicroBadge solamente */}
+            {/* Fila 1, col 2: MicroBadge (y cualquier badge adicional de micro) */}
             <div className="row-start-1 col-start-2 flex items-center justify-end gap-2 min-w-0">
               <MicroBadge ymd={ymd} />
             </div>
 
-            {/* Fila 2, col 1: info de partido (si aplica) */}
-            <div className="row-start-2 col-start-1 flex items-center gap-1 min-w-0">
-              {flag.kind === "PARTIDO" ? (
-                <div className="flex items-center gap-1 text-[9px] text-amber-900 max-w-full min-w-0">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {flag.logoUrl ? (
-                    <img
-                      src={flag.logoUrl}
-                      alt="Logo rival"
-                      className="w-[14px] h-[14px] object-contain rounded-full bg-white flex-shrink-0"
-                    />
-                  ) : null}
-                  <span className="font-semibold flex-shrink-0">PARTIDO</span>
-                  {flag.rival ? (
-                    <span className="truncate max-w-[120px]">vs {flag.rival}</span>
-                  ) : null}
-                </div>
+            {/* Fila 2: a la derecha, escudo + Plan de partido (sólo PARTIDO); en días normales, link sesión */}
+            <div className="row-start-2 col-start-2 flex items-center justify-end gap-2 min-w-0">
+              {flag.kind === "PARTIDO" && flag.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={flag.logoUrl}
+                  alt="Logo rival"
+                  className="w-6 h-6 object-contain rounded-full bg-white flex-shrink-0"
+                />
               ) : null}
-            </div>
 
-            {/* Fila 2, col 2: link a sesión / plan de partido */}
-            <div className="row-start-2 col-start-2 flex items-center justify-end min-w-0">
               {flag.kind === "PARTIDO" ? (
                 <PlannerMatchLink
                   rivalId={flag.rivalId}
