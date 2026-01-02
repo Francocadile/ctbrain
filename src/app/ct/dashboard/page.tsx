@@ -279,10 +279,10 @@ function DashboardSemanaInner() {
 
     return (
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        {/* Header: grid 2x2 con altura fija para todos los días */}
+        {/* Header: grid 2x2, altura mínima DAY_HEADER_H y expansión sólo cuando es necesario (p.ej. PARTIDO) */}
         <div
           className="px-2 border-b bg-gray-50"
-          style={{ height: DAY_HEADER_H, minHeight: DAY_HEADER_H }}
+          style={{ minHeight: DAY_HEADER_H }}
         >
           <div className="grid grid-rows-2 grid-cols-[auto,1fr] gap-x-2 gap-y-1 h-full">
             {/* Fila 1, col 1: día/fecha */}
