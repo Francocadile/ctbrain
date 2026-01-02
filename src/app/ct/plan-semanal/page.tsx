@@ -309,13 +309,37 @@ function PlanSemanalInner() {
     const title = value || "";
     try {
       if (!value) {
-        if (existing) await deleteSession(existing.id);
-        await loadWeek(base);
+        if (existing) {
+          await deleteSession(existing.id);
+          setDaysMap((prev) => {
+            const prevDay = prev[dayYmd] || [];
+            return {
+              ...prev,
+              [dayYmd]: prevDay.filter((s) => s.id !== existing.id),
+            };
+          });
+        }
         return;
       }
-      if (!existing) await createSession({ title, description: desc, date: iso, type: "GENERAL" });
-      else await updateSession(existing.id, { title, description: desc, date: iso });
-      await loadWeek(base);
+      if (!existing) {
+        const { data: created } = await createSession({ title, description: desc, date: iso, type: "GENERAL" });
+        setDaysMap((prev) => {
+          const prevDay = prev[dayYmd] || [];
+          return {
+            ...prev,
+            [dayYmd]: [...prevDay, created],
+          };
+        });
+      } else {
+        const { data: updated } = await updateSession(existing.id, { title, description: desc, date: iso });
+        setDaysMap((prev) => {
+          const prevDay = prev[dayYmd] || [];
+          return {
+            ...prev,
+            [dayYmd]: prevDay.map((s) => (s.id === existing.id ? updated : s)),
+          };
+        });
+      }
     } catch (e: any) {
       console.error(e);
       alert(e?.message || "No se pudo actualizar la intensidad");
