@@ -273,60 +273,61 @@ function DashboardSemanaInner() {
       </div>
     );
 
-    const PartidoPanel = () => (
-      <div className="flex flex-col items-center justify-center gap-2">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        {flag.logoUrl ? (
-          <img src={flag.logoUrl} alt="Logo rival" className="max-h-[110px] object-contain" />
-        ) : null}
-        <div className="text-[13px] font-semibold tracking-wide">PARTIDO</div>
-        {flag.rival ? <div className="text-[12px]">vs <b>{flag.rival}</b></div> : null}
-      </div>
-    );
-
     const LibrePanel = () => (
       <div className="text-gray-700 font-semibold tracking-wide text-[14px]">LIBRE</div>
     );
 
     return (
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        {/* Header compacto */}
+        {/* Header compacto con chip de partido cuando aplica */}
         <div className="px-2 py-1 border-b bg-gray-50" style={{ height: DAY_HEADER_H }}>
           <div className="flex items-center justify-between min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-wide">
-              {humanDayUTC(ymd)}
+            <div className="flex items-center gap-1 min-w-0">
+              <div className="text-[10px] font-semibold uppercase tracking-wide">
+                {humanDayUTC(ymd)}
+              </div>
+              {flag.kind === "PARTIDO" && (
+                <div className="flex items-center gap-1 rounded-full border px-1.5 py-0.5 bg-amber-50 border-amber-200 text-[9px] text-amber-900">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {flag.logoUrl ? (
+                    <img
+                      src={flag.logoUrl}
+                      alt="Logo rival"
+                      className="w-[14px] h-[14px] object-contain rounded-full bg-white"
+                    />
+                  ) : null}
+                  <span className="font-semibold">Partido</span>
+                  {flag.rival ? (
+                    <span className="max-w-[80px] truncate">vs {flag.rival}</span>
+                  ) : null}
+                </div>
+              )}
             </div>
-          </div>
-
-          <div
-            className={`mt-1 flex items-center ${
-              flag.kind === "LIBRE" ? "justify-start" : "justify-between"
-            } gap-2`}
-          >
-            <MicroBadge ymd={ymd} />
-            {flag.kind === "LIBRE" ? null : flag.kind === "PARTIDO" ? (
-              <PlannerMatchLink
-                rivalId={flag.rivalId}
-                rivalName={flag.rival || ""}
-                label="Plan de partido"
-              />
-            ) : (
-              <a
-                href={headerHref}
-                className="text-[9px] rounded border px-1.5 py-0.5 hover:bg-gray-100 whitespace-nowrap"
-              >
-                sesión
-              </a>
-            )}
+            <div
+              className={`flex items-center ${
+                flag.kind === "LIBRE" ? "justify-end" : "justify-end"
+              } gap-2`}
+            >
+              <MicroBadge ymd={ymd} />
+              {flag.kind === "LIBRE" ? null : flag.kind === "PARTIDO" ? (
+                <PlannerMatchLink
+                  rivalId={flag.rivalId}
+                  rivalName={flag.rival || ""}
+                  label="Plan de partido"
+                />
+              ) : (
+                <a
+                  href={headerHref}
+                  className="text-[9px] rounded border px-1.5 py-0.5 hover:bg-gray-100 whitespace-nowrap"
+                >
+                  sesión
+                </a>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="p-2 space-y-2">
-          {flag.kind === "PARTIDO" && (
-            <SinglePanel>
-              <PartidoPanel />
-            </SinglePanel>
-          )}
+        <div className="p-2">
           {flag.kind === "LIBRE" && (
             <SinglePanel>
               <div className="text-gray-700 font-semibold tracking-wide text-[14px]">
@@ -334,7 +335,7 @@ function DashboardSemanaInner() {
               </div>
             </SinglePanel>
           )}
-          {/* En PARTIDO también mostramos la planificación normal */}
+          {/* En PARTIDO y días normales mostramos la misma planificación */}
           {(flag.kind === "NONE" || flag.kind === "PARTIDO") && <NormalBody />}
         </div>
       </div>
