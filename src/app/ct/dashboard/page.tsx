@@ -298,12 +298,14 @@ function DashboardSemanaInner() {
             {/* Fila 2: a la derecha, escudo + Plan de partido (sólo PARTIDO); en días normales, link sesión */}
             <div className="row-start-2 col-start-2 flex items-center justify-end gap-2 min-w-0">
               {flag.kind === "PARTIDO" && flag.logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={flag.logoUrl}
-                  alt="Logo rival"
-                  className="w-6 h-6 object-contain rounded-full bg-white flex-shrink-0"
-                />
+                <div className="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center flex-shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={flag.logoUrl}
+                    alt="Escudo rival"
+                    className="w-6 h-6 object-contain flex-shrink-0"
+                  />
+                </div>
               ) : null}
 
               {flag.kind === "PARTIDO" ? (
