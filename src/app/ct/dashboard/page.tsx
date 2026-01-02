@@ -279,17 +279,16 @@ function DashboardSemanaInner() {
 
     return (
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        {/* Header: una fila para día/chips y una fila extra sólo en PARTIDO para el chip de partido */}
-        <div
-          className={`px-2 border-b bg-gray-50 ${flag.kind === "PARTIDO" ? "py-2" : "py-1"}`}
-          style={{ height: flag.kind === "PARTIDO" ? DAY_HEADER_H + 10 : DAY_HEADER_H }}
-        >
-          {/* Fila 1: día/fecha + chips (micro + sesión / plan partido) */}
-          <div className="flex items-center justify-between min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-wide">
+        {/* Header con grid: siempre 2 filas (día/fecha + chips / partido) */}
+        <div className="px-2 py-2 border-b bg-gray-50">
+          <div className="grid grid-cols-[auto,1fr] gap-x-2 gap-y-1">
+            {/* Columna izquierda: día/fecha, nunca invadida */}
+            <div className="text-[10px] font-semibold uppercase tracking-wide flex-shrink-0">
               {humanDayUTC(ymd)}
             </div>
-            <div className="flex items-center justify-end gap-2 flex-wrap">
+
+            {/* Columna derecha, fila 1: chips (micro + sesión / plan partido) */}
+            <div className="flex items-center justify-end gap-2 min-w-0">
               <MicroBadge ymd={ymd} />
               {flag.kind === "LIBRE" ? null : flag.kind === "PARTIDO" ? (
                 <PlannerMatchLink
@@ -306,27 +305,29 @@ function DashboardSemanaInner() {
                 </a>
               )}
             </div>
-          </div>
 
-          {/* Fila 2: sólo PARTIDO, chip compacto con escudo + texto */}
-          {flag.kind === "PARTIDO" && (
-            <div className="mt-1 flex items-center justify-end gap-1 min-w-0">
-              <div className="flex items-center gap-1 rounded-full border px-1.5 py-0.5 bg-amber-50 border-amber-200 text-[9px] text-amber-900 max-w-full">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                {flag.logoUrl ? (
-                  <img
-                    src={flag.logoUrl}
-                    alt="Logo rival"
-                    className="w-[14px] h-[14px] object-contain rounded-full bg-white flex-shrink-0"
-                  />
-                ) : null}
-                <span className="font-semibold flex-shrink-0">Partido</span>
-                {flag.rival ? (
-                  <span className="truncate max-w-[120px]">vs {flag.rival}</span>
-                ) : null}
-              </div>
+            {/* Columna derecha, fila 2: placeholder siempre, contenido sólo en PARTIDO */}
+            <div className="col-start-2 flex items-center justify-end min-w-0">
+              {flag.kind === "PARTIDO" ? (
+                <div className="flex items-center gap-1 rounded-full border px-1.5 py-0.5 bg-amber-50 border-amber-200 text-[9px] text-amber-900 max-w-full">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {flag.logoUrl ? (
+                    <img
+                      src={flag.logoUrl}
+                      alt="Logo rival"
+                      className="w-[14px] h-[14px] object-contain rounded-full bg-white flex-shrink-0"
+                    />
+                  ) : null}
+                  <span className="font-semibold flex-shrink-0">PARTIDO</span>
+                  {flag.rival ? (
+                    <span className="truncate max-w-[140px]">vs {flag.rival}</span>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="h-[16px]" />
+              )}
             </div>
-          )}
+          </div>
         </div>
 
         <div className="p-2">
