@@ -279,35 +279,17 @@ function DashboardSemanaInner() {
 
     return (
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        {/* Header compacto con chip de partido cuando aplica */}
-        <div className="px-2 py-1 border-b bg-gray-50" style={{ height: DAY_HEADER_H }}>
+        {/* Header: una fila para día/chips y una fila extra sólo en PARTIDO para el chip de partido */}
+        <div
+          className={`px-2 border-b bg-gray-50 ${flag.kind === "PARTIDO" ? "py-2" : "py-1"}`}
+          style={{ height: flag.kind === "PARTIDO" ? DAY_HEADER_H + 10 : DAY_HEADER_H }}
+        >
+          {/* Fila 1: día/fecha + chips (micro + sesión / plan partido) */}
           <div className="flex items-center justify-between min-w-0">
-            <div className="flex items-center gap-1 min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-wide">
-                {humanDayUTC(ymd)}
-              </div>
-              {flag.kind === "PARTIDO" && (
-                <div className="flex items-center gap-1 rounded-full border px-1.5 py-0.5 bg-amber-50 border-amber-200 text-[9px] text-amber-900">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {flag.logoUrl ? (
-                    <img
-                      src={flag.logoUrl}
-                      alt="Logo rival"
-                      className="w-[14px] h-[14px] object-contain rounded-full bg-white"
-                    />
-                  ) : null}
-                  <span className="font-semibold">Partido</span>
-                  {flag.rival ? (
-                    <span className="max-w-[80px] truncate">vs {flag.rival}</span>
-                  ) : null}
-                </div>
-              )}
+            <div className="text-[10px] font-semibold uppercase tracking-wide">
+              {humanDayUTC(ymd)}
             </div>
-            <div
-              className={`flex items-center ${
-                flag.kind === "LIBRE" ? "justify-end" : "justify-end"
-              } gap-2`}
-            >
+            <div className="flex items-center justify-end gap-2 flex-wrap">
               <MicroBadge ymd={ymd} />
               {flag.kind === "LIBRE" ? null : flag.kind === "PARTIDO" ? (
                 <PlannerMatchLink
@@ -325,6 +307,26 @@ function DashboardSemanaInner() {
               )}
             </div>
           </div>
+
+          {/* Fila 2: sólo PARTIDO, chip compacto con escudo + texto */}
+          {flag.kind === "PARTIDO" && (
+            <div className="mt-1 flex items-center justify-end gap-1 min-w-0">
+              <div className="flex items-center gap-1 rounded-full border px-1.5 py-0.5 bg-amber-50 border-amber-200 text-[9px] text-amber-900 max-w-full">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {flag.logoUrl ? (
+                  <img
+                    src={flag.logoUrl}
+                    alt="Logo rival"
+                    className="w-[14px] h-[14px] object-contain rounded-full bg-white flex-shrink-0"
+                  />
+                ) : null}
+                <span className="font-semibold flex-shrink-0">Partido</span>
+                {flag.rival ? (
+                  <span className="truncate max-w-[120px]">vs {flag.rival}</span>
+                ) : null}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="p-2">
