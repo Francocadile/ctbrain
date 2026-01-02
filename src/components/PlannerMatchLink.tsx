@@ -97,13 +97,15 @@ export default function PlannerMatchLink({
     <a
       href={href}
       className={clsx(
-        "inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] hover:bg-gray-100 whitespace-nowrap",
+        "inline-flex items-center rounded border px-1.5 py-0.5 text-[11px] hover:bg-gray-100",
         className
       )}
       title={resolved?.name || cleanName || "Plan de partido"}
       aria-busy={loading}
     >
-      {label}
+      <span className="whitespace-pre-line leading-[1.05] text-[10px]">
+        {label}
+      </span>
     </a>
   );
 }

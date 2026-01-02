@@ -300,22 +300,22 @@ function DashboardSemanaInner() {
 
           {/* Fila 2: sólo PARTIDO → escudo izquierda / Plan de partido derecha */}
           {isMatchDay && (
-            <div className="flex items-center justify-between gap-2 min-w-0">
-              {/* Escudo: entero, sin recorte */}
-              <div className="flex items-center">
+            <div className="grid grid-cols-[auto,1fr] items-center gap-2 min-w-0">
+              {/* Escudo: entero, sin recorte, centrado en su caja */}
+              <div className="w-7 h-7 flex items-center justify-center">
                 {flag.logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={flag.logoUrl}
                     alt="Escudo rival"
-                    className="w-7 h-7 object-contain flex-shrink-0"
+                    className="w-7 h-7 object-contain"
                   />
                 ) : null}
               </div>
 
-              {/* Botón Plan de partido: entero, sin recorte, sin wrap extraño */}
-              <div className="flex justify-end min-w-0 flex-shrink-0">
-                <div className="flex-shrink-0 whitespace-nowrap">
+              {/* Botón Plan de partido en dos líneas, sin corte */}
+              <div className="min-w-0 flex justify-end">
+                <div className="max-w-[110px]">
                   <PlannerMatchLink
                     rivalId={flag.rivalId}
                     rivalName={flag.rival || ""}
