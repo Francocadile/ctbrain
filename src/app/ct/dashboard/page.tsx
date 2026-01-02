@@ -319,7 +319,7 @@ function DashboardSemanaInner() {
                   <PlannerMatchLink
                     rivalId={flag.rivalId}
                     rivalName={flag.rival || ""}
-                    label="Plan de partido"
+                    label={"Plan de\npartido"}
                   />
                 </div>
               </div>
