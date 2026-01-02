@@ -279,17 +279,45 @@ function DashboardSemanaInner() {
 
     return (
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        {/* Header simple: día/fecha + MicroBadge (y chips de micro) */}
+        {/* Header: una fila, tres zonas (fecha | micro | escudo+plan partido) */}
         <div
           className="px-2 border-b bg-gray-50"
-          style={{ minHeight: DAY_HEADER_H }}
+          style={{ height: DAY_HEADER_H, minHeight: DAY_HEADER_H }}
         >
-          <div className="flex items-center justify-between gap-2 min-w-0 h-full">
+          <div className="grid grid-cols-[auto,auto,1fr,auto] items-center gap-x-2 min-w-0 h-full">
+            {/* Fecha (izquierda) */}
             <div className="text-[10px] font-semibold uppercase tracking-wide flex-shrink-0 min-w-0 truncate">
               {humanDayUTC(ymd)}
             </div>
-            <div className="flex items-center justify-end gap-2 min-w-0">
+
+            {/* Micro / intensidad (centro-izquierda) */}
+            <div className="flex items-center gap-1 flex-shrink-0 min-w-0">
               <MicroBadge ymd={ymd} />
+            </div>
+
+            {/* Spacer (centro-derecha) */}
+            <div className="min-w-0" />
+
+            {/* Derecha: sólo PARTIDO → escudo + Plan de partido; otros días, sin cambios visuales */}
+            <div className="flex items-center justify-end gap-1 min-w-0">
+              {flag.kind === "PARTIDO" && flag.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={flag.logoUrl}
+                  alt="Escudo rival"
+                  className="w-[22px] h-[22px] object-contain flex-shrink-0"
+                />
+              ) : null}
+
+              {flag.kind === "PARTIDO" ? (
+                <div className="min-w-0">
+                  <PlannerMatchLink
+                    rivalId={flag.rivalId}
+                    rivalName={flag.rival || ""}
+                    label="Plan de partido"
+                  />
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -301,25 +329,6 @@ function DashboardSemanaInner() {
                 {librePill}
               </div>
             </SinglePanel>
-          )}
-
-          {/* Bloque partido: escudo + botón de plan de partido, sólo en PARTIDO */}
-          {flag.kind === "PARTIDO" && (
-            <div className="mb-2 flex flex-col items-center gap-1">
-              {flag.logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={flag.logoUrl}
-                  alt="Escudo rival"
-                  className="w-12 h-12 object-contain"
-                />
-              ) : null}
-              <PlannerMatchLink
-                rivalId={flag.rivalId}
-                rivalName={flag.rival || ""}
-                label="Plan de partido"
-              />
-            </div>
           )}
 
           {/* En PARTIDO y días normales mostramos la misma planificación */}
