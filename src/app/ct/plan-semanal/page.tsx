@@ -452,12 +452,26 @@ function PlanSemanalInner() {
 
     if (row === "HORA") {
       const hhmm = /^[0-9]{2}:[0-9]{2}$/.test(value || "") ? value : "";
+      const [local, setLocal] = useState(hhmm || "");
+      useEffect(() => {
+        setLocal(hhmm || "");
+      }, [hhmm, k]);
+
+      const commit = () => {
+        const v = (local || "").trim();
+        stageCell(dayYmd, turn, row, v);
+      };
+
       return (
         <input
           type="time"
           className="h-8 w-full rounded-md border px-2 text-xs"
-          value={hhmm}
-          onChange={(e) => stageCell(dayYmd, turn, row, e.target.value)}
+          value={local}
+          onChange={(e) => setLocal(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
         />
       );
     }

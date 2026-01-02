@@ -321,7 +321,7 @@ function DashboardSemanaInner() {
           </div>
         </div>
 
-        <div className="p-2">
+        <div className="p-2 space-y-2">
           {flag.kind === "PARTIDO" && (
             <SinglePanel>
               <PartidoPanel />
@@ -334,7 +334,8 @@ function DashboardSemanaInner() {
               </div>
             </SinglePanel>
           )}
-          {flag.kind === "NONE" && <NormalBody />}
+          {/* En PARTIDO también mostramos la planificación normal */}
+          {(flag.kind === "NONE" || flag.kind === "PARTIDO") && <NormalBody />}
         </div>
       </div>
     );
