@@ -246,6 +246,7 @@ function DashboardSemanaInner() {
     const flag = getDayFlag(ymd, activeTurn);
     const headerHref = `/ct/sessions/by-day/${ymd}/${activeTurn}`;
     const librePill = activeTurn === "morning" ? "Mañana libre" : "Tarde libre";
+    const isMatchDay = flag.kind === "PARTIDO";
 
     const NormalBody = () => (
       <div className="grid gap-[6px]" style={{ gridTemplateRows: `repeat(4, ${ROW_H}px)` }}>
@@ -279,47 +280,51 @@ function DashboardSemanaInner() {
 
     return (
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        {/* Header: una fila, tres zonas (fecha | micro | escudo+plan partido) */}
+        {/* Header: 1 fila para días normales/LIBRE, 2 filas sólo en PARTIDO */}
         <div
-          className="px-2 border-b bg-gray-50"
-          style={{ height: DAY_HEADER_H, minHeight: DAY_HEADER_H }}
+          className="px-2 border-b bg-gray-50 flex flex-col justify-center gap-1"
+          style={{
+            height: isMatchDay ? DAY_HEADER_H + 22 : DAY_HEADER_H,
+            minHeight: isMatchDay ? DAY_HEADER_H + 22 : DAY_HEADER_H,
+          }}
         >
-          <div className="grid grid-cols-[auto,auto,1fr,auto] items-center gap-x-2 min-w-0 h-full">
-            {/* Fecha (izquierda) */}
+          {/* Fila 1: siempre fecha + MicroBadge (igual en todos los días) */}
+          <div className="flex items-center justify-between gap-2 min-w-0">
             <div className="text-[10px] font-semibold uppercase tracking-wide flex-shrink-0 min-w-0 truncate">
               {humanDayUTC(ymd)}
             </div>
-
-            {/* Micro / intensidad (centro-izquierda) */}
             <div className="flex items-center gap-1 flex-shrink-0 min-w-0">
               <MicroBadge ymd={ymd} />
             </div>
+          </div>
 
-            {/* Spacer (centro-derecha) */}
-            <div className="min-w-0" />
+          {/* Fila 2: sólo PARTIDO → escudo izquierda / Plan de partido derecha */}
+          {isMatchDay && (
+            <div className="flex items-center justify-between gap-2 min-w-0">
+              {/* Escudo: entero, sin recorte */}
+              <div className="flex items-center">
+                {flag.logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={flag.logoUrl}
+                    alt="Escudo rival"
+                    className="w-7 h-7 object-contain flex-shrink-0"
+                  />
+                ) : null}
+              </div>
 
-            {/* Derecha: sólo PARTIDO → escudo + Plan de partido; otros días, sin cambios visuales */}
-            <div className="flex items-center justify-end gap-1 min-w-0">
-              {flag.kind === "PARTIDO" && flag.logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={flag.logoUrl}
-                  alt="Escudo rival"
-                  className="w-[22px] h-[22px] object-contain flex-shrink-0"
-                />
-              ) : null}
-
-              {flag.kind === "PARTIDO" ? (
-                <div className="min-w-0">
+              {/* Botón Plan de partido: entero, sin recorte, sin wrap extraño */}
+              <div className="flex justify-end min-w-0 flex-shrink-0">
+                <div className="flex-shrink-0 whitespace-nowrap">
                   <PlannerMatchLink
                     rivalId={flag.rivalId}
                     rivalName={flag.rival || ""}
                     label="Plan de partido"
                   />
                 </div>
-              ) : null}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="p-2">
