@@ -22,7 +22,15 @@ type TurnKey = "morning" | "afternoon";
 const ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 
 const SESSION_NAME_ROW = "NOMBRE SESIÓN" as const;
-const META_ROWS = [SESSION_NAME_ROW, "LUGAR", "HORA", "VIDEO"] as const;
+const META_ROWS = [
+  SESSION_NAME_ROW,
+  "TIPO",
+  "INTENSIDAD",
+  "LUGAR",
+  "HORA",
+  "VIDEO",
+  "RIVAL",
+] as const;
 
 /* =========================================================
    Flags día
@@ -201,6 +209,34 @@ function DashboardSemanaInner() {
 
   // META (solo lectura)
   function ReadonlyMetaCell({ ymd, row }: { ymd: string; row: (typeof META_ROWS)[number] }) {
+    // Filas derivadas que no vienen del GRID editor
+    if (row === "TIPO") {
+      const flag = getDayFlag(ymd, activeTurn);
+      let text: string;
+      if (flag.kind === "PARTIDO") text = "Partido";
+      else if (flag.kind === "LIBRE") text = "Libre";
+      else text = "—";
+      return (
+        <div className="h-6 text-[11px] px-1 flex items-center truncate">{text}</div>
+      );
+    }
+
+    if (row === "INTENSIDAD") {
+      const micro = getMicro(ymd, activeTurn);
+      const text = micro || "—";
+      return (
+        <div className="h-6 text-[11px] px-1 flex items-center truncate">{text}</div>
+      );
+    }
+
+    if (row === "RIVAL") {
+      const flag = getDayFlag(ymd, activeTurn);
+      const text = flag.kind === "PARTIDO" && flag.rival ? flag.rival : "—";
+      return (
+        <div className="h-6 text-[11px] px-1 flex items-center truncate">{text}</div>
+      );
+    }
+
     const s = findCell(ymd, activeTurn, row);
     const text = (s?.title || "").trim();
     if (!text)
