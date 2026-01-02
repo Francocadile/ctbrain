@@ -279,37 +279,26 @@ function DashboardSemanaInner() {
 
     return (
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        {/* Header con grid: siempre 2 filas (día/fecha + chips / partido) */}
-        <div className="px-2 py-2 border-b bg-gray-50">
-          <div className="grid grid-cols-[auto,1fr] gap-x-2 gap-y-1">
-            {/* Columna izquierda: día/fecha, nunca invadida */}
-            <div className="text-[10px] font-semibold uppercase tracking-wide flex-shrink-0">
+        {/* Header: grid 2x2 con altura fija para todos los días */}
+        <div
+          className="px-2 border-b bg-gray-50"
+          style={{ height: DAY_HEADER_H, minHeight: DAY_HEADER_H }}
+        >
+          <div className="grid grid-rows-2 grid-cols-[auto,1fr] gap-x-2 gap-y-1 h-full">
+            {/* Fila 1, col 1: día/fecha */}
+            <div className="row-start-1 col-start-1 text-[10px] font-semibold uppercase tracking-wide flex-shrink-0 min-w-0 truncate">
               {humanDayUTC(ymd)}
             </div>
 
-            {/* Columna derecha, fila 1: chips (micro + sesión / plan partido) */}
-            <div className="flex items-center justify-end gap-2 min-w-0">
+            {/* Fila 1, col 2: MicroBadge solamente */}
+            <div className="row-start-1 col-start-2 flex items-center justify-end gap-2 min-w-0">
               <MicroBadge ymd={ymd} />
-              {flag.kind === "LIBRE" ? null : flag.kind === "PARTIDO" ? (
-                <PlannerMatchLink
-                  rivalId={flag.rivalId}
-                  rivalName={flag.rival || ""}
-                  label="Plan de partido"
-                />
-              ) : (
-                <a
-                  href={headerHref}
-                  className="text-[9px] rounded border px-1.5 py-0.5 hover:bg-gray-100 whitespace-nowrap"
-                >
-                  sesión
-                </a>
-              )}
             </div>
 
-            {/* Columna derecha, fila 2: placeholder siempre, contenido sólo en PARTIDO */}
-            <div className="col-start-2 flex items-center justify-end min-w-0">
+            {/* Fila 2, col 1: info de partido (si aplica) */}
+            <div className="row-start-2 col-start-1 flex items-center gap-1 min-w-0">
               {flag.kind === "PARTIDO" ? (
-                <div className="flex items-center gap-1 rounded-full border px-1.5 py-0.5 bg-amber-50 border-amber-200 text-[9px] text-amber-900 max-w-full">
+                <div className="flex items-center gap-1 text-[9px] text-amber-900 max-w-full min-w-0">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   {flag.logoUrl ? (
                     <img
@@ -320,12 +309,28 @@ function DashboardSemanaInner() {
                   ) : null}
                   <span className="font-semibold flex-shrink-0">PARTIDO</span>
                   {flag.rival ? (
-                    <span className="truncate max-w-[140px]">vs {flag.rival}</span>
+                    <span className="truncate max-w-[120px]">vs {flag.rival}</span>
                   ) : null}
                 </div>
-              ) : (
-                <div className="h-[16px]" />
-              )}
+              ) : null}
+            </div>
+
+            {/* Fila 2, col 2: link a sesión / plan de partido */}
+            <div className="row-start-2 col-start-2 flex items-center justify-end min-w-0">
+              {flag.kind === "PARTIDO" ? (
+                <PlannerMatchLink
+                  rivalId={flag.rivalId}
+                  rivalName={flag.rival || ""}
+                  label="Plan de partido"
+                />
+              ) : flag.kind === "NONE" ? (
+                <a
+                  href={headerHref}
+                  className="text-[9px] rounded border px-1.5 py-0.5 hover:bg-gray-100 whitespace-nowrap truncate max-w-[120px]"
+                >
+                  sesión
+                </a>
+              ) : null}
             </div>
           </div>
         </div>
