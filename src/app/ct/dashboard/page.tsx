@@ -119,13 +119,10 @@ function parseVideoValue(v?: string | null) {
 }
 
 /* =========================================================
-   Layout
+  Layout
 ========================================================= */
 const COL_LABEL_W = 102;
 const DAY_MIN_W = 112;
-const ROW_H = 62;
-const DAY_HEADER_H = 54;
-const CELL_GAP = 6;
 
 /* =========================================================
    Inner
@@ -194,9 +191,6 @@ function DashboardSemanaInner() {
   function sessionsOf(ymd: string) {
     return daysMap[ymd] || [];
   }
-  function findCell(ymd: string, turn: TurnKey, row: string) {
-    return sessionsOf(ymd).find((s) => isCellOf(s, turn, row));
-  }
   function getDayFlag(ymd: string, turn: TurnKey): DayFlag {
     const f = sessionsOf(ymd).find((s) => isDayFlag(s, turn));
     return parseDayFlagTitle(f?.title);
@@ -237,7 +231,7 @@ function DashboardSemanaInner() {
       );
     }
 
-    const s = findCell(ymd, activeTurn, row);
+  const s = sessionsOf(ymd).find((sess) => isCellOf(sess, activeTurn, row));
     const text = (s?.title || "").trim();
     if (!text)
       return <div className="h-6 text-[11px] text-gray-400 italic px-1 flex items-center">—</div>;
@@ -264,123 +258,8 @@ function DashboardSemanaInner() {
     return <div className="h-6 text-[11px] px-1 flex items-center truncate">{text}</div>;
   }
 
-  function MicroBadge({ ymd }: { ymd: string }) {
-    const v = getMicro(ymd, activeTurn);
-    if (!v) return null;
-    const s = MICRO_STYLES[v];
-    return (
-      <span
-        className={`inline-flex items-center h-[18px] px-1.5 rounded-md border text-[9px] font-semibold ${s.bg} ${s.text} ${s.border} whitespace-nowrap`}
-        title="Intensidad (microciclo)"
-      >
-        {v}
-      </span>
-    );
-  }
-
-  function DayCard({ ymd }: { ymd: string }) {
-    const flag = getDayFlag(ymd, activeTurn);
-    const headerHref = `/ct/sessions/by-day/${ymd}/${activeTurn}`;
-    const librePill = activeTurn === "morning" ? "Mañana libre" : "Tarde libre";
-    const isMatchDay = flag.kind === "PARTIDO";
-
-    const NormalBody = () => (
-      <div className="grid gap-[6px]" style={{ gridTemplateRows: `repeat(4, ${ROW_H}px)` }}>
-        {ROWS.map((row) => {
-          const s = findCell(ymd, activeTurn, row);
-          const txt = (s?.title || "").trim();
-          return (
-            <div
-              key={row}
-              className="rounded-md border bg-gray-50 px-2 py-1.5 text-[12px] leading-[18px] whitespace-pre-wrap overflow-hidden"
-            >
-              {txt || <span className="text-gray-400 italic">—</span>}
-            </div>
-          );
-        })}
-      </div>
-    );
-
-    const SinglePanel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-      <div
-        className="rounded-md border bg-gray-50 flex items-center justify-center"
-        style={{ height: ROW_H * 4 + CELL_GAP * 3 }}
-      >
-        <div className="p-2 text-center">{children}</div>
-      </div>
-    );
-
-    const LibrePanel = () => (
-      <div className="text-gray-700 font-semibold tracking-wide text-[14px]">LIBRE</div>
-    );
-
-    return (
-      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-        {/* Header: 1 fila para días normales/LIBRE, 2 filas sólo en PARTIDO */}
-        <div
-          className="px-2 border-b bg-gray-50 flex flex-col justify-center gap-1"
-          style={{
-            height: isMatchDay ? DAY_HEADER_H + 22 : DAY_HEADER_H,
-            minHeight: isMatchDay ? DAY_HEADER_H + 22 : DAY_HEADER_H,
-          }}
-        >
-          {/* Fila 1: siempre fecha + MicroBadge (igual en todos los días) */}
-          <div className="flex items-center justify-between gap-2 min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-wide flex-shrink-0 min-w-0 truncate">
-              {humanDayUTC(ymd)}
-            </div>
-            <div className="flex items-center gap-1 flex-shrink-0 min-w-0">
-              <MicroBadge ymd={ymd} />
-            </div>
-          </div>
-
-          {/* Fila 2: sólo PARTIDO → escudo izquierda / Plan de partido derecha */}
-          {isMatchDay && (
-            <div className="grid grid-cols-[auto,1fr] items-center gap-2 min-w-0">
-              {/* Escudo: entero, sin recorte, centrado en su caja */}
-              <div className="w-7 h-7 flex items-center justify-center">
-                {flag.logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={flag.logoUrl}
-                    alt="Escudo rival"
-                    className="w-7 h-7 object-contain"
-                  />
-                ) : null}
-              </div>
-
-              {/* Botón Plan de partido en dos líneas, sin corte */}
-              <div className="min-w-0 flex justify-end">
-                <div className="max-w-[110px]">
-                  <PlannerMatchLink
-                    rivalId={flag.rivalId}
-                    rivalName={flag.rival || ""}
-                    label={"Plan de\npartido"}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="p-2">
-          {flag.kind === "LIBRE" && (
-            <SinglePanel>
-              <div className="text-gray-700 font-semibold tracking-wide text-[14px]">
-                {librePill}
-              </div>
-            </SinglePanel>
-          )}
-
-          {/* En PARTIDO y días normales mostramos la misma planificación */}
-          {(flag.kind === "NONE" || flag.kind === "PARTIDO") && <NormalBody />}
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="p-3 md:p-4 space-y-3" id="print-root">
+    <div className="p-3 md:p-4 space-y-3">
       {/* PRINT tweaks */}
       <style jsx global>{`
         @page { size: A4 landscape; margin: 8mm; }
@@ -390,9 +269,9 @@ function DashboardSemanaInner() {
           #print-root, #print-root * { visibility: visible !important; }
           #print-root {
             position: absolute; inset: 0; margin: 0; padding: 0;
-            transform: scale(0.94);
+            transform: scale(0.9);
             transform-origin: top left;
-            width: 106%;
+            width: 111%;
           }
           nav, aside, header[role="banner"], .sidebar, .app-sidebar, .print\\:hidden, .no-print {
             display: none !important;
@@ -447,57 +326,30 @@ function DashboardSemanaInner() {
       ) : (
         <div className="rounded-2xl border bg-white shadow-sm">
           <div className="p-3 w-full overflow-x-auto">
-            <div className="inline-block min-w-[900px] md:min-w-full">
-            {/* DETALLES */}
-            <div className="mb-2">
-              <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-0.5 border rounded-md uppercase tracking-wide text-[11px] inline-block">
-                DETALLES
-              </div>
-              <div
-                className="mt-2 grid gap-[6px]"
-                style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
-              >
-                {META_ROWS.map((labelText) => (
-                  <div key={`meta-${labelText}`} className="contents">
-                    <div className="bg-gray-50/60 border rounded-md px-2 py-1 text-[10px] font-medium text-gray-600">
-                      {labelText}
-                    </div>
-                    {orderedDays.map((ymd) => (
-                      <div key={`${labelText}-${ymd}`} className="rounded-md border px-1 py-0.5">
-                        <ReadonlyMetaCell ymd={ymd} row={labelText} />
+            <div className="inline-block min-w-[900px] md:min-w-full" id="print-root">
+              {/* DETALLES */}
+              <div className="mb-2">
+                <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-0.5 border rounded-md uppercase tracking-wide text-[11px] inline-block">
+                  DETALLES
+                </div>
+                <div
+                  className="mt-2 grid gap-[6px]"
+                  style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
+                >
+                  {META_ROWS.map((labelText) => (
+                    <div key={`meta-${labelText}`} className="contents">
+                      <div className="bg-gray-50/60 border rounded-md px-2 py-1 text-[10px] font-medium text-gray-600">
+                        {labelText}
                       </div>
-                    ))}
-                  </div>
-                ))}
+                      {orderedDays.map((ymd) => (
+                        <div key={`${labelText}-${ymd}`} className="rounded-md border px-1 py-0.5">
+                          <ReadonlyMetaCell ymd={ymd} row={labelText} />
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-
-            {/* TURNO */}
-            <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-0.5 border rounded-md uppercase tracking-wide text-[11px] mb-2">
-              {activeTurn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
-            </div>
-
-            {/* Cuerpo */}
-            <div
-              className="grid gap-3"
-              style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
-            >
-              <div
-                className="grid gap-[6px]"
-                style={{ gridTemplateRows: `${DAY_HEADER_H}px repeat(4, ${ROW_H}px)` }}
-              >
-                <div />
-                {ROWS.map((rowId) => (
-                  <div key={rowId} className="bg-gray-50/60 border rounded-md px-2 text-[10px] font-medium text-gray-600 flex items-center">
-                    <span className="leading-[14px] whitespace-pre-line">{label(rowId)}</span>
-                  </div>
-                ))}
-              </div>
-
-              {orderedDays.map((ymd) => (
-                <DayCard key={`card-${ymd}`} ymd={ymd} />
-              ))}
-            </div>
             </div>
           </div>
         </div>
