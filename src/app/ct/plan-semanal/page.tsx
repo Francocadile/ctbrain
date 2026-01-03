@@ -419,36 +419,35 @@ function PlanSemanalInner() {
     turn: TurnKey;
     row: (typeof META_ROWS)[number];
   }) {
-    // Filas derivadas solo lectura: no usan GRID/pending
+    // TIPO / INTENSIDAD / RIVAL ahora se editan acá reutilizando la lógica de MICROCICLO
     if (row === "TIPO") {
-      const flag = getDayFlag(dayYmd, turn);
-      let text: string;
-      if (flag.kind === "PARTIDO") text = "Partido";
-      else if (flag.kind === "LIBRE") text = "Libre";
-      else text = "—";
       return (
-        <div className="h-8 w-full rounded-md border px-2 text-xs flex items-center truncate bg-gray-50/60 text-gray-700">
-          {text}
+        <div className="h-8 w-full flex items-center">
+          <DayStatusCell ymd={dayYmd} turn={turn} />
         </div>
       );
     }
 
     if (row === "INTENSIDAD") {
-      const micro = getMicroValue(dayYmd, turn);
-      const text = micro || "—";
       return (
-        <div className="h-8 w-full rounded-md border px-2 text-xs flex items-center truncate bg-gray-50/60 text-gray-700">
-          {text}
+        <div className="h-8 w-full flex items-center">
+          <MicroCell ymd={dayYmd} turn={turn} />
         </div>
       );
     }
 
     if (row === "RIVAL") {
       const flag = getDayFlag(dayYmd, turn);
-      const text = flag.kind === "PARTIDO" && flag.rival ? flag.rival : "—";
+      if (flag.kind !== "PARTIDO") {
+        return (
+          <div className="h-8 w-full rounded-md border px-2 text-xs flex items-center text-gray-400 italic">
+            —
+          </div>
+        );
+      }
       return (
-        <div className="h-8 w-full rounded-md border px-2 text-xs flex items-center truncate bg-gray-50/60 text-gray-700">
-          {text}
+        <div className="h-8 w-full flex items-center">
+          <PartidoCell ymd={dayYmd} turn={turn} />
         </div>
       );
     }
@@ -857,13 +856,7 @@ function PlanSemanalInner() {
           ))}
         </div>
 
-        {/* MICROCICLO */}
-        <SectionLabel>MICROCICLO</SectionLabel>
-        <DayStatusRow turn={turn} />
-        <MicroRow turn={turn} />
-        <PartidoRow turn={turn} />
-
-        {/* DETALLES */}
+  {/* DETALLES */}
         <SectionLabel>DETALLES</SectionLabel>
         {META_ROWS.map((rowName) => (
           <div
