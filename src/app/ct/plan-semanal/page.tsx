@@ -40,7 +40,15 @@ type PaneKey = "editor" | "tools";
 
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 const SESSION_NAME_ROW = "NOMBRE SESIÓN";
-const META_ROWS = [SESSION_NAME_ROW, "LUGAR", "HORA", "VIDEO"] as const;
+const META_ROWS = [
+  SESSION_NAME_ROW,
+  "TIPO",
+  "INTENSIDAD",
+  "LUGAR",
+  "HORA",
+  "VIDEO",
+  "RIVAL",
+] as const;
 
 /* ===== Estado del día (tipo) ===== */
 type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
@@ -411,6 +419,40 @@ function PlanSemanalInner() {
     turn: TurnKey;
     row: (typeof META_ROWS)[number];
   }) {
+    // Filas derivadas solo lectura: no usan GRID/pending
+    if (row === "TIPO") {
+      const flag = getDayFlag(dayYmd, turn);
+      let text: string;
+      if (flag.kind === "PARTIDO") text = "Partido";
+      else if (flag.kind === "LIBRE") text = "Libre";
+      else text = "—";
+      return (
+        <div className="h-8 w-full rounded-md border px-2 text-xs flex items-center truncate bg-gray-50/60 text-gray-700">
+          {text}
+        </div>
+      );
+    }
+
+    if (row === "INTENSIDAD") {
+      const micro = getMicroValue(dayYmd, turn);
+      const text = micro || "—";
+      return (
+        <div className="h-8 w-full rounded-md border px-2 text-xs flex items-center truncate bg-gray-50/60 text-gray-700">
+          {text}
+        </div>
+      );
+    }
+
+    if (row === "RIVAL") {
+      const flag = getDayFlag(dayYmd, turn);
+      const text = flag.kind === "PARTIDO" && flag.rival ? flag.rival : "—";
+      return (
+        <div className="h-8 w-full rounded-md border px-2 text-xs flex items-center truncate bg-gray-50/60 text-gray-700">
+          {text}
+        </div>
+      );
+    }
+
     const existing = findCell(dayYmd, turn, row);
     const original = (existing?.title ?? "").trim();
     const k = cellKey(dayYmd, turn, row);
@@ -881,9 +923,43 @@ function PlanSemanalInner() {
           display: block;
         }
       `}</style>
+      <style jsx global>{`
+        @page { size: A4 landscape; margin: 8mm; }
+
+        @media print {
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+          /* ocultar todo excepto print-root */
+          body * { visibility: hidden !important; }
+          #print-root, #print-root * { visibility: visible !important; }
+
+          /* posicionar y escalar para que ENTRE */
+          #print-root {
+            position: absolute;
+            inset: 0;
+            margin: 0;
+            padding: 0;
+            transform: scale(0.88);
+            transform-origin: top left;
+            width: 114%;
+          }
+
+          /* compactar metas sólo en print */
+          #print-root .h-8 { height: 1.5rem !important; }
+          #print-root .text-xs { font-size: 11px !important; }
+
+          /* ocultar UI no imprimible si aparece dentro del root */
+          nav, aside, header[role="banner"], .sidebar, .app-sidebar, .print\\:hidden, .no-print {
+            display: none !important;
+          }
+
+          /* evitar que links agreguen URLs */
+          a[href]:after { content: ""; }
+        }
+      `}</style>
 
       {!hideHeader && (
-        <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between no-print">
           <div>
             <h1 className="text-lg md:text-xl font-bold">Plan semanal — Editor en tabla</h1>
             <p className="text-xs md:text-sm text-gray-500">
@@ -909,12 +985,13 @@ function PlanSemanalInner() {
       )}
 
       {/* Tabs */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 no-print">
         <button className={`px-3 py-1.5 rounded-xl border text-xs ${activePane === "editor" && activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={() => { setActivePane("editor"); setActiveTurn("morning"); }}>Mañana</button>
         <button className={`px-3 py-1.5 rounded-xl border text-xs ${activePane === "editor" && activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={() => { setActivePane("editor"); setActiveTurn("afternoon"); }}>Tarde</button>
         <button className={`px-3 py-1.5 rounded-xl border text-xs ${activePane === "tools" ? "bg-black text-white" : "hover:bg-gray-50"}`} onClick={() => setActivePane("tools")} title="Herramientas" aria-label="Herramientas">⚙️</button>
       </div>
 
+      <div id="print-root">
       {/* Contenido */}
       {activePane === "tools" ? (
         <div className="rounded-2xl border bg-white shadow-sm p-3">
@@ -929,6 +1006,7 @@ function PlanSemanalInner() {
           </div>
         </div>
       )}
+      </div>
 
       <VideoPlayerModal
         open={!!videoPreview}
