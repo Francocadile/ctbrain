@@ -7,6 +7,7 @@ import type { SessionDTO } from "@/lib/api/sessions";
 import DayStatusCell from "./DayStatusCell";
 import MicroCell from "./MicroCell";
 import PartidoCell from "./PartidoCell";
+import DayTypeCell from "./DayTypeCell";
 
 export type MetaRowId =
   | "NOMBRE SESIÓN"
@@ -52,10 +53,22 @@ export default function MetaInput({
 }: MetaInputProps) {
   const original = (existing?.title ?? "").trim();
   const value = pendingValue !== undefined ? pendingValue : original;
+
   if (row === "TIPO") {
     return (
-      <div className="h-8 w-full flex items-center">
-        <DayStatusCell ymd={dayYmd} turn={turn} weekStart={weekStart} getDayFlag={getDayFlag} setDayFlag={setDayFlag} />
+      <div className="min-h-8 w-full flex flex-col gap-1 text-[11px]">
+        <div className="flex items-center gap-2">
+          <DayStatusCell
+            ymd={dayYmd}
+            turn={turn}
+            weekStart={weekStart}
+            getDayFlag={getDayFlag}
+            setDayFlag={setDayFlag}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <DayTypeCell ymd={dayYmd} turn={turn} />
+        </div>
       </div>
     );
   }

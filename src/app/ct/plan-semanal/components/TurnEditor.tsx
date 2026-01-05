@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import type { DayFlag, TurnKey } from "@/lib/planner-contract";
+import { getDayTypeColorFor } from "./DayTypeCell";
 import { cellKey } from "@/lib/planner-contract";
 import EditableCell from "./EditableCell";
 import MetaInput, { type MetaRowId } from "./MetaInput";
@@ -56,6 +58,24 @@ export default function TurnEditor({
   places,
   setVideoPreview,
 }: TurnEditorProps) {
+  const [dayTypeVersion, setDayTypeVersion] = useState(0);
+
+  useEffect(() => {
+    function onTypes() {
+      setDayTypeVersion((v) => v + 1);
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("planner-daytypes-updated", onTypes as any);
+      window.addEventListener("planner-daytype-assignments-updated", onTypes as any);
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("planner-daytypes-updated", onTypes as any);
+        window.removeEventListener("planner-daytype-assignments-updated", onTypes as any);
+      }
+    };
+  }, []);
+
   return (
     <>
       {/* Encabezado de días */}
@@ -64,12 +84,19 @@ export default function TurnEditor({
         style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
       >
         <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600"></div>
-        {orderedDays.map((ymd) => (
-          <div key={`${turn}-${ymd}`} className="bg-gray-50 border-b px-2 py-1.5">
-            <div className="text-[11px] font-semibold uppercase tracking-wide">{humanDayUTC(ymd)}</div>
-            <div className="text-[10px] text-gray-400">{ymd}</div>
-          </div>
-        ))}
+        {orderedDays.map((ymd) => {
+          // dayTypeVersion fuerza rerender cuando cambian tipos/asignaciones
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const _version = dayTypeVersion;
+          const color = getDayTypeColorFor(ymd, turn);
+          const bgClass = color || "bg-gray-50";
+          return (
+            <div key={`${turn}-${ymd}`} className={`${bgClass} border-b px-2 py-1.5`}>
+              <div className="text-[11px] font-semibold uppercase tracking-wide">{humanDayUTC(ymd)}</div>
+              <div className="text-[10px] text-gray-500">{ymd}</div>
+            </div>
+          );
+        })}
       </div>
 
       {/* DETALLES */}
