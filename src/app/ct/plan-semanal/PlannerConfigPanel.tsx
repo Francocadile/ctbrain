@@ -1,4 +1,5 @@
 // src/app/ct/plan-semanal/PlannerConfigPanel.tsx
+// LEGACY / no usado en el flujo actual
 "use client";
 
 import { useEffect, useState } from "react";

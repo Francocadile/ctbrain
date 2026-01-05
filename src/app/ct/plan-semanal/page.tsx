@@ -1,7 +1,7 @@
 // src/app/ct/plan-semanal/page.tsx
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   getSessionsWeek,
@@ -12,9 +12,25 @@ import {
   toYYYYMMDDUTC,
   type SessionDTO,
 } from "@/lib/api/sessions";
+import {
+  type DayFlag,
+  type TurnKey,
+  type PaneKey,
+  type MicroKey,
+  cellMarker,
+  cellKey,
+  isCellOf,
+  isDayFlag,
+  isMicrocycle,
+  dayFlagMarker,
+  microMarker,
+  parseDayFlagTitle,
+  buildDayFlagTitle,
+  parseMicroTitle,
+} from "@/lib/planner-contract";
 import PlannerActionsBar from "./PlannerActionsBar";
-import PlannerMatchLink from "@/components/PlannerMatchLink";
 import VideoPlayerModal from "@/components/training/VideoPlayerModal";
+import TurnEditor from "./components/TurnEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -27,17 +43,8 @@ export default function Page() {
 }
 
 /* =========================================================
-   Constantes de layout (tamaños coherentes con dashboard)
-========================================================= */
-const COL_LABEL_W = 120;
-const DAY_MIN_W = 120;
-
-/* =========================================================
    Tipos y filas
 ========================================================= */
-type TurnKey = "morning" | "afternoon";
-type PaneKey = "editor" | "tools";
-
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 const SESSION_NAME_ROW = "NOMBRE SESIÓN";
 const META_ROWS = [
@@ -49,75 +56,6 @@ const META_ROWS = [
   "VIDEO",
   "RIVAL",
 ] as const;
-
-/* ===== Estado del día (tipo) ===== */
-type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
-type DayFlag = { kind: DayFlagKind; rivalId?: string; rival?: string; logoUrl?: string };
-const DAYFLAG_TAG = "DAYFLAG";
-const dayFlagMarker = (turn: TurnKey) => `[${DAYFLAG_TAG}:${turn}]`;
-const isDayFlag = (s: SessionDTO, turn: TurnKey) =>
-  typeof s.description === "string" && s.description.startsWith(dayFlagMarker(turn));
-
-/** Compat: acepta formato nuevo (PARTIDO|id|name|logo) y viejo (PARTIDO|name|logo) */
-function parseDayFlagTitle(title?: string | null): DayFlag {
-  const raw = (title || "").trim();
-  if (!raw) return { kind: "NONE" };
-  const parts = raw.split("|").map((x) => (x || "").trim());
-  const kind = parts[0];
-  if (kind === "PARTIDO") {
-    if (parts.length >= 4) {
-      const [, id, name, logo] = parts;
-      return { kind: "PARTIDO", rivalId: id || undefined, rival: name || "", logoUrl: logo || "" };
-    }
-    if (parts.length >= 3) {
-      const [, name, logo] = parts;
-      return { kind: "PARTIDO", rival: name || "", logoUrl: logo || "" };
-    }
-    return { kind: "PARTIDO" };
-  }
-  if (kind === "LIBRE") return { kind: "LIBRE" };
-  return { kind: "NONE" };
-}
-
-function sanitizePipes(s?: string | null) {
-  const t = (s || "").trim();
-  return t.replace(/\|/g, "/");
-}
-
-/** Siempre guarda en formato NUEVO: PARTIDO|<id>|<name>|<logo> (vacíos si no hay) */
-function buildDayFlagTitle(df: DayFlag): string {
-  if (df.kind === "PARTIDO") {
-    const id = (df.rivalId || "").trim();
-    const name = sanitizePipes(df.rival);
-    const logo = sanitizePipes(df.logoUrl);
-    return `PARTIDO|${id}|${name}|${logo}`;
-  }
-  if (df.kind === "LIBRE") return "LIBRE";
-  return "";
-}
-
-/* ===== MICROCICLO (intensidad) ===== */
-type MicroKey = "" | "MD+1" | "MD+2" | "MD-4" | "MD-3" | "MD-2" | "MD-1" | "MD" | "DESCANSO";
-const MICRO_TAG = "MICRO";
-const MICRO_CHOICES: Array<{ value: MicroKey; colorClass: string }> = [
-  { value: "",        colorClass: "" },
-  { value: "MD+1",    colorClass: "bg-blue-50" },
-  { value: "MD+2",    colorClass: "bg-yellow-50" },
-  { value: "MD-4",    colorClass: "bg-red-50" },
-  { value: "MD-3",    colorClass: "bg-orange-50" },
-  { value: "MD-2",    colorClass: "bg-green-50" },
-  { value: "MD-1",    colorClass: "bg-gray-50" },
-  { value: "MD",      colorClass: "bg-amber-50" },
-  { value: "DESCANSO",colorClass: "bg-gray-100" },
-];
-const microMarker = (turn: TurnKey) => `[${MICRO_TAG}:${turn}]`;
-const isMicrocycle = (s: SessionDTO, turn: TurnKey) =>
-  typeof s.description === "string" && s.description.startsWith(microMarker(turn));
-function parseMicroTitle(title?: string | null): MicroKey {
-  const t = (title || "").trim();
-  if (!t) return "";
-  return (MICRO_CHOICES.find((c) => c.value === t)?.value || "") as MicroKey;
-}
 
 /* =========================================================
    Utils
@@ -141,34 +79,6 @@ function computeISOForSlot(dayYmd: string, turn: TurnKey) {
   base.setUTCHours(turn === "morning" ? 9 : 15, 0, 0, 0);
   return base.toISOString();
 }
-function cellMarker(turn: TurnKey, row: string) {
-  return `[GRID:${turn}:${row}]`;
-}
-function isCellOf(s: SessionDTO, turn: TurnKey, row: string) {
-  return typeof s.description === "string" && s.description.startsWith(cellMarker(turn, row));
-}
-function parseVideoValue(v: string | null | undefined): { label: string; url: string } {
-  const raw = (v || "").trim();
-  if (!raw) return { label: "", url: "" };
-  const [label, url] = raw.split("|").map((s) => s.trim());
-  if (!url && label?.startsWith("http")) return { label: "Video", url: label };
-  return { label: label || "", url: url || "" };
-}
-function joinVideoValue(label: string, url: string) {
-  const l = (label || "").trim();
-  const u = (url || "").trim();
-  if (!l && !u) return "";
-  if (!l && u) return u;
-  return `${l}|${u}`;
-}
-function cellKey(dayYmd: string, turn: TurnKey, row: string) {
-  return `${dayYmd}::${turn}::${row}`;
-}
-function extractRivalIdFromUrl(s: string): string | undefined {
-  const m = s.match(/\/ct\/rivales\/([a-z0-9]+)(?:[/?#]|$)/i);
-  return m?.[1];
-}
-
 /* =========================================================
    Página
 ========================================================= */
@@ -374,6 +284,7 @@ function PlanSemanalInner() {
     const entries = Object.entries(pending);
     if (entries.length === 0) return;
     setSavingAll(true);
+    let errorMessage: string | null = null;
     try {
       for (const [k, value] of entries) {
         const [dayYmd, turn, row] = k.split("::") as [string, TurnKey, string];
@@ -399,509 +310,18 @@ function PlanSemanalInner() {
       await loadWeek(base);
     } catch (e: any) {
       console.error(e);
-      alert(e?.message || "Error al guardar cambios");
+      errorMessage = e?.message || "Error al guardar cambios";
     } finally {
       setSavingAll(false);
-    }
-  }
-
-  /* ============================
-     Componentes de celdas
-  ============================ */
-
-  // ---- Inputs META
-  function MetaInput({
-    dayYmd,
-    turn,
-    row,
-  }: {
-    dayYmd: string;
-    turn: TurnKey;
-    row: (typeof META_ROWS)[number];
-  }) {
-    // TIPO / INTENSIDAD / RIVAL ahora se editan acá reutilizando la lógica de MICROCICLO
-    if (row === "TIPO") {
-      return (
-        <div className="h-8 w-full flex items-center">
-          <DayStatusCell ymd={dayYmd} turn={turn} />
-        </div>
-      );
-    }
-
-    if (row === "INTENSIDAD") {
-      return (
-        <div className="h-8 w-full flex items-center">
-          <MicroCell ymd={dayYmd} turn={turn} />
-        </div>
-      );
-    }
-
-    if (row === "RIVAL") {
-      const flag = getDayFlag(dayYmd, turn);
-      if (flag.kind !== "PARTIDO") {
-        return (
-          <div className="h-8 w-full rounded-md border px-2 text-xs flex items-center text-gray-400 italic">
-            —
-          </div>
-        );
+      if (!errorMessage) {
+        // feedback inline mínimo
+        // eslint-disable-next-line no-alert
+        alert("Cambios guardados");
+      } else {
+        // eslint-disable-next-line no-alert
+        alert(errorMessage);
       }
-      return (
-        <div className="h-8 w-full flex items-center">
-          <PartidoCell ymd={dayYmd} turn={turn} />
-        </div>
-      );
     }
-
-    const existing = findCell(dayYmd, turn, row);
-    const original = (existing?.title ?? "").trim();
-    const k = cellKey(dayYmd, turn, row);
-    const value = pending[k] !== undefined ? pending[k] : original;
-
-    if (row === SESSION_NAME_ROW) {
-      const [local, setLocal] = useState(value || "");
-      useEffect(() => setLocal(value || ""), [value, k]);
-      const commit = () => {
-        const v = (local || "").trim();
-        if (v !== (original || "")) stageCell(dayYmd, turn, row, v);
-      };
-      return (
-        <input
-          className="h-8 w-full rounded-md border px-2 text-xs"
-          placeholder="Nombre de sesión (ej: Sesión 7 TM)"
-          value={local}
-          onChange={(e) => setLocal(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-        />
-      );
-    }
-
-    if (row === "LUGAR") {
-      const [local, setLocal] = useState(value || "");
-      useEffect(() => setLocal(value || ""), [value, k]);
-      return (
-        <input
-          list="places-datalist"
-          className="h-8 w-full rounded-md border px-2 text-xs"
-          placeholder="Lugar (texto libre o sugerencias)"
-          value={local}
-          onChange={(e) => setLocal(e.target.value)}
-          onBlur={() => stageCell(dayYmd, turn, row, (local || "").trim())}
-        />
-      );
-    }
-
-    if (row === "HORA") {
-      const hhmm = /^[0-9]{2}:[0-9]{2}$/.test(value || "") ? value : "";
-      const [local, setLocal] = useState(hhmm || "");
-      useEffect(() => {
-        setLocal(hhmm || "");
-      }, [hhmm, k]);
-
-      const commit = () => {
-        const v = (local || "").trim();
-        stageCell(dayYmd, turn, row, v);
-      };
-
-      return (
-        <input
-          type="time"
-          className="h-8 w-full rounded-md border px-2 text-xs"
-          value={local}
-          onChange={(e) => setLocal(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-          }}
-        />
-      );
-    }
-
-    if (row === "VIDEO") {
-      const parsed = parseVideoValue(value || "");
-      const [isEditing, setIsEditing] = useState(!(parsed.label || parsed.url));
-      const [localLabel, setLocalLabel] = useState(parsed.label);
-      const [localUrl, setLocalUrl] = useState(parsed.url);
-      useEffect(() => { setLocalLabel(parsed.label); setLocalUrl(parsed.url); }, [k, value]);
-
-      if (!isEditing) {
-        return (
-          <div className="flex items-center justify-between gap-1">
-            {parsed.url ? (
-              <button
-                type="button"
-                className="text-[12px] underline text-emerald-700 truncate"
-                title={parsed.label || "Video"}
-                onClick={() =>
-                  setVideoPreview({
-                    title: parsed.label || "Video sesión",
-                    zone: null,
-                    videoUrl: parsed.url,
-                  })
-                }
-              >
-                {parsed.label || "Video"}
-              </button>
-            ) : (
-              <span className="text-[12px] text-gray-500 truncate">{parsed.label}</span>
-            )}
-            <div className="flex items-center gap-1">
-              <button type="button" className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50" onClick={() => setIsEditing(true)} title="Editar">✏️</button>
-              <button type="button" className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50" onClick={() => stageCell(dayYmd, turn, row, "")} title="Borrar">❌</button>
-            </div>
-          </div>
-        );
-      }
-
-      return (
-        <div className="flex items-center gap-1.5">
-          <input className="h-8 w-[45%] rounded-md border px-2 text-xs" placeholder="Título" value={localLabel} onChange={(e) => setLocalLabel(e.target.value)} />
-          <input type="url" className="h-8 w-[55%] rounded-md border px-2 text-xs" placeholder="https://…" value={localUrl} onChange={(e) => setLocalUrl(e.target.value)} />
-          <button type="button" className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50" onClick={() => { stageCell(dayYmd, turn, row, joinVideoValue(localLabel, localUrl)); setIsEditing(false); }} title="Listo">✓</button>
-        </div>
-      );
-    }
-
-    return null;
-  }
-
-  // ---- Celdas de contenido
-  function EditableCell({ dayYmd, turn, row }: { dayYmd: string; turn: TurnKey; row: string }) {
-    const existing = findCell(dayYmd, turn, row);
-    const ref = useRef<HTMLDivElement | null>(null);
-    const k = cellKey(dayYmd, turn, row);
-    const staged = pending[k];
-    const initialText = staged !== undefined ? staged : existing?.title ?? "";
-
-    const onBlur = () => {
-      const txt = ref.current?.innerText ?? "";
-      stageCell(dayYmd, turn, row, txt);
-    };
-    const onKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-        e.preventDefault();
-        const txt = ref.current?.innerText ?? "";
-        stageCell(dayYmd, turn, row, txt);
-      }
-    };
-
-    const sessionHref = existing?.id ? `/ct/sessions/${existing.id}` : "";
-
-    const flag = getDayFlag(dayYmd, turn);
-    const flagBadge =
-      flag.kind === "LIBRE" ? (
-        <span className="text-[10px] bg-gray-100 border px-1.5 py-0.5 rounded">DÍA LIBRE</span>
-      ) : flag.kind === "PARTIDO" ? (
-        <span className="text-[10px] bg-amber-100 border px-1.5 py-0.5 rounded">
-          PARTIDO {flag.rival ? `vs ${flag.rival}` : ""}
-        </span>
-      ) : null;
-
-    return (
-      <div className="space-y-1">
-        <div className="flex items-center justify-between">
-          <div>{flagBadge}</div>
-          {sessionHref ? (
-            <a href={sessionHref} className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50" title="Abrir el ejercicio completo">
-              Ejercicio completo
-            </a>
-          ) : null}
-        </div>
-
-        <div
-          ref={ref}
-          contentEditable
-          suppressContentEditableWarning
-          onBlur={onBlur}
-          onKeyDown={onKeyDown}
-          className="min-h-[90px] w-full rounded-xl border p-2 text-[13px] leading-5 outline-none focus:ring-2 focus:ring-emerald-400 whitespace-pre-wrap"
-          data-placeholder="Contenidos / títulos (breves)…"
-          dangerouslySetInnerHTML={{ __html: (initialText || "").replace(/\n/g, "<br/>") }}
-        />
-      </div>
-    );
-  }
-
-  // ---- Tipo de día (fila) — sólo selector
-  function DayStatusCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
-    const df = getDayFlag(ymd, turn);
-    const [kind, setKind] = useState<DayFlagKind>(df.kind);
-
-    useEffect(() => {
-      setKind(getDayFlag(ymd, turn).kind);
-    }, [weekStart, ymd, turn]); // eslint-disable-line
-
-    const save = (next: DayFlag) => setDayFlag(ymd, turn, next);
-
-    return (
-      <div className="p-1">
-        <select
-          className="h-7 w-[140px] rounded-md border px-1.5 text-[11px]"
-          value={kind}
-          onChange={(e) => {
-            const k = e.target.value as DayFlagKind;
-            setKind(k);
-            if (k === "NONE") return save({ kind: "NONE" });
-            if (k === "LIBRE") return save({ kind: "LIBRE" });
-            if (k === "PARTIDO") return save({ kind: "PARTIDO", rival: "", logoUrl: "", rivalId: undefined });
-          }}
-        >
-          <option value="NONE">Normal</option>
-          <option value="PARTIDO">Partido (MD)</option>
-          <option value="LIBRE">Descanso</option>
-        </select>
-      </div>
-    );
-  }
-
-  function DayStatusRow({ turn }: { turn: TurnKey }) {
-    return (
-      <div
-        className="grid items-center border-b bg-gray-50/60"
-        style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
-      >
-        <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Tipo</div>
-        {orderedDays.map((ymd) => (
-          <DayStatusCell key={`${ymd}-${turn}-status`} ymd={ymd} turn={turn} />
-        ))}
-      </div>
-    );
-  }
-
-  // ---- Partido (Rival + Logo) — UI simple; id oculto (sin lupa)
-  function PartidoCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
-    const df = getDayFlag(ymd, turn);
-    const isMatch = df.kind === "PARTIDO";
-
-    if (!isMatch) {
-      return <div className="h-6 text-[11px] text-gray-400 italic px-1 flex items-center">—</div>;
-    }
-
-    const [isEditing, setIsEditing] = useState(!(df.rival || df.logoUrl));
-    const [localRival, setLocalRival] = useState(df.rival || "");
-    const [localLogo, setLocalLogo] = useState(df.logoUrl || "");
-    const [hiddenRivalId, setHiddenRivalId] = useState<string>(df.rivalId || "");
-
-    useEffect(() => {
-      const fresh = getDayFlag(ymd, turn);
-      setIsEditing(!(fresh.rival || fresh.logoUrl));
-      setLocalRival(fresh.rival || "");
-      setLocalLogo(fresh.logoUrl || "");
-      setHiddenRivalId(fresh.rivalId || "");
-    }, [weekStart, ymd, turn]); // eslint-disable-line
-
-    // Si pegan un link /ct/rivales/:id en "Rival", extraemos id en silencio
-    function onRivalChange(v: string) {
-      setLocalRival(v);
-      const maybeId = extractRivalIdFromUrl(v);
-      if (maybeId) setHiddenRivalId(maybeId);
-    }
-
-    const commit = async () => {
-      await setDayFlag(ymd, turn, {
-        kind: "PARTIDO",
-        rival: (localRival || "").trim(),
-        logoUrl: (localLogo || "").trim(),
-        rivalId: (hiddenRivalId || "").trim() || undefined,
-      });
-      setIsEditing(false);
-    };
-
-    if (!isEditing) {
-      const fallbackHref = `/ct/sessions/by-day/${ymd}/${turn}`;
-      return (
-        <div className="flex items-center justify-between gap-1">
-          <div className="h-6 text-[11px] px-1 flex items-center truncate gap-1">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            {localLogo ? <img src={localLogo} alt="Logo" className="w-[16px] h-[16px] object-contain rounded" /> : null}
-            <span className="truncate">{localRival || "—"}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <PlannerMatchLink
-              rivalId={hiddenRivalId || undefined}
-              rivalName={localRival || undefined}
-              label="Plan rival"
-              className="h-6"
-              fallbackHref={fallbackHref}
-            />
-            <button
-              type="button"
-              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
-              onClick={() => setIsEditing(true)}
-              title="Editar"
-            >
-              ✏️
-            </button>
-            <button
-              type="button"
-              className="h-6 px-1.5 rounded border text-[11px] hover:bg-gray-50"
-              onClick={async () => {
-                setLocalRival("");
-                setLocalLogo("");
-                setHiddenRivalId("");
-                await setDayFlag(ymd, turn, { kind: "PARTIDO", rival: "", logoUrl: "", rivalId: undefined });
-              }}
-              title="Borrar"
-            >
-              ❌
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    // Modo edición — SOLO dos campos visibles + ✓
-    return (
-      <div className="flex items-center gap-1.5">
-        <input
-          className="h-8 w-[58%] rounded-md border px-2 text-xs"
-          placeholder="Rival (nombre o link /ct/rivales/:id)"
-          value={localRival}
-          onChange={(e) => onRivalChange(e.target.value)}
-        />
-        <input
-          type="url"
-          className="h-8 w-[34%] rounded-md border px-2 text-xs"
-          placeholder="Logo URL"
-          value={localLogo}
-          onChange={(e) => setLocalLogo(e.target.value)}
-        />
-        <button
-          type="button"
-          className="h-8 px-2 rounded border text-[11px] hover:bg-gray-50"
-          onClick={commit}
-          title="Listo"
-        >
-          ✓
-        </button>
-      </div>
-    );
-  }
-
-  function PartidoRow({ turn }: { turn: TurnKey }) {
-    return (
-      <div
-        className="grid items-center border-b"
-        style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
-      >
-        <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Partido</div>
-        {orderedDays.map((ymd) => (
-          <div key={`${ymd}-${turn}-partido`} className="p-1">
-            <PartidoCell ymd={ymd} turn={turn} />
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  // ---- Intensidad (MICRO) fila
-  function MicroCell({ ymd, turn }: { ymd: string; turn: TurnKey }) {
-    const [val, setVal] = useState<MicroKey>(getMicroValue(ymd, turn));
-    useEffect(() => { setVal(getMicroValue(ymd, turn)); }, [weekStart, ymd, turn]); // eslint-disable-line
-    const cls = MICRO_CHOICES.find((c) => c.value === val)?.colorClass || "";
-    return (
-      <div className={`p-1 ${cls}`}>
-        <select
-          className={`h-7 w-full rounded-md border px-1.5 text-[11px] ${cls}`}
-          value={val}
-          onChange={async (e) => {
-            const nextVal = e.target.value as MicroKey;
-            setVal(nextVal);
-            await setMicroValue(ymd, turn, nextVal);
-          }}
-        >
-          {MICRO_CHOICES.map((opt) => (
-            <option key={opt.value || "none"} value={opt.value}>
-              {opt.value || "—"}
-            </option>
-          ))}
-        </select>
-      </div>
-    );
-  }
-  function MicroRow({ turn }: { turn: TurnKey }) {
-    return (
-      <div
-        className="grid items-center border-b"
-        style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
-      >
-        <div className="px-2 py-1.5 text-[11px] font-medium text-gray-600">Intensidad</div>
-        {orderedDays.map((ymd) => <MicroCell key={`${ymd}-${turn}-micro`} ymd={ymd} turn={turn} />)}
-      </div>
-    );
-  }
-
-  function SectionLabel({ children }: { children: React.ReactNode }) {
-    return (
-      <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
-        {children}
-      </div>
-    );
-  }
-
-  function TurnEditor({ turn }: { turn: TurnKey }) {
-    return (
-      <>
-        {/* Encabezado de días */}
-        <div
-          className="grid text-xs"
-          style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
-        >
-          <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600"></div>
-          {orderedDays.map((ymd) => (
-            <div key={`${turn}-${ymd}`} className="bg-gray-50 border-b px-2 py-1.5">
-              <div className="text-[11px] font-semibold uppercase tracking-wide">{humanDayUTC(ymd)}</div>
-              <div className="text-[10px] text-gray-400">{ymd}</div>
-            </div>
-          ))}
-        </div>
-
-  {/* DETALLES */}
-        <SectionLabel>DETALLES</SectionLabel>
-        {META_ROWS.map((rowName) => (
-          <div
-            key={`${turn}-meta-${rowName}`}
-            className="grid items-center"
-            style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
-          >
-            <div className="bg-gray-50/60 border-r px-2 py-1.5 text-[11px] font-medium text-gray-600">
-              {rowName}
-            </div>
-            {orderedDays.map((ymd) => (
-              <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
-                <MetaInput dayYmd={ymd} turn={turn} row={rowName} />
-              </div>
-            ))}
-          </div>
-        ))}
-
-        {/* CONTENIDOS */}
-        <div className="border-t">
-          <div className="px-2 py-1 text-[10px] text-gray-600 border-b bg-gray-50">
-            Escribí el <b>contenido general</b> (títulos). El detalle se edita en <b>“Ejercicio completo”</b>.
-          </div>
-          <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
-            {turn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
-          </div>
-          {CONTENT_ROWS.map((rowName) => (
-            <div
-              key={`${turn}-${rowName}`}
-              className="grid items-stretch"
-              style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
-            >
-              <div className="bg-gray-50/60 border-r px-2 py-2 text-[11px] font-medium text-gray-600 whitespace-pre-line">
-                {label(rowName)}
-              </div>
-              {orderedDays.map((ymd) => (
-                <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
-                  <EditableCell dayYmd={ymd} turn={turn} row={rowName} />
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      </>
-    );
   }
 
   const pendingCount = Object.keys(pending).length;
@@ -995,7 +415,25 @@ function PlanSemanalInner() {
       ) : (
         <div className="w-full overflow-x-auto rounded-2xl border bg-white shadow-sm">
           <div className="inline-block min-w-[900px] md:min-w-full">
-            <TurnEditor turn={activeTurn} />
+            <TurnEditor
+              turn={activeTurn}
+              orderedDays={orderedDays}
+              weekStart={weekStart}
+              contentRows={CONTENT_ROWS}
+              metaRows={META_ROWS}
+              sessionNameRowId={SESSION_NAME_ROW}
+              labelForRow={label}
+              getDayFlag={getDayFlag}
+              getMicroValue={getMicroValue}
+              setDayFlag={setDayFlag}
+              setMicroValue={setMicroValue}
+              findCell={findCell}
+              stageCell={stageCell}
+              pending={pending}
+              humanDayUTC={humanDayUTC}
+              places={places}
+              setVideoPreview={setVideoPreview}
+            />
           </div>
         </div>
       )}
