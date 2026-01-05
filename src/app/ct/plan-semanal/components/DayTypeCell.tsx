@@ -168,7 +168,7 @@ export default function DayTypeCell({ ymd, turn, value, onSelectedChange }: DayT
     updateTypes((prev) => prev.map((t) => (t.id === id ? { ...t, color } : t)));
   };
 
-  // Cerrar popover en click fuera
+  // Cerrar popover en click fuera (solo si se llega a usar la edición)
   useEffect(() => {
     if (!editing) return;
     function onDown(ev: MouseEvent) {
@@ -181,35 +181,22 @@ export default function DayTypeCell({ ymd, turn, value, onSelectedChange }: DayT
   }, [editing]);
 
   return (
-    <div className="relative flex items-center gap-1 text-[11px]">
-      <div className="flex items-center gap-1 flex-1 min-w-0">
-        <span className="text-[10px] text-gray-500 whitespace-nowrap">Tipo trabajo</span>
-        <div className="flex items-center gap-1 flex-1 min-w-0">
-          <div className={`w-3 h-3 rounded-full border ${selectedDef?.color || "bg-gray-50"}`} />
-          <select
-            className="h-7 flex-1 rounded-md border px-1.5 text-[11px] min-w-0"
-            value={selectedId || ""}
-            onChange={(e) => updateSelection(e.target.value as DayTypeId)}
-          >
-            <option value="">—</option>
-            {types.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-      <button
-        type="button"
-        className="h-6 w-6 flex items-center justify-center rounded border text-[11px] hover:bg-gray-50"
-        onClick={() => setEditing((v) => !v)}
-        title="Configurar tipos"
+    <div className="relative flex items-center gap-1 text-[11px] h-7">
+      <div className={`w-3 h-3 rounded-full border ${selectedDef?.color || "bg-gray-50"}`} />
+      <select
+        className="h-7 flex-1 rounded-md border px-1.5 text-[11px] min-w-0"
+        value={selectedId || ""}
+        onChange={(e) => updateSelection(e.target.value as DayTypeId)}
       >
-        ⚙️
-      </button>
+        <option value="">—</option>
+        {types.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.label}
+          </option>
+        ))}
+      </select>
 
-      {editing && (
+      {false && editing && (
         <div
           ref={panelRef}
           className="absolute z-20 top-full right-0 mt-1 w-80 rounded-lg border bg-white shadow-lg p-2 text-[11px]"

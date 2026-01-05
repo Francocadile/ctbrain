@@ -12,6 +12,7 @@ import DayTypeCell from "./DayTypeCell";
 export type MetaRowId =
   | "NOMBRE SESIÓN"
   | "TIPO"
+  | "TIPO TRABAJO"
   | "INTENSIDAD"
   | "LUGAR"
   | "HORA"
@@ -56,19 +57,22 @@ export default function MetaInput({
 
   if (row === "TIPO") {
     return (
-      <div className="min-h-8 w-full flex flex-col gap-1 text-[11px]">
-        <div className="flex items-center gap-2">
-          <DayStatusCell
-            ymd={dayYmd}
-            turn={turn}
-            weekStart={weekStart}
-            getDayFlag={getDayFlag}
-            setDayFlag={setDayFlag}
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <DayTypeCell ymd={dayYmd} turn={turn} />
-        </div>
+      <div className="h-8 w-full flex items-center">
+        <DayStatusCell
+          ymd={dayYmd}
+          turn={turn}
+          weekStart={weekStart}
+          getDayFlag={getDayFlag}
+          setDayFlag={setDayFlag}
+        />
+      </div>
+    );
+  }
+
+  if (row === "TIPO TRABAJO") {
+    return (
+      <div className="h-8 w-full flex items-center">
+        <DayTypeCell ymd={dayYmd} turn={turn} />
       </div>
     );
   }
