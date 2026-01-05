@@ -21,6 +21,8 @@ model Team {
   exercises          Exercise[]
   rivalReports       RivalReport[]
   deviceTokens       DeviceToken[]
+  plannerDayTypes    PlannerDayType[]
+  plannerDayTypeAssignments PlannerDayTypeAssignment[]
 }
 
 // prisma/schema.prisma
@@ -601,6 +603,32 @@ model DeviceToken {
 
   @@index([userId])
   @@index([pushToken])
+}
+
+model PlannerDayType {
+  id        String   @id @default(cuid())
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  key       String
+  label     String
+  color     String
+  order     Int
+  isDefault Boolean  @default(false)
+
+  @@unique([teamId, key])
+  @@index([teamId, order])
+}
+
+model PlannerDayTypeAssignment {
+  id         String   @id @default(cuid())
+  teamId     String
+  team       Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  ymd        String
+  turn       String
+  dayTypeKey String
+
+  @@unique([teamId, ymd, turn])
+  @@index([teamId, ymd])
 }
 
 enum RoutineVisibility {

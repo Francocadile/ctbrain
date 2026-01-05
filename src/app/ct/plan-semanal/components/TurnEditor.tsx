@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import type { DayFlag, TurnKey } from "@/lib/planner-contract";
-import { getDayTypeColorFor } from "./DayTypeCell";
 import { cellKey } from "@/lib/planner-contract";
 import EditableCell from "./EditableCell";
 import MetaInput, { type MetaRowId } from "./MetaInput";
@@ -26,6 +25,10 @@ export type TurnEditorProps = {
   humanDayUTC: (ymd: string) => string;
   places: string[];
   setVideoPreview: (payload: { title: string; zone?: string | null; videoUrl?: string | null } | null) => void;
+  dayTypeColorFor: (ymd: string, turn: TurnKey) => string | undefined;
+  dayTypes: import("@/lib/planner-daytype").DayTypeDef[];
+  dayTypeKeyFor: (ymd: string, turn: TurnKey) => import("@/lib/planner-daytype").DayTypeId | "";
+  setDayTypeAssignment: (ymd: string, turn: TurnKey, key: import("@/lib/planner-daytype").DayTypeId | "") => void;
 };
 
 const COL_LABEL_W = 120;
@@ -57,25 +60,11 @@ export default function TurnEditor({
   humanDayUTC,
   places,
   setVideoPreview,
+  dayTypeColorFor,
+  dayTypes,
+  dayTypeKeyFor,
+  setDayTypeAssignment,
 }: TurnEditorProps) {
-  const [dayTypeVersion, setDayTypeVersion] = useState(0);
-
-  useEffect(() => {
-    function onTypes() {
-      setDayTypeVersion((v) => v + 1);
-    }
-    if (typeof window !== "undefined") {
-      window.addEventListener("planner-daytypes-updated", onTypes as any);
-      window.addEventListener("planner-daytype-assignments-updated", onTypes as any);
-    }
-    return () => {
-      if (typeof window !== "undefined") {
-        window.removeEventListener("planner-daytypes-updated", onTypes as any);
-        window.removeEventListener("planner-daytype-assignments-updated", onTypes as any);
-      }
-    };
-  }, []);
-
   return (
     <>
       {/* Encabezado de días */}
@@ -85,10 +74,7 @@ export default function TurnEditor({
       >
         <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600"></div>
         {orderedDays.map((ymd) => {
-          // dayTypeVersion fuerza rerender cuando cambian tipos/asignaciones
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const _version = dayTypeVersion;
-          const color = getDayTypeColorFor(ymd, turn);
+          const color = dayTypeColorFor(ymd, turn);
           const bgClass = color || "bg-gray-50";
           return (
             <div key={`${turn}-${ymd}`} className={`${bgClass} border-b px-2 py-1.5`}>
@@ -114,8 +100,10 @@ export default function TurnEditor({
             const existing = findCell(ymd, turn, rowName);
             const k = cellKey(ymd, turn, rowName);
             const pendingValue = pending[k];
+            const color = dayTypeColorFor(ymd, turn);
+            const bgClass = color || "bg-white";
             return (
-              <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
+              <div key={`${ymd}-${turn}-${rowName}`} className={`p-1 ${bgClass}`}>
                 <MetaInput
                   dayYmd={ymd}
                   turn={turn}
@@ -131,6 +119,9 @@ export default function TurnEditor({
                   stageCell={stageCell}
                   setVideoPreview={setVideoPreview}
                   places={places}
+                  dayTypes={dayTypes}
+                  dayTypeKeyFor={dayTypeKeyFor}
+                  setDayTypeAssignment={setDayTypeAssignment}
                 />
               </div>
             );
@@ -162,8 +153,10 @@ export default function TurnEditor({
               const initialText = staged !== undefined ? staged : existing?.title ?? "";
               const flag = getDayFlag(ymd, turn);
               const sessionHref = existing?.id ? `/ct/sessions/${existing.id}` : "";
+              const color = dayTypeColorFor(ymd, turn);
+              const bgClass = color || "bg-white";
               return (
-                <div key={`${ymd}-${turn}-${rowName}`} className="p-1">
+                <div key={`${ymd}-${turn}-${rowName}`} className={`p-1 ${bgClass}`}>
                   <EditableCell
                     dayYmd={ymd}
                     turn={turn}

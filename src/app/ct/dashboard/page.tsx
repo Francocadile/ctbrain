@@ -10,6 +10,7 @@ import {
   toYYYYMMDDUTC,
   type SessionDTO,
 } from "@/lib/api/sessions";
+import type { DayTypeDef, DayTypeId } from "@/lib/planner-daytype";
 import PlannerMatchLink from "@/components/PlannerMatchLink";
 import VideoPlayerModal from "@/components/training/VideoPlayerModal";
 
@@ -25,6 +26,7 @@ const SESSION_NAME_ROW = "NOMBRE SESIÓN" as const;
 const META_ROWS = [
   SESSION_NAME_ROW,
   "TIPO",
+  "TIPO TRABAJO",
   "INTENSIDAD",
   "LUGAR",
   "HORA",
@@ -151,6 +153,10 @@ function DashboardSemanaInner() {
   const [rowLabels, setRowLabels] = useState<Record<string, string>>({});
   const label = (id: string) => rowLabels[id] || id;
 
+  // DayType (igual que editor, pero solo lectura)
+  const [dayTypes, setDayTypes] = useState<DayTypeDef[]>([]);
+  const [dayTypeAssignments, setDayTypeAssignments] = useState<Record<string, DayTypeId>>({});
+
   async function loadRowLabels() {
     try {
       const r = await fetch("/api/planner/labels", { cache: "no-store" });
@@ -177,6 +183,23 @@ function DashboardSemanaInner() {
       setDaysMap(res.days);
       setWeekStart(res.weekStart);
       setWeekEnd(res.weekEnd);
+      // DayType assignments para la semana visible
+      try {
+        const assignRes = await fetch(
+          `/api/ct/planner/day-type-assignments?weekStart=${encodeURIComponent(res.weekStart)}`,
+          { cache: "no-store" },
+        );
+        if (assignRes.ok) {
+          const json = await assignRes.json();
+          const map = (json.assignments || {}) as Record<string, DayTypeId>;
+          setDayTypeAssignments(map);
+        } else {
+          setDayTypeAssignments({});
+        }
+      } catch (err) {
+        console.error(err);
+        setDayTypeAssignments({});
+      }
     } finally {
       setLoadingWeek(false);
     }
@@ -190,6 +213,27 @@ function DashboardSemanaInner() {
     const start = new Date(`${weekStart}T00:00:00.000Z`);
     return Array.from({ length: 7 }, (_, i) => toYYYYMMDDUTC(addDaysUTC(start, i)));
   }, [weekStart]);
+
+  // DayTypes desde backend (por equipo)
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/ct/planner/day-types", { cache: "no-store" });
+        if (!res.ok) throw new Error("No se pudieron cargar los tipos de trabajo");
+        const json = await res.json();
+        const items = Array.isArray(json.dayTypes) ? (json.dayTypes as any[]) : [];
+        const mapped: DayTypeDef[] = items.map((t: any) => ({
+          id: String(t.key || ""),
+          label: String(t.label || ""),
+          color: String(t.color || "bg-gray-50"),
+        }));
+        setDayTypes(mapped);
+      } catch (e) {
+        console.error(e);
+        setDayTypes([]);
+      }
+    })();
+  }, []);
 
   function sessionsOf(ymd: string) {
     return daysMap[ymd] || [];
@@ -207,6 +251,22 @@ function DashboardSemanaInner() {
     return (["MD+1","MD+2","MD-4","MD-3","MD-2","MD-1","MD","DESCANSO",""].includes(val) ? val : "") as MicroKey;
   }
 
+  // DayType helpers (read-only)
+  const dayTypeKeyFor = (ymd: string, turn: TurnKey): DayTypeId | "" => {
+    const k = `${ymd}::${turn}`;
+    return dayTypeAssignments[k] || "";
+  };
+
+  const dayTypeDefFor = (ymd: string, turn: TurnKey): DayTypeDef | undefined => {
+    const key = dayTypeKeyFor(ymd, turn);
+    if (!key) return undefined;
+    return dayTypes.find((t) => t.id === key);
+  };
+
+  const dayTypeColorFor = (ymd: string, turn: TurnKey): string | undefined => {
+    return dayTypeDefFor(ymd, turn)?.color;
+  };
+
   // META (solo lectura)
   function ReadonlyMetaCell({ ymd, row }: { ymd: string; row: (typeof META_ROWS)[number] }) {
     // Filas derivadas que no vienen del GRID editor
@@ -218,6 +278,21 @@ function DashboardSemanaInner() {
       else text = "—";
       return (
         <div className="h-6 text-[11px] px-1 flex items-center truncate">{text}</div>
+      );
+    }
+
+    if (row === "TIPO TRABAJO") {
+      const def = dayTypeDefFor(ymd, activeTurn);
+      if (!def) {
+        return (
+          <div className="h-6 text-[11px] px-1 flex items-center text-gray-400 italic truncate">—</div>
+        );
+      }
+      return (
+        <div className="h-6 text-[11px] px-1 flex items-center gap-1 truncate">
+          <span className={`w-3 h-3 rounded-full border ${def.color}`} />
+          <span className="truncate">{def.label}</span>
+        </div>
       );
     }
 
@@ -283,6 +358,7 @@ function DashboardSemanaInner() {
     const headerHref = `/ct/sessions/by-day/${ymd}/${activeTurn}`;
     const librePill = activeTurn === "morning" ? "Mañana libre" : "Tarde libre";
     const isMatchDay = flag.kind === "PARTIDO";
+    const dayTypeBg = dayTypeColorFor(ymd, activeTurn) || "bg-gray-50";
 
     const NormalBody = () => (
       <div className="grid gap-[6px]" style={{ gridTemplateRows: `repeat(4, ${ROW_H}px)` }}>
@@ -292,7 +368,7 @@ function DashboardSemanaInner() {
           return (
             <div
               key={row}
-              className="rounded-md border bg-gray-50 px-2 py-1.5 text-[12px] leading-[18px] whitespace-pre-wrap overflow-hidden"
+              className={`rounded-md border px-2 py-1.5 text-[12px] leading-[18px] whitespace-pre-wrap overflow-hidden ${dayTypeBg}`}
             >
               {txt || <span className="text-gray-400 italic">—</span>}
             </div>
@@ -303,7 +379,7 @@ function DashboardSemanaInner() {
 
     const SinglePanel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
       <div
-        className="rounded-md border bg-gray-50 flex items-center justify-center"
+        className={`rounded-md border flex items-center justify-center ${dayTypeBg}`}
         style={{ height: ROW_H * 4 + CELL_GAP * 3 }}
       >
         <div className="p-2 text-center">{children}</div>
@@ -318,7 +394,7 @@ function DashboardSemanaInner() {
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
         {/* Header: 1 fila para días normales/LIBRE, 2 filas sólo en PARTIDO */}
         <div
-          className="px-2 border-b bg-gray-50 flex flex-col justify-center gap-1"
+          className={`px-2 border-b flex flex-col justify-center gap-1 ${dayTypeBg}`}
           style={{
             height: isMatchDay ? DAY_HEADER_H + 22 : DAY_HEADER_H,
             minHeight: isMatchDay ? DAY_HEADER_H + 22 : DAY_HEADER_H,

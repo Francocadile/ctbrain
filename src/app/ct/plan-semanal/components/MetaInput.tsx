@@ -8,6 +8,7 @@ import DayStatusCell from "./DayStatusCell";
 import MicroCell from "./MicroCell";
 import PartidoCell from "./PartidoCell";
 import DayTypeCell from "./DayTypeCell";
+import type { DayTypeDef, DayTypeId } from "@/lib/planner-daytype";
 
 export type MetaRowId =
   | "NOMBRE SESIÓN"
@@ -34,6 +35,9 @@ export type MetaInputProps = {
   stageCell: (dayYmd: string, turn: TurnKey, row: string, text: string) => void;
   setVideoPreview: (payload: { title: string; zone?: string | null; videoUrl?: string | null } | null) => void;
   places: string[];
+  dayTypes: DayTypeDef[];
+  dayTypeKeyFor: (ymd: string, turn: TurnKey) => DayTypeId | "";
+  setDayTypeAssignment: (ymd: string, turn: TurnKey, key: DayTypeId | "") => void;
 };
 
 export default function MetaInput({
@@ -51,6 +55,9 @@ export default function MetaInput({
   stageCell,
   setVideoPreview,
   places,
+  dayTypes,
+  dayTypeKeyFor,
+  setDayTypeAssignment,
 }: MetaInputProps) {
   const original = (existing?.title ?? "").trim();
   const value = pendingValue !== undefined ? pendingValue : original;
@@ -72,7 +79,13 @@ export default function MetaInput({
   if (row === "TIPO TRABAJO") {
     return (
       <div className="h-8 w-full flex items-center">
-        <DayTypeCell ymd={dayYmd} turn={turn} />
+        <DayTypeCell
+          ymd={dayYmd}
+          turn={turn}
+          value={dayTypeKeyFor(dayYmd, turn)}
+          onSelectedChange={(next) => setDayTypeAssignment(dayYmd, turn, next)}
+          types={dayTypes}
+        />
       </div>
     );
   }

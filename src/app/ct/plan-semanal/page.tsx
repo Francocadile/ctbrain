@@ -12,6 +12,7 @@ import {
   toYYYYMMDDUTC,
   type SessionDTO,
 } from "@/lib/api/sessions";
+import type { DayTypeDef, DayTypeId } from "@/lib/planner-daytype";
 import {
   type DayFlag,
   type TurnKey,
@@ -114,9 +115,15 @@ function PlanSemanalInner() {
     videoUrl?: string | null;
   } | null>(null);
 
+  // DayType state (desde APIs backend)
+  const [dayTypes, setDayTypes] = useState<DayTypeDef[]>([]);
+  const [dayTypeAssignments, setDayTypeAssignments] = useState<Record<string, DayTypeId>>({});
+
   // Preferencias de usuario (labels + places)
   const [rowLabels, setRowLabels] = useState<Record<string, string>>({});
   const [places, setPlaces] = useState<string[]>([]);
+  // Uso de DayTypes en la semana actual (para evitar borrar en uso)
+  const [dayTypeUsage, setDayTypeUsage] = useState<Record<string, boolean>>({});
 
   async function loadPrefs() {
     try {
@@ -141,6 +148,25 @@ function PlanSemanalInner() {
     };
   }, []);
 
+  // Carga de DayTypes
+  async function loadDayTypes() {
+    try {
+      const res = await fetch("/api/ct/planner/day-types", { cache: "no-store" });
+      if (!res.ok) throw new Error("No se pudieron cargar los tipos de trabajo");
+      const json = await res.json();
+      const list = Array.isArray(json.dayTypes) ? (json.dayTypes as any[]) : [];
+      const mapped: DayTypeDef[] = list.map((t: any) => ({
+        id: String(t.key || ""),
+        label: String(t.label || ""),
+        color: String(t.color || "bg-gray-50"),
+      }));
+      setDayTypes(mapped);
+    } catch (e) {
+      console.error(e);
+      setDayTypes([]);
+    }
+  }
+
   // Carga de semana
   async function loadWeek(d: Date) {
     setLoading(true);
@@ -152,6 +178,30 @@ function PlanSemanalInner() {
       setWeekStart(res.weekStart);
       setWeekEnd(res.weekEnd);
       setPending({});
+      // Cargar asignaciones DayType para esta semana
+      try {
+        const assignRes = await fetch(
+          `/api/ct/planner/day-type-assignments?weekStart=${encodeURIComponent(res.weekStart)}`,
+          { cache: "no-store" },
+        );
+        if (assignRes.ok) {
+          const json = await assignRes.json();
+          const map = (json.assignments || {}) as Record<string, DayTypeId>;
+          setDayTypeAssignments(map);
+          const usage: Record<string, boolean> = {};
+          Object.values(map).forEach((k) => {
+            if (k) usage[k] = true;
+          });
+          setDayTypeUsage(usage);
+        } else {
+          setDayTypeAssignments({});
+          setDayTypeUsage({});
+        }
+      } catch (err) {
+        console.error(err);
+        setDayTypeAssignments({});
+        setDayTypeUsage({});
+      }
     } catch (e) {
       console.error(e);
       alert("No se pudo cargar la semana.");
@@ -162,6 +212,10 @@ function PlanSemanalInner() {
   useEffect(() => {
     loadWeek(base);
   }, [base]); // eslint-disable-line
+
+  useEffect(() => {
+    loadDayTypes();
+  }, []);
 
   // Navegación semana
   function confirmDiscardIfNeeded(action: () => void) {
@@ -180,6 +234,57 @@ function PlanSemanalInner() {
   }, [weekStart]);
 
   const label = (id: string) => rowLabels[id] || id;
+
+  // DayType helpers
+  const dayTypeKeyFor = (ymd: string, turn: TurnKey): DayTypeId | "" => {
+    const k = `${ymd}::${turn}`;
+    return dayTypeAssignments[k] || "";
+  };
+
+  const dayTypeDefFor = (ymd: string, turn: TurnKey): DayTypeDef | undefined => {
+    const key = dayTypeKeyFor(ymd, turn);
+    if (!key) return undefined;
+    return dayTypes.find((t) => t.id === key);
+  };
+
+  const dayTypeColorFor = (ymd: string, turn: TurnKey): string | undefined => {
+    return dayTypeDefFor(ymd, turn)?.color;
+  };
+
+  async function setDayTypeAssignment(ymd: string, turn: TurnKey, key: DayTypeId | "") {
+    const mapKey = `${ymd}::${turn}`;
+    const prevMap = dayTypeAssignments;
+    const nextMap: Record<string, DayTypeId> = { ...dayTypeAssignments };
+    if (!key) delete nextMap[mapKey];
+    else nextMap[mapKey] = key;
+    setDayTypeAssignments(nextMap);
+
+    try {
+      const res = await fetch("/api/ct/planner/day-type-assignments", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          items: [
+            {
+              ymd,
+              turn,
+              dayTypeKey: key || "",
+            },
+          ],
+        }),
+      });
+      if (!res.ok) {
+        throw new Error("No se pudo guardar el tipo de trabajo");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("No se pudo guardar el tipo de trabajo");
+      // revertir optimismo si falla
+      setDayTypeAssignments(prevMap);
+    }
+  }
 
   // Helpers sesiones
   const listFor = (dayYmd: string) => daysMap[dayYmd] || [];
@@ -409,7 +514,14 @@ function PlanSemanalInner() {
       {/* Contenido */}
       {activePane === "tools" ? (
         <div className="rounded-2xl border bg-white shadow-sm p-3">
-          <PlannerActionsBar onAfterChange={() => { loadWeek(base); loadPrefs(); }} />
+          <PlannerActionsBar
+            dayTypeUsage={dayTypeUsage}
+            onAfterChange={() => {
+              loadWeek(base);
+              loadPrefs();
+              loadDayTypes();
+            }}
+          />
         </div>
       ) : loading ? (
         <div className="text-gray-500">Cargando semana…</div>
@@ -434,6 +546,10 @@ function PlanSemanalInner() {
               humanDayUTC={humanDayUTC}
               places={places}
               setVideoPreview={setVideoPreview}
+              dayTypeColorFor={dayTypeColorFor}
+              dayTypes={dayTypes}
+              dayTypeKeyFor={dayTypeKeyFor}
+              setDayTypeAssignment={setDayTypeAssignment}
             />
           </div>
         </div>
