@@ -13,6 +13,7 @@ import {
 import HelpTip from "@/components/HelpTip";
 import { DEFAULT_DAY_TYPES, type DayTypeDef, type DayTypeId } from "@/lib/planner-daytype";
 import { getMonday, toYYYYMMDDUTC } from "@/lib/api/sessions";
+import { CSRF_HEADER_NAME, getClientCsrfToken } from "@/lib/security/client-csrf";
 
 const DEFAULT_LABELS: RowLabels = {
   "PRE ENTREN0": "PRE ENTREN0",
@@ -217,10 +218,18 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
         isDefault: DEFAULT_DAY_TYPES.some((d) => d.id === t.id),
       }));
 
+      const token = getClientCsrfToken();
+      if (!token) {
+        alert("CSRF missing: recargá la página");
+        return;
+      }
+
       const res = await fetch("/api/ct/planner/day-types", {
         method: "PUT",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
+          [CSRF_HEADER_NAME]: token,
         },
         body: JSON.stringify({ dayTypes: payload }),
       });
