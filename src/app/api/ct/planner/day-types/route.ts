@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { dbScope } from "@/lib/dbScope";
 import { assertCsrf, handleCsrfError } from "@/lib/security/csrf";
-import { DEFAULT_DAY_TYPES } from "@/lib/planner-daytype";
+import { DEFAULT_DAY_TYPES, normalizeDayTypeColor } from "@/lib/planner-daytype";
 
 export const dynamic = "force-dynamic";
 
@@ -27,10 +27,10 @@ export async function GET(req: Request) {
       return NextResponse.json({ dayTypes });
     }
 
-  const dayTypes = rows.map((r: any) => ({
+    const dayTypes = rows.map((r: any) => ({
       key: r.key,
       label: r.label,
-      color: r.color,
+      color: normalizeDayTypeColor(r.color, "#f9fafb"),
       isDefault: r.isDefault,
       order: r.order,
     }));
@@ -57,14 +57,18 @@ export async function PUT(req: Request) {
     const cleaned = list.map((raw: any, index: number) => {
       const key = typeof raw?.key === "string" ? raw.key.trim().toUpperCase() : "";
       const label = typeof raw?.label === "string" ? raw.label.trim() : "";
-      const color = typeof raw?.color === "string" ? raw.color.trim() : "";
+      const rawColor = typeof raw?.color === "string" ? raw.color.trim() : "";
       const order = Number.isFinite(raw?.order) ? Number(raw.order) : index;
       const isDefault = !!raw?.isDefault;
 
       if (!key) throw new Error(`dayTypes[${index}].key requerido`);
       if (seenKeys.has(key)) throw new Error(`dayTypes[${index}].key duplicado: ${key}`);
       if (!label) throw new Error(`dayTypes[${index}].label requerido`);
+      const color = normalizeDayTypeColor(rawColor, "");
       if (!color) throw new Error(`dayTypes[${index}].color requerido`);
+      if (!/^#[0-9A-F]{6}$/.test(color)) {
+        throw new Error(`dayTypes[${index}].color inválido (usar HEX tipo #AABBCC)`);
+      }
       seenKeys.add(key);
 
       return { key, label, color, order, isDefault };

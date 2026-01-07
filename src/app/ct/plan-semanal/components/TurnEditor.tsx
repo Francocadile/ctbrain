@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import type { DayFlag, TurnKey } from "@/lib/planner-contract";
 import { cellKey } from "@/lib/planner-contract";
+import { getDayTypeTextColor } from "@/lib/planner-daytype";
 import EditableCell from "./EditableCell";
 import MetaInput, { type MetaRowId } from "./MetaInput";
 
@@ -74,10 +75,14 @@ export default function TurnEditor({
       >
         <div className="bg-gray-50 border-b px-2 py-1.5 font-semibold text-gray-600"></div>
         {orderedDays.map((ymd) => {
-          const color = dayTypeColorFor(ymd, turn);
-          const bgClass = color || "bg-gray-50";
+          const color = dayTypeColorFor(ymd, turn) || "#f9fafb";
+          const textColor = getDayTypeTextColor(color);
           return (
-            <div key={`${turn}-${ymd}`} className={`${bgClass} border-b px-2 py-1.5`}>
+            <div
+              key={`${turn}-${ymd}`}
+              className="border-b px-2 py-1.5"
+              style={{ backgroundColor: color, color: textColor }}
+            >
               <div className="text-[11px] font-semibold uppercase tracking-wide">{humanDayUTC(ymd)}</div>
               <div className="text-[10px] text-gray-500">{ymd}</div>
             </div>
@@ -100,10 +105,13 @@ export default function TurnEditor({
             const existing = findCell(ymd, turn, rowName);
             const k = cellKey(ymd, turn, rowName);
             const pendingValue = pending[k];
-            const color = dayTypeColorFor(ymd, turn);
-            const bgClass = color || "bg-white";
+            const color = dayTypeColorFor(ymd, turn) || "#ffffff";
             return (
-              <div key={`${ymd}-${turn}-${rowName}`} className={`p-1 ${bgClass}`}>
+              <div
+                key={`${ymd}-${turn}-${rowName}`}
+                className="p-1"
+                style={{ backgroundColor: color }}
+              >
                 <MetaInput
                   dayYmd={ymd}
                   turn={turn}
@@ -153,10 +161,13 @@ export default function TurnEditor({
               const initialText = staged !== undefined ? staged : existing?.title ?? "";
               const flag = getDayFlag(ymd, turn);
               const sessionHref = existing?.id ? `/ct/sessions/${existing.id}` : "";
-              const color = dayTypeColorFor(ymd, turn);
-              const bgClass = color || "bg-white";
+              const color = dayTypeColorFor(ymd, turn) || "#ffffff";
               return (
-                <div key={`${ymd}-${turn}-${rowName}`} className={`p-1 ${bgClass}`}>
+                <div
+                  key={`${ymd}-${turn}-${rowName}`}
+                  className="p-1"
+                  style={{ backgroundColor: color }}
+                >
                   <EditableCell
                     dayYmd={ymd}
                     turn={turn}

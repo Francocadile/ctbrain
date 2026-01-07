@@ -11,6 +11,7 @@ import {
   type SessionDTO,
 } from "@/lib/api/sessions";
 import type { DayTypeDef, DayTypeId } from "@/lib/planner-daytype";
+import { getDayTypeTextColor } from "@/lib/planner-daytype";
 import PlannerMatchLink from "@/components/PlannerMatchLink";
 import VideoPlayerModal from "@/components/training/VideoPlayerModal";
 
@@ -225,7 +226,7 @@ function DashboardSemanaInner() {
         const mapped: DayTypeDef[] = items.map((t: any) => ({
           id: String(t.key || ""),
           label: String(t.label || ""),
-          color: String(t.color || "bg-gray-50"),
+          color: String(t.color || "#f9fafb"),
         }));
         setDayTypes(mapped);
       } catch (e) {
@@ -290,7 +291,10 @@ function DashboardSemanaInner() {
       }
       return (
         <div className="h-6 text-[11px] px-1 flex items-center gap-1 truncate">
-          <span className={`w-3 h-3 rounded-full border ${def.color}`} />
+          <span
+            className="w-3 h-3 rounded-full border"
+            style={{ backgroundColor: def.color || "#f9fafb" }}
+          />
           <span className="truncate">{def.label}</span>
         </div>
       );
@@ -358,7 +362,8 @@ function DashboardSemanaInner() {
     const headerHref = `/ct/sessions/by-day/${ymd}/${activeTurn}`;
     const librePill = activeTurn === "morning" ? "Mañana libre" : "Tarde libre";
     const isMatchDay = flag.kind === "PARTIDO";
-    const dayTypeBg = dayTypeColorFor(ymd, activeTurn) || "bg-gray-50";
+    const dayTypeColor = dayTypeColorFor(ymd, activeTurn) || "#f9fafb";
+    const dayTypeText = getDayTypeTextColor(dayTypeColor);
 
     const NormalBody = () => (
       <div className="grid gap-[6px]" style={{ gridTemplateRows: `repeat(4, ${ROW_H}px)` }}>
@@ -368,7 +373,8 @@ function DashboardSemanaInner() {
           return (
             <div
               key={row}
-              className={`rounded-md border px-2 py-1.5 text-[12px] leading-[18px] whitespace-pre-wrap overflow-hidden ${dayTypeBg}`}
+              className="rounded-md border px-2 py-1.5 text-[12px] leading-[18px] whitespace-pre-wrap overflow-hidden"
+              style={{ backgroundColor: dayTypeColor }}
             >
               {txt || <span className="text-gray-400 italic">—</span>}
             </div>
@@ -379,8 +385,9 @@ function DashboardSemanaInner() {
 
     const SinglePanel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
       <div
-        className={`rounded-md border flex items-center justify-center ${dayTypeBg}`}
+        className="rounded-md border flex items-center justify-center"
         style={{ height: ROW_H * 4 + CELL_GAP * 3 }}
+        
       >
         <div className="p-2 text-center">{children}</div>
       </div>
@@ -394,10 +401,12 @@ function DashboardSemanaInner() {
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
         {/* Header: 1 fila para días normales/LIBRE, 2 filas sólo en PARTIDO */}
         <div
-          className={`px-2 border-b flex flex-col justify-center gap-1 ${dayTypeBg}`}
+          className="px-2 border-b flex flex-col justify-center gap-1"
           style={{
             height: isMatchDay ? DAY_HEADER_H + 22 : DAY_HEADER_H,
             minHeight: isMatchDay ? DAY_HEADER_H + 22 : DAY_HEADER_H,
+            backgroundColor: dayTypeColor,
+            color: dayTypeText,
           }}
         >
           {/* Fila 1: siempre fecha + MicroBadge (igual en todos los días) */}

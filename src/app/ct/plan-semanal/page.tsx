@@ -159,7 +159,7 @@ function PlanSemanalInner() {
       const mapped: DayTypeDef[] = list.map((t: any) => ({
         id: String(t.key || ""),
         label: String(t.label || ""),
-        color: String(t.color || "bg-gray-50"),
+        color: String(t.color || "#f9fafb"),
       }));
       setDayTypes(mapped);
     } catch (e) {

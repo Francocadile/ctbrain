@@ -11,7 +11,7 @@ import {
   type RowLabels,
 } from "@/lib/planner-prefs";
 import HelpTip from "@/components/HelpTip";
-import { DEFAULT_DAY_TYPES, type DayTypeDef, type DayTypeId } from "@/lib/planner-daytype";
+import { DEFAULT_DAY_TYPES, normalizeDayTypeColor, type DayTypeDef, type DayTypeId } from "@/lib/planner-daytype";
 import { getMonday, toYYYYMMDDUTC } from "@/lib/api/sessions";
 import { CSRF_HEADER_NAME, getClientCsrfToken } from "@/lib/security/client-csrf";
 
@@ -58,7 +58,7 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
           const mapped: DayTypeDef[] = items.map((t: any) => ({
             id: String(t.key || ""),
             label: String(t.label || ""),
-            color: String(t.color || "bg-gray-50"),
+            color: normalizeDayTypeColor(String(t.color || "")),
           }));
           setDayTypes(mapped);
         } else {
@@ -174,7 +174,7 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
     }
     setDayTypes((prev) => [
       ...prev,
-      { id: candidate, label: "Nuevo tipo", color: "bg-sky-50" },
+      { id: candidate, label: "Nuevo tipo", color: "#f0f9ff" },
     ]);
   }
 
@@ -200,14 +200,19 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
       for (const t of dayTypes) {
         const key = (t.id || "").trim().toUpperCase().replace(/\s+/g, "_");
         const label = (t.label || "").trim();
-        const color = (t.color || "bg-gray-50").trim();
-        if (!key || !label || !color) continue;
+        const rawColor = (t.color || "").trim();
+        if (!key || !label || !rawColor) continue;
         if (seen.has(key)) {
           alert("Hay claves de tipo de trabajo duplicadas. Revisá la lista.");
           return;
         }
         seen.add(key);
-        cleaned.push({ id: key, label, color });
+        const normalizedColor = normalizeDayTypeColor(rawColor, "");
+        if (!/^#[0-9A-F]{6}$/.test(normalizedColor)) {
+          alert("Hay colores inválidos. Usá un HEX tipo #AABBCC.");
+          return;
+        }
+        cleaned.push({ id: key, label, color: normalizedColor });
       }
 
       const payload = cleaned.map((t, idx) => ({
@@ -347,23 +352,28 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
         <div className="space-y-1 max-h-72 overflow-auto mb-2">
           {dayTypes.map((t, idx) => (
             <div key={t.id} className="flex items-center gap-2 text-[11px]">
-              <div className={`w-4 h-4 rounded-full border ${t.color}`} />
+              <div
+                className="w-4 h-4 rounded-full border"
+                style={{ backgroundColor: t.color || "#f9fafb" }}
+              />
               <input
                 className="flex-1 h-7 rounded border px-1 text-[11px]"
                 value={t.label}
                 onChange={(e) => handleDayTypeLabelChange(t.id, e.target.value)}
               />
-              <select
-                className="h-7 rounded border px-1 text-[11px]"
-                value={t.color}
+              <input
+                type="color"
+                className="h-7 w-10 rounded border p-0"
+                value={/^#?[0-9A-Fa-f]{6}$/.test(t.color || "") ? normalizeDayTypeColor(t.color) : "#ffffff"}
                 onChange={(e) => handleDayTypeColorChange(t.id, e.target.value)}
-              >
-                {["bg-sky-50","bg-red-50","bg-amber-50","bg-emerald-50","bg-violet-50","bg-blue-50","bg-yellow-50","bg-gray-50"].map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+              />
+              <input
+                className="h-7 w-20 rounded border px-1 text-[11px]"
+                value={t.color}
+                placeholder="#AABBCC"
+                onChange={(e) => handleDayTypeColorChange(t.id, e.target.value)}
+                onBlur={(e) => handleDayTypeColorChange(t.id, normalizeDayTypeColor(e.target.value))}
+              />
               <div className="flex items-center gap-1">
                 <button
                   type="button"

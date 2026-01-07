@@ -16,7 +16,10 @@ export default function DayTypeCell({ value, onSelectedChange, types }: DayTypeC
 
   return (
     <div className="flex items-center gap-1 text-[11px] h-7">
-      <div className={`w-3 h-3 rounded-full border ${selectedDef?.color || "bg-gray-50"}`} />
+      <div
+        className="w-3 h-3 rounded-full border"
+        style={{ backgroundColor: selectedDef?.color || "#f9fafb" }}
+      />
       <select
         className="h-7 flex-1 rounded-md border px-1.5 text-[11px] min-w-0"
         value={value || ""}
