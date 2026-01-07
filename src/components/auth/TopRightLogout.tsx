@@ -2,7 +2,11 @@
 
 import { signOut, useSession } from "next-auth/react";
 
-export default function TopRightLogout() {
+type TopRightLogoutProps = {
+  className?: string;
+};
+
+export default function TopRightLogout({ className = "" }: TopRightLogoutProps) {
   const { status } = useSession();
 
   if (status !== "authenticated") return null;
@@ -10,7 +14,7 @@ export default function TopRightLogout() {
   return (
     <button
       onClick={() => signOut({ callbackUrl: "/login" })}
-      className="fixed right-4 top-4 rounded-md border px-3 py-1 text-sm hover:bg-gray-50"
+      className={`rounded-md border px-3 py-1 text-sm hover:bg-gray-50 ${className}`}
       aria-label="Cerrar sesión"
     >
       Salir

@@ -7,10 +7,10 @@ import TeamSwitcher from "@/components/nav/TeamSwitcher";
 export default function MedicoLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen relative">
-      <div className="absolute left-4 top-4 z-40">
+      <div className="fixed top-4 right-4 z-40 flex items-center gap-3">
         <TeamSwitcher className="min-w-[160px]" />
+        <TopRightLogout />
       </div>
-      <TopRightLogout />
       {children}
     </div>
   );

@@ -23,7 +23,7 @@ export default async function MedicoPage() {
 
           {/* Informativas (sin enlace por ahora) */}
           <Card
-            title="Wellness"
+            title="Wellness / RPE"
             desc="Cuestionarios diarios y alertas automáticas."
             href={"/medico/wellness" as Route}
           />
