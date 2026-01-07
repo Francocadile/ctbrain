@@ -179,12 +179,25 @@ export default function EpisodeList({
       const res = await fetch(`/api/medico/clinical/${encodeURIComponent(ep.id)}`, {
         method: "DELETE",
       });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
+      let bodyText: string | null = null;
+      try {
+        bodyText = await res.text();
+      } catch {
+        bodyText = null;
       }
+
+      if (!res.ok) {
+        console.error("Error DELETE /api/medico/clinical", {
+          status: res.status,
+          body: bodyText,
+        });
+        window.alert("No se pudo eliminar el episodio clínico.");
+        return;
+      }
+
       await reload(date);
     } catch (e) {
-      console.error("Error eliminando episodio clínico", e);
+      console.error("Error de red eliminando episodio clínico", e);
       window.alert("No se pudo eliminar el episodio clínico.");
     }
   }

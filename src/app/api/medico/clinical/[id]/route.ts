@@ -248,7 +248,7 @@ export async function PATCH(req: NextRequest, ctx: { params: { id: string } }) {
 
 /* =======================
    DELETE /api/medico/clinical/[id]
-   Solo ADMIN
+   Solo MEDICO o ADMIN
 ======================= */
 export async function DELETE(req: NextRequest, ctx: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -256,7 +256,7 @@ export async function DELETE(req: NextRequest, ctx: { params: { id: string } }) 
   if (!session?.user?.id) {
     return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
   }
-  if (role !== Role.ADMIN) {
+  if (!role || !editorRoles.has(role)) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
