@@ -28,6 +28,11 @@ export default async function MedicoPage() {
             href={"/medico/wellness" as Route}
           />
           <Card
+            title="Microciclo"
+            desc="Plan semanal (solo lectura)."
+            href={"/medico/microciclo" as Route}
+          />
+          <Card
             title="Protocolos"
             desc="Intervenciones, guías y lineamientos."
             href={"/medico/protocols" as Route}
