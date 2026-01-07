@@ -6,7 +6,7 @@ import { checkRateLimit } from "./src/lib/rateLimit";
 import { assertCsrf } from "./src/lib/security/csrf";
 
 // ✅ Solo protegemos rutas del CT (y lo que definas explícito)
-const CT_PATHS = [/^\/ct(?:\/:|$)/, /^\/api\/sessions(?:\/:|$)/];
+const CT_PATHS = [/^\/ct(?:\/|$)/, /^\/api\/sessions(?:\/|$)/];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
