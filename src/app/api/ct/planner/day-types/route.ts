@@ -8,7 +8,8 @@ export const dynamic = "force-dynamic";
 // GET /api/ct/planner/day-types -> lista de tipos de trabajo del equipo actual
 export async function GET(req: Request) {
   try {
-    const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN"] as any });
+    // Lectura permitida para CT, ADMIN y MEDICO
+    const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN", "MEDICO"] as any });
 
     const rows = await prisma.plannerDayType.findMany({
       where: { teamId: team.id },

@@ -32,7 +32,8 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "weekStart inválido" }, { status: 400 });
     }
 
-    const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN"] as any });
+    // Lectura permitida para CT, ADMIN y MEDICO
+    const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN", "MEDICO"] as any });
     const days = computeWeekDays(weekStart);
 
     const rows = await prisma.plannerDayTypeAssignment.findMany({
