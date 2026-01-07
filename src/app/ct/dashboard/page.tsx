@@ -543,10 +543,10 @@ function DashboardSemanaInner() {
                     className="mt-2 grid gap-[6px]"
                     style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
                   >
-                    {META_ROWS.filter((labelText) => labelText !== "TIPO TRABAJO" && labelText !== "RIVAL").map((labelText) => (
+                    {META_ROWS.filter((labelText) => labelText !== "TIPO" && labelText !== "RIVAL").map((labelText) => (
                       <div key={`meta-${labelText}`} className="contents">
                         <div className="bg-gray-50/60 border rounded-md px-2 py-1 text-[10px] font-medium text-gray-600 text-center">
-                          {labelText}
+                          {labelText === "TIPO TRABAJO" ? "TIPO DE TRABAJO" : labelText}
                         </div>
                         {orderedDays.map((ymd) => (
                           <div key={`${labelText}-${ymd}`} className="rounded-md border px-1 py-0.5">
