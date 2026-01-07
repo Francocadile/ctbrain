@@ -53,10 +53,27 @@ function roleHome(role?: string) {
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isAPI = pathname.startsWith("/api");
+  const isSessionsApi = pathname.startsWith("/api/sessions");
+
+  const debugEnabled = isSessionsApi;
+  let debugRole = "none";
+  let debugHasToken = "0";
+
+  const withDebug = (res: NextResponse, branch: string): NextResponse => {
+    if (debugEnabled) {
+      res.headers.set("x-mw-hit", "1");
+      res.headers.set("x-mw-path", pathname);
+      res.headers.set("x-mw-method", req.method);
+      res.headers.set("x-mw-role", debugRole || "none");
+      res.headers.set("x-mw-has-token", debugHasToken);
+      res.headers.set("x-mw-branch", branch);
+    }
+    return res;
+  };
 
   // Públicos -> dejar pasar
   if (matchAny(pathname, PUBLIC)) {
-    return NextResponse.next();
+    return withDebug(NextResponse.next(), "public");
   }
 
   // ¿Qué guard aplica?
@@ -65,27 +82,35 @@ export async function middleware(req: NextRequest) {
 
   // Si no matchea nada, dejar pasar
   if (!needsCT && !needsMED) {
-    return NextResponse.next();
+    return withDebug(NextResponse.next(), "no-guard");
   }
 
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
 
   if (!token) {
     if (isAPI) {
-      return new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "content-type": "application/json" },
-      });
+      return withDebug(
+        new NextResponse(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+        isSessionsApi ? "sessions-no-token" : "no-token",
+      );
     }
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("callbackUrl", pathname);
-    return NextResponse.redirect(url);
+    return withDebug(
+      NextResponse.redirect(url),
+      isSessionsApi ? "sessions-no-token-redirect" : "no-token-redirect",
+    );
   }
   // Bypass global para SUPERADMIN: controla todo sin restricciones de equipo.
   const role = (token as any).role as string | undefined;
+  debugHasToken = "1";
+  debugRole = role ?? "none";
   if (role === "SUPERADMIN") {
-    return NextResponse.next();
+    return withDebug(NextResponse.next(), "superadmin");
   }
 
   const isApproved = (token as any).isApproved as boolean | undefined;
@@ -93,19 +118,29 @@ export async function middleware(req: NextRequest) {
   // Gate global: si no está aprobado y NO es admin → pending
   if (role !== "ADMIN" && isApproved === false) {
     if (isAPI) {
-      return new NextResponse(JSON.stringify({ error: "Forbidden", pendingApproval: true }), {
-        status: 403,
-        headers: { "content-type": "application/json" },
-      });
+      return withDebug(
+        new NextResponse(JSON.stringify({ error: "Forbidden", pendingApproval: true }), {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        }),
+        isSessionsApi ? "sessions-pending-approval-api" : "pending-approval-api",
+      );
     }
     const url = req.nextUrl.clone();
     url.pathname = "/pending-approval";
-    return NextResponse.redirect(url);
+    return withDebug(
+      NextResponse.redirect(url),
+      isSessionsApi ? "sessions-pending-approval-redirect" : "pending-approval-redirect",
+    );
   }
 
   // Guard CT
   if (needsCT) {
-    const allowed = role === "CT" || role === "ADMIN";
+    const isSessionsGet = isSessionsApi && req.method === "GET";
+    const allowed =
+      role === "CT" ||
+      role === "ADMIN" ||
+      (isSessionsGet && role === "MEDICO");
     if (!allowed) {
       console.info("[middleware] deny", {
         reason: "role-mismatch",
@@ -116,7 +151,10 @@ export async function middleware(req: NextRequest) {
       });
       const url = req.nextUrl.clone();
       url.pathname = roleHome(role);
-      return NextResponse.redirect(url);
+      return withDebug(
+        NextResponse.redirect(url),
+        isSessionsGet ? "sessions-get-denied" : "ct-denied",
+      );
     }
   }
 
@@ -134,7 +172,7 @@ export async function middleware(req: NextRequest) {
       });
       const url = req.nextUrl.clone();
       url.pathname = roleHome(role);
-      return NextResponse.redirect(url);
+      return withDebug(NextResponse.redirect(url), "med-denied");
     }
   }
 
@@ -156,28 +194,39 @@ export async function middleware(req: NextRequest) {
         userId: token.sub,
       });
       if (isAPI) {
-        return new NextResponse(JSON.stringify({ error: "Team selection required" }), {
-          status: 428,
-          headers: { "content-type": "application/json" },
-        });
+        return withDebug(
+          new NextResponse(JSON.stringify({ error: "Team selection required" }), {
+            status: 428,
+            headers: { "content-type": "application/json" },
+          }),
+          isSessionsApi ? "sessions-team-required-api" : "team-required-api",
+        );
       }
       const url = req.nextUrl.clone();
       url.pathname = "/redirect";
       url.searchParams.set("team", "select");
-      return NextResponse.redirect(url);
+      return withDebug(
+        NextResponse.redirect(url),
+        isSessionsApi ? "sessions-team-required-redirect" : "team-required-redirect",
+      );
     }
 
     const requestHeaders = new Headers(req.headers);
     requestHeaders.set("x-team", teamId);
 
-    return NextResponse.next({
-      request: {
-        headers: requestHeaders,
-      },
-    });
+    return withDebug(
+      NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      }),
+      isSessionsApi && req.method === "GET"
+        ? "sessions-get-allowed"
+        : "guard-allowed",
+    );
   }
 
-  return NextResponse.next();
+  return withDebug(NextResponse.next(), "no-guard-allowed");
 }
 
 export const config = {
