@@ -54,6 +54,8 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isAPI = pathname.startsWith("/api");
   const isSessionsApi = pathname.startsWith("/api/sessions");
+  const isDayTypesApi = pathname.startsWith("/api/ct/planner/day-types");
+  const isDayTypeAssignmentsApi = pathname.startsWith("/api/ct/planner/day-type-assignments");
 
   const debugEnabled = isSessionsApi;
   let debugRole = "none";
@@ -137,10 +139,11 @@ export async function middleware(req: NextRequest) {
   // Guard CT
   if (needsCT) {
     const isSessionsGet = isSessionsApi && req.method === "GET";
+    const isDayTypesGet = (isDayTypesApi || isDayTypeAssignmentsApi) && req.method === "GET";
     const allowed =
       role === "CT" ||
       role === "ADMIN" ||
-      (isSessionsGet && role === "MEDICO");
+      ((isSessionsGet || isDayTypesGet) && role === "MEDICO");
     if (!allowed) {
       console.info("[middleware] deny", {
         reason: "role-mismatch",
