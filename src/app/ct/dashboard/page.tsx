@@ -133,9 +133,14 @@ const CELL_GAP = 6;
 /* =========================================================
    Inner
 ========================================================= */
-function DashboardSemanaInner() {
+type DashboardSemanaInnerProps = {
+  showHeader?: boolean;
+};
+
+function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) {
   const qs = useSearchParams();
-  const hideHeader = qs.get("hideHeader") === "1";
+  const hideHeaderParam = qs.get("hideHeader") === "1";
+  const hideHeader = hideHeaderParam || !showHeader;
   const initialTurn = (qs.get("turn") === "afternoon" ? "afternoon" : "morning") as TurnKey;
   const [activeTurn, setActiveTurn] = useState<TurnKey>(initialTurn);
 
@@ -605,6 +610,10 @@ function DashboardSemanaInner() {
 /* =========================================================
    Wrapper
 ========================================================= */
+export function DashboardPlanGridReadOnly() {
+  return <DashboardSemanaInner showHeader={false} />;
+}
+
 export default function DashboardSemanaPage() {
   return (
     <Suspense fallback={<div className="p-3 text-gray-500">Cargando…</div>}>
