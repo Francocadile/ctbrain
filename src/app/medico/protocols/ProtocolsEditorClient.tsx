@@ -201,6 +201,43 @@ export default function ProtocolsEditorClient() {
     }
   }
 
+  async function handleDeleteProtocol() {
+    if (!detail) return;
+    const ok = window.confirm(
+      "¿Seguro que querés eliminar este protocolo? Se borrarán también sus etapas y bloques.",
+    );
+    if (!ok) return;
+
+    try {
+      const res = await fetch(`/api/medico/protocols/${encodeURIComponent(detail.id)}` , {
+        method: "DELETE",
+      });
+
+      let bodyText: string | null = null;
+      try {
+        bodyText = await res.text();
+      } catch {
+        bodyText = null;
+      }
+
+      if (!res.ok) {
+        console.error("Error DELETE /api/medico/protocols/[id]", {
+          status: res.status,
+          body: bodyText,
+        });
+        window.alert("No se pudo eliminar el protocolo.");
+        return;
+      }
+
+      setSelectedId(null);
+      setDetail(null);
+      await loadList();
+    } catch (e) {
+      console.error("Error de red eliminando protocolo", e);
+      window.alert("No se pudo eliminar el protocolo.");
+    }
+  }
+
   async function addStage() {
     if (!detail) return;
     setError(null);
@@ -342,6 +379,13 @@ export default function ProtocolsEditorClient() {
                 onClick={handleHeaderSave}
               >
                 Guardar encabezado
+              </button>
+              <button
+                type="button"
+                className="h-9 rounded-md border px-3 text-sm text-red-600 hover:bg-red-50"
+                onClick={handleDeleteProtocol}
+              >
+                Eliminar protocolo
               </button>
             </div>
           </div>
