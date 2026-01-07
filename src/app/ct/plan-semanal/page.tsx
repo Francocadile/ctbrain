@@ -12,6 +12,7 @@ import {
   toYYYYMMDDUTC,
   type SessionDTO,
 } from "@/lib/api/sessions";
+import { CSRF_HEADER_NAME, getClientCsrfToken } from "@/lib/security/client-csrf";
 import type { DayTypeDef, DayTypeId } from "@/lib/planner-daytype";
 import {
   type DayFlag,
@@ -260,10 +261,19 @@ function PlanSemanalInner() {
     setDayTypeAssignments(nextMap);
 
     try {
+      const token = getClientCsrfToken();
+      if (!token) {
+        alert("CSRF missing: recargá la página");
+        setDayTypeAssignments(prevMap);
+        return;
+      }
+
       const res = await fetch("/api/ct/planner/day-type-assignments", {
         method: "PUT",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
+          [CSRF_HEADER_NAME]: token,
         },
         body: JSON.stringify({
           items: [
