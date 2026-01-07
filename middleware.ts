@@ -79,6 +79,8 @@ export async function middleware(req: NextRequest) {
     return withSecurityHeaders(res);
   }
 
+  const isSessionsApi = pathname.startsWith("/api/sessions");
+
   const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
   if (!token) {
     const url = req.nextUrl.clone();
@@ -89,6 +91,23 @@ export async function middleware(req: NextRequest) {
   }
 
   const role = (token as any).role;
+
+  // Para GET /api/sessions permitimos también MEDICO (lectura del microciclo)
+  if (isSessionsApi && req.method === "GET") {
+    const isAllowed = role === "CT" || role === "ADMIN" || role === "MEDICO";
+    if (!isAllowed) {
+      const url = req.nextUrl.clone();
+      url.pathname =
+        role === "JUGADOR" ? "/player" :
+        role === "DIRECTIVO" ? "/directivo" : "/";
+      const res = NextResponse.redirect(url);
+      return withSecurityHeaders(res);
+    }
+
+    const res = NextResponse.next();
+    return withSecurityHeaders(res);
+  }
+
   const isAdminOrCT = role === "CT" || role === "ADMIN";
   if (!isAdminOrCT) {
     const url = req.nextUrl.clone();
