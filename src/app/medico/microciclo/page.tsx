@@ -1,14 +1,13 @@
 import RoleGate from "@/components/auth/RoleGate";
-import BackToMedico from "@/components/ui/BackToMedico";
+import CTLayout from "@/app/ct/layout";
 import CTDashboardPage from "@/app/ct/dashboard/page";
 
 export default function MedicoMicrocicloPage() {
   return (
     <RoleGate allow={["MEDICO", "ADMIN"]} requireTeam>
-      <>
-        <BackToMedico />
+      <CTLayout>
         <CTDashboardPage />
-      </>
+      </CTLayout>
     </RoleGate>
   );
 }
