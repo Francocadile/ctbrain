@@ -170,6 +170,25 @@ export default function EpisodeList({
 
   const showEmptyCreate = !loading && filtered.length === 0;
 
+  async function handleDelete(ep: Episode) {
+    if (typeof window === "undefined") return;
+    const ok = window.confirm("¿Seguro que querés eliminar este episodio clínico?");
+    if (!ok) return;
+
+    try {
+      const res = await fetch(`/api/medico/clinical/${encodeURIComponent(ep.id)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      await reload(date);
+    } catch (e) {
+      console.error("Error eliminando episodio clínico", e);
+      window.alert("No se pudo eliminar el episodio clínico.");
+    }
+  }
+
   return (
     <section className={`rounded-xl border bg-white p-5 shadow-sm ${className}`}>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -355,6 +374,13 @@ export default function EpisodeList({
                         onClick={() => onEdit?.(ep)}
                       >
                         Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="ml-2 rounded-md border px-3 py-1 text-sm text-red-600 hover:bg-red-50"
+                        onClick={() => handleDelete(ep)}
+                      >
+                        Eliminar
                       </button>
                     </td>
                   </tr>
