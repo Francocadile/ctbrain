@@ -363,7 +363,6 @@ function DashboardSemanaInner() {
     const librePill = activeTurn === "morning" ? "Mañana libre" : "Tarde libre";
     const isMatchDay = flag.kind === "PARTIDO";
     const dayTypeColor = dayTypeColorFor(ymd, activeTurn) || "#f9fafb";
-    const dayTypeText = getDayTypeTextColor(dayTypeColor);
 
     const NormalBody = () => (
       <div className="grid gap-[6px]" style={{ gridTemplateRows: `repeat(4, ${ROW_H}px)` }}>
@@ -373,8 +372,7 @@ function DashboardSemanaInner() {
           return (
             <div
               key={row}
-              className="rounded-md border px-2 py-1.5 text-[12px] leading-[18px] whitespace-pre-wrap overflow-hidden text-center"
-              style={{ backgroundColor: dayTypeColor }}
+              className="rounded-md border border-black/10 px-2 py-1.5 text-[12px] leading-[18px] whitespace-pre-wrap overflow-hidden text-center"
             >
               {txt || <span className="text-gray-400 italic">—</span>}
             </div>
@@ -398,15 +396,18 @@ function DashboardSemanaInner() {
     );
 
     return (
-      <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+      <div
+        className="relative rounded-xl border border-black/10 shadow-sm overflow-hidden"
+        style={{ backgroundColor: dayTypeColor }}
+      >
+        <div className="absolute inset-0 bg-white/10 pointer-events-none" />
+        <div className="relative">
         {/* Header: 1 fila para días normales/LIBRE, 2 filas sólo en PARTIDO */}
         <div
-          className="px-2 border-b flex flex-col justify-center gap-1"
+          className="px-2 border-b border-black/10 flex flex-col justify-center gap-1 text-gray-900"
           style={{
             height: isMatchDay ? DAY_HEADER_H + 22 : DAY_HEADER_H,
             minHeight: isMatchDay ? DAY_HEADER_H + 22 : DAY_HEADER_H,
-            backgroundColor: dayTypeColor,
-            color: dayTypeText,
           }}
         >
           {/* Fila 1: siempre fecha + MicroBadge (igual en todos los días) */}
@@ -459,6 +460,7 @@ function DashboardSemanaInner() {
 
           {/* En PARTIDO y días normales mostramos la misma planificación */}
           {(flag.kind === "NONE" || flag.kind === "PARTIDO") && <NormalBody />}
+        </div>
         </div>
       </div>
     );
