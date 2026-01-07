@@ -278,7 +278,7 @@ function DashboardSemanaInner() {
       else if (flag.kind === "LIBRE") text = "Libre";
       else text = "—";
       return (
-        <div className="h-6 text-[11px] px-1 flex items-center truncate">{text}</div>
+        <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center truncate">{text}</div>
       );
     }
 
@@ -286,11 +286,11 @@ function DashboardSemanaInner() {
       const def = dayTypeDefFor(ymd, activeTurn);
       if (!def) {
         return (
-          <div className="h-6 text-[11px] px-1 flex items-center text-gray-400 italic truncate">—</div>
+          <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center text-gray-400 italic truncate">—</div>
         );
       }
       return (
-        <div className="h-6 text-[11px] px-1 flex items-center gap-1 truncate">
+        <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center gap-1 truncate">
           <span
             className="w-3 h-3 rounded-full border"
             style={{ backgroundColor: def.color || "#f9fafb" }}
@@ -304,7 +304,7 @@ function DashboardSemanaInner() {
       const micro = getMicro(ymd, activeTurn);
       const text = micro || "—";
       return (
-        <div className="h-6 text-[11px] px-1 flex items-center truncate">{text}</div>
+        <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center truncate">{text}</div>
       );
     }
 
@@ -312,20 +312,20 @@ function DashboardSemanaInner() {
       const flag = getDayFlag(ymd, activeTurn);
       const text = flag.kind === "PARTIDO" && flag.rival ? flag.rival : "—";
       return (
-        <div className="h-6 text-[11px] px-1 flex items-center truncate">{text}</div>
+        <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center truncate">{text}</div>
       );
     }
 
     const s = findCell(ymd, activeTurn, row);
     const text = (s?.title || "").trim();
     if (!text)
-      return <div className="h-6 text-[11px] text-gray-400 italic px-1 flex items-center">—</div>;
+      return <div className="h-6 text-[11px] text-gray-400 italic px-1 flex items-center justify-center text-center">—</div>;
     if (row === "VIDEO") {
       const { label, url } = parseVideoValue(text);
       return url ? (
         <button
           type="button"
-          className="h-6 text-[11px] underline text-emerald-700 px-1 flex items-center truncate"
+          className="h-6 text-[11px] underline text-emerald-700 px-1 flex items-center justify-center text-center truncate"
           onClick={() =>
             setVideoPreview({
               title: label || "Video sesión",
@@ -337,10 +337,10 @@ function DashboardSemanaInner() {
           {label || "Video"}
         </button>
       ) : (
-        <div className="h-6 text-[11px] px-1 flex items-center truncate">{label}</div>
+        <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center truncate">{label}</div>
       );
     }
-    return <div className="h-6 text-[11px] px-1 flex items-center truncate">{text}</div>;
+    return <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center truncate">{text}</div>;
   }
 
   function MicroBadge({ ymd }: { ymd: string }) {
@@ -373,7 +373,7 @@ function DashboardSemanaInner() {
           return (
             <div
               key={row}
-              className="rounded-md border px-2 py-1.5 text-[12px] leading-[18px] whitespace-pre-wrap overflow-hidden"
+              className="rounded-md border px-2 py-1.5 text-[12px] leading-[18px] whitespace-pre-wrap overflow-hidden text-center"
               style={{ backgroundColor: dayTypeColor }}
             >
               {txt || <span className="text-gray-400 italic">—</span>}
@@ -465,7 +465,7 @@ function DashboardSemanaInner() {
   }
 
   return (
-    <div className="p-3 md:p-4 space-y-3" id="print-root">
+    <div className="p-3 md:p-4 space-y-3">
       {/* PRINT tweaks */}
       <style jsx global>{`
         @page { size: A4 landscape; margin: 8mm; }
@@ -530,62 +530,64 @@ function DashboardSemanaInner() {
       {loadingWeek ? (
         <div className="text-gray-500">Cargando…</div>
       ) : (
-        <div className="rounded-2xl border bg-white shadow-sm">
-          <div className="p-3 w-full overflow-x-auto">
-            <div className="inline-block min-w-[900px] md:min-w-full">
-            {/* DETALLES */}
-            <div className="mb-2">
-              <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-0.5 border rounded-md uppercase tracking-wide text-[11px] inline-block">
-                DETALLES
-              </div>
-              <div
-                className="mt-2 grid gap-[6px]"
-                style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
-              >
-                {META_ROWS.map((labelText) => (
-                  <div key={`meta-${labelText}`} className="contents">
-                    <div className="bg-gray-50/60 border rounded-md px-2 py-1 text-[10px] font-medium text-gray-600">
-                      {labelText}
-                    </div>
-                    {orderedDays.map((ymd) => (
-                      <div key={`${labelText}-${ymd}`} className="rounded-md border px-1 py-0.5">
-                        <ReadonlyMetaCell ymd={ymd} row={labelText} />
+        <section id="print-root">
+          <div className="rounded-2xl border bg-white shadow-sm">
+            <div className="p-3 w-full overflow-x-auto">
+              <div className="inline-block min-w-[900px] md:min-w-full">
+                {/* DETALLES */}
+                <div className="mb-2">
+                  <div className="bg-emerald-50 text-emerald-900 font-semibold px-2 py-0.5 border rounded-md uppercase tracking-wide text-[11px] inline-block">
+                    DETALLES
+                  </div>
+                  <div
+                    className="mt-2 grid gap-[6px]"
+                    style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
+                  >
+                    {META_ROWS.filter((labelText) => labelText !== "TIPO TRABAJO" && labelText !== "RIVAL").map((labelText) => (
+                      <div key={`meta-${labelText}`} className="contents">
+                        <div className="bg-gray-50/60 border rounded-md px-2 py-1 text-[10px] font-medium text-gray-600 text-center">
+                          {labelText}
+                        </div>
+                        {orderedDays.map((ymd) => (
+                          <div key={`${labelText}-${ymd}`} className="rounded-md border px-1 py-0.5">
+                            <ReadonlyMetaCell ymd={ymd} row={labelText} />
+                          </div>
+                        ))}
                       </div>
                     ))}
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
 
-            {/* TURNO */}
-            <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-0.5 border rounded-md uppercase tracking-wide text-[11px] mb-2">
-              {activeTurn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
-            </div>
+                {/* TURNO */}
+                <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-0.5 border rounded-md uppercase tracking-wide text-[11px] mb-2">
+                  {activeTurn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
+                </div>
 
-            {/* Cuerpo */}
-            <div
-              className="grid gap-3"
-              style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
-            >
-              <div
-                className="grid gap-[6px]"
-                style={{ gridTemplateRows: `${DAY_HEADER_H}px repeat(4, ${ROW_H}px)` }}
-              >
-                <div />
-                {ROWS.map((rowId) => (
-                  <div key={rowId} className="bg-gray-50/60 border rounded-md px-2 text-[10px] font-medium text-gray-600 flex items-center">
-                    <span className="leading-[14px] whitespace-pre-line">{label(rowId)}</span>
+                {/* Cuerpo */}
+                <div
+                  className="grid gap-3"
+                  style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
+                >
+                  <div
+                    className="grid gap-[6px]"
+                    style={{ gridTemplateRows: `${DAY_HEADER_H}px repeat(4, ${ROW_H}px)` }}
+                  >
+                    <div />
+                    {ROWS.map((rowId) => (
+                      <div key={rowId} className="bg-gray-50/60 border rounded-md px-2 text-[10px] font-medium text-gray-600 flex items-center justify-center text-center">
+                        <span className="leading-[14px] whitespace-pre-line">{label(rowId)}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
 
-              {orderedDays.map((ymd) => (
-                <DayCard key={`card-${ymd}`} ymd={ymd} />
-              ))}
-            </div>
+                  {orderedDays.map((ymd) => (
+                    <DayCard key={`card-${ymd}`} ymd={ymd} />
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
+        </section>
       )}
       <VideoPlayerModal
         open={!!videoPreview}
