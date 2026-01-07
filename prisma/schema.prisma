@@ -23,6 +23,7 @@ model Team {
   deviceTokens       DeviceToken[]
   plannerDayTypes    PlannerDayType[]
   plannerDayTypeAssignments PlannerDayTypeAssignment[]
+  protocols          Protocol[]
 }
 
 // prisma/schema.prisma
@@ -152,6 +153,8 @@ model User {
   wellnessEntries WellnessEntry[]
   plannerPrefs    PlannerPrefs[]
   clinicalEntries ClinicalEntry[]
+  protocolsAsPlayer  Protocol[]        @relation("ProtocolPlayer")
+  protocolsCreated   Protocol[]        @relation("ProtocolCreatedBy")
   teams           UserTeam[]
   reports         Report[]
   players         Player[]
@@ -450,6 +453,8 @@ model ClinicalEntry {
   protocolControls   String?
   protocolCriteria   String?
 
+  protocols Protocol[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -459,6 +464,85 @@ model ClinicalEntry {
   @@index([leaveKind])
   @@index([bodyPart])
   @@index([userId, date])
+}
+
+// ========= Protocolos médicos =========
+
+enum ProtocolStatus {
+  DRAFT
+  ACTIVE
+  FINISHED
+}
+
+enum ProtocolBlockType {
+  GYM
+  FIELD
+  POOL
+  THERAPY
+  MOBILITY
+  SUPPLEMENT
+  OTHER
+}
+
+model Protocol {
+  id              String   @id @default(cuid())
+  teamId          String
+  playerId        String
+  clinicalEntryId String?
+
+  createdById String
+
+  title         String?
+  injuryContext String?
+  status        ProtocolStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stages ProtocolStage[]
+
+  team          Team           @relation(fields: [teamId], references: [id])
+  player        User           @relation("ProtocolPlayer", fields: [playerId], references: [id])
+  createdBy     User           @relation("ProtocolCreatedBy", fields: [createdById], references: [id])
+  clinicalEntry ClinicalEntry? @relation(fields: [clinicalEntryId], references: [id])
+
+  @@index([teamId])
+  @@index([playerId])
+  @@index([clinicalEntryId])
+}
+
+model ProtocolStage {
+  id         String @id @default(cuid())
+  protocolId String
+
+  date  DateTime
+  title String?
+  order Int
+
+  notes String?
+
+  blocks ProtocolBlock[]
+
+  protocol Protocol @relation(fields: [protocolId], references: [id])
+
+  @@index([protocolId, order])
+  @@index([date])
+}
+
+model ProtocolBlock {
+  id      String @id @default(cuid())
+  stageId String
+  order   Int
+
+  type      ProtocolBlockType
+  content   String
+  intensity String?
+  volume    String?
+  notes     String?
+
+  stage ProtocolStage @relation(fields: [stageId], references: [id])
+
+  @@index([stageId, order])
 }
 
 // ========= Scouting =========

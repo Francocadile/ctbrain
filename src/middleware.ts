@@ -32,7 +32,7 @@ const MED_PATHS = [
 // Excepción: CT puede LEER endpoints clínicos
 function isClinicalReadForCT(pathname: string, method: string) {
   if (method !== "GET") return false;
-  return /^\/api\/medico\/clinical(?:\/|$)/.test(pathname);
+  return /^\/api\/medico\/(clinical|protocols)(?:\/|$)/.test(pathname);
 }
 
 function matchAny(pathname: string, patterns: RegExp[]) {
