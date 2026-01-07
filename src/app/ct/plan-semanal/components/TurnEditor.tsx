@@ -105,12 +105,10 @@ export default function TurnEditor({
             const existing = findCell(ymd, turn, rowName);
             const k = cellKey(ymd, turn, rowName);
             const pendingValue = pending[k];
-            const color = dayTypeColorFor(ymd, turn) || "#ffffff";
             return (
               <div
                 key={`${ymd}-${turn}-${rowName}`}
                 className="p-1"
-                style={{ backgroundColor: color }}
               >
                 <MetaInput
                   dayYmd={ymd}
