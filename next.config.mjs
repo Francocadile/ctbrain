@@ -14,6 +14,15 @@ const nextConfig = {
     };
     return config;
   },
+  outputFileTracingExcludes: {
+    "*": [
+      "apps/**",
+      "**/apps/**",
+      "**/android/**",
+      "**/ios/**",
+      "**/Pods/**",
+    ],
+  },
 };
 
 export default nextConfig;

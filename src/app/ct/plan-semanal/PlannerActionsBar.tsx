@@ -233,7 +233,12 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
         },
         body: JSON.stringify({ dayTypes: payload }),
       });
-      if (!res.ok) throw new Error("No se pudieron guardar los tipos de trabajo");
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(
+          `No se pudieron guardar los tipos de trabajo (HTTP ${res.status}) ${txt}`,
+        );
+      }
       alert("Tipos de trabajo guardados.");
       onAfterChange?.();
     } catch (e: any) {
