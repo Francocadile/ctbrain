@@ -25,10 +25,12 @@ export default async function MedicoPage() {
           <Card
             title="Wellness"
             desc="Cuestionarios diarios y alertas automáticas."
+            href={"/medico/wellness" as Route}
           />
           <Card
             title="Protocolos"
             desc="Intervenciones, guías y lineamientos."
+            href={"/medico/protocols" as Route}
           />
         </section>
       </main>
