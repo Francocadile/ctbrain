@@ -37,7 +37,7 @@
   "include": [
     "next-env.d.ts",
     "src/**/*",
-    "next.config.js",
+    "next.config.mjs",
     "postcss.config.js",
     "tailwind.config.js",
     "types/**/*",
