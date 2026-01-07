@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "vercel-build": "npm run migrate:deploy && npm run build",
     "start": "next start",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
