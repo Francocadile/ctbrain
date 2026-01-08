@@ -385,14 +385,14 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
     const hasAnyContent = hasGridContent || hasSessionName;
 
     const NormalBody = () => (
-      <div className="grid gap-[6px]" style={{ gridTemplateRows: `repeat(4, ${ROW_H}px)` }}>
+      <div className="grid gap-[6px]" style={{ gridTemplateRows: `repeat(4, minmax(${ROW_H}px, auto))` }}>
         {ROWS.map((row) => {
           const s = findCell(ymd, activeTurn, row);
           const txt = (s?.title || "").trim();
           return (
             <div
               key={row}
-              className="rounded-md border border-black/10 px-2 py-1.5 text-[12px] leading-[18px] whitespace-pre-wrap overflow-hidden text-center"
+              className="rounded-md border border-black/10 px-2 py-1.5 text-[12px] leading-[18px] whitespace-pre-wrap text-center"
             >
               {txt || <span className="text-gray-400 italic">—</span>}
             </div>
