@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useMemo, useRef, useEffect } from "react";
+import type { Exercise } from "@/lib/sessions/encodeDecodeExercises";
+import { ExerciseCardPreview } from "./ExerciseCardPreview";
 
 export type SessionDayBlock = {
   rowKey: string; // ej: "PRE ENTREN0", "FÍSICO"
   rowLabel: string; // label visible
   title: string; // contenido del bloque
   sessionId: string; // id de la Session
-  exerciseTitles?: string[]; // títulos de tareas decodificadas
+  exercises?: Exercise[]; // ejercicios decodificados
 };
 
 type SessionDayViewProps = {
@@ -132,6 +134,7 @@ export default function SessionDayView({
         {blocks.map((block) => (
           <div
             key={block.rowKey}
+            data-row-key={block.rowKey}
             ref={(el) => {
               blockRefs.current[block.rowKey] = el;
             }}
@@ -145,30 +148,22 @@ export default function SessionDayView({
               {block.sessionId && (
                 <div className="flex gap-2 no-print">
                   {mode === "ct" ? (
-                    <>
+                    onEditBlock ? (
+                      <button
+                        type="button"
+                        className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
+                        onClick={() => onEditBlock(block)}
+                      >
+                        Editar ejercicios
+                      </button>
+                    ) : (
                       <a
-                        href={`/ct/sessions/${block.sessionId}?view=1`}
+                        href={`/ct/sessions/${block.sessionId}`}
                         className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
                       >
-                        Ver ejercicio
+                        Editar ejercicios
                       </a>
-                      {onEditBlock ? (
-                        <button
-                          type="button"
-                          className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
-                          onClick={() => onEditBlock(block)}
-                        >
-                          Editar ejercicios
-                        </button>
-                      ) : (
-                        <a
-                          href={`/ct/sessions/${block.sessionId}`}
-                          className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
-                        >
-                          Editar ejercicios
-                        </a>
-                      )}
-                    </>
+                    )
                   ) : mode === "player" ? (
                     <a
                       href={`/jugador/sesiones/${block.sessionId}`}
@@ -188,16 +183,18 @@ export default function SessionDayView({
                   <span className="text-gray-400 italic">—</span>
                 )}
               </div>
-              {block.exerciseTitles && block.exerciseTitles.length > 0 && (
-                <div className="mt-1 text-[12px] text-gray-600">
-                  <ul className="list-disc list-inside space-y-0.5">
-                    {block.exerciseTitles.slice(0, 4).map((t, idx) => (
-                      <li key={`${block.rowKey}-ex-${idx}`}>{t}</li>
-                    ))}
-                  </ul>
-                  {block.exerciseTitles.length > 4 && (
+              {block.exercises && block.exercises.length > 0 && (
+                <div className="mt-2 space-y-2">
+                  {block.exercises.slice(0, 6).map((ex, idx) => (
+                    <ExerciseCardPreview
+                      key={`${block.rowKey}-ex-${idx}`}
+                      exercise={ex}
+                      index={idx}
+                    />
+                  ))}
+                  {block.exercises.length > 6 && (
                     <div className="text-[11px] text-gray-500">
-                      +{block.exerciseTitles.length - 4} más
+                      +{block.exercises.length - 6} más
                     </div>
                   )}
                 </div>
