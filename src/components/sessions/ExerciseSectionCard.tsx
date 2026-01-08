@@ -68,6 +68,7 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
     "idle" | "exporting" | "uploading" | "done" | "error"
   >("idle");
   const [saveError, setSaveError] = React.useState<string | null>(null);
+  const [saveWarning, setSaveWarning] = React.useState<string | null>(null);
   const [templateStatus, setTemplateStatus] = React.useState<
     "idle" | "saving" | "done" | "error"
   >("idle");
@@ -100,6 +101,7 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
     setIsSavingDiagram(false);
     setSaveStage("idle");
     setSaveError(null);
+    setSaveWarning(null);
     setShowDiagramEditor(true);
   };
 
@@ -110,6 +112,7 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
     setIsSavingDiagram(false);
     setSaveStage("idle");
     setSaveError(null);
+    setSaveWarning(null);
   };
 
   const saveDiagram = async () => {
@@ -121,6 +124,7 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
     setIsSavingDiagram(true);
     setSaveStage("exporting");
     setSaveError(null);
+    setSaveWarning(null);
 
     let renderedImage: string | undefined;
 
@@ -159,19 +163,16 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
         "No se pudo subir el PNG del diagrama a Blob",
         err,
       );
-      setIsSavingDiagram(false);
-      setSaveStage("error");
-      setSaveError(
-        "No se pudo subir el diagrama. Revisá la conexión y reintentá.",
+      setSaveWarning(
+        "No se pudo subir a la nube. Se guardó local en la sesión.",
       );
-      return;
     }
 
     onChange({
       diagram: {
         ...draftDiagram,
         renderedImageUrl,
-        renderedImage: undefined,
+        renderedImage,
       },
     });
 
@@ -890,6 +891,11 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
             {saveError && (
               <div className="mt-3 text-[11px] text-red-600">
                 {saveError}
+              </div>
+            )}
+            {saveWarning && !saveError && (
+              <div className="mt-3 text-[11px] text-amber-600">
+                {saveWarning}
               </div>
             )}
 

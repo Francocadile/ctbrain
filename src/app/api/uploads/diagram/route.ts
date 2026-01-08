@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   try {
     assertCsrf(req);
 
-    const { team } = await dbScope({ req, roles: [Role.CT, Role.ADMIN] });
+    const { team, user } = await dbScope({ req, roles: [Role.CT, Role.ADMIN] });
     const json = await req.json();
     const parsed = bodySchema.safeParse(json);
 
@@ -30,11 +30,18 @@ export async function POST(req: Request) {
 
     const { sessionId, exerciseIndex, pngDataUrl } = parsed.data;
 
+    console.log("[uploads/diagram] incoming", {
+      role: user.role,
+      teamId: team.id,
+      sessionId,
+      exerciseIndex,
+    });
+
     const token = process.env.BLOB_READ_WRITE_TOKEN;
     if (!token) {
-      console.error("BLOB_READ_WRITE_TOKEN no configurado");
+      console.error("BLOB_READ_WRITE_TOKEN missing");
       return NextResponse.json(
-        { error: "Blob storage no configurado" },
+        { error: "BLOB_READ_WRITE_TOKEN missing" },
         { status: 500 },
       );
     }

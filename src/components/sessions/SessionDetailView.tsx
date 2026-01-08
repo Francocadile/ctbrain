@@ -52,6 +52,7 @@ export type SessionDetailViewProps = {
   pickerSearch?: string;
   setPickerSearch?: (value: string) => void;
   setPickerIndex?: (value: number | null) => void;
+  embed?: boolean;
 };
 
 export default function SessionDetailView({
@@ -81,66 +82,103 @@ export default function SessionDetailView({
   pickerSearch,
   setPickerSearch,
   setPickerIndex,
+  embed,
 }: SessionDetailViewProps) {
   const displayRow = (markerRow || "").replace("ENTREN0", "ENTRENO");
   const ro = isViewMode || !editing || mode !== "ct";
 
   return (
-    <div id="print-root" className="p-4 md:p-6 space-y-4 print:!p-2">
-      {/* Header */}
-      <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between print:hidden">
-        <div>
-          <h1 className="text-lg md:text-xl font-bold">
-            Sesión: {displayRow || "Bloque"} · {"(" + (markerTurn === "morning" ? "Mañana" : markerTurn === "afternoon" ? "Tarde" : "—") + ")"}
-          </h1>
-          <p className="text-xs md:text-sm text-gray-500">
-            Día: {markerYmd || "—"} · Tipo: {s.type}
-          </p>
-        </div>
-
-        {mode === "ct" && (
-          <div className="flex items-center gap-2">
-            {markerYmd && markerTurn && (
-              <a
-                href={`/ct/sessions/by-day/${markerYmd}/${markerTurn}?focus=${encodeURIComponent(
-                  markerRow || ""
-                )}`}
-                className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
-              >
-                ← Volver a sesión
-              </a>
-            )}
-            <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-              Dashboard
-            </a>
-            {editing ? (
-              <button
-                onClick={onSaveAll}
-                disabled={saving}
-                className="px-3 py-1.5 rounded-xl text-xs font-medium text-white bg-gray-900 hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {saving ? "Guardando…" : "Guardar"}
-              </button>
-            ) : (
-              setEditing && (
-                <button
-                  onClick={() => setEditing(true)}
-                  className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
-                >
-                  ✏️ Editar
-                </button>
-              )
-            )}
-            <button
-              onClick={() => window.print()}
-              className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
-              title="Imprimir"
-            >
-              🖨️ Imprimir
-            </button>
+    <div
+      id="print-root"
+      className={embed ? "p-2 md:p-3 space-y-3 print:!p-2" : "p-4 md:p-6 space-y-4 print:!p-2"}
+    >
+      {/* Header principal (oculto en modo embed) */}
+      {!embed && (
+        <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between print:hidden">
+          <div>
+            <h1 className="text-lg md:text-xl font-bold">
+              Sesión: {displayRow || "Bloque"} · {"(" + (markerTurn === "morning" ? "Mañana" : markerTurn === "afternoon" ? "Tarde" : "—") + ")"}
+            </h1>
+            <p className="text-xs md:text-sm text-gray-500">
+              Día: {markerYmd || "—"} · Tipo: {s.type}
+            </p>
           </div>
-        )}
-      </header>
+
+          {mode === "ct" && (
+            <div className="flex items-center gap-2">
+              {markerYmd && markerTurn && (
+                <a
+                  href={`/ct/sessions/by-day/${markerYmd}/${markerTurn}?focus=${encodeURIComponent(
+                    markerRow || ""
+                  )}`}
+                  className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
+                >
+                  ← Volver a sesión
+                </a>
+              )}
+              <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+                Dashboard
+              </a>
+              {editing ? (
+                <button
+                  onClick={onSaveAll}
+                  disabled={saving}
+                  className="px-3 py-1.5 rounded-xl text-xs font-medium text-white bg-gray-900 hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {saving ? "Guardando…" : "Guardar"}
+                </button>
+              ) : (
+                setEditing && (
+                  <button
+                    onClick={() => setEditing(true)}
+                    className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
+                  >
+                    ✏️ Editar
+                  </button>
+                )
+              )}
+              <button
+                onClick={() => window.print()}
+                className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
+                title="Imprimir"
+              >
+                🖨️ Imprimir
+              </button>
+            </div>
+          )}
+        </header>
+      )}
+
+      {/* Barra compacta en modo embed con acciones esenciales */}
+      {embed && mode === "ct" && (
+        <div className="mb-2 flex items-center justify-end gap-2 print:hidden">
+          {editing ? (
+            <button
+              onClick={onSaveAll}
+              disabled={saving}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-gray-900 hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving ? "Guardando…" : "Guardar"}
+            </button>
+          ) : (
+            setEditing && (
+              <button
+                onClick={() => setEditing(true)}
+                className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50"
+              >
+                ✏️ Editar
+              </button>
+            )
+          )}
+          <button
+            onClick={() => window.print()}
+            className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50"
+            title="Imprimir"
+          >
+            🖨️ Imprimir
+          </button>
+        </div>
+      )}
 
       {/* Lista de ejercicios de la sesión (campo) */}
       {exercises.length > 0 && (

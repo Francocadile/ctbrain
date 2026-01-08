@@ -21,6 +21,7 @@ type SessionDayViewProps = {
   };
   blocks: SessionDayBlock[];
   mode: "ct" | "player";
+  onEditBlock?: (block: SessionDayBlock) => void;
 };
 
 const WEEKDAY_ES = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"] as const;
@@ -38,6 +39,7 @@ export default function SessionDayView({
   header,
   blocks,
   mode,
+  onEditBlock,
 }: SessionDayViewProps) {
   const printCSS = `
     @page { size: A4 portrait; margin: 10mm; }
@@ -149,12 +151,22 @@ export default function SessionDayView({
                       >
                         Ver ejercicio
                       </a>
-                      <a
-                        href={`/ct/sessions/${block.sessionId}`}
-                        className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
-                      >
-                        Editar ejercicios
-                      </a>
+                      {onEditBlock ? (
+                        <button
+                          type="button"
+                          className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
+                          onClick={() => onEditBlock(block)}
+                        >
+                          Editar ejercicios
+                        </button>
+                      ) : (
+                        <a
+                          href={`/ct/sessions/${block.sessionId}`}
+                          className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
+                        >
+                          Editar ejercicios
+                        </a>
+                      )}
                     </>
                   ) : mode === "player" ? (
                     <a

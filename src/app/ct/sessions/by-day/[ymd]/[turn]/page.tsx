@@ -98,6 +98,7 @@ export default function SessionTurnoPage() {
   const [loading, setLoading] = useState(false);
   const [daySessions, setDaySessions] = useState<SessionDTO[]>([]);
   const [weekStart, setWeekStart] = useState<string>("");
+  const [editingBlock, setEditingBlock] = useState<SessionDayBlock | null>(null);
 
   const printCSS = `
     @page { size: A4 portrait; margin: 10mm; }
@@ -226,12 +227,53 @@ export default function SessionTurnoPage() {
   }
 
   return (
-    <SessionDayView
-      date={ymd}
-      turn={turn}
-      header={header}
-      blocks={viewBlocks}
-      mode="ct"
-    />
+    <>
+      <SessionDayView
+        date={ymd}
+        turn={turn}
+        header={header}
+        blocks={viewBlocks}
+        mode="ct"
+        onEditBlock={(block) => setEditingBlock(block)}
+      />
+
+      {editingBlock && editingBlock.sessionId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="relative h-[90vh] w-full max-w-5xl rounded-2xl bg-white shadow-xl flex flex-col">
+            <div className="flex items-center justify-between border-b px-4 py-2 text-sm font-medium text-slate-800">
+              <span>
+                Editar ejercicios · {editingBlock.rowLabel}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-md border px-2 py-1 text-xs hover:bg-slate-50"
+                  onClick={async () => {
+                    setEditingBlock(null);
+                    try {
+                      const date = new Date(`${ymd}T00:00:00.000Z`);
+                      const monday = getMonday(date);
+                      const res = await getSessionsWeek({ start: toYYYYMMDDUTC(monday) });
+                      setWeekStart(res.weekStart);
+                      setDaySessions(res.days?.[ymd] || []);
+                    } catch (e) {
+                      console.error(e);
+                    }
+                  }}
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <iframe
+                src={`/ct/sessions/${editingBlock.sessionId}?embed=1`}
+                className="h-full w-full border-0"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

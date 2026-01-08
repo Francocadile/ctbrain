@@ -86,6 +86,7 @@ export default function SesionDetailEditorPage() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const isViewMode = searchParams.get("view") === "1";
+  const isEmbed = searchParams.get("embed") === "1";
   const router = useRouter();
 
   const [loading, setLoading] = useState(true);
@@ -527,6 +528,7 @@ export default function SesionDetailEditorPage() {
         pickerSearch={pickerSearch}
         setPickerSearch={setPickerSearch}
         setPickerIndex={setPickerIndex}
+        embed={isEmbed}
       />
 
       {/* estilos de impresión */}

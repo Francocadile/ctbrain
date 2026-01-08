@@ -25,8 +25,26 @@ export async function uploadDiagramPng(
   });
 
   if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Error al subir diagrama (${res.status}): ${text || res.statusText}`);
+    let message = "";
+    try {
+      const data = (await res.json()) as any;
+      if (data && typeof data.error === "string") {
+        message = data.error;
+      } else if (data && typeof data.message === "string") {
+        message = data.message;
+      }
+    } catch {
+      const text = await res.text().catch(() => "");
+      message = text || res.statusText;
+    }
+
+    console.error("uploadDiagramPng failed", {
+      status: res.status,
+      statusText: res.statusText,
+      message,
+    });
+
+    throw new Error(message || `Error al subir diagrama (${res.status})`);
   }
 
   const json = (await res.json()) as { url?: string };
