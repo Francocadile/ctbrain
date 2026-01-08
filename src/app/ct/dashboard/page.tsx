@@ -606,11 +606,11 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
                 >
                   <div
                     className="grid gap-[6px]"
-                    style={{ gridTemplateRows: `${DAY_HEADER_H}px repeat(4, ${ROW_H}px)` }}
+                      style={{ gridTemplateRows: `${DAY_HEADER_H}px repeat(4, minmax(${ROW_H}px, auto))` }}
                   >
                     <div />
                     {ROWS.map((rowId) => (
-                      <div key={rowId} className="bg-gray-50/60 border rounded-md px-2 text-[10px] font-medium text-gray-600 flex items-center justify-center text-center">
+                        <div key={rowId} className="bg-gray-50/60 border rounded-md px-2 text-[10px] font-medium text-gray-600 flex items-center justify-center text-center h-full">
                         <span className="leading-[14px] whitespace-pre-line">{label(rowId)}</span>
                       </div>
                     ))}
