@@ -599,25 +599,131 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
                   {activeTurn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
                 </div>
 
-                {/* Cuerpo */}
+                {/* Cuerpo: grid global por semana (1 columna de labels + 7 días) */}
                 <div
-                  className="grid gap-3"
-                  style={{ gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))` }}
+                  className="grid gap-[6px]"
+                  style={{
+                    gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))`,
+                    gridTemplateRows: `${DAY_HEADER_H}px repeat(4, minmax(${ROW_H}px, auto))`,
+                  }}
                 >
-                  <div
-                    className="grid gap-[6px]"
-                      style={{ gridTemplateRows: `${DAY_HEADER_H}px repeat(4, minmax(${ROW_H}px, auto))` }}
-                  >
-                    <div />
-                    {ROWS.map((rowId) => (
-                        <div key={rowId} className="bg-gray-50/60 border rounded-md px-2 text-[10px] font-medium text-gray-600 flex items-center justify-center text-center h-full">
+                  {/* Fila 1: header vacío + header por día */}
+                  <div />
+                  {orderedDays.map((ymd) => {
+                    const flag = getDayFlag(ymd, activeTurn);
+                    const librePill = activeTurn === "morning" ? "Mañana libre" : "Tarde libre";
+                    const isMatchDay = flag.kind === "PARTIDO";
+                    const isLibre = flag.kind === "LIBRE";
+                    const dayTypeColor = dayTypeColorFor(ymd, activeTurn) || "#f9fafb";
+
+                    // Contenido del día para decidir si mostramos el botón "Ver sesión"
+                    let focusRow: (typeof ROWS)[number] = ROWS[0];
+                    let hasGridContent = false;
+                    for (const row of ROWS) {
+                      const s = findCell(ymd, activeTurn, row);
+                      const txt = (s?.title || "").trim();
+                      if (txt && !hasGridContent) {
+                        hasGridContent = true;
+                        focusRow = row;
+                      }
+                    }
+                    const sessionNameCell = findCell(ymd, activeTurn, SESSION_NAME_ROW);
+                    const hasSessionName = ((sessionNameCell?.title || "").trim().length ?? 0) > 0;
+                    const hasAnyContent = hasGridContent || hasSessionName;
+                    const showVerSesion = hasAnyContent && (flag.kind === "NONE" || flag.kind === "PARTIDO");
+
+                    return (
+                      <div
+                        key={`header-${ymd}`}
+                        className="relative rounded-xl border border-black/10 shadow-sm overflow-hidden"
+                        style={{ backgroundColor: dayTypeColor }}
+                      >
+                        <div className="absolute inset-0 bg-white/10 pointer-events-none" />
+                        <div
+                          className="relative px-2 flex flex-col justify-center gap-1 text-gray-900"
+                          style={{
+                            height: isMatchDay ? DAY_HEADER_H + 22 : DAY_HEADER_H,
+                            minHeight: isMatchDay ? DAY_HEADER_H + 22 : DAY_HEADER_H,
+                          }}
+                        >
+                          {/* Fila 1: fecha + MicroBadge + libre */}
+                          <div className="flex items-center justify-between gap-2 min-w-0">
+                            <div className="text-[10px] font-semibold uppercase tracking-wide flex-shrink-0 min-w-0 truncate">
+                              {humanDayUTC(ymd)}
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0 min-w-0">
+                              {isLibre && (
+                                <span className="text-[10px] font-semibold tracking-wide text-gray-700">
+                                  {librePill}
+                                </span>
+                              )}
+                              <MicroBadge ymd={ymd} />
+                            </div>
+                          </div>
+
+                          {/* Fila 2: sólo PARTIDO → escudo izquierda / Plan de partido derecha */}
+                          {isMatchDay && (
+                            <div className="grid grid-cols-[auto,1fr] items-center gap-2 min-w-0">
+                              <div className="w-7 h-7 flex items-center justify-center">
+                                {flag.logoUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={flag.logoUrl}
+                                    alt="Escudo rival"
+                                    className="w-7 h-7 object-contain"
+                                  />
+                                ) : null}
+                              </div>
+
+                              <div className="min-w-0 flex justify-end">
+                                <div className="max-w-[110px]">
+                                  <PlannerMatchLink
+                                    rivalId={flag.rivalId}
+                                    rivalName={flag.rival || ""}
+                                    label={"Plan de\npartido"}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {showVerSesion && (
+                            <div className="mt-1 flex justify-end">
+                              <a
+                                href={`/ct/sessions/by-day/${ymd}/${activeTurn}?focus=${encodeURIComponent(focusRow)}`}
+                                className="text-[10px] px-2 py-0.5 rounded-full border border-emerald-600 text-emerald-700 hover:bg-emerald-50 bg-white/70"
+                              >
+                                Ver sesión
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Filas 2..5: labels + contenido por día (ROWS) */}
+                  {ROWS.map((rowId) => (
+                    <div key={`row-${rowId}`} className="contents">
+                      <div className="bg-gray-50/60 border rounded-md px-2 text-[10px] font-medium text-gray-600 flex items-center justify-center text-center">
                         <span className="leading-[14px] whitespace-pre-line">{label(rowId)}</span>
                       </div>
-                    ))}
-                  </div>
 
-                  {orderedDays.map((ymd) => (
-                    <DayCard key={`card-${ymd}`} ymd={ymd} />
+                      {orderedDays.map((ymd) => {
+                        const dayTypeColor = dayTypeColorFor(ymd, activeTurn) || "#f9fafb";
+                        const s = findCell(ymd, activeTurn, rowId);
+                        const txt = (s?.title || "").trim();
+                        return (
+                          <div
+                            key={`${ymd}-${rowId}`}
+                            className="rounded-md border border-black/10 px-2 py-1.5 text-[12px] leading-[18px] whitespace-pre-wrap text-center"
+                            style={{ backgroundColor: dayTypeColor }}
+                          >
+                            {txt || <span className="text-gray-400 italic">—</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
                   ))}
                 </div>
               </div>
