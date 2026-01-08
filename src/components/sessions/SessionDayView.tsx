@@ -7,6 +7,7 @@ export type SessionDayBlock = {
   rowLabel: string; // label visible
   title: string; // contenido del bloque
   sessionId: string; // id de la Session
+  exerciseTitles?: string[]; // títulos de tareas decodificadas
 };
 
 type SessionDayViewProps = {
@@ -179,11 +180,27 @@ export default function SessionDayView({
                 </div>
               )}
             </div>
-            <div className="min-h-[120px] whitespace-pre-wrap leading-6 text-[13px]">
-              {block.title ? (
-                block.title
-              ) : (
-                <span className="text-gray-400 italic">—</span>
+            <div className="min-h-[120px] text-[13px] leading-6 space-y-1">
+              <div className="whitespace-pre-wrap">
+                {block.title ? (
+                  block.title
+                ) : (
+                  <span className="text-gray-400 italic">—</span>
+                )}
+              </div>
+              {block.exerciseTitles && block.exerciseTitles.length > 0 && (
+                <div className="mt-1 text-[12px] text-gray-600">
+                  <ul className="list-disc list-inside space-y-0.5">
+                    {block.exerciseTitles.slice(0, 4).map((t, idx) => (
+                      <li key={`${block.rowKey}-ex-${idx}`}>{t}</li>
+                    ))}
+                  </ul>
+                  {block.exerciseTitles.length > 4 && (
+                    <div className="text-[11px] text-gray-500">
+                      +{block.exerciseTitles.length - 4} más
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>

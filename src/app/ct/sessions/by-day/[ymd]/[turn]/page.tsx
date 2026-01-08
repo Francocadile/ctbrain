@@ -10,6 +10,7 @@ import {
   type SessionDTO,
 } from "@/lib/api/sessions";
 import SessionDayView, { SessionDayBlock } from "@/components/sessions/SessionDayView";
+import { decodeExercises } from "@/lib/sessions/encodeDecodeExercises";
 
 type TurnKey = "morning" | "afternoon";
 
@@ -180,11 +181,23 @@ export default function SessionTurnoPage() {
     () =>
       CONTENT_ROWS.map((rowLabel) => {
         const cell = daySessions.find((s) => isCellOf(s, turn, rowLabel));
+        let exerciseTitles: string[] = [];
+        if (cell?.description) {
+          try {
+            const decoded = decodeExercises(cell.description);
+            exerciseTitles = decoded.exercises
+              .map((ex) => (ex.title || "").trim())
+              .filter(Boolean);
+          } catch (e) {
+            console.error("decodeExercises failed for by-day block", e);
+          }
+        }
         return {
           rowKey: rowLabel,
           rowLabel,
           title: (cell?.title || "").trim(),
           sessionId: cell?.id || "",
+          exerciseTitles,
         };
       }),
     [daySessions, turn]
@@ -201,21 +214,27 @@ export default function SessionTurnoPage() {
               {formatSessionHeaderDate(ymd)}, {turn === "morning" ? "Mañana" : "Tarde"}
             </div>
             <span className={`text-[10px] px-2 py-0.5 rounded border ${microChipClass(micro)}`}>
-              {micro || "—"}
+              {micro || ""}
             </span>
           </div>
           <div className="flex items-center gap-2 no-print">
-            <a href="/ct/dashboard" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-              ← Dashboard
+            <a
+              href="/ct/dashboard"
+              className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
+            >
+               Dashboard
             </a>
-            <a href="/ct/plan-semanal" className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
-              ✏️ Editor
+            <a
+              href="/ct/plan-semanal"
+              className="px-3 py-1.5 rounded-xl border hover:bg-gray-50 text-xs"
+            >
+               Editor
             </a>
             <button
               onClick={() => window.print()}
               className="px-3 py-1.5 rounded-xl border text-xs hover:bg-gray-50"
             >
-              🖨 Imprimir
+               Imprimir
             </button>
           </div>
         </header>
@@ -267,7 +286,11 @@ export default function SessionTurnoPage() {
             </div>
             <div className="flex-1 overflow-hidden">
               <iframe
-                src={`/ct/sessions/${editingBlock.sessionId}?embed=1`}
+                src={(() => {
+                  const base = `/ct/sessions/${editingBlock.sessionId}`;
+                  const sep = base.includes("?") ? "&" : "?";
+                  return `${base}${sep}embed=1`;
+                })()}
                 className="h-full w-full border-0"
               />
             </div>
