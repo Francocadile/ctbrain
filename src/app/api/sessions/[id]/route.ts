@@ -15,6 +15,7 @@ const sessionSelect = {
   id: true,
   title: true,
   description: true,
+  content: true,
   date: true,
   type: true,
   createdAt: true,
@@ -27,6 +28,7 @@ const updateSchema = z
   .object({
     title: z.string().optional().nullable(),
     description: z.string().optional().nullable(),
+    content: z.any().optional(),
     date: z.string().datetime().optional(),
     type: z.enum(["GENERAL", "FUERZA", "TACTICA", "AEROBICO", "RECUPERACION"]).optional(),
   })
@@ -99,6 +101,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       data: {
         ...(data.title !== undefined ? { title: (data.title ?? "").trim() } : {}),
         ...(data.description !== undefined ? { description: data.description } : {}),
+        ...(data.content !== undefined ? { content: data.content as any } : {}),
         ...(data.date ? { date: new Date(data.date) } : {}),
         ...(data.type ? { type: data.type } : {}),
       },

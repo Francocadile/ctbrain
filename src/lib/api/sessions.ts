@@ -4,6 +4,7 @@ export type SessionDTO = {
   id: string;
   title: string | null;
   description: string | null;
+  content?: unknown;
   date: string; // ISO
   type?: "GENERAL" | "FUERZA" | "TACTICA" | "AEROBICO" | "RECUPERACION";
   createdAt?: string;
@@ -50,6 +51,7 @@ export async function createSession(payload: {
   description: string | null;
   date: string; // ISO
   type?: SessionDTO["type"];
+  content?: unknown;
 }) {
   const res = await fetch(`/api/sessions`, {
     method: "POST",
@@ -69,7 +71,7 @@ export async function createSession(payload: {
 // Editar sesión (PUT /api/sessions/[id]) -> { data: SessionDTO }
 export async function updateSession(
   id: string,
-  payload: Partial<{ title: string; description: string | null; date: string; type: SessionDTO["type"] }>
+  payload: Partial<{ title: string; description: string | null; date: string; type: SessionDTO["type"]; content: unknown }>
 ) {
   const res = await fetch(`/api/sessions/${id}`, {
     method: "PUT",

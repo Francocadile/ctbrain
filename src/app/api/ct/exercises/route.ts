@@ -16,6 +16,7 @@ const sessionMetaSchema = z
     sessionId: z.string().optional().nullable(),
     routineId: z.string().optional().nullable(),
     routineName: z.string().optional().nullable(),
+    diagram: z.unknown().optional().nullable(),
   })
   .optional()
   .nullable();

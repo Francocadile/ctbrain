@@ -1,5 +1,7 @@
 // src/lib/sessions/encodeDecodeExercises.ts
 
+import type { FieldDiagramState } from "./fieldDiagram";
+
 export type Exercise = {
   title: string;
   kind: string;
@@ -8,6 +10,8 @@ export type Exercise = {
   duration: string;
   description: string;
   imageUrl: string;
+  material?: string;
+  diagram?: FieldDiagramState;
   routineId?: string;
   routineName?: string;
   isRoutineOnly?: boolean;
@@ -100,6 +104,8 @@ export function decodeExercises(
       duration: e.duration ?? "",
       description: e.description ?? "",
       imageUrl: e.imageUrl ?? "",
+      material: (e as any)?.material ?? "",
+      diagram: (e as any)?.diagram,
       routineId: (e as any)?.routineId ?? "",
       routineName: (e as any)?.routineName ?? "",
       isRoutineOnly: (e as any)?.isRoutineOnly ?? false,

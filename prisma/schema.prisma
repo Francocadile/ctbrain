@@ -182,6 +182,7 @@ model Session {
   id          String      @id @default(cuid())
   title       String
   description String?
+  content     Json?
   date        DateTime
   type        SessionType @default(GENERAL)
   createdAt   DateTime    @default(now())

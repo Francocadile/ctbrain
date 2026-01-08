@@ -10,6 +10,7 @@ import {
   type SessionMeta,
   type ExerciseDTO,
 } from "@/lib/api/exercises";
+import type { FieldDiagramState } from "@/lib/sessions/fieldDiagram";
 import { listKinds, addKind as apiAddKind, replaceKinds } from "@/lib/settings";
 import SessionDetailView from "@/components/sessions/SessionDetailView";
 import {
@@ -17,6 +18,7 @@ import {
   decodeExercises,
   type Exercise,
 } from "@/lib/sessions/encodeDecodeExercises";
+import { legacyToDocument } from "@/lib/sessions/sessionContent";
 import type { RoutineSummary } from "@/lib/sessions/routineSummary";
 import { dbScope } from "@/lib/dbScope";
 import type { SessionRoutineSnapshot } from "@/lib/sessions/sessionRoutineSnapshot";
@@ -121,9 +123,14 @@ export default function SesionDetailEditorPage() {
   setS(sess);
 
         const d = decodeExercises(sess?.description || "");
+
+        // Si en el futuro usamos Session.content como documento estructurado,
+        // podríamos mapearlo aquí. Paso 1: sólo soportamos lectura legacy
+        // y convertimos a documento en memoria cuando haga falta.
+
         setPrefix(d.prefix);
         if (d.exercises.length) {
-          // Si hay ejercicios embebidos en la descripción, usamos solo esos
+          // Legacy: ejercicios embebidos en description
           setExercises(d.exercises);
         } else if (isViewMode) {
           // Modo solo lectura: siempre consultamos la biblioteca por ejercicios de sesión.
@@ -335,10 +342,16 @@ export default function SesionDetailEditorPage() {
       prefix || (s.description as string) || "",
       exercises
     );
+
+    // Para compat, seguimos guardando la descripción legacy
+    // y además persistimos el documento estructurado en Session.content.
+    const doc = legacyToDocument(prefix || "", exercises);
+
     await updateSession(s.id, {
       title: s.title ?? "",
       description: newDescription,
       date: s.date,
+      content: doc,
     });
   }
 
@@ -378,6 +391,7 @@ export default function SesionDetailEditorPage() {
           sessionId: s.id,
           routineId: ex.routineId || null,
           routineName: ex.routineName || null,
+          diagram: ex.diagram as FieldDiagramState | undefined,
         };
 
         if (ex.libraryExerciseId) {
@@ -454,6 +468,10 @@ export default function SesionDetailEditorPage() {
       players = rawPlayers;
     }
 
+    const metaWithDiagram = meta as SessionMeta & {
+      diagram?: FieldDiagramState | null;
+    };
+
     const patched: Exercise = {
       title: exLib.name || "",
       kind: (meta as any).type || "",
@@ -466,6 +484,7 @@ export default function SesionDetailEditorPage() {
       routineName: (meta as any).routineName || "",
       isRoutineOnly: false,
       libraryExerciseId: exLib.id,
+      diagram: (metaWithDiagram as any).diagram ?? undefined,
     };
 
     setExercises((prev) =>
