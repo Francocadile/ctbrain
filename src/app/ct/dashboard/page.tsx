@@ -364,10 +364,25 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
 
   function DayCard({ ymd }: { ymd: string }) {
     const flag = getDayFlag(ymd, activeTurn);
-    const headerHref = `/ct/sessions/by-day/${ymd}/${activeTurn}`;
     const librePill = activeTurn === "morning" ? "Mañana libre" : "Tarde libre";
     const isMatchDay = flag.kind === "PARTIDO";
     const dayTypeColor = dayTypeColorFor(ymd, activeTurn) || "#f9fafb";
+
+    // Contenido del día para decidir si mostramos el botón "Ver sesión"
+    let focusRow: (typeof ROWS)[number] = ROWS[0];
+    let hasGridContent = false;
+    for (const row of ROWS) {
+      const s = findCell(ymd, activeTurn, row);
+      const txt = (s?.title || "").trim();
+      if (txt && !hasGridContent) {
+        hasGridContent = true;
+        focusRow = row;
+      }
+    }
+
+    const sessionNameCell = findCell(ymd, activeTurn, SESSION_NAME_ROW);
+    const hasSessionName = ((sessionNameCell?.title || "").trim().length ?? 0) > 0;
+    const hasAnyContent = hasGridContent || hasSessionName;
 
     const NormalBody = () => (
       <div className="grid gap-[6px]" style={{ gridTemplateRows: `repeat(4, ${ROW_H}px)` }}>
@@ -379,21 +394,7 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
               key={row}
               className="rounded-md border border-black/10 px-2 py-1.5 text-[12px] leading-[18px] whitespace-pre-wrap overflow-hidden text-center"
             >
-              {txt ? (
-                <div className="flex flex-col items-center gap-1">
-                  <div>{txt}</div>
-                  {s?.id && (
-                    <a
-                      href={`/ct/sessions/${s.id}`}
-                      className="text-[10px] text-emerald-700 underline"
-                    >
-                      Ver sesión
-                    </a>
-                  )}
-                </div>
-              ) : (
-                <span className="text-gray-400 italic">—</span>
-              )}
+              {txt || <span className="text-gray-400 italic">—</span>}
             </div>
           );
         })}
@@ -478,7 +479,21 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
           )}
 
           {/* En PARTIDO y días normales mostramos la misma planificación */}
-          {(flag.kind === "NONE" || flag.kind === "PARTIDO") && <NormalBody />}
+          {(flag.kind === "NONE" || flag.kind === "PARTIDO") && (
+            <>
+              <NormalBody />
+              {hasAnyContent && (
+                <div className="mt-2 flex justify-center">
+                  <a
+                    href={`/ct/sessions/by-day/${ymd}/${activeTurn}?focus=${encodeURIComponent(focusRow)}`}
+                    className="text-[10px] px-2 py-1 rounded-full border border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+                  >
+                    Ver sesión
+                  </a>
+                </div>
+              )}
+            </>
+          )}
         </div>
         </div>
       </div>
