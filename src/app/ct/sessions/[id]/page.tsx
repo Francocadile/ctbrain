@@ -18,7 +18,6 @@ import {
   decodeExercises,
   type Exercise,
 } from "@/lib/sessions/encodeDecodeExercises";
-import { legacyToDocument } from "@/lib/sessions/sessionContent";
 import type { RoutineSummary } from "@/lib/sessions/routineSummary";
 import { dbScope } from "@/lib/dbScope";
 import type { SessionRoutineSnapshot } from "@/lib/sessions/sessionRoutineSnapshot";
@@ -343,15 +342,10 @@ export default function SesionDetailEditorPage() {
       exercises
     );
 
-    // Para compat, seguimos guardando la descripción legacy
-    // y además persistimos el documento estructurado en Session.content.
-    const doc = legacyToDocument(prefix || "", exercises);
-
     await updateSession(s.id, {
       title: s.title ?? "",
       description: newDescription,
       date: s.date,
-      content: doc,
     });
   }
 

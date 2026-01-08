@@ -37,7 +37,6 @@ const sessionSelect = {
   id: true,
   title: true,
   description: true,
-  content: true,
   date: true,
   type: true,
   createdAt: true,
@@ -51,7 +50,6 @@ const createSchema = z
   .object({
     title: z.string().optional().nullable(), // "" permitido si es DAYFLAG
     description: z.string().optional().nullable(),
-    content: z.any().optional(),
     date: z
       .string()
       .datetime({ message: "Fecha inválida (usar ISO, ej: 2025-08-27T12:00:00Z)" }),
@@ -168,14 +166,13 @@ export async function POST(req: Request) {
       );
     }
 
-    const { title, description, date, type, content } = parsed.data;
+  const { title, description, date, type } = parsed.data;
 
     const created = await prisma.session.create(
       scopedCreateArgs(team.id, {
         data: {
           title: (title ?? "").trim(), // "" permitido si es DAYFLAG
           description: description ?? null,
-          content: content ?? null,
           date: new Date(date),
           type: type ?? "GENERAL",
           createdBy: user.id,
