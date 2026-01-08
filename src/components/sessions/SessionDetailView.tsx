@@ -87,11 +87,79 @@ export default function SessionDetailView({
   const displayRow = (markerRow || "").replace("ENTREN0", "ENTRENO");
   const ro = isViewMode || !editing || mode !== "ct";
 
+  const printCSS = `
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 10mm;
+      }
+      body {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      body * {
+        visibility: hidden !important;
+      }
+      #print-root,
+      #print-root * {
+        visibility: visible !important;
+      }
+      #print-root {
+        position: absolute;
+        inset: 0;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      nav,
+      aside,
+      header[role='banner'],
+      .sidebar,
+      .app-sidebar,
+      .print\\:hidden {
+        display: none !important;
+      }
+      a[href]:after {
+        content: '';
+      }
+      .print\\:page {
+        page-break-after: always;
+      }
+      #print-root section.print\\:page {
+        margin-bottom: 6mm;
+        padding: 8px 10px !important;
+        border-width: 1px !important;
+        page-break-inside: avoid !important;
+      }
+      #print-root h1 {
+        font-size: 14px !important;
+        margin-bottom: 4px !important;
+      }
+      #print-root h2,
+      #print-root h3 {
+        font-size: 12px !important;
+      }
+      #print-root label {
+        font-size: 9px !important;
+      }
+      #print-root p,
+      #print-root input,
+      #print-root textarea {
+        font-size: 10px !important;
+        line-height: 1.3 !important;
+      }
+      #print-root img {
+        max-width: 100% !important;
+        height: auto !important;
+      }
+    }
+  `;
+
   return (
     <div
       id="print-root"
       className={embed ? "p-2 md:p-3 space-y-3 print:!p-2" : "p-4 md:p-6 space-y-4 print:!p-2"}
     >
+      <style jsx global>{printCSS}</style>
       {/* Header principal (oculto en modo embed) */}
       {!embed && (
         <header className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between print:hidden">

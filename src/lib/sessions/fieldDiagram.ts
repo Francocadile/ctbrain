@@ -34,6 +34,29 @@ export type DiagramBall = {
   y: number;
 };
 
+export type DiagramRect = {
+  id: string;
+  type: "rect";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  stroke?: string;
+  fill?: string;
+  opacity?: number;
+};
+
+export type DiagramCircleShape = {
+  id: string;
+  type: "circle";
+  x: number;
+  y: number;
+  r: number;
+  stroke?: string;
+  fill?: string;
+  opacity?: number;
+};
+
 export type DiagramArrow = {
   id: string;
   type: "arrow";
@@ -59,7 +82,9 @@ export type DiagramObject =
   | DiagramGoal
   | DiagramBall
   | DiagramArrow
-  | DiagramText;
+  | DiagramText
+  | DiagramRect
+  | DiagramCircleShape;
 
 export type FieldDiagramState = {
   version: 1;

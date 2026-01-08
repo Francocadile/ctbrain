@@ -140,49 +140,68 @@ export default function SessionDayView({
             }}
             className="rounded-2xl border bg-white shadow-sm p-3"
           >
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">
-                {block.rowLabel}
-              </h2>
+            {(() => {
+              const contentChips = (block.title || "")
+                .split(/\r?\n/)
+                .map((s) => s.trim())
+                .filter(Boolean);
 
-              {block.sessionId && (
-                <div className="flex gap-2 no-print">
-                  {mode === "ct" ? (
-                    onEditBlock ? (
-                      <button
-                        type="button"
-                        className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
-                        onClick={() => onEditBlock(block)}
-                      >
-                        Editar ejercicios
-                      </button>
-                    ) : (
-                      <a
-                        href={`/ct/sessions/${block.sessionId}`}
-                        className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
-                      >
-                        Editar ejercicios
-                      </a>
-                    )
-                  ) : mode === "player" ? (
-                    <a
-                      href={`/jugador/sesiones/${block.sessionId}`}
-                      className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
-                    >
-                      Ver ejercicio
-                    </a>
-                  ) : null}
+              return (
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-700">
+                      {block.rowLabel}
+                    </h2>
+                    {contentChips.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {contentChips.map((chip, idx) => (
+                          <span
+                            key={`${block.rowKey}-chip-${idx}`}
+                            className="inline-flex items-center rounded-full border bg-gray-50 px-2 py-0.5 text-[10px] text-gray-700"
+                          >
+                            {chip}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {block.sessionId && (
+                    <div className="flex gap-2 no-print">
+                      {mode === "ct" ? (
+                        onEditBlock ? (
+                          <button
+                            type="button"
+                            className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
+                            onClick={() => onEditBlock(block)}
+                          >
+                            Editar ejercicios
+                          </button>
+                        ) : (
+                          <a
+                            href={`/ct/sessions/${block.sessionId}`}
+                            className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
+                          >
+                            Editar ejercicios
+                          </a>
+                        )
+                      ) : mode === "player" ? (
+                        <a
+                          href={`/jugador/sesiones/${block.sessionId}`}
+                          className="text-[11px] rounded-md border px-2 py-1 hover:bg-gray-50"
+                        >
+                          Ver ejercicio
+                        </a>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()}
             <div className="min-h-[120px] text-[13px] leading-6 space-y-1">
-              <div className="whitespace-pre-wrap">
-                {block.title ? (
-                  block.title
-                ) : (
-                  <span className="text-gray-400 italic">—</span>
-                )}
-              </div>
+              {(!block.title || block.title.trim().length === 0) && (!block.exercises || block.exercises.length === 0) && (
+                <span className="text-gray-400 italic">—</span>
+              )}
               {block.exercises && block.exercises.length > 0 && (
                 <div className="mt-2 space-y-2">
                   {block.exercises.slice(0, 6).map((ex, idx) => (

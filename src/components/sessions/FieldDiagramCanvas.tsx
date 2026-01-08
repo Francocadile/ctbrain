@@ -10,6 +10,8 @@ import type {
   DiagramBall,
   DiagramArrow,
   DiagramText,
+  DiagramRect,
+  DiagramCircleShape,
   FieldDiagramTemplateKey,
   PitchBackground,
 } from "@/lib/sessions/fieldDiagram";
@@ -194,6 +196,31 @@ export function FieldDiagramCanvas({
         break;
       case "ball":
         obj = { id, type: "ball", x: cx, y: cy } as DiagramBall;
+        break;
+      case "rect":
+        obj = {
+          id,
+          type: "rect",
+          x: cx,
+          y: cy,
+          width: 0.22,
+          height: 0.16,
+          stroke: "#fef9c3",
+          fill: "#facc15",
+          opacity: 0.35,
+        } as DiagramRect;
+        break;
+      case "circle":
+        obj = {
+          id,
+          type: "circle",
+          x: cx,
+          y: cy,
+          r: 0.09,
+          stroke: "#fee2e2",
+          fill: "#ef4444",
+          opacity: 0.35,
+        } as DiagramCircleShape;
         break;
       case "arrow":
         obj = {
@@ -511,6 +538,42 @@ export function FieldDiagramCanvas({
             {...common}
           />
         );
+      case "rect": {
+        const width = obj.width * VIEWBOX_WIDTH;
+        const height = obj.height * VIEWBOX_HEIGHT;
+        const x = obj.x * VIEWBOX_WIDTH - width / 2;
+        const y = obj.y * VIEWBOX_HEIGHT - height / 2;
+        return (
+          <rect
+            key={obj.id}
+            x={x}
+            y={y}
+            width={width}
+            height={height}
+            fill={obj.fill ?? "#facc15"}
+            stroke={sel ? "#fbbf24" : obj.stroke ?? "#fef9c3"}
+            strokeWidth={sel ? 1 : 0.8}
+            opacity={obj.opacity ?? 0.4}
+            {...common}
+          />
+        );
+      }
+      case "circle": {
+        const radius = obj.r * VIEWBOX_WIDTH;
+        return (
+          <circle
+            key={obj.id}
+            cx={obj.x * VIEWBOX_WIDTH}
+            cy={obj.y * VIEWBOX_HEIGHT}
+            r={radius}
+            fill={obj.fill ?? "#ef4444"}
+            stroke={sel ? "#fbbf24" : obj.stroke ?? "#fee2e2"}
+            strokeWidth={sel ? 1 : 0.8}
+            opacity={obj.opacity ?? 0.4}
+            {...common}
+          />
+        );
+      }
       case "arrow":
         return (
           <g key={obj.id} {...common}>
@@ -634,6 +697,20 @@ export function FieldDiagramCanvas({
             onClick={() => addObject("text")}
           >
             + Texto
+          </button>
+          <button
+            type="button"
+            className="rounded-md border border-emerald-500 bg-emerald-800 px-2 py-0.5 hover:bg-emerald-700"
+            onClick={() => addObject("rect")}
+          >
+            + Cuadrado
+          </button>
+          <button
+            type="button"
+            className="rounded-md border border-emerald-500 bg-emerald-800 px-2 py-0.5 hover:bg-emerald-700"
+            onClick={() => addObject("circle")}
+          >
+            + Círculo
           </button>
 
           <span className="ml-3 font-medium text-slate-200">Presets:</span>

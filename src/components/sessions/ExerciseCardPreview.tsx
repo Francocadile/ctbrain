@@ -12,6 +12,7 @@ type ExerciseCardPreviewProps = {
 export function ExerciseCardPreview({ exercise, index }: ExerciseCardPreviewProps) {
   const title = exercise.title?.trim() || "Sin título";
   const diagram = exercise.diagram;
+  const description = exercise.description?.trim();
 
   const hasDiagram = !!diagram;
   const hasRenderedUrl = !!diagram?.renderedImageUrl;
@@ -81,6 +82,11 @@ export function ExerciseCardPreview({ exercise, index }: ExerciseCardPreviewProp
                 </span>
               ))}
             </div>
+          )}
+          {description && (
+            <p className="mt-2 text-xs md:text-sm text-gray-600 whitespace-pre-line line-clamp-3">
+              {description}
+            </p>
           )}
         </div>
       </div>
