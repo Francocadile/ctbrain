@@ -57,7 +57,12 @@ export async function createSession(payload: {
     body: JSON.stringify(payload),
   });
   const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || "Error al crear la sesión");
+  if (!res.ok) {
+    // Log detallado para diagnóstico (incluye issues de Zod si están presentes)
+    // Se ejecuta en el cliente (navegador) al usar el editor de plan semanal.
+    console.error("createSession error response", json);
+    throw new Error(json?.error || "Error al crear la sesión");
+  }
   return json as { data: SessionDTO };
 }
 
@@ -72,7 +77,10 @@ export async function updateSession(
     body: JSON.stringify(payload),
   });
   const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || "Error al actualizar la sesión");
+  if (!res.ok) {
+    console.error("updateSession error response", json);
+    throw new Error(json?.error || "Error al actualizar la sesión");
+  }
   return json as { data: SessionDTO };
 }
 
@@ -80,7 +88,10 @@ export async function updateSession(
 export async function deleteSession(id: string) {
   const res = await fetch(`/api/sessions/${id}`, { method: "DELETE" });
   const json = await res.json();
-  if (!res.ok) throw new Error(json?.error || "Error al borrar la sesión");
+  if (!res.ok) {
+    console.error("deleteSession error response", json);
+    throw new Error(json?.error || "Error al borrar la sesión");
+  }
   return json as { ok: boolean };
 }
 

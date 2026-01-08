@@ -138,7 +138,7 @@ export default function TurnEditor({
       {/* CONTENIDOS */}
       <div className="border-t">
         <div className="px-2 py-1 text-[10px] text-gray-600 border-b bg-gray-50">
-          Escribí el <b>contenido general</b> (títulos). El detalle se edita en <b>“Ejercicio completo”</b>.
+          Escribí el <b>contenido general</b> (títulos). El detalle se edita en <b>“Cargar ejercicios de la sesión”</b>.
         </div>
         <div className="bg-emerald-100/70 text-emerald-900 font-semibold px-2 py-1 border-b uppercase tracking-wide text-[12px]">
           {turn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}

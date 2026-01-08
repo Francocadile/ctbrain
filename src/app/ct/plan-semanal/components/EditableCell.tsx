@@ -64,9 +64,9 @@ export default function EditableCell({
           <a
             href={sessionHref}
             className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50"
-            title="Abrir el ejercicio completo"
+            title="Cargar ejercicios de la sesión"
           >
-            Ejercicio completo
+            Cargar ejercicios de la sesión
           </a>
         ) : null}
       </div>

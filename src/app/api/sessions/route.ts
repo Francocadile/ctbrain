@@ -58,10 +58,10 @@ const createSchema = z
       .optional(),
   })
   .superRefine((data, ctx) => {
-    // Si NO es un DAYFLAG, exigir mínimo 2 caracteres de título
+    // Si NO es un DAYFLAG, exigir que el título no sea vacío (se permiten códigos cortos)
     if (!isDayFlagDescription(data.description)) {
       const len = (data.title || "").trim().length;
-      if (len < 2) {
+      if (len < 1) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "Título muy corto",
@@ -151,8 +151,17 @@ export async function POST(req: Request) {
     const body = await req.json();
     const parsed = createSchema.safeParse(body);
     if (!parsed.success) {
+      const flat = parsed.error.flatten();
+      const issues = parsed.error.issues.map((iss) => ({
+        path: iss.path,
+        message: iss.message,
+      }));
       return NextResponse.json(
-        { error: "Datos inválidos", details: parsed.error.flatten() },
+        {
+          error: "Datos inválidos",
+          details: flat,
+          issues,
+        },
         { status: 400 }
       );
     }

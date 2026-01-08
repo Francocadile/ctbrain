@@ -384,14 +384,24 @@ function PlanSemanalInner() {
   const [pending, setPending] = useState<Record<string, string>>({});
   const [savingAll, setSavingAll] = useState(false);
 
+  function cleanText(input: string) {
+    return (input ?? "")
+      .replace(/\u00A0/g, " ") // NBSP -> space
+      .replace(/\s+/g, " ") // colapsa whitespace (incluye \n, \t)
+      .trim();
+  }
+
   function stageCell(dayYmd: string, turn: TurnKey, row: string, text: string) {
     const k = cellKey(dayYmd, turn, row);
+    const cleaned = cleanText(text);
+
     setPending((prev) => {
       const next = { ...prev };
       const existing = findCell(dayYmd, turn, row);
-      const currentValue = existing?.title?.trim() ?? "";
-      if ((text || "").trim() === currentValue) delete next[k];
-      else next[k] = text;
+      const currentValue = cleanText(existing?.title ?? "");
+
+      if (cleaned === currentValue) delete next[k];
+      else next[k] = cleaned;
       return next;
     });
   }
@@ -407,7 +417,7 @@ function PlanSemanalInner() {
         const existing = findCell(dayYmd, turn, row);
         const iso = computeISOForSlot(dayYmd, turn);
         const marker = cellMarker(turn, row);
-        const text = (value ?? "").trim();
+        const text = cleanText(value ?? "");
 
         if (!text) {
           if (existing) await deleteSession(existing.id);
@@ -424,6 +434,7 @@ function PlanSemanalInner() {
         }
       }
       await loadWeek(base);
+      setPending({});
     } catch (e: any) {
       console.error(e);
       errorMessage = e?.message || "Error al guardar cambios";

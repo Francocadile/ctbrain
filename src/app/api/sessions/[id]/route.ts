@@ -34,7 +34,8 @@ const updateSchema = z
     if (!isDayFlagDescription(data.description)) {
       if (data.title !== undefined) {
         const len = (data.title || "").trim().length;
-        if (len > 0 && len < 2) {
+        // Permitir códigos cortos (1 carácter); sólo bloquear si es vacío
+        if (len < 1) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: "Título muy corto",
@@ -69,8 +70,17 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     const body = await req.json();
     const parsed = updateSchema.safeParse(body);
     if (!parsed.success) {
+      const flat = parsed.error.flatten();
+      const issues = parsed.error.issues.map((iss) => ({
+        path: iss.path,
+        message: iss.message,
+      }));
       return NextResponse.json(
-        { error: "Datos inválidos", details: parsed.error.flatten() },
+        {
+          error: "Datos inválidos",
+          details: flat,
+          issues,
+        },
         { status: 400 }
       );
     }
