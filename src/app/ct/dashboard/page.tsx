@@ -379,7 +379,21 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
               key={row}
               className="rounded-md border border-black/10 px-2 py-1.5 text-[12px] leading-[18px] whitespace-pre-wrap overflow-hidden text-center"
             >
-              {txt || <span className="text-gray-400 italic">—</span>}
+              {txt ? (
+                <div className="flex flex-col items-center gap-1">
+                  <div>{txt}</div>
+                  {s?.id && (
+                    <a
+                      href={`/ct/sessions/${s.id}`}
+                      className="text-[10px] text-emerald-700 underline"
+                    >
+                      Ver sesión
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <span className="text-gray-400 italic">—</span>
+              )}
             </div>
           );
         })}
