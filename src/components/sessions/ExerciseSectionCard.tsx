@@ -482,8 +482,32 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
 
                       onChange({ imageUrl: url });
                     } catch (err) {
-                      console.error("No se pudo subir la imagen del ejercicio", err);
-                      alert("No se pudo subir la imagen del ejercicio. Reintentá más tarde.");
+                      const anyErr = err as any;
+                      const status: number | undefined = anyErr?.status;
+                      const body: string | undefined = anyErr?.body;
+
+                      console.error("No se pudo subir la imagen del ejercicio", {
+                        error: err,
+                        status,
+                        body,
+                      });
+
+                      const bodyText = typeof body === "string" ? body : anyErr?.message || "";
+                      const isTooLarge =
+                        status === 413 ||
+                        /too large|entity too large|body exceeded/i.test(bodyText);
+
+                      if (isTooLarge) {
+                        alert(
+                          "Imagen demasiado grande. Probá subir una imagen con menor resolución o peso.",
+                        );
+                      } else {
+                        alert(
+                          `No se pudo subir la imagen del ejercicio (status ${
+                            status ?? "desconocido"
+                          }). Detalle: ${bodyText || "Error desconocido"}`,
+                        );
+                      }
                     } finally {
                       e.target.value = "";
                     }
@@ -800,8 +824,32 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
 
                             setBackground({ kind: "image", url });
                           } catch (err) {
-                            console.error("No se pudo subir la imagen de fondo", err);
-                            alert("No se pudo subir la imagen de fondo. Reintentá más tarde.");
+                            const anyErr = err as any;
+                            const status: number | undefined = anyErr?.status;
+                            const body: string | undefined = anyErr?.body;
+
+                            console.error("No se pudo subir la imagen de fondo", {
+                              error: err,
+                              status,
+                              body,
+                            });
+
+                            const bodyText = typeof body === "string" ? body : anyErr?.message || "";
+                            const isTooLarge =
+                              status === 413 ||
+                              /too large|entity too large|body exceeded/i.test(bodyText);
+
+                            if (isTooLarge) {
+                              alert(
+                                "Imagen demasiado grande. Probá subir una imagen de fondo con menor resolución o peso.",
+                              );
+                            } else {
+                              alert(
+                                `No se pudo subir la imagen de fondo (status ${
+                                  status ?? "desconocido"
+                                }). Detalle: ${bodyText || "Error desconocido"}`,
+                              );
+                            }
                           } finally {
                             e.target.value = "";
                           }

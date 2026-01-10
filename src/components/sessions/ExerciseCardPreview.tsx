@@ -2,6 +2,7 @@
 
 import React from "react";
 import type { Exercise } from "@/lib/sessions/encodeDecodeExercises";
+import VideoPlayerModal from "@/components/training/VideoPlayerModal";
 import { FieldDiagramCanvas } from "./FieldDiagramCanvas";
 
 type ExerciseCardPreviewProps = {
@@ -9,18 +10,10 @@ type ExerciseCardPreviewProps = {
   index?: number;
 };
 
-function resolveYoutubeEmbedUrl(url: string): string {
-  const shortMatch = /youtu\.be\/([^?&#]+)/i.exec(url);
-  if (shortMatch?.[1]) {
-    return `https://www.youtube.com/embed/${shortMatch[1]}`;
-  }
-
-  const watchMatch = /youtube\.com\/watch\?[^#]*v=([^&]+)/i.exec(url);
-  if (watchMatch?.[1]) {
-    return `https://www.youtube.com/embed/${watchMatch[1]}`;
-  }
-
-  return url;
+function isVideoUrl(url: string | undefined | null) {
+  if (!url) return false;
+  const u = url.toLowerCase();
+  return u.includes("youtube.com") || u.includes("youtu.be") || u.includes("vimeo.com");
 }
 
 export function ExerciseCardPreview({ exercise, index }: ExerciseCardPreviewProps) {
@@ -28,6 +21,7 @@ export function ExerciseCardPreview({ exercise, index }: ExerciseCardPreviewProp
   const diagram = exercise.diagram;
   const description = exercise.description?.trim();
   const videoUrl = (exercise as any).videoUrl as string | undefined;
+  const hasVideo = isVideoUrl(videoUrl);
 
   const hasDiagram = !!diagram;
   const hasRenderedUrl = !!diagram?.renderedImageUrl;
@@ -38,6 +32,8 @@ export function ExerciseCardPreview({ exercise, index }: ExerciseCardPreviewProp
   if (exercise.space?.trim()) chips.push(exercise.space.trim());
   if (exercise.players?.trim()) chips.push(exercise.players.trim());
   if (exercise.duration?.trim()) chips.push(exercise.duration.trim());
+
+  const [isVideoModalOpen, setIsVideoModalOpen] = React.useState(false);
 
   return (
     <article className="rounded-2xl border bg-white shadow-sm p-3 md:p-4 space-y-3">
@@ -50,6 +46,15 @@ export function ExerciseCardPreview({ exercise, index }: ExerciseCardPreviewProp
           <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
             Tarea
           </div>
+        )}
+        {hasVideo && (
+          <button
+            type="button"
+            className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 underline-offset-2 hover:underline"
+            onClick={() => setIsVideoModalOpen(true)}
+          >
+            Ver video
+          </button>
         )}
       </header>
 
@@ -103,21 +108,16 @@ export function ExerciseCardPreview({ exercise, index }: ExerciseCardPreviewProp
               {description}
             </p>
           )}
-          {videoUrl && (
-            <div className="mt-3">
-              <div className="aspect-video w-full rounded-lg border overflow-hidden">
-                <iframe
-                  src={resolveYoutubeEmbedUrl(videoUrl)}
-                  className="w-full h-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  title={title || "Video de ejercicio"}
-                />
-              </div>
-            </div>
-          )}
         </div>
       </div>
+
+      <VideoPlayerModal
+        open={isVideoModalOpen && hasVideo}
+        onClose={() => setIsVideoModalOpen(false)}
+        title={title}
+        zone={exercise.space?.trim() || exercise.kind?.trim() || null}
+        videoUrl={videoUrl}
+      />
     </article>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import type { SessionDTO } from "@/lib/api/sessions";
+import VideoPlayerModal from "@/components/training/VideoPlayerModal";
 
 // Types mirrored from page.tsx
 export type Exercise = {
@@ -62,6 +63,13 @@ export default function SessionPageContent({
   const displayRow = (marker.row || "").replace("ENTREN0", "ENTRENO");
   const roCls = "bg-gray-50 text-gray-600 cursor-not-allowed";
 
+  const [videoModal, setVideoModal] = useState<{
+    open: boolean;
+    url?: string;
+    title?: string;
+    zone?: string | null;
+  }>({ open: false });
+
   return (
     <div id="print-root" className="p-4 md:p-6 space-y-4 print:!p-2">
       {/* Header */}
@@ -88,6 +96,22 @@ export default function SessionPageContent({
               <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-700">
                 EJERCICIO #{idx + 1}
               </span>
+              {isVideoUrl(ex.videoUrl) && (
+                <button
+                  type="button"
+                  className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 underline-offset-2 hover:underline"
+                  onClick={() =>
+                    setVideoModal({
+                      open: true,
+                      url: ex.videoUrl || undefined,
+                      title: ex.title || `Ejercicio #${idx + 1}`,
+                      zone: ex.space?.trim() || ex.kind?.trim() || null,
+                    })
+                  }
+                >
+                  Ver video
+                </button>
+              )}
             </div>
 
             <div className="p-3 grid md:grid-cols-2 gap-3">
@@ -164,22 +188,7 @@ export default function SessionPageContent({
                       </div>
                     ) : null}
 
-                    {ex.videoUrl ? (
-                      <div className="mt-3">
-                        <label className="text-[11px] text-gray-500 block mb-1 print:hidden">
-                          Video del ejercicio
-                        </label>
-                        <div className="aspect-video w-full rounded-lg border overflow-hidden">
-                          <iframe
-                            src={resolveYoutubeEmbedUrl(ex.videoUrl)}
-                            className="w-full h-full"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                            title={ex.title || "Video de ejercicio"}
-                          />
-                        </div>
-                      </div>
-                    ) : null}
+                    {/* El video se muestra vía modal "Ver video" en el encabezado, no inline. */}
                   </div>
 
                   {/* En el editor moderno ya no mostramos vínculos directos a rutinas desde aquí. */}
@@ -189,6 +198,14 @@ export default function SessionPageContent({
           </section>
         ))}
       </div>
+
+      <VideoPlayerModal
+        open={videoModal.open && !!videoModal.url}
+        onClose={() => setVideoModal({ open: false })}
+        title={videoModal.title || "Ejercicio"}
+        zone={videoModal.zone}
+        videoUrl={videoModal.url}
+      />
     </div>
   );
 }

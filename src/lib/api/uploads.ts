@@ -80,9 +80,19 @@ export async function uploadDiagramBackground(
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(
+
+    console.error("uploadDiagramBackground failed", {
+      status: res.status,
+      statusText: res.statusText,
+      body: text,
+    });
+
+    const error = new Error(
       `Error al subir fondo de diagrama (${res.status}): ${text || res.statusText}`,
     );
+    (error as any).status = res.status;
+    (error as any).body = text;
+    throw error;
   }
 
   const json = (await res.json()) as { url?: string };
