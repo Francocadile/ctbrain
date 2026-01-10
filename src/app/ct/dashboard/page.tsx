@@ -2,7 +2,6 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   getSessionsWeek,
@@ -11,7 +10,6 @@ import {
   type SessionDTO,
 } from "@/lib/api/sessions";
 import type { DayTypeDef, DayTypeId } from "@/lib/planner-daytype";
-import { getDayTypeTextColor } from "@/lib/planner-daytype";
 import PlannerMatchLink from "@/components/PlannerMatchLink";
 import VideoPlayerModal from "@/components/training/VideoPlayerModal";
 
@@ -20,8 +18,13 @@ import VideoPlayerModal from "@/components/training/VideoPlayerModal";
 ========================================================= */
 type TurnKey = "morning" | "afternoon";
 
-// IDs internos (no cambian). El label visible se resuelve con rowLabels.
-const ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
+// IDs internos por defecto. El label visible se resuelve con rowLabels.
+const DEFAULT_CONTENT_ROWS = [
+  "PRE ENTREN0",
+  "FÍSICO",
+  "TÉCNICO–TÁCTICO",
+  "COMPENSATORIO",
+] as const;
 
 const SESSION_NAME_ROW = "NOMBRE SESIÓN" as const;
 const META_ROWS = [
@@ -39,7 +42,12 @@ const META_ROWS = [
    Flags día
 ========================================================= */
 type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
-type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string; rivalId?: string };
+type DayFlag = {
+  kind: DayFlagKind;
+  rival?: string;
+  logoUrl?: string;
+  rivalId?: string;
+};
 
 const DAYFLAG_TAG = "DAYFLAG";
 const dayFlagMarker = (turn: TurnKey) => `[${DAYFLAG_TAG}:${turn}]`;
@@ -55,11 +63,16 @@ function parseDayFlagTitle(title?: string | null): DayFlag {
   const kind = parts[0];
 
   if (kind === "PARTIDO") {
-    if (parts.length >= 4) { // nuevo
+    if (parts.length >= 4) {
       const [, id, name, logo] = parts;
-      return { kind: "PARTIDO", rivalId: id || undefined, rival: name || "", logoUrl: logo || "" };
+      return {
+        kind: "PARTIDO",
+        rivalId: id || undefined,
+        rival: name || "",
+        logoUrl: logo || "",
+      };
     }
-    if (parts.length >= 3) { // viejo
+    if (parts.length >= 3) {
       const [, name, logo] = parts;
       return { kind: "PARTIDO", rival: name || "", logoUrl: logo || "" };
     }
@@ -72,7 +85,17 @@ function parseDayFlagTitle(title?: string | null): DayFlag {
 /* =========================================================
    Microciclo (MD)
 ========================================================= */
-type MicroKey = "" | "MD+1" | "MD+2" | "MD-4" | "MD-3" | "MD-2" | "MD-1" | "MD" | "DESCANSO";
+type MicroKey =
+  | ""
+  | "MD+1"
+  | "MD+2"
+  | "MD-4"
+  | "MD-3"
+  | "MD-2"
+  | "MD-1"
+  | "MD"
+  | "DESCANSO";
+
 const MICRO_TAG = "MICRO";
 const microMarker = (turn: TurnKey) => `[${MICRO_TAG}:${turn}]`;
 const isMicroOf = (s: SessionDTO, turn: TurnKey) =>
@@ -155,29 +178,41 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
     videoUrl?: string | null;
   } | null>(null);
 
-  // ===== Row labels (mismos que el Editor) =====
+  // ===== Prefs (mismos que el Editor) =====
   const [rowLabels, setRowLabels] = useState<Record<string, string>>({});
+  const [contentRowIds, setContentRowIds] = useState<string[]>(() => [...DEFAULT_CONTENT_ROWS]);
   const label = (id: string) => rowLabels[id] || id;
 
   // DayType (igual que editor, pero solo lectura)
   const [dayTypes, setDayTypes] = useState<DayTypeDef[]>([]);
   const [dayTypeAssignments, setDayTypeAssignments] = useState<Record<string, DayTypeId>>({});
 
-  async function loadRowLabels() {
+  async function loadPrefs() {
     try {
       const r = await fetch("/api/planner/labels", { cache: "no-store" });
       const j = await r.json();
       setRowLabels(j?.rowLabels || {});
+      if (Array.isArray(j?.contentRowIds) && j.contentRowIds.length) {
+        setContentRowIds(j.contentRowIds as string[]);
+      } else {
+        setContentRowIds([...DEFAULT_CONTENT_ROWS]);
+      }
     } catch {
       setRowLabels({});
+      setContentRowIds([...DEFAULT_CONTENT_ROWS]);
     }
   }
 
   useEffect(() => {
-    loadRowLabels();
-    const onUpd = () => loadRowLabels();
+    loadPrefs();
+    const onUpd = () => loadPrefs();
     window.addEventListener("planner-row-labels-updated", onUpd as any);
-    return () => window.removeEventListener("planner-row-labels-updated", onUpd as any);
+    // mantenemos simetría con el editor (por si disparás refresh desde tools)
+    window.addEventListener("planner-places-updated", onUpd as any);
+    return () => {
+      window.removeEventListener("planner-row-labels-updated", onUpd as any);
+      window.removeEventListener("planner-places-updated", onUpd as any);
+    };
   }, []);
 
   async function loadWeek(d: Date) {
@@ -189,6 +224,7 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
       setDaysMap(res.days);
       setWeekStart(res.weekStart);
       setWeekEnd(res.weekEnd);
+
       // DayType assignments para la semana visible
       try {
         const assignRes = await fetch(
@@ -254,7 +290,11 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
   function getMicro(ymd: string, turn: TurnKey): MicroKey {
     const m = sessionsOf(ymd).find((s) => isMicroOf(s, turn));
     const val = (m?.title || "").trim() as MicroKey;
-    return (["MD+1","MD+2","MD-4","MD-3","MD-2","MD-1","MD","DESCANSO",""].includes(val) ? val : "") as MicroKey;
+    return (
+      (["MD+1", "MD+2", "MD-4", "MD-3", "MD-2", "MD-1", "MD", "DESCANSO", ""].includes(val)
+        ? val
+        : "") as MicroKey
+    );
   }
 
   // DayType helpers (read-only)
@@ -275,15 +315,13 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
 
   // META (solo lectura)
   function ReadonlyMetaCell({ ymd, row }: { ymd: string; row: (typeof META_ROWS)[number] }) {
-    // Filas derivadas que no vienen del GRID editor
     if (row === "TIPO") {
       const flag = getDayFlag(ymd, activeTurn);
-      let text: string;
-      if (flag.kind === "PARTIDO") text = "Partido";
-      else if (flag.kind === "LIBRE") text = "Libre";
-      else text = "—";
+      const text = flag.kind === "PARTIDO" ? "Partido" : flag.kind === "LIBRE" ? "Libre" : "—";
       return (
-        <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center truncate">{text}</div>
+        <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center truncate">
+          {text}
+        </div>
       );
     }
 
@@ -291,15 +329,14 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
       const def = dayTypeDefFor(ymd, activeTurn);
       if (!def) {
         return (
-          <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center text-gray-400 italic truncate">—</div>
+          <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center text-gray-400 italic truncate">
+            —
+          </div>
         );
       }
       return (
         <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center gap-1 truncate">
-          <span
-            className="w-3 h-3 rounded-full border"
-            style={{ backgroundColor: def.color || "#f9fafb" }}
-          />
+          <span className="w-3 h-3 rounded-full border" style={{ backgroundColor: def.color || "#f9fafb" }} />
           <span className="truncate">{def.label}</span>
         </div>
       );
@@ -309,7 +346,9 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
       const micro = getMicro(ymd, activeTurn);
       const text = micro || "—";
       return (
-        <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center truncate">{text}</div>
+        <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center truncate">
+          {text}
+        </div>
       );
     }
 
@@ -317,14 +356,22 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
       const flag = getDayFlag(ymd, activeTurn);
       const text = flag.kind === "PARTIDO" && flag.rival ? flag.rival : "—";
       return (
-        <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center truncate">{text}</div>
+        <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center truncate">
+          {text}
+        </div>
       );
     }
 
     const s = findCell(ymd, activeTurn, row);
     const text = (s?.title || "").trim();
-    if (!text)
-      return <div className="h-6 text-[11px] text-gray-400 italic px-1 flex items-center justify-center text-center">—</div>;
+    if (!text) {
+      return (
+        <div className="h-6 text-[11px] text-gray-400 italic px-1 flex items-center justify-center text-center">
+          —
+        </div>
+      );
+    }
+
     if (row === "VIDEO") {
       const { label, url } = parseVideoValue(text);
       return url ? (
@@ -345,6 +392,7 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
         <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center truncate">{label}</div>
       );
     }
+
     return <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center truncate">{text}</div>;
   }
 
@@ -368,10 +416,10 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
     const isMatchDay = flag.kind === "PARTIDO";
     const dayTypeColor = dayTypeColorFor(ymd, activeTurn) || "#f9fafb";
 
-    // Contenido del día para decidir si mostramos el botón "Ver sesión"
-    let focusRow: (typeof ROWS)[number] = ROWS[0];
+    const firstRowId = contentRowIds[0] ?? SESSION_NAME_ROW;
+    let focusRow: string = firstRowId;
     let hasGridContent = false;
-    for (const row of ROWS) {
+    for (const row of contentRowIds) {
       const s = findCell(ymd, activeTurn, row);
       const txt = (s?.title || "").trim();
       if (txt && !hasGridContent) {
@@ -384,9 +432,12 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
     const hasSessionName = ((sessionNameCell?.title || "").trim().length ?? 0) > 0;
     const hasAnyContent = hasGridContent || hasSessionName;
 
+    const len = contentRowIds.length || 1;
+    const panelHeight = ROW_H * len + CELL_GAP * (len - 1);
+
     const NormalBody = () => (
-      <div className="grid gap-[6px]" style={{ gridTemplateRows: `repeat(4, minmax(${ROW_H}px, auto))` }}>
-        {ROWS.map((row) => {
+      <div className="grid gap-[6px]" style={{ gridTemplateRows: `repeat(${len}, minmax(${ROW_H}px, auto))` }}>
+        {contentRowIds.map((row) => {
           const s = findCell(ymd, activeTurn, row);
           const txt = (s?.title || "").trim();
           return (
@@ -401,100 +452,77 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
       </div>
     );
 
-    const SinglePanel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-      <div
-        className="rounded-md border flex items-center justify-center"
-        style={{ height: ROW_H * 4 + CELL_GAP * 3 }}
-        
-      >
+    const SinglePanel = ({ children }: { children: React.ReactNode }) => (
+      <div className="rounded-md border flex items-center justify-center" style={{ height: panelHeight }}>
         <div className="p-2 text-center">{children}</div>
       </div>
     );
 
-    const LibrePanel = () => (
-      <div className="text-gray-700 font-semibold tracking-wide text-[14px]">LIBRE</div>
-    );
-
     return (
-      <div
-        className="relative rounded-xl border border-black/10 shadow-sm overflow-hidden"
-        style={{ backgroundColor: dayTypeColor }}
-      >
+      <div className="relative rounded-xl border border-black/10 shadow-sm overflow-hidden" style={{ backgroundColor: dayTypeColor }}>
         <div className="absolute inset-0 bg-white/10 pointer-events-none" />
         <div className="relative">
-        {/* Header: 1 fila para días normales/LIBRE, 2 filas sólo en PARTIDO */}
-        <div
-          className="px-2 border-b border-black/10 flex flex-col justify-center gap-1 text-gray-900"
-          style={{
-            height: isMatchDay ? DAY_HEADER_H + 22 : DAY_HEADER_H,
-            minHeight: isMatchDay ? DAY_HEADER_H + 22 : DAY_HEADER_H,
-          }}
-        >
-          {/* Fila 1: siempre fecha + MicroBadge (igual en todos los días) */}
-          <div className="flex items-center justify-between gap-2 min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-wide flex-shrink-0 min-w-0 truncate">
-              {humanDayUTC(ymd)}
+          <div
+            className="px-2 border-b border-black/10 flex flex-col justify-center gap-1 text-gray-900"
+            style={{
+              height: isMatchDay ? DAY_HEADER_H + 22 : DAY_HEADER_H,
+              minHeight: isMatchDay ? DAY_HEADER_H + 22 : DAY_HEADER_H,
+            }}
+          >
+            <div className="flex items-center justify-between gap-2 min-w-0">
+              <div className="text-[10px] font-semibold uppercase tracking-wide flex-shrink-0 min-w-0 truncate">
+                {humanDayUTC(ymd)}
+              </div>
+              <div className="flex items-center gap-1 flex-shrink-0 min-w-0">
+                <MicroBadge ymd={ymd} />
+              </div>
             </div>
-            <div className="flex items-center gap-1 flex-shrink-0 min-w-0">
-              <MicroBadge ymd={ymd} />
-            </div>
+
+            {isMatchDay && (
+              <div className="grid grid-cols-[auto,1fr] items-center gap-2 min-w-0">
+                <div className="w-7 h-7 flex items-center justify-center">
+                  {flag.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={flag.logoUrl} alt="Escudo rival" className="w-7 h-7 object-contain" />
+                  ) : null}
+                </div>
+
+                <div className="min-w-0 flex justify-end">
+                  <div className="max-w-[110px]">
+                    <PlannerMatchLink
+                      rivalId={flag.rivalId}
+                      rivalName={flag.rival || ""}
+                      label={"Plan de\npartido"}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Fila 2: sólo PARTIDO → escudo izquierda / Plan de partido derecha */}
-          {isMatchDay && (
-            <div className="grid grid-cols-[auto,1fr] items-center gap-2 min-w-0">
-              {/* Escudo: entero, sin recorte, centrado en su caja */}
-              <div className="w-7 h-7 flex items-center justify-center">
-                {flag.logoUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={flag.logoUrl}
-                    alt="Escudo rival"
-                    className="w-7 h-7 object-contain"
-                  />
-                ) : null}
-              </div>
+          <div className="p-2">
+            {flag.kind === "LIBRE" && (
+              <SinglePanel>
+                <div className="text-gray-700 font-semibold tracking-wide text-[14px]">{librePill}</div>
+              </SinglePanel>
+            )}
 
-              {/* Botón Plan de partido en dos líneas, sin corte */}
-              <div className="min-w-0 flex justify-end">
-                <div className="max-w-[110px]">
-                  <PlannerMatchLink
-                    rivalId={flag.rivalId}
-                    rivalName={flag.rival || ""}
-                    label={"Plan de\npartido"}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="p-2">
-          {flag.kind === "LIBRE" && (
-            <SinglePanel>
-              <div className="text-gray-700 font-semibold tracking-wide text-[14px]">
-                {librePill}
-              </div>
-            </SinglePanel>
-          )}
-
-          {/* En PARTIDO y días normales mostramos la misma planificación */}
-          {(flag.kind === "NONE" || flag.kind === "PARTIDO") && (
-            <>
-              <NormalBody />
-              {hasAnyContent && (
-                <div className="mt-2 flex justify-center">
-                  <a
-                    href={`/ct/sessions/by-day/${ymd}/${activeTurn}?focus=${encodeURIComponent(focusRow)}`}
-                    className="text-[10px] px-2 py-1 rounded-full border border-emerald-600 text-emerald-700 hover:bg-emerald-50"
-                  >
-                    Ver sesión
-                  </a>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+            {(flag.kind === "NONE" || flag.kind === "PARTIDO") && (
+              <>
+                <NormalBody />
+                {hasAnyContent && (
+                  <div className="mt-2 flex justify-center">
+                    <a
+                      href={`/ct/sessions/by-day/${ymd}/${activeTurn}?focus=${encodeURIComponent(focusRow)}`}
+                      className="text-[10px] px-2 py-1 rounded-full border border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+                    >
+                      Ver sesión
+                    </a>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -502,7 +530,6 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
 
   return (
     <div className="p-3 md:p-4 space-y-3">
-      {/* PRINT tweaks */}
       <style jsx global>{`
         @page { size: A4 landscape; margin: 8mm; }
         @media print {
@@ -533,7 +560,9 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1 mr-2">
               <button
-                className={`px-2.5 py-1.5 rounded-xl border text-xs ${activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"}`}
+                className={`px-2.5 py-1.5 rounded-xl border text-xs ${
+                  activeTurn === "morning" ? "bg-black text-white" : "hover:bg-gray-50"
+                }`}
                 onClick={() => {
                   const p = new URLSearchParams(qs.toString());
                   p.set("turn", "morning");
@@ -544,7 +573,9 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
                 Mañana
               </button>
               <button
-                className={`px-2.5 py-1.5 rounded-xl border text-xs ${activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"}`}
+                className={`px-2.5 py-1.5 rounded-xl border text-xs ${
+                  activeTurn === "afternoon" ? "bg-black text-white" : "hover:bg-gray-50"
+                }`}
                 onClick={() => {
                   const p = new URLSearchParams(qs.toString());
                   p.set("turn", "afternoon");
@@ -555,10 +586,18 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
                 Tarde
               </button>
             </div>
-            <button onClick={() => setBase((d) => addDaysUTC(d, -7))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">◀ Semana anterior</button>
-            <button onClick={() => setBase(getMonday(new Date()))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Hoy</button>
-            <button onClick={() => setBase((d) => addDaysUTC(d, 7))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">Semana siguiente ▶</button>
-            <button onClick={() => window.print()} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">🖨️ Imprimir</button>
+            <button onClick={() => setBase((d) => addDaysUTC(d, -7))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+              ◀ Semana anterior
+            </button>
+            <button onClick={() => setBase(getMonday(new Date()))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+              Hoy
+            </button>
+            <button onClick={() => setBase((d) => addDaysUTC(d, 7))} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+              Semana siguiente ▶
+            </button>
+            <button onClick={() => window.print()} className="px-2.5 py-1.5 rounded-xl border hover:bg-gray-50 text-xs">
+              🖨️ Imprimir
+            </button>
           </div>
         </header>
       )}
@@ -599,15 +638,14 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
                   {activeTurn === "morning" ? "TURNO MAÑANA" : "TURNO TARDE"}
                 </div>
 
-                {/* Cuerpo: grid global por semana (1 columna de labels + 7 días) */}
+                {/* Cuerpo: grid global por semana */}
                 <div
                   className="grid gap-[6px]"
                   style={{
                     gridTemplateColumns: `${COL_LABEL_W}px repeat(7, minmax(${DAY_MIN_W}px, 1fr))`,
-                    gridTemplateRows: `${DAY_HEADER_H}px repeat(4, minmax(${ROW_H}px, auto))`,
+                    gridTemplateRows: `${DAY_HEADER_H}px repeat(${contentRowIds.length || 1}, minmax(${ROW_H}px, auto))`,
                   }}
                 >
-                  {/* Fila 1: header vacío + header por día */}
                   <div />
                   {orderedDays.map((ymd) => {
                     const flag = getDayFlag(ymd, activeTurn);
@@ -616,10 +654,10 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
                     const isLibre = flag.kind === "LIBRE";
                     const dayTypeColor = dayTypeColorFor(ymd, activeTurn) || "#f9fafb";
 
-                    // Contenido del día para decidir si mostramos el botón "Ver sesión"
-                    let focusRow: (typeof ROWS)[number] = ROWS[0];
+                    const firstRowId = contentRowIds[0] ?? SESSION_NAME_ROW;
+                    let focusRow: string = firstRowId;
                     let hasGridContent = false;
-                    for (const row of ROWS) {
+                    for (const row of contentRowIds) {
                       const s = findCell(ymd, activeTurn, row);
                       const txt = (s?.title || "").trim();
                       if (txt && !hasGridContent) {
@@ -646,32 +684,24 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
                             minHeight: isMatchDay ? DAY_HEADER_H + 22 : DAY_HEADER_H,
                           }}
                         >
-                          {/* Fila 1: fecha + MicroBadge + libre */}
                           <div className="flex items-center justify-between gap-2 min-w-0">
                             <div className="text-[10px] font-semibold uppercase tracking-wide flex-shrink-0 min-w-0 truncate">
                               {humanDayUTC(ymd)}
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0 min-w-0">
                               {isLibre && (
-                                <span className="text-[10px] font-semibold tracking-wide text-gray-700">
-                                  {librePill}
-                                </span>
+                                <span className="text-[10px] font-semibold tracking-wide text-gray-700">{librePill}</span>
                               )}
                               <MicroBadge ymd={ymd} />
                             </div>
                           </div>
 
-                          {/* Fila 2: sólo PARTIDO → escudo izquierda / Plan de partido derecha */}
                           {isMatchDay && (
                             <div className="grid grid-cols-[auto,1fr] items-center gap-2 min-w-0">
                               <div className="w-7 h-7 flex items-center justify-center">
                                 {flag.logoUrl ? (
                                   // eslint-disable-next-line @next/next/no-img-element
-                                  <img
-                                    src={flag.logoUrl}
-                                    alt="Escudo rival"
-                                    className="w-7 h-7 object-contain"
-                                  />
+                                  <img src={flag.logoUrl} alt="Escudo rival" className="w-7 h-7 object-contain" />
                                 ) : null}
                               </div>
 
@@ -702,8 +732,7 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
                     );
                   })}
 
-                  {/* Filas 2..5: labels + contenido por día (ROWS) */}
-                  {ROWS.map((rowId) => (
+                  {contentRowIds.map((rowId) => (
                     <div key={`row-${rowId}`} className="contents">
                       <div className="bg-gray-50/60 border rounded-md px-2 text-[10px] font-medium text-gray-600 flex items-center justify-center text-center">
                         <span className="leading-[14px] whitespace-pre-line">{label(rowId)}</span>
@@ -731,6 +760,7 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
           </div>
         </section>
       )}
+
       <VideoPlayerModal
         open={!!videoPreview}
         onClose={() => setVideoPreview(null)}
