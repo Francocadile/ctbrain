@@ -67,7 +67,8 @@ function isRealExercise(ex: Exercise): boolean {
     !!ex.space?.trim() ||
     !!ex.players?.trim() ||
     !!ex.duration?.trim() ||
-    !!ex.imageUrl?.trim();
+    !!ex.imageUrl?.trim() ||
+    !!ex.videoUrl?.trim();
 
   // Bloques “solo rutina”: no van a la biblioteca
   if (ex.isRoutineOnly) return false;
@@ -163,6 +164,9 @@ export default function SesionDetailEditorPage() {
                   };
                 }
 
+                const rawImage = (meta.imageUrl as string) || "";
+                const rawVideo = exLib.videoUrl || "";
+
                 return {
                   title: exLib.name || "",
                   kind: (meta.type as string) || "",
@@ -173,10 +177,8 @@ export default function SesionDetailEditorPage() {
                       : "",
                   duration: (meta.duration as string) || "",
                   description: (meta.description as string) || "",
-                  imageUrl:
-                    (meta.imageUrl as string) ||
-                    exLib.videoUrl ||
-                    "",
+                  imageUrl: rawImage,
+                  videoUrl: rawVideo,
                   routineId: (meta.routineId as string) || "",
                   routineName: (meta.routineName as string) || "",
                 };
@@ -200,6 +202,7 @@ export default function SesionDetailEditorPage() {
               duration: "",
               description: "",
               imageUrl: "",
+              videoUrl: "",
             },
           ]);
         }
@@ -298,6 +301,7 @@ export default function SesionDetailEditorPage() {
         duration: "",
         description: "",
         imageUrl: "",
+        videoUrl: "",
       },
     ]);
   }
@@ -365,7 +369,7 @@ export default function SesionDetailEditorPage() {
       for (const ex of realExercises) {
         const name = (ex.title || ex.kind || "Ejercicio sin nombre").trim();
         const zone = (ex.space || ex.kind || "").trim() || null;
-        const videoUrl = (ex.imageUrl || "").trim() || null;
+        const videoUrl = (ex.videoUrl || "").trim() || null;
 
         const rawPlayers = (ex as any).players ?? null;
         let players: number | string | null = null;

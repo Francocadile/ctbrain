@@ -10,6 +10,7 @@ export type Exercise = {
   duration: string;
   description: string;
   imageUrl: string;
+  videoUrl?: string;
   material?: string;
   diagram?: FieldDiagramState;
   routineId?: string;
@@ -104,6 +105,7 @@ export function decodeExercises(
       duration: e.duration ?? "",
       description: e.description ?? "",
       imageUrl: e.imageUrl ?? "",
+      videoUrl: (e as any)?.videoUrl ?? "",
       material: (e as any)?.material ?? "",
       diagram: (e as any)?.diagram,
       routineId: (e as any)?.routineId ?? "",

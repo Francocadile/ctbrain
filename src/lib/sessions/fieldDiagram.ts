@@ -1,4 +1,4 @@
-export type FieldDiagramTemplateKey = "full_pitch" | "half_pitch";
+export type FieldDiagramTemplateKey = "full_pitch" | "half_pitch" | "free_space";
 
 export type PitchBackground =
   | { kind: "template"; key: FieldDiagramTemplateKey }
@@ -68,6 +68,18 @@ export type DiagramArrow = {
   thickness?: number;
 };
 
+export type DiagramLine = {
+  id: string;
+  type: "line";
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  dashed?: boolean;
+  thickness?: number;
+  stroke?: string;
+};
+
 export type DiagramText = {
   id: string;
   type: "text";
@@ -84,7 +96,8 @@ export type DiagramObject =
   | DiagramArrow
   | DiagramText
   | DiagramRect
-  | DiagramCircleShape;
+  | DiagramCircleShape
+  | DiagramLine;
 
 export type FieldDiagramState = {
   version: 1;

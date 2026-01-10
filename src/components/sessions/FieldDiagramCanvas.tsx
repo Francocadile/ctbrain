@@ -12,6 +12,7 @@ import type {
   DiagramText,
   DiagramRect,
   DiagramCircleShape,
+  DiagramLine,
   FieldDiagramTemplateKey,
   PitchBackground,
 } from "@/lib/sessions/fieldDiagram";
@@ -283,6 +284,18 @@ export function FieldDiagramCanvas({
           dashed: false,
         } as DiagramArrow;
         break;
+      case "line":
+        obj = {
+          id,
+          type: "line",
+          x1: cx - 0.1,
+          y1: cy,
+          x2: cx + 0.1,
+          y2: cy,
+          dashed: false,
+          thickness: 1.2,
+        } as DiagramLine;
+        break;
       case "text":
         obj = {
           id,
@@ -351,7 +364,7 @@ export function FieldDiagramCanvas({
     if (resizeModeRef.current) return;
     setSelected(obj.id);
     const p = getPointer(evt as any);
-    if (obj.type === "arrow") {
+    if (obj.type === "arrow" || obj.type === "line") {
       // Arrastramos todo el vector manteniendo el offset del punto medio
       const mx = (obj.x1 + obj.x2) / 2;
       const my = (obj.y1 + obj.y2) / 2;
@@ -422,7 +435,7 @@ export function FieldDiagramCanvas({
           obj.height = height;
         } else if (mode.kind === "arrow") {
           const obj = draft.objects[idx];
-          if (obj.type !== "arrow") return;
+          if (obj.type !== "arrow" && obj.type !== "line") return;
 
           const nextX = clamp(p.x);
           const nextY = clamp(p.y);
@@ -462,7 +475,7 @@ export function FieldDiagramCanvas({
       const idx = draft.objects.findIndex((o) => o.id === draggingId);
       if (idx === -1) return;
       const obj = draft.objects[idx];
-      if (obj.type === "arrow") {
+      if (obj.type === "arrow" || obj.type === "line") {
         const { dx, dy } = dragOffset.current!;
         const mx = p.x + dx;
         const my = p.y + dy;
@@ -476,8 +489,8 @@ export function FieldDiagramCanvas({
         obj.y2 = my + hy;
       } else {
         const { dx, dy } = dragOffset.current!;
-        obj.x = Math.min(1, Math.max(0, p.x + dx));
-        obj.y = Math.min(1, Math.max(0, p.y + dy));
+        (obj as any).x = Math.min(1, Math.max(0, p.x + dx));
+        (obj as any).y = Math.min(1, Math.max(0, p.y + dy));
       }
     });
   };
@@ -516,7 +529,7 @@ export function FieldDiagramCanvas({
             obj.height = Math.max(0.02, snappedBottom - snappedTop);
           } else if (mode.kind === "arrow") {
             const obj = draft.objects[idx];
-            if (obj.type !== "arrow") return;
+            if (obj.type !== "arrow" && obj.type !== "line") return;
 
             obj.x1 = snap(obj.x1);
             obj.y1 = snap(obj.y1);
@@ -540,7 +553,7 @@ export function FieldDiagramCanvas({
           const idx = draft.objects.findIndex((o) => o.id === draggingId);
           if (idx === -1) return;
           const obj = draft.objects[idx];
-          if (obj.type === "arrow") {
+          if (obj.type === "arrow" || obj.type === "line") {
             obj.x1 = snap(obj.x1);
             obj.y1 = snap(obj.y1);
             obj.x2 = snap(obj.x2);
@@ -579,6 +592,20 @@ export function FieldDiagramCanvas({
             width={VIEWBOX_WIDTH}
             height={VIEWBOX_HEIGHT}
             preserveAspectRatio="xMidYMid slice"
+          />
+        </g>
+      );
+    }
+
+    if (normalized.kind === "template" && normalized.key === "free_space") {
+      return (
+        <g>
+          <rect
+            x={0}
+            y={0}
+            width={VIEWBOX_WIDTH}
+            height={VIEWBOX_HEIGHT}
+            fill="#065f46"
           />
         </g>
       );
@@ -659,8 +686,8 @@ export function FieldDiagramCanvas({
       style: { cursor: readOnly ? "default" : "pointer" },
     } as const;
 
-    const cx = obj.type === "arrow" ? 0 : obj.x * VIEWBOX_WIDTH;
-    const cy = obj.type === "arrow" ? 0 : obj.y * VIEWBOX_HEIGHT;
+    const cx = obj.type === "arrow" || obj.type === "line" ? 0 : obj.x * VIEWBOX_WIDTH;
+    const cy = obj.type === "arrow" || obj.type === "line" ? 0 : obj.y * VIEWBOX_HEIGHT;
 
     switch (obj.type) {
       case "player": {
@@ -925,6 +952,72 @@ export function FieldDiagramCanvas({
             )}
           </g>
         );
+      case "line":
+        return (
+          <g key={obj.id} {...common}>
+            <line
+              x1={obj.x1 * VIEWBOX_WIDTH}
+              y1={obj.y1 * VIEWBOX_HEIGHT}
+              x2={obj.x2 * VIEWBOX_WIDTH}
+              y2={obj.y2 * VIEWBOX_HEIGHT}
+              stroke={sel ? "#e5e7eb" : obj.stroke ?? "#f9fafb"}
+              strokeWidth={obj.thickness ?? 1.2}
+              strokeDasharray={obj.dashed ? "3,3" : undefined}
+            />
+            {sel && (
+              <>
+                <circle
+                  cx={obj.x1 * VIEWBOX_WIDTH}
+                  cy={obj.y1 * VIEWBOX_HEIGHT}
+                  r={2.2}
+                  fill="#fbbf24"
+                  stroke="#111827"
+                  strokeWidth={0.5}
+                  style={{ cursor: "pointer" }}
+                  onMouseDown={(e) => {
+                    if (readOnly) return;
+                    e.stopPropagation();
+                    resizeModeRef.current = {
+                      kind: "arrow",
+                      id: obj.id,
+                      handle: "start",
+                      initial: {
+                        x1: obj.x1,
+                        y1: obj.y1,
+                        x2: obj.x2,
+                        y2: obj.y2,
+                      },
+                    };
+                  }}
+                />
+                <circle
+                  cx={obj.x2 * VIEWBOX_WIDTH}
+                  cy={obj.y2 * VIEWBOX_HEIGHT}
+                  r={2.2}
+                  fill="#fbbf24"
+                  stroke="#111827"
+                  strokeWidth={0.5}
+                  style={{ cursor: "pointer" }}
+                  onMouseDown={(e) => {
+                    if (readOnly) return;
+                    e.stopPropagation();
+                    resizeModeRef.current = {
+                      kind: "arrow",
+                      id: obj.id,
+                      handle: "end",
+                      initial: {
+                        x1: obj.x1,
+                        y1: obj.y1,
+                        x2: obj.x2,
+                        y2: obj.y2,
+                      },
+                    };
+                  }}
+                />
+              </>
+            )}
+          </g>
+        );
       case "text":
         return (
           <text
@@ -978,6 +1071,7 @@ export function FieldDiagramCanvas({
           >
             <option value="full_pitch">Campo completo</option>
             <option value="half_pitch">1/2 campo</option>
+            <option value="free_space">Espacio libre</option>
           </select>
 
           <span className="ml-2 text-slate-300">Objetos:</span>
@@ -1022,6 +1116,13 @@ export function FieldDiagramCanvas({
             onClick={() => addObject("arrow")}
           >
             + Flecha
+          </button>
+          <button
+            type="button"
+            className="rounded-md border border-emerald-500 bg-emerald-800 px-2 py-0.5 hover:bg-emerald-700"
+            onClick={() => addObject("line")}
+          >
+            + Línea
           </button>
           <button
             type="button"

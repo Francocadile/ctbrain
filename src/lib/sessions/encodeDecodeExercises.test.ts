@@ -13,6 +13,7 @@ describe("encodeDecodeExercises helpers", () => {
         duration: "15",
         description: "posesión en espacio reducido",
         imageUrl: "https://example.com/rondo.png",
+        videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         routineId: "routine-1",
         routineName: "Pre-partido",
         isRoutineOnly: true,
@@ -33,6 +34,7 @@ describe("encodeDecodeExercises helpers", () => {
     expect(ex.duration).toBe(exercises[0].duration);
     expect(ex.description).toBe(exercises[0].description);
     expect(ex.imageUrl).toBe(exercises[0].imageUrl);
+    expect(ex.videoUrl).toBe(exercises[0].videoUrl);
     expect(ex.routineId).toBe(exercises[0].routineId);
     expect(ex.routineName).toBe(exercises[0].routineName);
     expect(ex.isRoutineOnly).toBe(exercises[0].isRoutineOnly);

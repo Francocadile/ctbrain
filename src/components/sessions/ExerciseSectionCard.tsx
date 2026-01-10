@@ -2,7 +2,7 @@
 
 import React from "react";
 
-import type { FieldDiagramState, DiagramObject, PitchBackground } from "@/lib/sessions/fieldDiagram";
+import type { FieldDiagramState, DiagramObject, PitchBackground, FieldDiagramTemplateKey } from "@/lib/sessions/fieldDiagram";
 import { saveSessionExerciseTemplate } from "@/lib/api/exercises";
 import { uploadDiagramPng, uploadDiagramBackground } from "@/lib/api/uploads";
 import { FieldDiagramCanvas, exportDiagramToPng } from "./FieldDiagramCanvas";
@@ -15,6 +15,7 @@ type ExerciseForCard = {
   duration: string;
   description: string;
   imageUrl: string;
+  videoUrl?: string;
   material?: string;
   diagram?: FieldDiagramState;
   routineId?: string;
@@ -54,8 +55,7 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
 
   const title = exercise.title?.trim() || "Sin título";
   const headerLabel = `TAREA #${String(index + 1).padStart(2, "0")}`;
-
-  const video = isVideoUrl?.(exercise.imageUrl);
+  const video = isVideoUrl?.(exercise.videoUrl);
 
   const [showDiagramEditor, setShowDiagramEditor] = React.useState(false);
   const [draftDiagram, setDraftDiagram] = React.useState<FieldDiagramState | null>(
@@ -83,7 +83,7 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
       objects: [],
     };
 
-  const setBackground = (bg: PitchBackground | "full_pitch" | "half_pitch") => {
+  const setBackground = (bg: PitchBackground | FieldDiagramTemplateKey) => {
     setDraftDiagram((prev) => {
       if (!prev) return prev;
       return {
@@ -224,7 +224,7 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
 
       const shift = (v: number) => Math.min(1, Math.max(0, v + 0.02));
 
-      if (clone.type === "arrow") {
+      if (clone.type === "arrow" || clone.type === "line") {
         clone.x1 = shift(clone.x1);
         clone.y1 = shift(clone.y1);
         clone.x2 = shift(clone.x2);
@@ -391,21 +391,71 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
                 className="inline-flex items-center justify-center rounded-md border border-emerald-600 bg-emerald-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-emerald-700"
                 onClick={openEditor}
               >
-                {hasDiagram ? "Editar cancha" : "Crear cancha"}
+                {hasDiagram ? "Editar cancha" : "Crear ejercicio"}
               </button>
             </div>
           )}
 
           {!readOnly && (
-            <div className="flex flex-col gap-1 text-xs">
-              <label className="font-medium text-slate-700">URL imagen / video</label>
-              <input
-                type="text"
-                className="w-full rounded-md border px-2 py-1 text-xs"
-                value={exercise.imageUrl}
-                onChange={(e) => onChange({ imageUrl: e.target.value })}
-                placeholder="https://..."
-              />
+            <div className="flex flex-col gap-2 text-xs">
+              <div className="flex flex-col gap-1">
+                <label className="font-medium text-slate-700">Imagen del ejercicio</label>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg"
+                  className="block w-full text-[11px] text-slate-700 file:mr-2 file:rounded-md file:border file:border-slate-300 file:bg-white file:px-2 file:py-0.5 file:text-[11px] file:font-medium file:text-slate-700 hover:file:bg-slate-50 disabled:opacity-40"
+                  disabled={readOnly}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+
+                    try {
+                      const reader = new FileReader();
+                      const dataUrl: string = await new Promise((resolve, reject) => {
+                        reader.onerror = () => reject(reader.error);
+                        reader.onload = () =>
+                          resolve(typeof reader.result === "string" ? reader.result : "");
+                        reader.readAsDataURL(file);
+                      });
+
+                      if (!dataUrl) return;
+
+                      const { url } = await uploadDiagramBackground({
+                        sessionId,
+                        pngDataUrl: dataUrl,
+                      });
+
+                      onChange({ imageUrl: url });
+                    } catch (err) {
+                      console.error("No se pudo subir la imagen del ejercicio", err);
+                      alert("No se pudo subir la imagen del ejercicio. Reintentá más tarde.");
+                    } finally {
+                      e.target.value = "";
+                    }
+                  }}
+                />
+                {exercise.imageUrl && (
+                  <div className="mt-1">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={exercise.imageUrl}
+                      alt={title}
+                      className="max-h-40 w-full rounded-md border object-contain bg-slate-100"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="font-medium text-slate-700">Video del ejercicio (YouTube)</label>
+                <input
+                  type="text"
+                  className="w-full rounded-md border px-2 py-1 text-xs"
+                  value={exercise.videoUrl ?? ""}
+                  onChange={(e) => onChange({ videoUrl: e.target.value })}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                />
+              </div>
               {showLibraryPickerButton && onOpenLibraryPicker && (
                 <button
                   type="button"
@@ -428,7 +478,7 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
                         exercise.title?.trim() || "Ejercicio sin título";
                       const zone =
                         exercise.space?.trim() || exercise.kind?.trim() || null;
-                      const videoUrl = exercise.imageUrl?.trim() || null;
+                      const videoUrl = exercise.videoUrl?.trim() || null;
 
                       const rawPlayers = (exercise as any).players ?? null;
                       let players: number | string | null = null;
@@ -486,7 +536,7 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
                       ? "Guardando plantilla…"
                       : templateStatus === "done"
                         ? "Plantilla guardada"
-                        : "Guardar como plantilla"}
+                        : "Guardar ejercicio (incluye cancha)"}
                   </button>
                   {templateError && (
                     <span className="text-red-600">
@@ -648,6 +698,16 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
                         }
                       >
                         Medio campo
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-md border border-slate-300 bg-white px-2 py-0.5 hover:bg-slate-100"
+                        disabled={isSavingDiagram}
+                        onClick={() =>
+                          setBackground({ kind: "template", key: "free_space" })
+                        }
+                      >
+                        Espacio libre
                       </button>
                     </div>
                     <div className="space-y-1">

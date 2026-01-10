@@ -12,6 +12,7 @@ export type Exercise = {
   duration: string;
   description: string;
   imageUrl: string;
+  videoUrl?: string;
   routineId?: string;
   routineName?: string;
   isRoutineOnly?: boolean;
@@ -21,6 +22,20 @@ function isVideoUrl(url: string | undefined | null) {
   if (!url) return false;
   const u = url.toLowerCase();
   return u.includes("youtube.com") || u.includes("youtu.be") || u.includes("vimeo.com");
+}
+
+function resolveYoutubeEmbedUrl(url: string): string {
+  const shortMatch = /youtu\.be\/([^?&#]+)/i.exec(url);
+  if (shortMatch?.[1]) {
+    return `https://www.youtube.com/embed/${shortMatch[1]}`;
+  }
+
+  const watchMatch = /youtube\.com\/watch\?[^#]*v=([^&]+)/i.exec(url);
+  if (watchMatch?.[1]) {
+    return `https://www.youtube.com/embed/${watchMatch[1]}`;
+  }
+
+  return url;
 }
 
 function parseMarker(description?: string) {
@@ -135,33 +150,34 @@ export default function SessionPageContent({
                   </div>
 
                   <div className="space-y-2 md:col-span-2">
-                    <div className="flex items-center justify-between print:hidden">
-                      <label className="text-[11px] text-gray-500">Imagen / video (URL)</label>
-                    </div>
-                    <input
-                      className={`w-full rounded-md border px-2 py-1.5 text-sm print:hidden ${roCls}`}
-                      value={ex.imageUrl}
-                      readOnly
-                    />
                     {ex.imageUrl ? (
-                      <div className="mt-2">
-                        {isVideoUrl(ex.imageUrl) ? (
-                          <div className="aspect-video w-full rounded-lg border overflow-hidden">
-                            <iframe
-                              src={ex.imageUrl}
-                              className="w-full h-full"
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                              allowFullScreen
-                            />
-                          </div>
-                        ) : (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={ex.imageUrl}
-                            alt="Vista previa"
-                            className="max-h-80 rounded-lg border object-contain"
+                      <div>
+                        <label className="text-[11px] text-gray-500 block mb-1 print:hidden">
+                          Imagen del ejercicio
+                        </label>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={ex.imageUrl}
+                          alt="Vista previa"
+                          className="max-h-80 rounded-lg border object-contain"
+                        />
+                      </div>
+                    ) : null}
+
+                    {ex.videoUrl ? (
+                      <div className="mt-3">
+                        <label className="text-[11px] text-gray-500 block mb-1 print:hidden">
+                          Video del ejercicio
+                        </label>
+                        <div className="aspect-video w-full rounded-lg border overflow-hidden">
+                          <iframe
+                            src={resolveYoutubeEmbedUrl(ex.videoUrl)}
+                            className="w-full h-full"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            title={ex.title || "Video de ejercicio"}
                           />
-                        )}
+                        </div>
                       </div>
                     ) : null}
                   </div>
