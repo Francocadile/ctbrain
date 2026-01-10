@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import { Role } from "@prisma/client";
 import { dbScope } from "@/lib/dbScope";
@@ -29,15 +30,6 @@ export async function POST(req: Request) {
 
     const { sessionId, pngDataUrl } = parsed.data;
 
-    const token = process.env.BLOB_READ_WRITE_TOKEN;
-    if (!token) {
-      console.error("BLOB_READ_WRITE_TOKEN no configurado");
-      return NextResponse.json(
-        { error: "Blob storage no configurado" },
-        { status: 500 },
-      );
-    }
-
     const base64PrefixIndex = pngDataUrl.indexOf("base64,");
     const base64Part =
       base64PrefixIndex >= 0
@@ -56,6 +48,53 @@ export async function POST(req: Request) {
     }
 
     const safeSessionId = sessionId.replace(/[^a-zA-Z0-9_-]/g, "_");
+
+    const token = process.env.BLOB_READ_WRITE_TOKEN;
+
+    if (!token) {
+      // Entorno de desarrollo sin Blob: guardamos un PNG en disco local bajo /public/dev-uploads
+      if (process.env.NODE_ENV !== "production") {
+        try {
+          const fs = await import("fs/promises");
+          const pathMod = await import("path");
+
+          const rootDir = process.cwd();
+          const uploadsDir = pathMod.join(rootDir, "public", "dev-uploads", "sessions", safeSessionId);
+          await fs.mkdir(uploadsDir, { recursive: true });
+
+          const filename = `diagram-background-${randomUUID()}.png`;
+          const filePath = pathMod.join(uploadsDir, filename);
+          await fs.writeFile(filePath, buffer);
+
+          const publicUrl = `/dev-uploads/sessions/${safeSessionId}/${filename}`;
+          console.warn("Blob no configurado; usando fallback local DEV para diagram-background", {
+            filePath,
+            publicUrl,
+          });
+
+          return NextResponse.json({ url: publicUrl });
+        } catch (err) {
+          console.error("Fallback local DEV para diagram-background falló", err);
+          return NextResponse.json(
+            {
+              error:
+                "Blob storage no configurado y no se pudo escribir en el filesystem local en desarrollo.",
+            },
+            { status: 500 },
+          );
+        }
+      }
+
+      console.error("BLOB_READ_WRITE_TOKEN no configurado en producción");
+      return NextResponse.json(
+        {
+          error:
+            "Blob storage no configurado: falta la env BLOB_READ_WRITE_TOKEN en el entorno de despliegue.",
+        },
+        { status: 500 },
+      );
+    }
+
     const path = `openbase/${team.id}/sessions/${safeSessionId}/diagram-background.png`;
 
     const blob = await put(path, buffer, {
