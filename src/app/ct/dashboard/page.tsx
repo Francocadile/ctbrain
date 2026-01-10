@@ -492,7 +492,9 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
           <div className="p-2">
             {flag.kind === "LIBRE" && (
               <SinglePanel>
-                <div className="text-gray-700 font-semibold tracking-wide text-[14px]">{librePill}</div>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full border border-gray-300 bg-white text-[10px] font-medium text-gray-700">
+                  {librePill}
+                </span>
               </SinglePanel>
             )}
 
@@ -503,7 +505,7 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
                   <div className="mt-2 flex justify-center">
                     <a
                       href={`/ct/sessions/by-day/${ymd}/${activeTurn}?focus=${encodeURIComponent(focusRow)}`}
-                      className="text-[10px] px-2 py-1 rounded-full border border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+                      className="inline-flex items-center px-2 py-0.5 rounded-full border border-emerald-600 text-[10px] font-medium text-emerald-700 hover:bg-emerald-50 bg-white/80"
                     >
                       Ver sesión
                     </a>
@@ -679,7 +681,9 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0 min-w-0">
                               {isLibre && (
-                                <span className="text-[10px] font-semibold tracking-wide text-gray-700">{librePill}</span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full border border-gray-300 bg-white/80 text-[10px] font-medium text-gray-700">
+                                  {librePill}
+                                </span>
                               )}
                               <MicroBadge ymd={ymd} />
                             </div>
@@ -710,7 +714,7 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
                             <div className="mt-1 flex justify-end">
                               <a
                                 href={`/ct/sessions/by-day/${ymd}/${activeTurn}?focus=${encodeURIComponent(focusRow)}`}
-                                className="text-[10px] px-2 py-0.5 rounded-full border border-emerald-600 text-emerald-700 hover:bg-emerald-50 bg-white/70"
+                                className="inline-flex items-center px-2 py-0.5 rounded-full border border-emerald-600 text-[10px] font-medium text-emerald-700 hover:bg-emerald-50 bg-white/80"
                               >
                                 Ver sesión
                               </a>

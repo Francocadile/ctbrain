@@ -59,10 +59,10 @@ export default function EditableCell({
         {sessionHref ? (
           <a
             href={sessionHref}
-            className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-700 hover:bg-slate-50"
             title="Cargar ejercicios de la sesión"
           >
-            <span className="text-[10px]" aria-hidden="true">
+            <span className="text-[9px]" aria-hidden="true">
               ➜
             </span>
             <span>Cargar ejercicios de la sesión</span>
