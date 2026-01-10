@@ -190,6 +190,17 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
     }
   }
 
+  async function handleRestoreContentRows() {
+    const ok = confirm("¿Restaurar filas de contenido originales? Esto eliminará filas personalizadas.");
+    if (!ok) return;
+
+    const nextIds = Object.keys(DEFAULT_LABELS);
+    const mergedLabels: RowLabels = {};
+    const nextLabels = mergePreservingNonContentLabels(nextIds, mergedLabels);
+    await handleSaveContentRows(nextLabels, nextIds);
+    setDraftRowLabels({});
+  }
+
   async function handleSavePlaces() {
     setLoading(true);
     try {
@@ -343,15 +354,20 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
         </div>
 
         <div className="space-y-2">
-          {contentRowIds.map((id, index) => (
-            <div key={id} className="flex items-center gap-2">
-              <div className="w-40 text-xs text-gray-600 truncate" title={id}>
-                {id}
-              </div>
+          {contentRowIds.map((id, index) => {
+            const draft = draftRowLabels[id];
+            const baseLabel = current[id] ?? id;
+            const displayLabel = draft ?? baseLabel;
+
+            return (
+              <div key={id} className="flex items-center gap-2">
+                <div className="w-40 text-xs text-gray-600 truncate" title={displayLabel}>
+                  {displayLabel}
+                </div>
               <input
                 className="flex-1 h-8 rounded-md border px-2 text-xs"
                 placeholder="Nombre visible de la fila"
-                value={draftRowLabels[id] ?? current[id] ?? id}
+                value={displayLabel}
                 ref={(el) => {
                   contentRowInputRefs.current[id] = el;
                 }}
@@ -397,7 +413,8 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="mt-3 flex gap-2">
@@ -423,6 +440,14 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
             }}
           >
             + fila
+          </button>
+          <button
+            type="button"
+            className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50"
+            disabled={loading}
+            onClick={handleRestoreContentRows}
+          >
+            Restaurar originales
           </button>
         </div>
       </section>
