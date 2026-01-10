@@ -61,12 +61,12 @@ export function ExerciseCardPreview({ exercise, index }: ExerciseCardPreviewProp
 
       {imageUrl && (
         <div className="mt-1">
-          <div className="aspect-video w-full overflow-hidden bg-black/5">
+          <div className="aspect-video w-full max-h-[240px] overflow-hidden rounded-lg border bg-black/5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={imageUrl}
               alt={title}
-              className="w-full h-full rounded-md border object-cover"
+              className="w-full h-full object-cover"
             />
           </div>
         </div>

@@ -12,11 +12,10 @@ import {
 import SessionDayView, { SessionDayBlock } from "@/components/sessions/SessionDayView";
 import { decodeExercises, type Exercise } from "@/lib/sessions/encodeDecodeExercises";
 import type { RowLabels } from "@/lib/planner-prefs";
-import { fetchRowLabels } from "@/lib/planner-prefs";
 
 type TurnKey = "morning" | "afternoon";
 
-// Bloques principales de contenido
+// Bloques principales de contenido (fallback por compatibilidad para semanas viejas)
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 
 // Metadatos (arriba). Agregamos NOMBRE SESIÓN
@@ -103,6 +102,7 @@ export default function SessionTurnoPage() {
   const [weekStart, setWeekStart] = useState<string>("");
   const [editingBlock, setEditingBlock] = useState<SessionDayBlock | null>(null);
   const [rowLabels, setRowLabels] = useState<RowLabels>({});
+  const [contentRowIds, setContentRowIds] = useState<string[]>(() => [...CONTENT_ROWS]);
 
   const printCSS = `
     @page { size: A4 portrait; margin: 10mm; }
@@ -136,17 +136,26 @@ export default function SessionTurnoPage() {
     load();
   }, [ymd]);
 
+  // Preferencias de planner (labels + filas dinámicas de contenido)
   useEffect(() => {
-    async function loadRowLabels() {
+    async function loadPlannerPrefs() {
       try {
-        const labels = await fetchRowLabels();
-        setRowLabels(labels || {});
+        const r = await fetch("/api/planner/labels", { cache: "no-store" });
+        if (!r.ok) throw new Error("fetch planner prefs failed");
+        const j = await r.json();
+        setRowLabels(j.rowLabels || {});
+        const ids =
+          Array.isArray(j.contentRowIds) && j.contentRowIds.length
+            ? (j.contentRowIds as string[])
+            : [...CONTENT_ROWS];
+        setContentRowIds(ids);
       } catch (e) {
-        console.error("No se pudieron cargar rowLabels para vista by-day", e);
+        console.error("No se pudieron cargar prefs de planner para vista by-day", e);
         setRowLabels({});
+        setContentRowIds([...CONTENT_ROWS]);
       }
     }
-    loadRowLabels();
+    loadPlannerPrefs();
   }, []);
 
   useEffect(() => {
@@ -195,7 +204,7 @@ export default function SessionTurnoPage() {
 
   const viewBlocks: SessionDayBlock[] = useMemo(
     () =>
-      CONTENT_ROWS.map((rowId) => {
+      contentRowIds.map((rowId) => {
         const cell = daySessions.find((s) => isCellOf(s, turn, rowId));
         const visibleLabel = rowLabels[rowId] || rowId;
         let exercises: Exercise[] = [];
@@ -216,7 +225,7 @@ export default function SessionTurnoPage() {
           exercises,
         };
       }),
-    [daySessions, turn, rowLabels]
+    [daySessions, turn, rowLabels, contentRowIds]
   );
 
   // Si es día libre, mostramos solo el mensaje de descanso en lugar de bloques
