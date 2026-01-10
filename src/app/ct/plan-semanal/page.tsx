@@ -119,9 +119,10 @@ function PlanSemanalInner() {
   const [dayTypes, setDayTypes] = useState<DayTypeDef[]>([]);
   const [dayTypeAssignments, setDayTypeAssignments] = useState<Record<string, DayTypeId>>({});
 
-  // Preferencias de usuario (labels + places)
+  // Preferencias de usuario (labels + places + filas de contenido)
   const [rowLabels, setRowLabels] = useState<Record<string, string>>({});
   const [places, setPlaces] = useState<string[]>([]);
+  const [contentRowIds, setContentRowIds] = useState<string[]>(() => [...CONTENT_ROWS]);
   // Uso de DayTypes en la semana actual (para evitar borrar en uso)
   const [dayTypeUsage, setDayTypeUsage] = useState<Record<string, boolean>>({});
 
@@ -131,9 +132,15 @@ function PlanSemanalInner() {
       const j = await r.json();
       setRowLabels(j.rowLabels || {});
       setPlaces(j.places || []);
+      setContentRowIds(
+        Array.isArray(j.contentRowIds) && j.contentRowIds.length
+          ? (j.contentRowIds as string[])
+          : [...CONTENT_ROWS],
+      );
     } catch {
       setRowLabels({});
       setPlaces([]);
+      setContentRowIds([...CONTENT_ROWS]);
     }
   }
 
@@ -552,7 +559,7 @@ function PlanSemanalInner() {
               turn={activeTurn}
               orderedDays={orderedDays}
               weekStart={weekStart}
-              contentRows={CONTENT_ROWS}
+              contentRows={contentRowIds}
               metaRows={META_ROWS}
               sessionNameRowId={SESSION_NAME_ROW}
               labelForRow={label}

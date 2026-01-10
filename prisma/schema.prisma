@@ -398,6 +398,8 @@ model PlannerPrefs {
   teamId    String
   rowLabels Json     @default("{}")
   places    Json     @default("[]")
+  contentRowIds Json?
+  metaRowIds     Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

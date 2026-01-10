@@ -38,12 +38,22 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
 
   // para mostrar “Actual: …”
   const [current, setCurrent] = useState<RowLabels>({});
+  const [contentRowIds, setContentRowIds] = useState<string[]>([]);
+  const [draftRowLabels, setDraftRowLabels] = useState<RowLabels>({});
 
   useEffect(() => {
     (async () => {
       try {
-        const server = await fetchRowLabels();
-        setCurrent(server || {});
+        const r = await fetch("/api/planner/labels", { cache: "no-store" });
+        if (r.ok) {
+          const j = await r.json();
+          const server = (j.rowLabels || {}) as RowLabels;
+          const ids = Array.isArray(j.contentRowIds) && j.contentRowIds.length
+            ? (j.contentRowIds as string[])
+            : Object.keys(DEFAULT_LABELS);
+          setCurrent(server || {});
+          setContentRowIds(ids);
+        }
       } catch {}
       try {
         const list = await fetchPlaces();
@@ -92,6 +102,34 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
     }
   }
 
+  async function handleSaveContentRows(nextLabels: RowLabels, nextIds: string[]) {
+    setLoading(true);
+    try {
+      const token = getClientCsrfToken();
+      if (!token) throw new Error("CSRF missing: recargá la página");
+
+      const res = await fetch("/api/planner/labels", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          [CSRF_HEADER_NAME]: token,
+        },
+        body: JSON.stringify({ rowLabels: nextLabels, contentRowIds: nextIds }),
+      });
+      if (!res.ok) throw new Error("No se pudieron guardar las filas de contenido");
+
+      setCurrent(nextLabels);
+      setContentRowIds(nextIds);
+      window.dispatchEvent(new Event("planner-row-labels-updated"));
+      onAfterChange?.();
+    } catch (e: any) {
+      alert(e?.message || "No se pudieron guardar las filas de contenido");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleResetLabels() {
     const ok = confirm("¿Restaurar nombres originales?");
     if (!ok) return;
@@ -100,6 +138,7 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
       await resetRowLabels();
       setLabels({});
       setCurrent({});
+      setContentRowIds(Object.keys(DEFAULT_LABELS));
       window.dispatchEvent(new Event("planner-row-labels-updated"));
       onAfterChange?.();
       alert("Restaurado.");
@@ -298,6 +337,57 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
             className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50"
           >
             Restaurar originales
+          </button>
+        </div>
+      </section>
+
+      {/* FILAS DE CONTENIDO */}
+      <section className="rounded-xl border p-3">
+        <div className="mb-2 flex items-center gap-2">
+          <h3 className="text-sm font-semibold">Filas de contenido</h3>
+          <HelpTip text="Configura qué filas de contenido aparecen en el plan semanal y sus nombres visibles." />
+        </div>
+
+        <div className="space-y-2">
+          {contentRowIds.map((id) => (
+            <div key={id} className="flex items-center gap-2">
+              <div className="w-40 text-xs text-gray-600 truncate" title={id}>
+                {id}
+              </div>
+              <input
+                className="flex-1 h-8 rounded-md border px-2 text-xs"
+                placeholder="Nombre visible de la fila"
+                value={draftRowLabels[id] ?? current[id] ?? id}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setDraftRowLabels((prev) => ({ ...prev, [id]: value }));
+                }}
+                onBlur={() => {
+                  const nextLabels = { ...current, ...draftRowLabels };
+                  const nextIds = contentRowIds;
+                  handleSaveContentRows(nextLabels, nextIds).then(() => {
+                    setDraftRowLabels({});
+                  });
+                }}
+              />
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-3 flex gap-2">
+          <button
+            type="button"
+            className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50"
+            disabled={loading}
+            onClick={async () => {
+              const id = `row-${Date.now()}`;
+              const nextIds = [...contentRowIds, id];
+              const nextLabels = { ...current, [id]: "Nueva fila" };
+              await handleSaveContentRows(nextLabels, nextIds);
+              setDraftRowLabels({});
+            }}
+          >
+            + fila
           </button>
         </div>
       </section>

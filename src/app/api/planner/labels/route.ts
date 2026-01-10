@@ -13,7 +13,7 @@ function plannerPrefsKey(userId: string, teamId: string): Prisma.PlannerPrefsWhe
   } as unknown as Prisma.PlannerPrefsWhereUniqueInput;
 }
 
-// GET -> { rowLabels, places }
+// GET -> { rowLabels, places, contentRowIds }
 export async function GET(req: NextRequest) {
   try {
     const { prisma, team, user } = await dbScope({ req });
@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       rowLabels: (pref?.rowLabels as Record<string, string> | null) ?? null,
       places: places.map((p) => p.name),
+      contentRowIds: (pref?.contentRowIds as string[] | null) ?? null,
     });
   } catch (error: any) {
     if (error instanceof Response) return error;
@@ -49,14 +50,23 @@ export async function POST(req: NextRequest) {
     const body = (await req.json().catch(() => ({}))) as {
       rowLabels?: Record<string, string>;
       places?: string[];
+      contentRowIds?: string[];
     };
 
     await prisma.$transaction(async (tx) => {
-      if (body.rowLabels) {
+      if (body.rowLabels || body.contentRowIds) {
         await tx.plannerPrefs.upsert({
           where: plannerPrefsKey(userId, teamId),
-          update: { rowLabels: body.rowLabels },
-          create: { userId, teamId, rowLabels: body.rowLabels } as any,
+          update: {
+            ...(body.rowLabels ? { rowLabels: body.rowLabels } : {}),
+            ...(body.contentRowIds ? { contentRowIds: body.contentRowIds as any } : {}),
+          },
+          create: {
+            userId,
+            teamId,
+            ...(body.rowLabels ? { rowLabels: body.rowLabels } : {}),
+            ...(body.contentRowIds ? { contentRowIds: body.contentRowIds as any } : {}),
+          } as any,
         });
       }
 
@@ -99,7 +109,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// DELETE -> resetea rowLabels del usuario
+// DELETE -> resetea rowLabels del usuario y contentRowIds
 export async function DELETE(req: NextRequest) {
   try {
     const { prisma, team, user } = await dbScope({ req, roles: [Role.CT, Role.ADMIN] });
@@ -108,8 +118,8 @@ export async function DELETE(req: NextRequest) {
 
     await prisma.plannerPrefs.upsert({
       where: plannerPrefsKey(userId, teamId),
-      update: { rowLabels: {} },
-      create: { userId, teamId, rowLabels: {} } as any,
+      update: { rowLabels: {}, contentRowIds: null as any },
+      create: { userId, teamId, rowLabels: {}, contentRowIds: null as any } as any,
     });
     return NextResponse.json({ ok: true });
   } catch (error: any) {
