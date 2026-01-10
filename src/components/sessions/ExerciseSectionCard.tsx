@@ -462,57 +462,71 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
             <div className="flex flex-col gap-2 text-xs">
               <div className="flex flex-col gap-1">
                 <label className="font-medium text-slate-700">Imagen del ejercicio</label>
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg"
-                  className="block w-full text-[11px] text-slate-700 file:mr-2 file:rounded-md file:border file:border-slate-300 file:bg-white file:px-2 file:py-0.5 file:text-[11px] file:font-medium file:text-slate-700 hover:file:bg-slate-50 disabled:opacity-40"
-                  disabled={readOnly}
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg"
+                    className="block text-[11px] text-slate-700 file:mr-2 file:rounded-md file:border file:border-slate-300 file:bg-white file:px-2 file:py-0.5 file:text-[11px] file:font-medium file:text-slate-700 hover:file:bg-slate-50 disabled:opacity-40"
+                    disabled={readOnly}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
 
-                    try {
-                      const dataUrl = await readAndResizeImageFile(file);
-                      if (!dataUrl) return;
+                      try {
+                        const dataUrl = await readAndResizeImageFile(file);
+                        if (!dataUrl) return;
 
-                      const { url } = await uploadDiagramBackground({
-                        sessionId,
-                        pngDataUrl: dataUrl,
-                      });
+                        const { url } = await uploadDiagramBackground({
+                          sessionId,
+                          pngDataUrl: dataUrl,
+                        });
 
-                      onChange({ imageUrl: url });
-                    } catch (err) {
-                      const anyErr = err as any;
-                      const status: number | undefined = anyErr?.status;
-                      const body: string | undefined = anyErr?.body;
+                        onChange({ imageUrl: url });
+                      } catch (err) {
+                        const anyErr = err as any;
+                        const status: number | undefined = anyErr?.status;
+                        const body: string | undefined = anyErr?.body;
 
-                      console.error("No se pudo subir la imagen del ejercicio", {
-                        error: err,
-                        status,
-                        body,
-                      });
+                        console.error("No se pudo subir la imagen del ejercicio", {
+                          error: err,
+                          status,
+                          body,
+                        });
 
-                      const bodyText = typeof body === "string" ? body : anyErr?.message || "";
-                      const isTooLarge =
-                        status === 413 ||
-                        /too large|entity too large|body exceeded/i.test(bodyText);
+                        const bodyText = typeof body === "string" ? body : anyErr?.message || "";
+                        const isTooLarge =
+                          status === 413 ||
+                          /too large|entity too large|body exceeded/i.test(bodyText);
 
-                      if (isTooLarge) {
-                        alert(
-                          "Imagen demasiado grande. Probá subir una imagen con menor resolución o peso.",
-                        );
-                      } else {
-                        alert(
-                          `No se pudo subir la imagen del ejercicio (status ${
-                            status ?? "desconocido"
-                          }). Detalle: ${bodyText || "Error desconocido"}`,
-                        );
+                        if (isTooLarge) {
+                          alert(
+                            "Imagen demasiado grande. Probá subir una imagen con menor resolución o peso.",
+                          );
+                        } else {
+                          alert(
+                            `No se pudo subir la imagen del ejercicio (status ${
+                              status ?? "desconocido"
+                            }). Detalle: ${bodyText || "Error desconocido"}`,
+                          );
+                        }
+                      } finally {
+                        e.target.value = "";
                       }
-                    } finally {
-                      e.target.value = "";
-                    }
-                  }}
-                />
+                    }}
+                  />
+                  {exercise.imageUrl && (
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center rounded-md border border-slate-300 bg-white px-2 py-1 font-medium text-slate-700 hover:bg-slate-50"
+                      onClick={() => {
+                        if (!window.confirm("¿Eliminar imagen?")) return;
+                        onChange({ imageUrl: "" });
+                      }}
+                    >
+                      Eliminar imagen
+                    </button>
+                  )}
+                </div>
                 {exercise.imageUrl && (
                   <div className="mt-1">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
