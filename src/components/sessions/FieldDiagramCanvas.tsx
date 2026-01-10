@@ -495,7 +495,7 @@ export function FieldDiagramCanvas({
     });
   };
 
-  const endDrag = () => {
+  const endDrag = React.useCallback(() => {
     if (!readOnly) {
       const snap = (v: number, step = 0.02) => {
         const snapped = Math.round(v / step) * step;
@@ -568,7 +568,23 @@ export function FieldDiagramCanvas({
 
     setDraggingId(null);
     dragOffset.current = null;
-  };
+  }, [readOnly, draggingId, update]);
+
+  React.useEffect(() => {
+    if (readOnly) return;
+
+    const handleWindowMouseUp = () => {
+      if (resizeModeRef.current || draggingId || dragOffset.current) {
+        endDrag();
+      }
+    };
+
+    window.addEventListener("mouseup", handleWindowMouseUp);
+
+    return () => {
+      window.removeEventListener("mouseup", handleWindowMouseUp);
+    };
+  }, [readOnly, draggingId, endDrag]);
 
   const onSvgClickEmpty = () => {
     if (readOnly) return;

@@ -2,10 +2,71 @@
 
 import React from "react";
 
+import VideoPlayerModal from "@/components/training/VideoPlayerModal";
 import type { FieldDiagramState, DiagramObject, PitchBackground, FieldDiagramTemplateKey } from "@/lib/sessions/fieldDiagram";
 import { saveSessionExerciseTemplate } from "@/lib/api/exercises";
 import { uploadDiagramPng, uploadDiagramBackground } from "@/lib/api/uploads";
 import { FieldDiagramCanvas, exportDiagramToPng } from "./FieldDiagramCanvas";
+
+async function readImageFileAsDataUrl(file: File): Promise<string> {
+  const reader = new FileReader();
+  return await new Promise<string>((resolve, reject) => {
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () =>
+      resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.readAsDataURL(file);
+  });
+}
+
+async function resizeImageDataUrl(
+  dataUrl: string,
+  maxWidth = 1200,
+  maxHeight = 1200,
+): Promise<string> {
+  return await new Promise<string>((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        let { width, height } = img;
+        const scale = Math.min(maxWidth / width, maxHeight / height, 1);
+
+        if (!isFinite(scale) || scale <= 0) {
+          resolve(dataUrl);
+          return;
+        }
+
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+        const pngDataUrl = canvas.toDataURL("image/png");
+        resolve(pngDataUrl || dataUrl);
+      } catch (err) {
+        reject(err as Error);
+      }
+    };
+    img.onerror = () => {
+      resolve(dataUrl);
+    };
+    img.src = dataUrl;
+  });
+}
+
+async function readAndResizeImageFile(file: File): Promise<string> {
+  const dataUrl = await readImageFileAsDataUrl(file);
+  if (!dataUrl) return dataUrl;
+  return await resizeImageDataUrl(dataUrl);
+}
 
 type ExerciseForCard = {
   title: string;
@@ -73,6 +134,7 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
     "idle" | "saving" | "done" | "error"
   >("idle");
   const [templateError, setTemplateError] = React.useState<string | null>(null);
+  const [isVideoModalOpen, setIsVideoModalOpen] = React.useState(false);
 
   const hasDiagram = !!exercise.diagram;
 
@@ -410,14 +472,7 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
                     if (!file) return;
 
                     try {
-                      const reader = new FileReader();
-                      const dataUrl: string = await new Promise((resolve, reject) => {
-                        reader.onerror = () => reject(reader.error);
-                        reader.onload = () =>
-                          resolve(typeof reader.result === "string" ? reader.result : "");
-                        reader.readAsDataURL(file);
-                      });
-
+                      const dataUrl = await readAndResizeImageFile(file);
                       if (!dataUrl) return;
 
                       const { url } = await uploadDiagramBackground({
@@ -561,7 +616,18 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
         {/* Columna derecha: meta + descripción */}
         <div className="flex flex-col gap-3 text-xs">
           <div className="flex flex-col gap-2">
-            <label className="font-medium text-slate-700">Título del ejercicio</label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="font-medium text-slate-700">Título del ejercicio</label>
+              {!readOnly && video && exercise.videoUrl && (
+                <button
+                  type="button"
+                  className="text-[11px] font-medium text-emerald-700 hover:text-emerald-800 underline-offset-2 hover:underline"
+                  onClick={() => setIsVideoModalOpen(true)}
+                >
+                  Ver video
+                </button>
+              )}
+            </div>
             <input
               type="text"
               className="w-full rounded-md border px-2 py-1 text-xs disabled:bg-slate-50"
@@ -724,14 +790,7 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
                           if (!file) return;
 
                           try {
-                            const reader = new FileReader();
-                            const dataUrl: string = await new Promise((resolve, reject) => {
-                              reader.onerror = () => reject(reader.error);
-                              reader.onload = () =>
-                                resolve(typeof reader.result === "string" ? reader.result : "");
-                              reader.readAsDataURL(file);
-                            });
-
+                            const dataUrl = await readAndResizeImageFile(file);
                             if (!dataUrl) return;
 
                             const { url } = await uploadDiagramBackground({
@@ -988,6 +1047,14 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
           </div>
         </div>
       )}
+
+      <VideoPlayerModal
+        open={isVideoModalOpen && !!exercise.videoUrl}
+        onClose={() => setIsVideoModalOpen(false)}
+        title={exercise.title?.trim() || "Ejercicio"}
+        zone={exercise.space?.trim() || exercise.kind?.trim() || null}
+        videoUrl={exercise.videoUrl}
+      />
     </section>
   );
 }
