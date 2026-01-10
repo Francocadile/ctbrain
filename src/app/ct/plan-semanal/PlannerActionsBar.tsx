@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  fetchRowLabels,
   saveRowLabels,
   resetRowLabels,
   fetchPlaces,
@@ -12,7 +11,6 @@ import {
 } from "@/lib/planner-prefs";
 import HelpTip from "@/components/HelpTip";
 import { DEFAULT_DAY_TYPES, normalizeDayTypeColor, type DayTypeDef, type DayTypeId } from "@/lib/planner-daytype";
-import { getMonday, toYYYYMMDDUTC } from "@/lib/api/sessions";
 import { CSRF_HEADER_NAME, getClientCsrfToken } from "@/lib/security/client-csrf";
 
 const DEFAULT_LABELS: RowLabels = {
@@ -40,6 +38,7 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
   const [current, setCurrent] = useState<RowLabels>({});
   const [contentRowIds, setContentRowIds] = useState<string[]>([]);
   const [draftRowLabels, setDraftRowLabels] = useState<RowLabels>({});
+  const contentRowInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   useEffect(() => {
     (async () => {
@@ -114,6 +113,27 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
     return out;
   }
 
+  function mergePreservingNonContentLabels(nextIds: string[], mergedLabels: RowLabels): RowLabels {
+    const next: RowLabels = {};
+    const contentSet = new Set(contentRowIds);
+
+    for (const key of Object.keys(current)) {
+      if (!contentSet.has(key)) {
+        const value = current[key];
+        if (typeof value === "string" && value.trim()) {
+          next[key] = value;
+        }
+      }
+    }
+
+    const normalized = normalizeLabelMapForIds(nextIds, mergedLabels);
+    return { ...next, ...normalized };
+  }
+
+  function isBaseRowId(id: string): boolean {
+    return Object.prototype.hasOwnProperty.call(DEFAULT_LABELS, id);
+  }
+
   async function saveOneRowLabel(rowId: string) {
     const raw = (draftRowLabels[rowId] ?? current[rowId] ?? rowId).trim();
 
@@ -121,8 +141,9 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
     if (!raw || raw === rowId) delete merged[rowId];
     else merged[rowId] = raw;
 
-    const nextLabels = normalizeLabelMapForIds(contentRowIds, merged);
-    await handleSaveContentRows(nextLabels, contentRowIds);
+    const nextLabels = mergePreservingNonContentLabels(contentRowIds, merged);
+    const ok = await handleSaveContentRows(nextLabels, contentRowIds);
+    if (!ok) return;
 
     setDraftRowLabels((prev) => {
       const next = { ...prev };
@@ -131,7 +152,41 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
     });
   }
 
-  async function handleSaveContentRows(nextLabels: RowLabels, nextIds: string[]) {
+  async function moveRow(rowId: string, dir: -1 | 1) {
+    const idx = contentRowIds.indexOf(rowId);
+    if (idx === -1) return;
+    const swapIdx = idx + dir;
+    if (swapIdx < 0 || swapIdx >= contentRowIds.length) return;
+
+    const nextIds = [...contentRowIds];
+    const tmp = nextIds[idx];
+    nextIds[idx] = nextIds[swapIdx];
+    nextIds[swapIdx] = tmp;
+
+    const mergedLabels: RowLabels = { ...current, ...draftRowLabels };
+    const nextLabels = mergePreservingNonContentLabels(nextIds, mergedLabels);
+    await handleSaveContentRows(nextLabels, nextIds);
+  }
+
+  async function deleteRow(rowId: string) {
+    if (isBaseRowId(rowId)) return;
+    const ok = confirm("¿Eliminar esta fila? No borra datos guardados, solo la oculta del editor.");
+    if (!ok) return;
+
+    const nextIds = contentRowIds.filter((x) => x !== rowId);
+    const mergedLabels: RowLabels = { ...current };
+    delete mergedLabels[rowId];
+    const nextLabels = mergePreservingNonContentLabels(nextIds, mergedLabels);
+    await handleSaveContentRows(nextLabels, nextIds);
+
+    setDraftRowLabels((prev) => {
+      const next = { ...prev };
+      delete next[rowId];
+      return next;
+    });
+  }
+
+  async function handleSaveContentRows(nextLabels: RowLabels, nextIds: string[]): Promise<boolean> {
     setLoading(true);
     try {
       const token = getClientCsrfToken();
@@ -152,8 +207,10 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
       setContentRowIds(nextIds);
       window.dispatchEvent(new Event("planner-row-labels-updated"));
       onAfterChange?.();
+      return true;
     } catch (e: any) {
       alert(e?.message || "No se pudieron guardar las filas de contenido");
+      return false;
     } finally {
       setLoading(false);
     }
@@ -378,7 +435,7 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
         </div>
 
         <div className="space-y-2">
-          {contentRowIds.map((id) => (
+          {contentRowIds.map((id, index) => (
             <div key={id} className="flex items-center gap-2">
               <div className="w-40 text-xs text-gray-600 truncate" title={id}>
                 {id}
@@ -387,6 +444,9 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
                 className="flex-1 h-8 rounded-md border px-2 text-xs"
                 placeholder="Nombre visible de la fila"
                 value={draftRowLabels[id] ?? current[id] ?? id}
+                ref={(el) => {
+                  contentRowInputRefs.current[id] = el;
+                }}
                 onChange={(e) => {
                   const value = e.target.value;
                   setDraftRowLabels((prev) => ({ ...prev, [id]: value }));
@@ -395,6 +455,39 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
                   saveOneRowLabel(id);
                 }}
               />
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  className="h-7 w-7 flex items-center justify-center rounded border text-[10px] hover:bg-gray-50"
+                  disabled={index === 0}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => moveRow(id, -1)}
+                  title="Subir"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  className="h-7 w-7 flex items-center justify-center rounded border text-[10px] hover:bg-gray-50"
+                  disabled={index === contentRowIds.length - 1}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => moveRow(id, 1)}
+                  title="Bajar"
+                >
+                  ↓
+                </button>
+                {!isBaseRowId(id) && (
+                  <button
+                    type="button"
+                    className="h-7 w-7 flex items-center justify-center rounded border text-[10px] hover:bg-gray-50"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => deleteRow(id)}
+                    title="Eliminar fila personalizada"
+                  >
+                    🗑
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -409,10 +502,16 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
               const nextIds = [...contentRowIds, id];
 
               const merged: RowLabels = { ...current, [id]: "Nueva fila" };
-              const nextLabels = normalizeLabelMapForIds(nextIds, merged);
+              const nextLabels = mergePreservingNonContentLabels(nextIds, merged);
 
               await handleSaveContentRows(nextLabels, nextIds);
               setDraftRowLabels({});
+
+              const input = contentRowInputRefs.current[id];
+              if (input) {
+                input.focus();
+                input.select();
+              }
             }}
           >
             + fila
