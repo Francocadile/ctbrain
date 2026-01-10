@@ -54,15 +54,18 @@ export default function EditableCell({
 
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div>{flagBadge}</div>
         {sessionHref ? (
           <a
             href={sessionHref}
-            className="text-[11px] rounded-lg border px-2 py-0.5 hover:bg-gray-50"
+            className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-50"
             title="Cargar ejercicios de la sesión"
           >
-            Cargar ejercicios de la sesión
+            <span className="text-[10px]" aria-hidden="true">
+              ➜
+            </span>
+            <span>Cargar ejercicios de la sesión</span>
           </a>
         ) : null}
       </div>
