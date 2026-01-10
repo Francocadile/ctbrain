@@ -2,8 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  saveRowLabels,
-  resetRowLabels,
   fetchPlaces,
   savePlacesFromTextarea,
   clearPlaces,
@@ -25,8 +23,6 @@ type Props = { onAfterChange?: () => void; dayTypeUsage?: Record<string, boolean
 export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: Props) {
   const [loading, setLoading] = useState(false);
 
-  // lo que el usuario escribe (sin defaults)
-  const [labels, setLabels] = useState<RowLabels>({});
   const [placesText, setPlacesText] = useState("");
   const [placesCount, setPlacesCount] = useState(0);
 
@@ -78,28 +74,6 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
       }
     })();
   }, []);
-
-  async function handleSaveLabels() {
-    setLoading(true);
-    try {
-      // solo enviamos las claves que el usuario escribió (no vacíos)
-      const payload: RowLabels = {};
-      for (const k of Object.keys(DEFAULT_LABELS)) {
-        const v = (labels[k] || "").trim();
-        if (v) payload[k] = v;
-      }
-      await saveRowLabels(payload);
-      window.dispatchEvent(new Event("planner-row-labels-updated"));
-      setCurrent({ ...current, ...payload });
-      setLabels({});
-      onAfterChange?.();
-      alert("Nombres guardados.");
-    } catch (e: any) {
-      alert(e?.message || "No se pudieron guardar los nombres");
-    } finally {
-      setLoading(false);
-    }
-  }
 
   function normalizeLabelMapForIds(ids: string[], labels: RowLabels): RowLabels {
     const out: RowLabels = {};
@@ -211,25 +185,6 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
     } catch (e: any) {
       alert(e?.message || "No se pudieron guardar las filas de contenido");
       return false;
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleResetLabels() {
-    const ok = confirm("¿Restaurar nombres originales?");
-    if (!ok) return;
-    setLoading(true);
-    try {
-      await resetRowLabels();
-      setLabels({});
-      setCurrent({});
-      setContentRowIds(Object.keys(DEFAULT_LABELS));
-      window.dispatchEvent(new Event("planner-row-labels-updated"));
-      onAfterChange?.();
-      alert("Restaurado.");
-    } catch (e: any) {
-      alert(e?.message || "No se pudo resetear");
     } finally {
       setLoading(false);
     }
@@ -380,53 +335,6 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
 
   return (
     <div className="space-y-6">
-      {/* NOMBRES DE FILAS */}
-      <section className="rounded-xl border p-3">
-        <div className="mb-2 flex items-center gap-2">
-          <h3 className="text-sm font-semibold">Nombres de filas (tu preferencia)</h3>
-          <HelpTip text="Escribí solo si querés cambiar el nombre visible. Se guarda en tu usuario." />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
-          {Object.keys(DEFAULT_LABELS).map((key) => (
-            <div key={key} className="flex flex-col gap-1">
-              <label className="text-[11px] text-gray-600">Actual: {current[key] || key}</label>
-              <input
-                className="h-9 rounded-md border px-2 text-sm"
-                value={labels[key] || ""}
-                onChange={(e) => setLabels((prev) => ({ ...prev, [key]: e.target.value }))}
-                placeholder={
-                  key === "PRE ENTREN0"
-                    ? "Ej: Activación"
-                    : key === "FÍSICO"
-                    ? "Ej: Entrada en calor"
-                    : key === "TÉCNICO–TÁCTICO"
-                    ? "Ej: Principal"
-                    : "Ej: Post entreno"
-                }
-              />
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-3 flex gap-2">
-          <button
-            onClick={handleSaveLabels}
-            disabled={loading}
-            className="px-3 py-1.5 rounded-lg bg-black text-white text-xs hover:opacity-90"
-          >
-            Guardar
-          </button>
-          <button
-            onClick={handleResetLabels}
-            disabled={loading}
-            className="px-3 py-1.5 rounded-lg border text-xs hover:bg-gray-50"
-          >
-            Restaurar originales
-          </button>
-        </div>
-      </section>
-
       {/* FILAS DE CONTENIDO */}
       <section className="rounded-xl border p-3">
         <div className="mb-2 flex items-center gap-2">
