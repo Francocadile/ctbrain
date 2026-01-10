@@ -11,6 +11,8 @@ import {
 } from "@/lib/api/sessions";
 import SessionDayView, { SessionDayBlock } from "@/components/sessions/SessionDayView";
 import { decodeExercises, type Exercise } from "@/lib/sessions/encodeDecodeExercises";
+import type { RowLabels } from "@/lib/planner-prefs";
+import { fetchRowLabels } from "@/lib/planner-prefs";
 
 type TurnKey = "morning" | "afternoon";
 
@@ -100,6 +102,7 @@ export default function SessionTurnoPage() {
   const [daySessions, setDaySessions] = useState<SessionDTO[]>([]);
   const [weekStart, setWeekStart] = useState<string>("");
   const [editingBlock, setEditingBlock] = useState<SessionDayBlock | null>(null);
+  const [rowLabels, setRowLabels] = useState<RowLabels>({});
 
   const printCSS = `
     @page { size: A4 portrait; margin: 10mm; }
@@ -132,6 +135,19 @@ export default function SessionTurnoPage() {
     }
     load();
   }, [ymd]);
+
+  useEffect(() => {
+    async function loadRowLabels() {
+      try {
+        const labels = await fetchRowLabels();
+        setRowLabels(labels || {});
+      } catch (e) {
+        console.error("No se pudieron cargar rowLabels para vista by-day", e);
+        setRowLabels({});
+      }
+    }
+    loadRowLabels();
+  }, []);
 
   useEffect(() => {
     if (!focus) return;
@@ -179,8 +195,9 @@ export default function SessionTurnoPage() {
 
   const viewBlocks: SessionDayBlock[] = useMemo(
     () =>
-      CONTENT_ROWS.map((rowLabel) => {
-        const cell = daySessions.find((s) => isCellOf(s, turn, rowLabel));
+      CONTENT_ROWS.map((rowId) => {
+        const cell = daySessions.find((s) => isCellOf(s, turn, rowId));
+        const visibleLabel = rowLabels[rowId] || rowId;
         let exercises: Exercise[] = [];
         if (cell?.description) {
           try {
@@ -192,14 +209,14 @@ export default function SessionTurnoPage() {
           }
         }
         return {
-          rowKey: rowLabel,
-          rowLabel,
+          rowKey: rowId,
+          rowLabel: visibleLabel,
           title: (cell?.title || "").trim(),
           sessionId: cell?.id || "",
           exercises,
         };
       }),
-    [daySessions, turn]
+    [daySessions, turn, rowLabels]
   );
 
   // Si es día libre, mostramos solo el mensaje de descanso en lugar de bloques

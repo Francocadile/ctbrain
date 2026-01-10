@@ -20,6 +20,7 @@ export function ExerciseCardPreview({ exercise, index }: ExerciseCardPreviewProp
   const title = exercise.title?.trim() || "Sin título";
   const diagram = exercise.diagram;
   const description = exercise.description?.trim();
+  const imageUrl = (exercise as any).imageUrl as string | undefined;
   const videoUrl = (exercise as any).videoUrl as string | undefined;
   const hasVideo = isVideoUrl(videoUrl);
 
@@ -57,6 +58,19 @@ export function ExerciseCardPreview({ exercise, index }: ExerciseCardPreviewProp
           </button>
         )}
       </header>
+
+      {imageUrl && (
+        <div className="mt-1">
+          <div className="aspect-video w-full overflow-hidden bg-black/5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={imageUrl}
+              alt={title}
+              className="w-full h-full rounded-md border object-cover"
+            />
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col md:flex-row gap-3">
         {hasDiagram && (
