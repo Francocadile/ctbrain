@@ -102,6 +102,35 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
     }
   }
 
+  function normalizeLabelMapForIds(ids: string[], labels: RowLabels): RowLabels {
+    const out: RowLabels = {};
+    for (const id of ids) {
+      const raw = (labels[id] ?? "").trim();
+      if (!raw) continue;
+      if (raw === id) continue; // no persistir "default"
+      out[id] = raw;
+    }
+    // por ahora no preservamos labels para ids que ya no están
+    return out;
+  }
+
+  async function saveOneRowLabel(rowId: string) {
+    const raw = (draftRowLabels[rowId] ?? current[rowId] ?? rowId).trim();
+
+    const merged: RowLabels = { ...current };
+    if (!raw || raw === rowId) delete merged[rowId];
+    else merged[rowId] = raw;
+
+    const nextLabels = normalizeLabelMapForIds(contentRowIds, merged);
+    await handleSaveContentRows(nextLabels, contentRowIds);
+
+    setDraftRowLabels((prev) => {
+      const next = { ...prev };
+      delete next[rowId];
+      return next;
+    });
+  }
+
   async function handleSaveContentRows(nextLabels: RowLabels, nextIds: string[]) {
     setLoading(true);
     try {
@@ -363,11 +392,7 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
                   setDraftRowLabels((prev) => ({ ...prev, [id]: value }));
                 }}
                 onBlur={() => {
-                  const nextLabels = { ...current, ...draftRowLabels };
-                  const nextIds = contentRowIds;
-                  handleSaveContentRows(nextLabels, nextIds).then(() => {
-                    setDraftRowLabels({});
-                  });
+                  saveOneRowLabel(id);
                 }}
               />
             </div>
@@ -382,7 +407,10 @@ export default function PlannerActionsBar({ onAfterChange, dayTypeUsage = {} }: 
             onClick={async () => {
               const id = `row-${Date.now()}`;
               const nextIds = [...contentRowIds, id];
-              const nextLabels = { ...current, [id]: "Nueva fila" };
+
+              const merged: RowLabels = { ...current, [id]: "Nueva fila" };
+              const nextLabels = normalizeLabelMapForIds(nextIds, merged);
+
               await handleSaveContentRows(nextLabels, nextIds);
               setDraftRowLabels({});
             }}
