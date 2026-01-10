@@ -136,6 +136,56 @@ export function FieldDiagramCanvas({
   const [draggingId, setDraggingId] = React.useState<string | null>(null);
   const dragOffset = React.useRef<{ dx: number; dy: number } | null>(null);
 
+  type RectHandle =
+    | "left"
+    | "right"
+    | "top"
+    | "bottom"
+    | "top-left"
+    | "top-right"
+    | "bottom-left"
+    | "bottom-right";
+
+  type ArrowHandle = "start" | "end";
+
+  type CircleHandle = "radius";
+
+  type ResizeMode =
+    | {
+        kind: "rect";
+        id: string;
+        handle: RectHandle;
+        initial: {
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+        };
+      }
+    | {
+        kind: "arrow";
+        id: string;
+        handle: ArrowHandle;
+        initial: {
+          x1: number;
+          y1: number;
+          x2: number;
+          y2: number;
+        };
+      }
+    | {
+        kind: "circle";
+        id: string;
+        handle: CircleHandle;
+        initial: {
+          x: number;
+          y: number;
+          r: number;
+        };
+      };
+
+  const resizeModeRef = React.useRef<ResizeMode | null>(null);
+
   const selectedId =
     controlledSelectedId !== undefined ? controlledSelectedId : internalSelectedId;
 
@@ -297,6 +347,8 @@ export function FieldDiagramCanvas({
   ) => {
     if (readOnly) return;
     evt.stopPropagation();
+    // Si estamos en modo resize, ignoramos drags estándar
+    if (resizeModeRef.current) return;
     setSelected(obj.id);
     const p = getPointer(evt as any);
     if (obj.type === "arrow") {
@@ -312,8 +364,99 @@ export function FieldDiagramCanvas({
 
   const onSvgMouseMove = (evt: React.MouseEvent<SVGSVGElement, MouseEvent>) => {
     if (readOnly) return;
-    if (!draggingId || !dragOffset.current) return;
     const p = getPointer(evt);
+
+    // Resize de rectángulos o flechas mediante handles
+    if (resizeModeRef.current) {
+      const mode = resizeModeRef.current;
+      const clamp = (v: number) => Math.min(1, Math.max(0, v));
+
+      update((draft) => {
+        const idx = draft.objects.findIndex((o) => o.id === mode.id);
+        if (idx === -1) return;
+
+        if (mode.kind === "rect") {
+          const obj = draft.objects[idx];
+          if (obj.type !== "rect") return;
+
+          const minSize = 0.02;
+          let left = mode.initial.x - mode.initial.width / 2;
+          let right = mode.initial.x + mode.initial.width / 2;
+          let top = mode.initial.y - mode.initial.height / 2;
+          let bottom = mode.initial.y + mode.initial.height / 2;
+
+          switch (mode.handle) {
+            case "left":
+            case "top-left":
+            case "bottom-left":
+              left = Math.min(clamp(p.x), right - minSize);
+              break;
+            case "right":
+            case "top-right":
+            case "bottom-right":
+              right = Math.max(clamp(p.x), left + minSize);
+              break;
+          }
+
+          switch (mode.handle) {
+            case "top":
+            case "top-left":
+            case "top-right":
+              top = Math.min(clamp(p.y), bottom - minSize);
+              break;
+            case "bottom":
+            case "bottom-left":
+            case "bottom-right":
+              bottom = Math.max(clamp(p.y), top + minSize);
+              break;
+          }
+
+          const width = Math.max(minSize, right - left);
+          const height = Math.max(minSize, bottom - top);
+          const cx = (left + right) / 2;
+          const cy = (top + bottom) / 2;
+
+          obj.x = clamp(cx);
+          obj.y = clamp(cy);
+          obj.width = width;
+          obj.height = height;
+        } else if (mode.kind === "arrow") {
+          const obj = draft.objects[idx];
+          if (obj.type !== "arrow") return;
+
+          const nextX = clamp(p.x);
+          const nextY = clamp(p.y);
+
+          if (mode.handle === "start") {
+            obj.x1 = nextX;
+            obj.y1 = nextY;
+          } else {
+            obj.x2 = nextX;
+            obj.y2 = nextY;
+          }
+        } else if (mode.kind === "circle") {
+          const obj = draft.objects[idx];
+          if (obj.type !== "circle") return;
+
+          const cx = mode.initial.x;
+          const cy = mode.initial.y;
+
+          const dx = clamp(p.x) - cx;
+          const dy = clamp(p.y) - cy;
+
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          const minR = 0.02;
+          const maxR = 0.5;
+
+          obj.r = Math.min(maxR, Math.max(minR, dist));
+        }
+      });
+
+      return;
+    }
+
+    // Drag estándar de objetos
+    if (!draggingId || !dragOffset.current) return;
 
     update((draft) => {
       const idx = draft.objects.findIndex((o) => o.id === draggingId);
@@ -340,26 +483,76 @@ export function FieldDiagramCanvas({
   };
 
   const endDrag = () => {
-    if (!readOnly && draggingId) {
+    if (!readOnly) {
       const snap = (v: number, step = 0.02) => {
         const snapped = Math.round(v / step) * step;
         return Math.min(1, Math.max(0, snapped));
       };
-      update((draft) => {
-        const idx = draft.objects.findIndex((o) => o.id === draggingId);
-        if (idx === -1) return;
-        const obj = draft.objects[idx];
-        if (obj.type === "arrow") {
-          obj.x1 = snap(obj.x1);
-          obj.y1 = snap(obj.y1);
-          obj.x2 = snap(obj.x2);
-          obj.y2 = snap(obj.y2);
-        } else {
-          obj.x = snap(obj.x);
-          obj.y = snap(obj.y);
-        }
-      });
+
+      // Snap de resize
+      if (resizeModeRef.current) {
+        const mode = resizeModeRef.current;
+        update((draft) => {
+          const idx = draft.objects.findIndex((o) => o.id === mode.id);
+          if (idx === -1) return;
+
+          if (mode.kind === "rect") {
+            const obj = draft.objects[idx];
+            if (obj.type !== "rect") return;
+
+            const left = obj.x - obj.width / 2;
+            const right = obj.x + obj.width / 2;
+            const top = obj.y - obj.height / 2;
+            const bottom = obj.y + obj.height / 2;
+
+            const snappedLeft = snap(left);
+            const snappedRight = snap(right);
+            const snappedTop = snap(top);
+            const snappedBottom = snap(bottom);
+
+            obj.x = snap((snappedLeft + snappedRight) / 2);
+            obj.y = snap((snappedTop + snappedBottom) / 2);
+            obj.width = Math.max(0.02, snappedRight - snappedLeft);
+            obj.height = Math.max(0.02, snappedBottom - snappedTop);
+          } else if (mode.kind === "arrow") {
+            const obj = draft.objects[idx];
+            if (obj.type !== "arrow") return;
+
+            obj.x1 = snap(obj.x1);
+            obj.y1 = snap(obj.y1);
+            obj.x2 = snap(obj.x2);
+            obj.y2 = snap(obj.y2);
+          } else if (mode.kind === "circle") {
+            const obj = draft.objects[idx];
+            if (obj.type !== "circle") return;
+
+            obj.x = snap(obj.x);
+            obj.y = snap(obj.y);
+            obj.r = Math.max(0.02, snap(obj.r));
+          }
+        });
+        resizeModeRef.current = null;
+      }
+
+      // Snap de drag estándar
+      if (draggingId) {
+        update((draft) => {
+          const idx = draft.objects.findIndex((o) => o.id === draggingId);
+          if (idx === -1) return;
+          const obj = draft.objects[idx];
+          if (obj.type === "arrow") {
+            obj.x1 = snap(obj.x1);
+            obj.y1 = snap(obj.y1);
+            obj.x2 = snap(obj.x2);
+            obj.y2 = snap(obj.y2);
+          } else {
+            obj.x = snap(obj.x);
+            obj.y = snap(obj.y);
+          }
+        });
+      }
     }
+
     setDraggingId(null);
     dragOffset.current = null;
   };
@@ -543,35 +736,122 @@ export function FieldDiagramCanvas({
         const height = obj.height * VIEWBOX_HEIGHT;
         const x = obj.x * VIEWBOX_WIDTH - width / 2;
         const y = obj.y * VIEWBOX_HEIGHT - height / 2;
+        const handleSize = 2.4;
+
+        const onHandleMouseDown = (
+          e: React.MouseEvent<SVGRectElement, MouseEvent>,
+          handle: RectHandle,
+        ) => {
+          if (readOnly) return;
+          e.stopPropagation();
+          resizeModeRef.current = {
+            kind: "rect",
+            id: obj.id,
+            handle,
+            initial: {
+              x: obj.x,
+              y: obj.y,
+              width: obj.width,
+              height: obj.height,
+            },
+          };
+        };
+
+        const handles: { key: RectHandle; cx: number; cy: number }[] = [
+          { key: "top-left", cx: x, cy: y },
+          { key: "top-right", cx: x + width, cy: y },
+          { key: "bottom-left", cx: x, cy: y + height },
+          { key: "bottom-right", cx: x + width, cy: y + height },
+          { key: "top", cx: x + width / 2, cy: y },
+          { key: "bottom", cx: x + width / 2, cy: y + height },
+          { key: "left", cx: x, cy: y + height / 2 },
+          { key: "right", cx: x + width, cy: y + height / 2 },
+        ];
+
         return (
-          <rect
-            key={obj.id}
-            x={x}
-            y={y}
-            width={width}
-            height={height}
-            fill={obj.fill ?? "#facc15"}
-            stroke={sel ? "#fbbf24" : obj.stroke ?? "#fef9c3"}
-            strokeWidth={sel ? 1 : 0.8}
-            opacity={obj.opacity ?? 0.4}
-            {...common}
-          />
+          <g key={obj.id}>
+            <rect
+              x={x}
+              y={y}
+              width={width}
+              height={height}
+              fill={obj.fill ?? "#facc15"}
+              stroke={sel ? "#fbbf24" : obj.stroke ?? "#fef9c3"}
+              strokeWidth={sel ? 1 : 0.8}
+              opacity={obj.opacity ?? 0.4}
+              {...common}
+            />
+            {sel &&
+              handles.map((h) => (
+                <rect
+                  key={h.key}
+                  x={h.cx - handleSize / 2}
+                  y={h.cy - handleSize / 2}
+                  width={handleSize}
+                  height={handleSize}
+                  fill="#fbbf24"
+                  stroke="#111827"
+                  strokeWidth={0.5}
+                  style={{ cursor: "nwse-resize" }}
+                  onMouseDown={(e) => onHandleMouseDown(e, h.key)}
+                />
+              ))}
+          </g>
         );
       }
       case "circle": {
         const radius = obj.r * VIEWBOX_WIDTH;
+        const cx = obj.x * VIEWBOX_WIDTH;
+        const cy = obj.y * VIEWBOX_HEIGHT;
+        const handleRadius = 2.2;
+
+        const onHandleMouseDown = (
+          e: React.MouseEvent<SVGCircleElement, MouseEvent>,
+          handle: CircleHandle,
+        ) => {
+          if (readOnly) return;
+          e.stopPropagation();
+          resizeModeRef.current = {
+            kind: "circle",
+            id: obj.id,
+            handle,
+            initial: {
+              x: obj.x,
+              y: obj.y,
+              r: obj.r,
+            },
+          };
+        };
+
+        // Un único handle hacia la derecha del círculo
+        const hx = cx + radius;
+        const hy = cy;
+
         return (
-          <circle
-            key={obj.id}
-            cx={obj.x * VIEWBOX_WIDTH}
-            cy={obj.y * VIEWBOX_HEIGHT}
-            r={radius}
-            fill={obj.fill ?? "#ef4444"}
-            stroke={sel ? "#fbbf24" : obj.stroke ?? "#fee2e2"}
-            strokeWidth={sel ? 1 : 0.8}
-            opacity={obj.opacity ?? 0.4}
-            {...common}
-          />
+          <g key={obj.id}>
+            <circle
+              cx={cx}
+              cy={cy}
+              r={radius}
+              fill={obj.fill ?? "#ef4444"}
+              stroke={sel ? "#fbbf24" : obj.stroke ?? "#fee2e2"}
+              strokeWidth={sel ? 1 : 0.8}
+              opacity={obj.opacity ?? 0.4}
+              {...common}
+            />
+            {sel && (
+              <circle
+                cx={hx}
+                cy={hy}
+                r={handleRadius}
+                fill="#fbbf24"
+                stroke="#111827"
+                strokeWidth={0.5}
+                style={{ cursor: "ew-resize" }}
+                onMouseDown={(e) => onHandleMouseDown(e, "radius")}
+              />
+            )}
+          </g>
         );
       }
       case "arrow":
@@ -591,6 +871,58 @@ export function FieldDiagramCanvas({
               points={computeArrowHeadPoints(obj)}
               fill={sel ? "#e5e7eb" : "#f9fafb"}
             />
+            {sel && (
+              <>
+                <circle
+                  cx={obj.x1 * VIEWBOX_WIDTH}
+                  cy={obj.y1 * VIEWBOX_HEIGHT}
+                  r={2.2}
+                  fill="#fbbf24"
+                  stroke="#111827"
+                  strokeWidth={0.5}
+                  style={{ cursor: "pointer" }}
+                  onMouseDown={(e) => {
+                    if (readOnly) return;
+                    e.stopPropagation();
+                    resizeModeRef.current = {
+                      kind: "arrow",
+                      id: obj.id,
+                      handle: "start",
+                      initial: {
+                        x1: obj.x1,
+                        y1: obj.y1,
+                        x2: obj.x2,
+                        y2: obj.y2,
+                      },
+                    };
+                  }}
+                />
+                <circle
+                  cx={obj.x2 * VIEWBOX_WIDTH}
+                  cy={obj.y2 * VIEWBOX_HEIGHT}
+                  r={2.2}
+                  fill="#fbbf24"
+                  stroke="#111827"
+                  strokeWidth={0.5}
+                  style={{ cursor: "pointer" }}
+                  onMouseDown={(e) => {
+                    if (readOnly) return;
+                    e.stopPropagation();
+                    resizeModeRef.current = {
+                      kind: "arrow",
+                      id: obj.id,
+                      handle: "end",
+                      initial: {
+                        x1: obj.x1,
+                        y1: obj.y1,
+                        x2: obj.x2,
+                        y2: obj.y2,
+                      },
+                    };
+                  }}
+                />
+              </>
+            )}
           </g>
         );
       case "text":
