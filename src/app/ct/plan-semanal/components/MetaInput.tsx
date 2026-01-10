@@ -224,36 +224,67 @@ function HoraInput({ dayYmd, turn, row, value, stageCell }: BaseMetaProps) {
   );
 }
 
+type EspacioCanonical = "" | "FULL" | "HALF" | "THREE_QUARTERS";
+
+function normalizeEspacioValue(raw: string | undefined): EspacioCanonical {
+  const v = (raw || "").trim().toUpperCase();
+  if (!v) return "";
+  if (v === "FULL" || v === "HALF" || v === "THREE_QUARTERS") return v;
+  if (v === "1") return "FULL";
+  if (v === "2") return "HALF";
+  if (v === "3" || v === "4") return "THREE_QUARTERS";
+  return "";
+}
+
 function EspacioSugeridoInput({ dayYmd, turn, row, value, stageCell }: BaseMetaProps) {
-  const [local, setLocal] = useState(value || "");
+  const [local, setLocal] = useState<EspacioCanonical>(() => normalizeEspacioValue(value));
 
   useEffect(() => {
-    setLocal(value || "");
+    setLocal(normalizeEspacioValue(value));
   }, [value, dayYmd, turn, row]);
 
-  const commit = () => {
-    const v = (local || "").trim();
-    stageCell(dayYmd, turn, row, v);
+  const handleSelect = (next: Exclude<EspacioCanonical, "">) => {
+    const newValue: EspacioCanonical = local === next ? "" : next;
+    setLocal(newValue);
+    stageCell(dayYmd, turn, row, newValue);
   };
 
   return (
-    <select
-      className="h-8 w-full rounded-md border px-2 text-xs"
-      value={local}
-      onChange={(e) => {
-        setLocal(e.target.value);
-        const next = e.target.value;
-        stageCell(dayYmd, turn, row, next);
-      }}
-      onBlur={commit}
-    >
-      <option value="">—</option>
-      <option value="FULL">Full</option>
-      <option value="1">1</option>
-      <option value="2">2</option>
-      <option value="3">3</option>
-      <option value="4">4</option>
-    </select>
+    <div className="h-8 w-full flex items-center gap-1">
+      {(
+        [
+          { key: "FULL" as const, label: "Completa" },
+          { key: "HALF" as const, label: "Mitad" },
+          { key: "THREE_QUARTERS" as const, label: "3/4" },
+        ]
+      ).map((opt) => {
+        const active = local === opt.key;
+        return (
+          <button
+            key={opt.key}
+            type="button"
+            className={`flex-1 h-8 rounded-md border px-1 flex items-center gap-1 text-[10px] ${
+              active ? "border-emerald-600 bg-emerald-50" : "bg-white hover:bg-gray-50"
+            }`}
+            onClick={() => handleSelect(opt.key)}
+          >
+            <div className="relative h-5 flex-1 rounded-sm bg-emerald-100 overflow-hidden">
+              {opt.key === "FULL" && (
+                <div className="absolute inset-0 bg-emerald-500/60" />
+              )}
+              {opt.key === "HALF" && (
+                <div className="absolute inset-y-0 left-0 w-1/2 bg-emerald-500/60" />
+              )}
+              {opt.key === "THREE_QUARTERS" && (
+                <div className="absolute inset-y-0 left-0 w-3/4 bg-emerald-500/60" />
+              )}
+              <div className="absolute inset-0 border border-emerald-700/40 rounded-sm" />
+            </div>
+            <span className="whitespace-nowrap">{opt.label}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
