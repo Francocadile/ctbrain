@@ -50,10 +50,6 @@ export default function EditableCell({
   const flagBadge =
     flag.kind === "LIBRE" ? (
       <span className="text-[10px] bg-gray-100 border px-1.5 py-0.5 rounded">DÍA LIBRE</span>
-    ) : flag.kind === "PARTIDO" ? (
-      <span className="text-[10px] bg-amber-100 border px-1.5 py-0.5 rounded">
-        PARTIDO {flag.rival ? `vs ${flag.rival}` : ""}
-      </span>
     ) : null;
 
   return (

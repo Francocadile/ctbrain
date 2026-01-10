@@ -4,19 +4,16 @@ import { useEffect, useState } from "react";
 import type { DayFlag, TurnKey } from "@/lib/planner-contract";
 import { parseVideoValue, joinVideoValue } from "@/lib/planner-contract";
 import type { SessionDTO } from "@/lib/api/sessions";
-import DayStatusCell from "./DayStatusCell";
-import MicroCell from "./MicroCell";
 import PartidoCell from "./PartidoCell";
 import DayTypeCell from "./DayTypeCell";
 import type { DayTypeDef, DayTypeId } from "@/lib/planner-daytype";
 
 export type MetaRowId =
   | "NOMBRE SESIÓN"
-  | "TIPO"
-  | "TIPO TRABAJO"
-  | "INTENSIDAD"
+  | "TIPO SESIÓN"
   | "LUGAR"
   | "HORA"
+  | "ESPACIO SUGERIDO"
   | "VIDEO"
   | "RIVAL";
 
@@ -62,21 +59,7 @@ export default function MetaInput({
   const original = (existing?.title ?? "").trim();
   const value = pendingValue !== undefined ? pendingValue : original;
 
-  if (row === "TIPO") {
-    return (
-      <div className="h-8 w-full flex items-center">
-        <DayStatusCell
-          ymd={dayYmd}
-          turn={turn}
-          weekStart={weekStart}
-          getDayFlag={getDayFlag}
-          setDayFlag={setDayFlag}
-        />
-      </div>
-    );
-  }
-
-  if (row === "TIPO TRABAJO") {
+  if (row === "TIPO SESIÓN") {
     return (
       <div className="h-8 w-full flex items-center">
         <DayTypeCell
@@ -90,23 +73,9 @@ export default function MetaInput({
     );
   }
 
-  if (row === "INTENSIDAD") {
-    return (
-      <div className="h-8 w-full flex items-center">
-        <MicroCell
-          ymd={dayYmd}
-          turn={turn}
-          weekStart={weekStart}
-          getMicroValue={getMicroValue}
-          setMicroValue={setMicroValue}
-        />
-      </div>
-    );
-  }
-
   if (row === "RIVAL") {
-    const flag = getDayFlag(dayYmd, turn);
-    if (flag.kind !== "PARTIDO") {
+    const micro = getMicroValue(dayYmd, turn);
+    if (micro !== "MD") {
       return (
         <div className="h-8 w-full rounded-md border px-2 text-xs flex items-center text-gray-400 italic">
           —
@@ -147,6 +116,18 @@ export default function MetaInput({
 
   if (row === "HORA") {
     return <HoraInput dayYmd={dayYmd} turn={turn} row={row} value={value} stageCell={stageCell} />;
+  }
+
+  if (row === "ESPACIO SUGERIDO") {
+    return (
+      <EspacioSugeridoInput
+        dayYmd={dayYmd}
+        turn={turn}
+        row={row}
+        value={value}
+        stageCell={stageCell}
+      />
+    );
   }
 
   if (row === "VIDEO") {
@@ -240,6 +221,39 @@ function HoraInput({ dayYmd, turn, row, value, stageCell }: BaseMetaProps) {
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
       }}
     />
+  );
+}
+
+function EspacioSugeridoInput({ dayYmd, turn, row, value, stageCell }: BaseMetaProps) {
+  const [local, setLocal] = useState(value || "");
+
+  useEffect(() => {
+    setLocal(value || "");
+  }, [value, dayYmd, turn, row]);
+
+  const commit = () => {
+    const v = (local || "").trim();
+    stageCell(dayYmd, turn, row, v);
+  };
+
+  return (
+    <select
+      className="h-8 w-full rounded-md border px-2 text-xs"
+      value={local}
+      onChange={(e) => {
+        setLocal(e.target.value);
+        const next = e.target.value;
+        stageCell(dayYmd, turn, row, next);
+      }}
+      onBlur={commit}
+    >
+      <option value="">—</option>
+      <option value="FULL">Full</option>
+      <option value="1">1</option>
+      <option value="2">2</option>
+      <option value="3">3</option>
+      <option value="4">4</option>
+    </select>
   );
 }
 

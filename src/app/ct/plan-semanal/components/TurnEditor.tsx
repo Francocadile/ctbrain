@@ -7,6 +7,7 @@ import { cellKey } from "@/lib/planner-contract";
 import { getDayTypeTextColor } from "@/lib/planner-daytype";
 import EditableCell from "./EditableCell";
 import MetaInput, { type MetaRowId } from "./MetaInput";
+import MicroCell from "./MicroCell";
 
 export type TurnEditorProps = {
   turn: TurnKey;
@@ -83,7 +84,18 @@ export default function TurnEditor({
               className="border-b px-2 py-1.5"
               style={{ backgroundColor: color, color: textColor }}
             >
-              <div className="text-[11px] font-semibold uppercase tracking-wide">{humanDayUTC(ymd)}</div>
+              <div className="flex items-center justify-between gap-1">
+                <div className="text-[11px] font-semibold uppercase tracking-wide">{humanDayUTC(ymd)}</div>
+                <div className="w-[82px]">
+                  <MicroCell
+                    ymd={ymd}
+                    turn={turn}
+                    weekStart={weekStart}
+                    getMicroValue={getMicroValue}
+                    setMicroValue={setMicroValue}
+                  />
+                </div>
+              </div>
               <div className="text-[10px] text-gray-500">{ymd}</div>
             </div>
           );

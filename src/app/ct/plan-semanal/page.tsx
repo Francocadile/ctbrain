@@ -51,11 +51,10 @@ const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSA
 const SESSION_NAME_ROW = "NOMBRE SESIÓN";
 const META_ROWS = [
   SESSION_NAME_ROW,
-  "TIPO",
-  "TIPO TRABAJO",
-  "INTENSIDAD",
+  "TIPO SESIÓN",
   "LUGAR",
   "HORA",
+  "ESPACIO SUGERIDO",
   "VIDEO",
   "RIVAL",
 ] as const;
@@ -69,7 +68,7 @@ function addDaysUTC(date: Date, days: number) {
   return x;
 }
 function humanDayUTC(ymd: string) {
-  const d = new Date(`${ymd}T00:00:00.000Z`);
+	const d = new Date(`${ymd}T00:00:00.000Z`);
   return d.toLocaleDateString(undefined, {
     weekday: "short",
     day: "2-digit",

@@ -15,12 +15,6 @@ export type PartidoCellProps = {
 
 export default function PartidoCell({ ymd, turn, weekStart, getDayFlag, setDayFlag }: PartidoCellProps) {
   const df = getDayFlag(ymd, turn);
-  const isMatch = df.kind === "PARTIDO";
-
-  if (!isMatch) {
-    return <div className="h-6 text-[11px] text-gray-400 italic px-1 flex items-center">—</div>;
-  }
-
   const [isEditing, setIsEditing] = useState(!(df.rival || df.logoUrl));
   const [localRival, setLocalRival] = useState(df.rival || "");
   const [localLogo, setLocalLogo] = useState(df.logoUrl || "");
