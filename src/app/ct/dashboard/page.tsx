@@ -31,7 +31,6 @@ const META_ROWS = [
   SESSION_NAME_ROW,
   "TIPO",
   "TIPO TRABAJO",
-  "INTENSIDAD",
   "LUGAR",
   "HORA",
   "VIDEO",
@@ -338,16 +337,6 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
         <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center gap-1 truncate">
           <span className="w-3 h-3 rounded-full border" style={{ backgroundColor: def.color || "#f9fafb" }} />
           <span className="truncate">{def.label}</span>
-        </div>
-      );
-    }
-
-    if (row === "INTENSIDAD") {
-      const micro = getMicro(ymd, activeTurn);
-      const text = micro || "—";
-      return (
-        <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center truncate">
-          {text}
         </div>
       );
     }
