@@ -420,6 +420,61 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
     }
   }
 
+  async function deleteBlock(blockId: string): Promise<void> {
+    setError(null);
+
+    const snapshotBlock = localBlocks.find((b) => b.id === blockId);
+    if (!snapshotBlock) return;
+
+    const snapshotItems = localItems.filter((it) => it.blockId === blockId);
+
+    // Optimista: eliminar bloque del listado
+    setLocalBlocks((prev) => prev.filter((b) => b.id !== blockId));
+
+    // Optimista: los items pasan a "sin bloque"
+    setLocalItems((prev) =>
+      prev.map((it) => (it.blockId === blockId ? { ...it, blockId: null } : it)),
+    );
+
+    // Si el bloque estaba activo/seleccionado, limpiar panel y selección
+    if (selectedBlockId === blockId || activeBlockId === blockId) {
+      setSelectedBlockId(null);
+      setActiveBlockId(null);
+      setSelectedItemId(null);
+      setInlineMode("none");
+    }
+
+    // Si el item seleccionado pertenecía a este bloque, también limpiar
+    const selectedItem = selectedItemId
+      ? localItems.find((it) => it.id === selectedItemId)
+      : null;
+    if (selectedItem?.blockId === blockId) {
+      setSelectedItemId(null);
+      setInlineMode("none");
+    }
+
+    try {
+      await deleteJSON(`/api/ct/routines/blocks/${blockId}`);
+      startTransition(() => router.refresh());
+    } catch (err) {
+      console.error(err);
+      setError("No se pudo eliminar el bloque");
+
+      // Rollback: restaurar bloque
+      setLocalBlocks((prev) =>
+        [...prev, snapshotBlock].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+      );
+
+      // Rollback: restaurar items que eran de ese bloque
+      setLocalItems((prev) =>
+        prev.map((it) => {
+          const snap = snapshotItems.find((s) => s.id === it.id);
+          return snap ? snap : it;
+        }),
+      );
+    }
+  }
+
   async function deleteItem(itemId: string): Promise<void> {
     setError(null);
 
@@ -910,6 +965,7 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
           onSelectItem={handleSelectItem}
           onAddBlock={handleAddBlock}
           onAddItem={handleAddItem}
+          onDeleteBlock={deleteBlock}
           onBlockNameChangeLocal={handleRenameBlockLocal}
           onRenameBlock={handleRenameBlock}
           onDragStartItem={handleDragStart}
@@ -1006,6 +1062,7 @@ type RoutineStructurePanelProps = {
   onSelectItem: (blockId: string | null, itemId: string | null) => void;
   onAddBlock: () => void;
   onAddItem: (blockId: string) => void;
+  onDeleteBlock: (blockId: string) => Promise<void>;
   onBlockNameChangeLocal: (blockId: string, name: string) => void;
   onRenameBlock: (b: RoutineBlockDTO, name: string) => Promise<void> | void;
   onDragStartItem: (blockId: string, itemId: string, e: React.DragEvent) => void;
@@ -1054,6 +1111,7 @@ function RoutineStructurePanel({
   onAddExerciseToRoutine,
   onLocalChangeItem,
   onSaveItemField,
+  onDeleteBlock,
   onDeleteItem,
   onDuplicateItem,
   onMoveItemToBlock,
@@ -1141,13 +1199,32 @@ function RoutineStructurePanel({
                     {items.length} ejercicios
                   </p>
                   {!readOnly && (
-                    <button
-                      type="button"
-                      className="rounded border border-white/30 px-2 py-0.5 text-[10px] hover:bg-white/10"
-                      onClick={() => onAddItem(block.id)}
-                    >
-                      + Ejercicio
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="rounded border border-white/30 px-2 py-0.5 text-[10px] hover:bg-white/10"
+                        onClick={() => onAddItem(block.id)}
+                      >
+                        + Ejercicio
+                      </button>
+
+                      <button
+                        type="button"
+                        className="text-[11px] rounded-full border px-2 py-1 text-red-600 hover:bg-red-50"
+                        onClick={async () => {
+                          if (
+                            !window.confirm(
+                              "¿Eliminar este bloque? Los ejercicios quedarán como 'sin bloque'. ¿Continuar?",
+                            )
+                          ) {
+                            return;
+                          }
+                          await onDeleteBlock(block.id);
+                        }}
+                      >
+                        Eliminar bloque
+                      </button>
+                    </div>
                   )}
                 </div>
               </header>
