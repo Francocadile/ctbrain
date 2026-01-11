@@ -422,12 +422,30 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
 
   async function deleteItem(itemId: string): Promise<void> {
     setError(null);
+
+    const snapshot = localItems.find((it) => it.id === itemId);
+    if (!snapshot) return;
+
+    // Optimista: sacar de UI ya
+    setLocalItems((prev) => prev.filter((it) => it.id !== itemId));
+
+    // Si estaba seleccionado, cerrar editor/selección
+    if (selectedItemId === itemId) {
+      setSelectedItemId(null);
+      setInlineMode("none");
+    }
+
     try {
       await deleteJSON(`/api/ct/routines/items/${itemId}`);
       startTransition(() => router.refresh());
     } catch (err) {
       console.error(err);
-      setError("No se pudo borrar el ejercicio");
+      setError("No se pudo eliminar el ejercicio de la rutina");
+
+      // Rollback mínimo: reinsertar y ordenar por 'order'
+      setLocalItems((prev) =>
+        [...prev, snapshot].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+      );
     }
   }
 
@@ -1245,6 +1263,26 @@ function RoutineStructurePanel({
                               </div>
                             </div>
                           </button>
+
+                          {!readOnly && (
+                            <button
+                              type="button"
+                              className="shrink-0 px-2 py-1 rounded border border-gray-200 text-[10px] text-red-600 hover:bg-red-50"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (
+                                  !confirm(
+                                    "¿Eliminar este ejercicio de la rutina? Esta acción no se puede deshacer.",
+                                  )
+                                ) {
+                                  return;
+                                }
+                                await onDeleteItem(it.id);
+                              }}
+                            >
+                              Eliminar
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
