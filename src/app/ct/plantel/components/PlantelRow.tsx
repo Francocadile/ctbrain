@@ -61,6 +61,25 @@ export default function PlantelRow({ player }: { player: PlayerWithUser }) {
           >
             {hasAccess ? "Gestionar acceso" : "Activar acceso"}
           </button>
+          <button
+            type="button"
+            className="px-2 py-1 rounded border border-gray-200 hover:bg-red-50"
+            onClick={async () => {
+              if (!confirm("¿Eliminar jugador? Esta acción no se puede deshacer.")) return;
+
+              const res = await fetch(`/api/ct/plantel/${player.id}`, { method: "DELETE" });
+
+              if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                alert((data as any)?.error ?? "No se pudo eliminar.");
+                return;
+              }
+
+              window.location.reload();
+            }}
+          >
+            Eliminar
+          </button>
           <Link
             href={`/ct/plantel/${player.id}`}
             className="px-2 py-1 rounded border border-gray-200 hover:bg-gray-50"
