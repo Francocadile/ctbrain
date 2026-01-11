@@ -117,11 +117,11 @@ export function ExerciseCardPreview({ exercise, index }: ExerciseCardPreviewProp
               ))}
             </div>
           )}
-          {description && (
-            <p className="mt-2 text-xs md:text-sm text-gray-600 whitespace-pre-line line-clamp-3">
+          {description?.trim() ? (
+            <div className="mt-2 max-w-prose whitespace-pre-line text-[13px] leading-relaxed text-gray-800 md:text-sm">
               {description}
-            </p>
-          )}
+            </div>
+          ) : null}
         </div>
       </div>
 
