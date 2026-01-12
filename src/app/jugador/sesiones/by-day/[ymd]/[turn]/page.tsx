@@ -4,6 +4,7 @@ import Link from "next/link";
 import SessionDayView, { SessionDayBlock } from "@/components/sessions/SessionDayView";
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { decodeExercises, type Exercise } from "@/lib/sessions/encodeDecodeExercises";
 
 function getDayRangeFromYmd(ymd: string) {
   const [year, month, day] = ymd.split("-").map((v) => parseInt(v, 10));
@@ -91,11 +92,24 @@ export default async function JugadorSessionDayPage({
     const cell = daySessions.find(
       (it: any) => typeof it.description === "string" && it.description.startsWith(marker)
     );
+
+    let exercises: Exercise[] = [];
+    if (cell?.description) {
+      try {
+        const decoded = decodeExercises(cell.description);
+        exercises = decoded.exercises || [];
+      } catch (e) {
+        // no rompemos vista jugador si hay una celda vieja o malformada
+        console.error("[player by-day] decodeExercises failed", e);
+      }
+    }
+
     return {
       rowKey: rowLabel,
       rowLabel,
       title: (cell?.title || "").trim(),
       sessionId: cell?.id || "",
+      exercises,
     };
   });
 
