@@ -14,7 +14,54 @@ function getDayRangeFromYmd(ymd: string) {
 }
 
 const META_ROWS = ["LUGAR", "HORA", "VIDEO", "NOMBRE SESIÓN"] as const;
-const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
+// Fallback por compatibilidad para semanas viejas (si no hay prefs)
+const DEFAULT_CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
+
+type TurnKey = "morning" | "afternoon";
+
+/* ====== Marcadores usados por el editor ====== */
+const DAYFLAG_TAG = "DAYFLAG";
+const MICRO_TAG = "MICRO";
+const dayFlagMarker = (turn: TurnKey) => `[${DAYFLAG_TAG}:${turn}]`;
+const microMarker = (turn: TurnKey) => `[${MICRO_TAG}:${turn}]`;
+
+type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
+type DayFlag = { kind: DayFlagKind; rivalId?: string; rival?: string; logoUrl?: string };
+
+// Compat: NUEVO (PARTIDO|id|name|logo) y VIEJO (PARTIDO|name|logo)
+function parseDayFlagTitle(title?: string | null): DayFlag {
+  const raw = (title || "").trim();
+  if (!raw) return { kind: "NONE" };
+  const parts = raw.split("|").map((x) => (x || "").trim());
+  const kind = parts[0];
+  if (kind === "PARTIDO") {
+    if (parts.length >= 4) {
+      const [, id, name, logo] = parts;
+      return { kind: "PARTIDO", rivalId: id || undefined, rival: name || "", logoUrl: logo || "" };
+    }
+    if (parts.length >= 3) {
+      const [, name, logo] = parts;
+      return { kind: "PARTIDO", rival: name || "", logoUrl: logo || "" };
+    }
+    return { kind: "PARTIDO" };
+  }
+  if (kind === "LIBRE") return { kind: "LIBRE" };
+  return { kind: "NONE" };
+}
+
+type MicroKey = "" | "MD+1" | "MD+2" | "MD-4" | "MD-3" | "MD-2" | "MD-1" | "MD" | "DESCANSO";
+function parseMicroTitle(title?: string | null): MicroKey {
+  const t = (title || "").trim();
+  const allowed = new Set(["", "MD+1", "MD+2", "MD-4", "MD-3", "MD-2", "MD-1", "MD", "DESCANSO"]);
+  return (allowed.has(t) ? (t as MicroKey) : "") as MicroKey;
+}
+
+function isDayFlag(s: any, turn: TurnKey) {
+  return typeof s.description === "string" && s.description.startsWith(dayFlagMarker(turn));
+}
+function isMicro(s: any, turn: TurnKey) {
+  return typeof s.description === "string" && s.description.startsWith(microMarker(turn));
+}
 
 function cellMarker(turn: "morning" | "afternoon", row: string) {
   return `[GRID:${turn}:${row}]`;
@@ -56,6 +103,24 @@ export default async function JugadorSessionDayPage({
     orderBy: { date: "asc" },
   });
 
+  // Prefs del planner (labels + filas dinámicas de contenido)
+  let rowLabels: Record<string, string> = {};
+  let contentRowIds: string[] = [...DEFAULT_CONTENT_ROWS];
+  try {
+    const prefs = await (prisma as any).plannerPrefs.findFirst({
+      where: { teamId: player.teamId },
+      orderBy: { createdAt: "desc" },
+    });
+    rowLabels = (prefs?.rowLabels || {}) as Record<string, string>;
+    if (Array.isArray(prefs?.contentRowIds) && prefs.contentRowIds.length) {
+      contentRowIds = prefs.contentRowIds as string[];
+    }
+  } catch {
+    // fallback silencioso
+    rowLabels = {};
+    contentRowIds = [...DEFAULT_CONTENT_ROWS];
+  }
+
   const getMetaCell = (row: (typeof META_ROWS)[number]) => {
     const marker = cellMarker(params.turn, row);
     const s = daySessions.find(
@@ -79,16 +144,29 @@ export default async function JugadorSessionDayPage({
 
   const video = parseVideoValue(videoRaw);
 
+  // Día libre / partido / etc.
+  const dayFlag: DayFlag = (() => {
+    const f = daySessions.find((s: any) => isDayFlag(s, params.turn));
+    return parseDayFlagTitle(f?.title);
+  })();
+
+  // Intensidad (MICRO)
+  const micro: MicroKey = (() => {
+    const m = daySessions.find((s: any) => isMicro(s, params.turn));
+    return parseMicroTitle(m?.title);
+  })();
+
   const header = {
     name,
     place: lugar,
     time: hora,
     videoUrl: video.url || null,
-    microLabel: null,
+    microLabel: micro || null,
   };
 
-  const viewBlocks: SessionDayBlock[] = CONTENT_ROWS.map((rowLabel) => {
-    const marker = cellMarker(params.turn, rowLabel);
+  // Bloques: igual que CT by-day: usa contentRowIds (dinámico) + rowLabels
+  const viewBlocks: SessionDayBlock[] = contentRowIds.map((rowId) => {
+    const marker = cellMarker(params.turn, rowId);
     const cell = daySessions.find(
       (it: any) => typeof it.description === "string" && it.description.startsWith(marker)
     );
@@ -105,13 +183,36 @@ export default async function JugadorSessionDayPage({
     }
 
     return {
-      rowKey: rowLabel,
-      rowLabel,
+      rowKey: rowId,
+      rowLabel: rowLabels[rowId] || rowId,
       title: (cell?.title || "").trim(),
       sessionId: cell?.id || "",
       exercises,
     };
   });
+
+  // Si es día libre, mostramos solo el mensaje (igual que CT)
+  if (dayFlag.kind === "LIBRE") {
+    return (
+      <main className="min-h-screen bg-gray-50 px-4 py-4 md:px-6 md:py-8">
+        <div className="max-w-3xl mx-auto space-y-4">
+          <div>
+            <Link
+              href="/jugador"
+              className="inline-flex items-center text-sm text-gray-600 hover:text-gray-900 hover:underline"
+            >
+              <span className="mr-1">←</span>
+              <span>Volver</span>
+            </Link>
+          </div>
+
+          <div className="rounded-2xl border bg-white shadow-sm p-6 text-center text-gray-700 font-semibold">
+            DESCANSO
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-4 md:px-6 md:py-8">
