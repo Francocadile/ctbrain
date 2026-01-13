@@ -439,6 +439,14 @@ export function ExerciseSectionCard(props: ExerciseSectionCardProps) {
                 value={exercise.diagram as FieldDiagramState}
                 readOnly
               />
+            ) : exercise.imageUrl ? (
+              // Fallback: si no hay diagrama, mostramos la imagen del ejercicio (y evitamos el estado vacío).
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={exercise.imageUrl}
+                alt={title}
+                className="aspect-video w-full rounded-lg object-contain bg-black/40"
+              />
             ) : (
               <div className="flex aspect-video w-full items-center justify-center rounded-lg bg-emerald-900/40 text-center text-[11px] text-emerald-100">
                 Diagrama de cancha no definido.
