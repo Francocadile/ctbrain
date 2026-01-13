@@ -67,6 +67,16 @@ function cellMarker(turn: "morning" | "afternoon", row: string) {
   return `[GRID:${turn}:${row}]`;
 }
 
+function extractGridRowId(description: unknown, turn: TurnKey): string | null {
+  if (typeof description !== "string") return null;
+  const prefix = `[GRID:${turn}:`;
+  if (!description.startsWith(prefix)) return null;
+  const end = description.indexOf("]", prefix.length);
+  if (end === -1) return null;
+  const rowId = description.slice(prefix.length, end);
+  return rowId.trim() || null;
+}
+
 export default async function JugadorSessionDayPage({
   params,
 }: {
@@ -121,6 +131,39 @@ export default async function JugadorSessionDayPage({
     contentRowIds = [...DEFAULT_CONTENT_ROWS];
   }
 
+  // Merge: filas preferidas (prefs) + filas detectadas en sesiones (GRID) para este turno.
+  // Esto cubre el caso donde existe una fila nueva (ej "TAREA 5") ya persistida en sessions
+  // pero todavía no figura en prefs (o el jugador está leyendo prefs viejas).
+  const finalRowIds: string[] = (() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+
+    // 1) primero las de prefs (preserva orden)
+    for (const id of contentRowIds) {
+      const key = String(id || "").trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(key);
+    }
+
+    // 2) luego las que aparecen en sessions como GRID markers
+    const extras: string[] = [];
+    for (const s of daySessions as any[]) {
+      const rowId = extractGridRowId(s?.description, params.turn);
+      if (!rowId) continue;
+      if (seen.has(rowId)) continue;
+      // evitamos capturar meta rows como “bloques”
+      if ((META_ROWS as readonly string[]).includes(rowId)) continue;
+      seen.add(rowId);
+      extras.push(rowId);
+    }
+
+    // Orden: por aparición ya está OK según orderBy: { date: "asc" },
+    // que es estable para las celdas del día.
+    out.push(...extras);
+    return out;
+  })();
+
   const getMetaCell = (row: (typeof META_ROWS)[number]) => {
     const marker = cellMarker(params.turn, row);
     const s = daySessions.find(
@@ -165,7 +208,7 @@ export default async function JugadorSessionDayPage({
   };
 
   // Bloques: igual que CT by-day: usa contentRowIds (dinámico) + rowLabels
-  const viewBlocks: SessionDayBlock[] = contentRowIds.map((rowId) => {
+  const viewBlocks: SessionDayBlock[] = finalRowIds.map((rowId) => {
     const marker = cellMarker(params.turn, rowId);
     const cell = daySessions.find(
       (it: any) => typeof it.description === "string" && it.description.startsWith(marker)
