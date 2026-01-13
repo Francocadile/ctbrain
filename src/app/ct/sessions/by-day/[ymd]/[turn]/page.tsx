@@ -42,6 +42,13 @@ function parseVideoValue(v: string | null | undefined): { label: string; url: st
   return { label: label || "", url: url || "" };
 }
 
+function visibleRowLabel(rowId: string, rowLabels: RowLabels, index1Based: number) {
+  const fromPrefs = rowLabels[rowId];
+  if (fromPrefs) return fromPrefs;
+  if (/^row-\d+$/i.test(rowId)) return `Tarea ${index1Based}`;
+  return rowId;
+}
+
 const WEEKDAY_ES = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"] as const;
 
 function formatSessionHeaderDate(ymd: string) {
@@ -204,9 +211,9 @@ export default function SessionTurnoPage() {
 
   const viewBlocks: SessionDayBlock[] = useMemo(
     () =>
-      contentRowIds.map((rowId) => {
+      contentRowIds.map((rowId, idx) => {
         const cell = daySessions.find((s) => isCellOf(s, turn, rowId));
-        const visibleLabel = rowLabels[rowId] || rowId;
+        const visibleLabel = visibleRowLabel(rowId, rowLabels, idx + 1);
         let exercises: Exercise[] = [];
         if (cell?.description) {
           try {

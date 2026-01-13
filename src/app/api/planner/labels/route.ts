@@ -7,21 +7,21 @@ function cleanPlaces(input: string[] | undefined) {
   return Array.from(new Set((input ?? []).map((s) => (s ?? "").trim()).filter(Boolean)));
 }
 
-function plannerPrefsKey(userId: string, teamId: string): Prisma.PlannerPrefsWhereUniqueInput {
+function plannerPrefsKey(teamId: string): Prisma.PlannerPrefsWhereUniqueInput {
   return {
-    userId_teamId: { userId, teamId },
+    teamId,
   } as unknown as Prisma.PlannerPrefsWhereUniqueInput;
 }
 
 // GET -> { rowLabels, places, contentRowIds }
 export async function GET(req: NextRequest) {
   try {
-    const { prisma, team, user } = await dbScope({ req });
+    // Team-scoped: cualquier miembro del equipo puede leer (incluye jugadores)
+    const { prisma, team } = await dbScope({ req });
     const teamId = team.id;
-    const userId = user.id;
 
     const pref = await prisma.plannerPrefs.findUnique({
-      where: plannerPrefsKey(userId, teamId),
+      where: plannerPrefsKey(teamId),
     });
     const places = await prisma.place.findMany({
       where: scopedWhere(teamId, {}) as Prisma.PlaceWhereInput,
@@ -44,9 +44,9 @@ export async function GET(req: NextRequest) {
 // POST -> guarda rowLabels (usuario) y/o reemplaza places (team)
 export async function POST(req: NextRequest) {
   try {
-    const { prisma, team, user } = await dbScope({ req, roles: [Role.CT, Role.ADMIN] });
+    // Team-scoped: solo staff puede modificar
+    const { prisma, team } = await dbScope({ req, roles: [Role.CT, Role.ADMIN] });
     const teamId = team.id;
-    const userId = user.id;
     const body = (await req.json().catch(() => ({}))) as {
       rowLabels?: Record<string, string>;
       places?: string[];
@@ -56,13 +56,12 @@ export async function POST(req: NextRequest) {
     await prisma.$transaction(async (tx) => {
       if (body.rowLabels || body.contentRowIds) {
         await tx.plannerPrefs.upsert({
-          where: plannerPrefsKey(userId, teamId),
+          where: plannerPrefsKey(teamId),
           update: {
             ...(body.rowLabels ? { rowLabels: body.rowLabels } : {}),
             ...(body.contentRowIds ? { contentRowIds: body.contentRowIds as any } : {}),
           },
           create: {
-            userId,
             teamId,
             ...(body.rowLabels ? { rowLabels: body.rowLabels } : {}),
             ...(body.contentRowIds ? { contentRowIds: body.contentRowIds as any } : {}),
@@ -112,14 +111,13 @@ export async function POST(req: NextRequest) {
 // DELETE -> resetea rowLabels del usuario y contentRowIds
 export async function DELETE(req: NextRequest) {
   try {
-    const { prisma, team, user } = await dbScope({ req, roles: [Role.CT, Role.ADMIN] });
+    const { prisma, team } = await dbScope({ req, roles: [Role.CT, Role.ADMIN] });
     const teamId = team.id;
-    const userId = user.id;
 
     await prisma.plannerPrefs.upsert({
-      where: plannerPrefsKey(userId, teamId),
+      where: plannerPrefsKey(teamId),
       update: { rowLabels: {}, contentRowIds: null as any },
-      create: { userId, teamId, rowLabels: {}, contentRowIds: null as any } as any,
+      create: { teamId, rowLabels: {}, contentRowIds: null as any } as any,
     });
     return NextResponse.json({ ok: true });
   } catch (error: any) {

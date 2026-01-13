@@ -1,6 +1,6 @@
 export type RowLabels = Record<string, string>;
 
-// ---- Row labels (por usuario)
+// ---- Row labels (por equipo)
 export async function fetchRowLabels(): Promise<RowLabels> {
   const r = await fetch("/api/planner/labels", { cache: "no-store" });
   if (!r.ok) throw new Error("fetch rowLabels failed");

@@ -5,7 +5,7 @@ import SessionDayView, { SessionDayBlock } from "@/components/sessions/SessionDa
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { decodeExercises, type Exercise } from "@/lib/sessions/encodeDecodeExercises";
-import { getPlannerLabelsForUserTeam } from "@/lib/planner/labels";
+import { getPlannerLabelsForTeam } from "@/lib/planner/labels";
 
 export const dynamic = "force-dynamic";
 
@@ -27,8 +27,7 @@ const META_ROW_IDS = [
   "VIDEO",
   "RIVAL",
 ] as const;
-// Fallback por compatibilidad para semanas viejas (si no hay prefs)
-const DEFAULT_CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
+
 
 type TurnKey = "morning" | "afternoon";
 
@@ -134,27 +133,23 @@ export default async function JugadorSessionDayPage({
     orderBy: { date: "asc" },
   });
 
-  // Labels/rows: misma fuente y misma forma que GET /api/planner/labels
-  // (prefs por usuario+equipo). Si no hay prefs, caemos al fallback por compat.
+  // Labels/rows: team-scoped (mismas prefs/labels para CT + Jugador).
+  // Si no hay prefs, NO inventamos filas base: renderizamos solo lo detectado en DB.
   let rowLabels: Record<string, string> = {};
-  let contentRowIds: string[] = [...DEFAULT_CONTENT_ROWS];
+  let contentRowIds: string[] = [];
   try {
-    const { rowLabels: apiRowLabels, contentRowIds: apiContentRowIds } = await getPlannerLabelsForUserTeam(
-      session.user.id,
-      teamId,
-    );
+    const { rowLabels: apiRowLabels, contentRowIds: apiContentRowIds } = await getPlannerLabelsForTeam(teamId);
     rowLabels = apiRowLabels || {};
     if (Array.isArray(apiContentRowIds) && apiContentRowIds.length) {
       contentRowIds = apiContentRowIds;
     }
   } catch {
     rowLabels = {};
-    contentRowIds = [...DEFAULT_CONTENT_ROWS];
+    contentRowIds = [];
   }
 
   // Merge: filas preferidas (prefs) + filas detectadas en sesiones (GRID) para este turno.
-  // Esto cubre el caso donde existe una fila nueva (ej "TAREA 5") ya persistida en sessions
-  // pero todavía no figura en prefs (o el jugador está leyendo prefs viejas).
+  // Siempre excluimos meta rows del editor.
   const finalRowIds: string[] = (() => {
     const seen = new Set<string>();
     const out: string[] = [];
@@ -163,6 +158,7 @@ export default async function JugadorSessionDayPage({
     for (const id of contentRowIds) {
       const key = String(id || "").trim();
       if (!key || seen.has(key)) continue;
+      if ((META_ROW_IDS as readonly string[]).includes(key)) continue;
       seen.add(key);
       out.push(key);
     }
@@ -186,13 +182,13 @@ export default async function JugadorSessionDayPage({
   })();
 
   // Label visible:
-  // - si existe rowLabels[rowId], usarlo (misma fuente que /api/planner/labels)
-  // - si no existe y rowId empieza con ROW-, usar fallback "TAREA N" (N = posición 1-based)
+  // - si existe rowLabels[rowId], usarlo
+  // - si no existe y rowId matchea /^row-\d+$/i, usar fallback "Tarea N" (N = posición 1-based)
   // - sino, fallback al rowId
   const labelForRowId = (rowId: string, contentIndex1Based: number) => {
     const fromPrefs = rowLabels[rowId];
     if (fromPrefs) return fromPrefs;
-    if (rowId.startsWith("ROW-")) return `TAREA ${contentIndex1Based}`;
+    if (/^row-\d+$/i.test(rowId)) return `Tarea ${contentIndex1Based}`;
     return rowId;
   };
 
