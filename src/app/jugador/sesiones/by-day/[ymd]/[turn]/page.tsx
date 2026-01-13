@@ -14,6 +14,16 @@ function getDayRangeFromYmd(ymd: string) {
 }
 
 const META_ROWS = ["LUGAR", "HORA", "VIDEO", "NOMBRE SESIÓN"] as const;
+// Meta-rows del editor (NO deben aparecer como bloques de contenido en by-day)
+const META_ROW_IDS = [
+  "NOMBRE SESIÓN",
+  "TIPO SESIÓN",
+  "LUGAR",
+  "HORA",
+  "ESPACIO SUGERIDO",
+  "VIDEO",
+  "RIVAL",
+] as const;
 // Fallback por compatibilidad para semanas viejas (si no hay prefs)
 const DEFAULT_CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 
@@ -152,8 +162,8 @@ export default async function JugadorSessionDayPage({
       const rowId = extractGridRowId(s?.description, params.turn);
       if (!rowId) continue;
       if (seen.has(rowId)) continue;
-      // evitamos capturar meta rows como “bloques”
-      if ((META_ROWS as readonly string[]).includes(rowId)) continue;
+      // evitamos capturar meta rows como “bloques"
+      if ((META_ROW_IDS as readonly string[]).includes(rowId)) continue;
       seen.add(rowId);
       extras.push(rowId);
     }
@@ -163,6 +173,17 @@ export default async function JugadorSessionDayPage({
     out.push(...extras);
     return out;
   })();
+
+  // Label visible:
+  // - si existe rowLabels[rowId], usarlo
+  // - si no existe y rowId empieza con ROW-, mostrar "TAREA N" (N basado en posición 1-based)
+  // - sino, fallback al rowId
+  const labelForRowId = (rowId: string, contentIndex1Based: number) => {
+    const fromPrefs = rowLabels[rowId];
+    if (fromPrefs) return fromPrefs;
+    if (rowId.startsWith("ROW-")) return `TAREA ${contentIndex1Based}`;
+    return rowId;
+  };
 
   const getMetaCell = (row: (typeof META_ROWS)[number]) => {
     const marker = cellMarker(params.turn, row);
@@ -208,7 +229,8 @@ export default async function JugadorSessionDayPage({
   };
 
   // Bloques: igual que CT by-day: usa contentRowIds (dinámico) + rowLabels
-  const viewBlocks: SessionDayBlock[] = finalRowIds.map((rowId) => {
+  const viewBlocks: SessionDayBlock[] = finalRowIds.map((rowId, idx) => {
+    const contentIndex = idx + 1;
     const marker = cellMarker(params.turn, rowId);
     const cell = daySessions.find(
       (it: any) => typeof it.description === "string" && it.description.startsWith(marker)
@@ -227,7 +249,7 @@ export default async function JugadorSessionDayPage({
 
     return {
       rowKey: rowId,
-      rowLabel: rowLabels[rowId] || rowId,
+      rowLabel: labelForRowId(rowId, contentIndex),
       title: (cell?.title || "").trim(),
       sessionId: cell?.id || "",
       exercises,
