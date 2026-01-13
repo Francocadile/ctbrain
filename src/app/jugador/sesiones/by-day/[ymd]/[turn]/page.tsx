@@ -7,6 +7,8 @@ import prisma from "@/lib/prisma";
 import { decodeExercises, type Exercise } from "@/lib/sessions/encodeDecodeExercises";
 import { getPlannerLabelsForUserTeam } from "@/lib/planner/labels";
 
+export const dynamic = "force-dynamic";
+
 function getDayRangeFromYmd(ymd: string) {
   const [year, month, day] = ymd.split("-").map((v) => parseInt(v, 10));
   const start = new Date(Date.UTC(year, month - 1, day));
@@ -111,11 +113,19 @@ export default async function JugadorSessionDayPage({
     redirect("/jugador");
   }
 
+  // TeamId estable: para jugador debe salir del perfil Player (no del selector CT).
+  // Fallback: currentTeamId del JWT si por alguna razón el Player no tiene teamId.
+  const teamId: string | null = (player?.teamId as string | null) ?? (session.user as any)?.currentTeamId ?? null;
+  if (!teamId) {
+    // Sin team no podemos resolver sesiones ni prefs de planner.
+    redirect("/jugador");
+  }
+
   const { start, end } = getDayRangeFromYmd(params.ymd);
 
   const daySessions = await (prisma as any).session.findMany({
     where: {
-      teamId: player.teamId,
+      teamId,
       date: {
         gte: start,
         lt: end,
@@ -131,7 +141,7 @@ export default async function JugadorSessionDayPage({
   try {
     const { rowLabels: apiRowLabels, contentRowIds: apiContentRowIds } = await getPlannerLabelsForUserTeam(
       session.user.id,
-      player.teamId,
+      teamId,
     );
     rowLabels = apiRowLabels || {};
     if (Array.isArray(apiContentRowIds) && apiContentRowIds.length) {
