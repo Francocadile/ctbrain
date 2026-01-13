@@ -13,6 +13,8 @@ type SessionMeta = {
   players?: number | null;
   duration?: string | null;
   description?: string | null;
+  imageUrl?: string | null;
+  diagram?: any;
   originSessionId?: string | null;
 };
 
@@ -40,6 +42,12 @@ type DerivedExercise = ExerciseClientDTO & {
   primaryZone: string;
   tags: string[];
 };
+
+function getExerciseImageUrl(ex: ExerciseClientDTO): string | null {
+  const meta = ex.sessionMeta as any;
+  const url = (meta?.imageUrl ?? null) as string | null;
+  return typeof url === "string" && url.trim() ? url.trim() : null;
+}
 
 const groupLabels: Record<ExerciseGroup, string> = {
   Warmup: "Warmup",
@@ -382,6 +390,21 @@ export default function ExercisesLibraryClient({ exercises, mode }: Props) {
                     <div className="mt-3 rounded-xl border bg-gray-50 px-3 py-2.5 text-[11px] text-gray-700">
                       {ex.sessionMeta ? (
                         <div className="space-y-0.5">
+                          {getExerciseImageUrl(ex) && (
+                            <div className="pt-1">
+                              <div className="text-[10px] font-semibold text-gray-600 mb-1">
+                                Imagen
+                              </div>
+                              <div className="w-[220px] h-[220px] rounded-lg border bg-white flex items-center justify-center overflow-hidden">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={getExerciseImageUrl(ex)!}
+                                  alt={ex.name}
+                                  className="max-w-full max-h-full object-contain"
+                                />
+                              </div>
+                            </div>
+                          )}
                           {ex.sessionMeta.type && (
                             <p>
                               <span className="font-semibold">Tipo: </span>
