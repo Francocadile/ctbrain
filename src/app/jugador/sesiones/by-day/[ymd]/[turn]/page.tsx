@@ -5,6 +5,7 @@ import SessionDayView, { SessionDayBlock } from "@/components/sessions/SessionDa
 import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { decodeExercises, type Exercise } from "@/lib/sessions/encodeDecodeExercises";
+import { getPlannerLabelsForUserTeam } from "@/lib/planner/labels";
 
 function getDayRangeFromYmd(ymd: string) {
   const [year, month, day] = ymd.split("-").map((v) => parseInt(v, 10));
@@ -123,20 +124,20 @@ export default async function JugadorSessionDayPage({
     orderBy: { date: "asc" },
   });
 
-  // Prefs del planner (labels + filas dinámicas de contenido)
+  // Labels/rows: misma fuente y misma forma que GET /api/planner/labels
+  // (prefs por usuario+equipo). Si no hay prefs, caemos al fallback por compat.
   let rowLabels: Record<string, string> = {};
   let contentRowIds: string[] = [...DEFAULT_CONTENT_ROWS];
   try {
-    const prefs = await (prisma as any).plannerPrefs.findFirst({
-      where: { teamId: player.teamId },
-      orderBy: { createdAt: "desc" },
-    });
-    rowLabels = (prefs?.rowLabels || {}) as Record<string, string>;
-    if (Array.isArray(prefs?.contentRowIds) && prefs.contentRowIds.length) {
-      contentRowIds = prefs.contentRowIds as string[];
+    const { rowLabels: apiRowLabels, contentRowIds: apiContentRowIds } = await getPlannerLabelsForUserTeam(
+      session.user.id,
+      player.teamId,
+    );
+    rowLabels = apiRowLabels || {};
+    if (Array.isArray(apiContentRowIds) && apiContentRowIds.length) {
+      contentRowIds = apiContentRowIds;
     }
   } catch {
-    // fallback silencioso
     rowLabels = {};
     contentRowIds = [...DEFAULT_CONTENT_ROWS];
   }
@@ -174,16 +175,9 @@ export default async function JugadorSessionDayPage({
     return out;
   })();
 
-  // Label visible:
-  // - si existe rowLabels[rowId], usarlo
-  // - si no existe y rowId empieza con ROW-, mostrar "TAREA N" (N basado en posición 1-based)
-  // - sino, fallback al rowId
-  const labelForRowId = (rowId: string, contentIndex1Based: number) => {
-    const fromPrefs = rowLabels[rowId];
-    if (fromPrefs) return fromPrefs;
-    if (rowId.startsWith("ROW-")) return `TAREA ${contentIndex1Based}`;
-    return rowId;
-  };
+  // Label visible: si no hay label configurado, mostramos el rowId.
+  // Para ROW-* esperamos que llegue el label desde prefs (ej: "TAREA 5").
+  const labelForRowId = (rowId: string) => rowLabels[rowId] ?? rowId;
 
   const getMetaCell = (row: (typeof META_ROWS)[number]) => {
     const marker = cellMarker(params.turn, row);
@@ -229,8 +223,7 @@ export default async function JugadorSessionDayPage({
   };
 
   // Bloques: igual que CT by-day: usa contentRowIds (dinámico) + rowLabels
-  const viewBlocks: SessionDayBlock[] = finalRowIds.map((rowId, idx) => {
-    const contentIndex = idx + 1;
+  const viewBlocks: SessionDayBlock[] = finalRowIds.map((rowId) => {
     const marker = cellMarker(params.turn, rowId);
     const cell = daySessions.find(
       (it: any) => typeof it.description === "string" && it.description.startsWith(marker)
@@ -249,7 +242,7 @@ export default async function JugadorSessionDayPage({
 
     return {
       rowKey: rowId,
-      rowLabel: labelForRowId(rowId, contentIndex),
+      rowLabel: labelForRowId(rowId),
       title: (cell?.title || "").trim(),
       sessionId: cell?.id || "",
       exercises,
