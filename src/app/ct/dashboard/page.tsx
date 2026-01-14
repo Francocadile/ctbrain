@@ -363,22 +363,28 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
 
     if (row === "VIDEO") {
       const { label, url } = parseVideoValue(text);
-      return url ? (
-        <button
-          type="button"
-          className="h-6 text-[11px] underline text-emerald-700 px-1 flex items-center justify-center text-center truncate"
-          onClick={() =>
-            setVideoPreview({
-              title: label || "Video sesión",
-              zone: null,
-              videoUrl: url,
-            })
-          }
-        >
-          {label || "Video"}
-        </button>
-      ) : (
-        <div className="h-6 text-[11px] px-1 flex items-center justify-center text-center truncate">{label}</div>
+      return (
+        <div className="flex items-center justify-center h-full">
+          {url ? (
+            <button
+              type="button"
+              className="w-28 h-6 text-[11px] px-2 rounded-md border bg-white text-gray-700 truncate"
+              onClick={() =>
+                setVideoPreview({
+                  title: label || "Video sesión",
+                  zone: null,
+                  videoUrl: url,
+                })
+              }
+            >
+              {label || "Video"}
+            </button>
+          ) : (
+            <div className="h-6 text-[11px] text-gray-400 italic px-1 flex items-center justify-center text-center">
+              —
+            </div>
+          )}
+        </div>
       );
     }
 
