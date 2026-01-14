@@ -56,12 +56,12 @@ function parseMarker(description?: string) {
 }
 
 function isToday(date: Date) {
-  const today = new Date();
-  return (
-    date.getFullYear() === today.getFullYear() &&
-    date.getMonth() === today.getMonth() &&
-    date.getDate() === today.getDate()
-  );
+  // Importante: RPE/Wellness se guardan como UTC start-of-day (YYYY-MM-DDT00:00:00.000Z).
+  // Si comparamos con `new Date()` (tz local/servidor), cerca de medianoche puede quedar desfasado.
+  // Usamos Buenos Aires para consistencia con el resto del home.
+  const { startOfDay, endOfDay } = getTodayInBuenosAires();
+  const t = date.getTime();
+  return t >= startOfDay.getTime() && t < endOfDay.getTime();
 }
 
 export default async function JugadorHomePage() {
