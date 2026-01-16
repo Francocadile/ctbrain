@@ -29,6 +29,11 @@ const MED_PATHS = [
   /^\/api\/medico(?:\/|$)/,
 ];
 
+// Guard Directivo
+const DIRECTIVO_PATHS = [
+  /^\/directivo(?:\/|$)/,
+];
+
 // Excepción: CT puede LEER endpoints clínicos
 function isClinicalReadForCT(pathname: string, method: string) {
   if (method !== "GET") return false;
@@ -81,9 +86,10 @@ export async function middleware(req: NextRequest) {
   // ¿Qué guard aplica?
   const needsCT = matchAny(pathname, CT_PATHS);
   const needsMED = matchAny(pathname, MED_PATHS);
+  const needsDirectivo = matchAny(pathname, DIRECTIVO_PATHS);
 
   // Si no matchea nada, dejar pasar
-  if (!needsCT && !needsMED) {
+  if (!needsCT && !needsMED && !needsDirectivo) {
     return withDebug(NextResponse.next(), "no-guard");
   }
 
@@ -179,7 +185,24 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  const requiresTeam = needsCT || needsMED;
+  // Guard Directivo
+  if (needsDirectivo) {
+    const allowed = role === "DIRECTIVO" || role === "ADMIN" || role === "CT";
+    if (!allowed) {
+      console.info("[middleware] deny", {
+        reason: "role-mismatch",
+        pathname,
+        guard: "DIRECTIVO",
+        role,
+        userId: token.sub,
+      });
+      const url = req.nextUrl.clone();
+      url.pathname = roleHome(role);
+      return withDebug(NextResponse.redirect(url), "directivo-denied");
+    }
+  }
+
+  const requiresTeam = needsCT || needsMED || needsDirectivo;
   if (requiresTeam) {
     const cookieTeam = req.cookies.get("ctb_team")?.value?.trim();
     const tokenTeam =
@@ -236,6 +259,7 @@ export const config = {
   matcher: [
     // Home y login quedan públicos; protegemos resto
     "/ct/:path*",
+    "/directivo/:path*",
     "/api/ct/:path*",
     "/api/sessions/:path*",
     // "/api/users/:path*" ← lo sacamos del matcher, así ni pasa por el middleware

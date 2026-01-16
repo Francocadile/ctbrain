@@ -2,11 +2,19 @@ import RoleGate from "@/components/auth/RoleGate";
 import VideoViewer from "@/components/videos/VideoViewer";
 import { listTeamVideos } from "@/lib/videos";
 import { Role } from "@prisma/client";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function DirectivoVideosPage() {
-  const videos = await listTeamVideos({ roles: [Role.DIRECTIVO, Role.ADMIN, Role.CT] });
+  const session = await getServerSession(authOptions);
+  const role = (session?.user as any)?.role as Role | undefined;
+
+  const videos = await listTeamVideos({
+    roles: [Role.DIRECTIVO, Role.ADMIN, Role.CT],
+    scope: role === Role.DIRECTIVO ? "directivo" : "all",
+  });
 
   return (
     <RoleGate allow={["DIRECTIVO", "ADMIN", "CT"]} requireTeam>
