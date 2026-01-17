@@ -20,11 +20,41 @@ type TurnKey = "morning" | "afternoon";
 const CONTENT_ROWS = ["PRE ENTREN0", "FÍSICO", "TÉCNICO–TÁCTICO", "COMPENSATORIO"] as const;
 const META_ROWS = ["LUGAR", "HORA", "VIDEO", "NOMBRE SESIÓN"] as const;
 
+/* ====== Marcadores usados por el editor (paridad con /ct) ====== */
+const DAYFLAG_TAG = "DAYFLAG";
+const MICRO_TAG = "MICRO";
+const dayFlagMarker = (turn: TurnKey) => `[${DAYFLAG_TAG}:${turn}]`;
+const microMarker = (turn: TurnKey) => `[${MICRO_TAG}:${turn}]`;
+
 function cellMarker(turn: TurnKey, row: string) {
   return `[GRID:${turn}:${row}]`;
 }
 function isCellOf(s: SessionDTO, turn: TurnKey, row: string) {
   return typeof s.description === "string" && s.description.startsWith(cellMarker(turn, row));
+}
+
+type MicroKey = "" | "MD+1" | "MD+2" | "MD-4" | "MD-3" | "MD-2" | "MD-1" | "MD" | "DESCANSO";
+function isMicro(s: SessionDTO, turn: TurnKey) {
+  return typeof s.description === "string" && s.description.startsWith(microMarker(turn));
+}
+function parseMicroTitle(title?: string | null): MicroKey {
+  const t = (title || "").trim();
+  const allowed = new Set(["", "MD+1", "MD+2", "MD-4", "MD-3", "MD-2", "MD-1", "MD", "DESCANSO"]);
+  return (allowed.has(t) ? (t as MicroKey) : "") as MicroKey;
+}
+
+function isDayFlag(s: SessionDTO, turn: TurnKey) {
+  return typeof s.description === "string" && s.description.startsWith(dayFlagMarker(turn));
+}
+type DayFlagKind = "NONE" | "PARTIDO" | "LIBRE";
+type DayFlag = { kind: DayFlagKind; rival?: string; logoUrl?: string };
+function parseDayFlagTitle(title?: string | null): DayFlag {
+  const t = (title || "").trim();
+  if (!t) return { kind: "NONE" };
+  const [kind, rival, logoUrl] = t.split("|").map((x) => (x || "").trim());
+  if (kind === "PARTIDO") return { kind: "PARTIDO", rival, logoUrl };
+  if (kind === "LIBRE") return { kind: "LIBRE" };
+  return { kind: "NONE" };
 }
 
 function visibleRowLabel(rowId: string, rowLabels: RowLabels, index1Based: number) {
@@ -58,6 +88,8 @@ export default function MedicoSessionsByDayPage() {
       try {
         const date = new Date(`${ymd}T00:00:00.000Z`);
         const monday = getMonday(date);
+        // ⚠️ Importante: el endpoint correcto del helper es GET /api/sessions?start=...
+        // No /api/sessions/week (ese endpoint existe pero NO lo usa el helper).
         const res = await getSessionsWeek({ start: toYYYYMMDDUTC(monday) });
         setDaySessions(res.days?.[ymd] || []);
       } catch (e) {
@@ -107,16 +139,47 @@ export default function MedicoSessionsByDayPage() {
     return { lugar, hora, video, name };
   }, [daySessions, turn]);
 
+  const dayFlag = useMemo<DayFlag>(() => {
+    const f = daySessions.find((s) => isDayFlag(s, turn));
+    return parseDayFlagTitle(f?.title);
+  }, [daySessions, turn]);
+
+  const micro = useMemo<MicroKey>(() => {
+    const m = daySessions.find((s) => isMicro(s, turn));
+    return parseMicroTitle(m?.title);
+  }, [daySessions, turn]);
+
   const header = useMemo(
     () => ({
       name: meta.name,
       place: meta.lugar,
       time: meta.hora,
       videoUrl: meta.video.url || null,
-      microLabel: null,
+      microLabel: micro || null,
     }),
-    [meta]
+    [meta, micro]
   );
+
+  // Si es día libre, replicamos el comportamiento de CT (vista vacía de bloques).
+  if (dayFlag.kind === "LIBRE") {
+    return (
+      <RoleGate allow={["MEDICO", "ADMIN"]} requireTeam>
+        <main className="min-h-[70vh] px-6 py-10 space-y-4">
+          <BackToMedico />
+          <div className="rounded-2xl border bg-white shadow-sm overflow-hidden">
+            <SessionDayView
+              date={ymd}
+              turn={turn}
+              header={header}
+              blocks={[]}
+              mode="player"
+              onEditBlock={undefined}
+            />
+          </div>
+        </main>
+      </RoleGate>
+    );
+  }
 
   const blocks: SessionDayBlock[] = useMemo(
     () =>
