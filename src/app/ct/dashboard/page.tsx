@@ -157,9 +157,13 @@ const CELL_GAP = 6;
 ========================================================= */
 type DashboardSemanaInnerProps = {
   showHeader?: boolean;
+  baseSessionUrl?: string;
 };
 
-function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) {
+function DashboardSemanaInner({
+  showHeader = true,
+  baseSessionUrl = "/ct/sessions/by-day",
+}: DashboardSemanaInnerProps) {
   const qs = useSearchParams();
   const hideHeaderParam = qs.get("hideHeader") === "1";
   const hideHeader = hideHeaderParam || !showHeader;
@@ -510,7 +514,9 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
                 {hasAnyContent && (
                   <div className="mt-2 flex justify-center">
                     <a
-                      href={`/ct/sessions/by-day/${ymd}/${activeTurn}?focus=${encodeURIComponent(focusRow)}`}
+                      href={`${baseSessionUrl}/${ymd}/${activeTurn}?focus=${encodeURIComponent(
+                        focusRow
+                      )}`}
                       className="inline-flex items-center px-2 py-0.5 rounded-full border border-emerald-600 text-[10px] font-medium text-emerald-700 hover:bg-emerald-50 bg-white/80"
                     >
                       Ver sesión
@@ -719,7 +725,9 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
                           {showVerSesion && (
                             <div className="mt-1 flex justify-end">
                               <a
-                                href={`/ct/sessions/by-day/${ymd}/${activeTurn}?focus=${encodeURIComponent(focusRow)}`}
+                                href={`${baseSessionUrl}/${ymd}/${activeTurn}?focus=${encodeURIComponent(
+                                  focusRow
+                                )}`}
                                 className="inline-flex items-center px-2 py-0.5 rounded-full border border-emerald-600 text-[10px] font-medium text-emerald-700 hover:bg-emerald-50 bg-white/80"
                               >
                                 Ver sesión
@@ -775,7 +783,7 @@ function DashboardSemanaInner({ showHeader = true }: DashboardSemanaInnerProps) 
    Wrapper
 ========================================================= */
 export function DashboardPlanGridReadOnly() {
-  return <DashboardSemanaInner showHeader={false} />;
+  return <DashboardSemanaInner showHeader={false} baseSessionUrl="/medico/sesiones/by-day" />;
 }
 
 export default function DashboardSemanaPage() {

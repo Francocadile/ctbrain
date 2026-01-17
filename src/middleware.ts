@@ -144,6 +144,7 @@ export async function middleware(req: NextRequest) {
 
   // Guard CT
   if (needsCT) {
+    // Permitir lectura de sesiones a MEDICO: listado, week y detalle (/api/sessions/[id]) SOLO por GET.
     const isSessionsGet = isSessionsApi && req.method === "GET";
     const isDayTypesGet = (isDayTypesApi || isDayTypeAssignmentsApi) && req.method === "GET";
     const allowed =
