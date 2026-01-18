@@ -86,41 +86,14 @@ export default function MedicoSessionsByDayPage() {
     async function load() {
       if (!ymd) return;
       try {
-        const date = new Date(`${ymd}T00:00:00.000Z`);
+        const [y, m, d] = ymd.split("-").map(Number);
+        // Semana/calendario: usar fecha local para evitar desfasajes por UTC.
+        const date = new Date(y, (m || 1) - 1, d || 1);
         const monday = getMonday(date);
         const start = toYYYYMMDDUTC(monday);
         // ⚠️ Importante: el endpoint correcto del helper es GET /api/sessions?start=...
         // No /api/sessions/week (ese endpoint existe pero NO lo usa el helper).
         const res = await getSessionsWeek({ start });
-
-        // ===== DEBUG TEMP (diagnóstico médico by-day) =====
-        // Para reproducir: /medico/sesiones/by-day/2026-01-16/morning
-        try {
-          const keys = Object.keys(res.days || {});
-          const list = (res.days as any)?.[ymd] as SessionDTO[] | undefined;
-          console.log("[medico by-day] ymd=", ymd, "turn=", turn);
-          console.log("[medico by-day] start (monday UTC)=", start);
-          console.log("[medico by-day] week.days keys=", keys);
-          console.log("[medico by-day] week.days[ymd].length=", list?.length ?? 0);
-          const first = list?.[0];
-          console.log(
-            "[medico by-day] first session id=",
-            first?.id || "(none)",
-            "description.slice(0,200)=",
-            (first?.description || "").slice(0, 200)
-          );
-
-          const re = new RegExp(`^\\[GRID:${turn}:[^\\]]+\\]`, "gm");
-          const gridLines = (list || []).reduce((acc, s) => {
-            const txt = s.description || "";
-            const m = txt.match(re);
-            return acc + (m?.length || 0);
-          }, 0);
-          console.log("[medico by-day] GRID markers count for turn=", turn, "=>", gridLines);
-        } catch (e) {
-          console.log("[medico by-day] debug failed", e);
-        }
-        // ===== END DEBUG =====
 
         setDaySessions((res.days as any)?.[ymd] || []);
       } catch (e) {
