@@ -1,0 +1,151 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+type NextRivalMeta =
+  | { exists: false }
+  | { exists: true; fileName: string; uploadedAt: string };
+
+const MAX_PDF_BYTES = 20 * 1024 * 1024;
+
+export default function CtProximoRivalPage() {
+  const [meta, setMeta] = useState<NextRivalMeta | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [file, setFile] = useState<File | null>(null);
+
+  const fileLabel = useMemo(() => {
+    if (!file) return "Ningún archivo seleccionado";
+    const mb = (file.size / (1024 * 1024)).toFixed(1);
+    return `${file.name} (${mb} MB)`;
+  }, [file]);
+
+  async function loadMeta() {
+    try {
+      setError(null);
+      const res = await fetch("/api/ct/next-rival", { cache: "no-store" });
+      if (!res.ok) throw new Error(await res.text());
+      setMeta((await res.json()) as NextRivalMeta);
+    } catch (e: any) {
+      setError(e?.message || "No se pudo cargar el estado actual");
+    }
+  }
+
+  useEffect(() => {
+    loadMeta();
+  }, []);
+
+  function validateSelectedFile(f: File): string | null {
+    const name = (f.name || "").toLowerCase();
+    const type = (f.type || "").toLowerCase();
+    const isPdf = type === "application/pdf" || name.endsWith(".pdf");
+    if (!isPdf) return "Solo se permite PDF";
+    if (f.size <= 0) return "Archivo vacío";
+    if (f.size > MAX_PDF_BYTES) return "El archivo supera el límite de 20MB";
+    return null;
+  }
+
+  async function upload() {
+    if (!file) {
+      setError("Seleccioná un PDF");
+      return;
+    }
+
+    const v = validateSelectedFile(file);
+    if (v) {
+      setError(v);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const fd = new FormData();
+      fd.set("file", file);
+
+      // CSRF pattern del repo: assertCsrf acepta X-CT-CSRF: "1" o "ctb".
+      const res = await fetch("/api/ct/next-rival", {
+        method: "POST",
+        headers: {
+          "X-CT-CSRF": "1",
+        },
+        body: fd,
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || res.statusText);
+      }
+
+      alert("PDF subido correctamente");
+      setFile(null);
+      await loadMeta();
+    } catch (e: any) {
+      setError(e?.message || "No se pudo subir el PDF");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main className="min-h-screen px-4 py-4 md:px-6 md:py-8">
+      <div className="max-w-2xl mx-auto space-y-4">
+        <header className="space-y-1">
+          <h1 className="text-xl font-semibold text-gray-900">Próximo rival (PDF)</h1>
+          <p className="text-sm text-gray-600">
+            Subí o reemplazá el informe PDF del próximo rival. Se mantiene un solo archivo activo por equipo.
+          </p>
+        </header>
+
+        <section className="rounded-2xl border bg-white p-4 md:p-6 shadow-sm space-y-3">
+          <h2 className="text-sm font-semibold text-gray-800">Estado actual</h2>
+
+          {meta === null ? (
+            <p className="text-sm text-gray-500">Cargando…</p>
+          ) : meta.exists ? (
+            <div className="text-sm text-gray-700 space-y-1">
+              <div>
+                <span className="text-gray-500">Archivo:</span> {meta.fileName}
+              </div>
+              <div>
+                <span className="text-gray-500">Subido:</span> {meta.uploadedAt.slice(0, 10)}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">No hay PDF cargado todavía.</p>
+          )}
+        </section>
+
+        <section className="rounded-2xl border bg-white p-4 md:p-6 shadow-sm space-y-3">
+          <h2 className="text-sm font-semibold text-gray-800">Subir / Reemplazar</h2>
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+
+          <div className="space-y-2">
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={(e) => {
+                const f = e.target.files?.[0] || null;
+                setError(null);
+                setFile(f);
+              }}
+            />
+            <div className="text-xs text-gray-500">{fileLabel}</div>
+          </div>
+
+          <button
+            type="button"
+            onClick={upload}
+            disabled={loading}
+            className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {loading ? "Subiendo…" : "Subir / Reemplazar"}
+          </button>
+        </section>
+      </div>
+    </main>
+  );
+}
