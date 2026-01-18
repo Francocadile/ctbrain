@@ -89,6 +89,38 @@ export default function CtProximoRivalPage() {
     }
   }
 
+  async function removePdf() {
+    if (!meta || !meta.exists) return;
+
+    const ok = confirm("¿Eliminar el informe PDF del próximo rival?");
+    if (!ok) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const res = await fetch("/api/ct/next-rival", {
+        method: "DELETE",
+        headers: {
+          "X-CT-CSRF": "1",
+        },
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || res.statusText);
+      }
+
+      alert("PDF eliminado");
+      setFile(null);
+      await loadMeta();
+    } catch (e: any) {
+      setError(e?.message || "No se pudo eliminar el PDF");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <main className="min-h-screen px-4 py-4 md:px-6 md:py-8">
       <div className="max-w-2xl mx-auto space-y-4">
@@ -111,6 +143,17 @@ export default function CtProximoRivalPage() {
               </div>
               <div>
                 <span className="text-gray-500">Subido:</span> {meta.uploadedAt.slice(0, 10)}
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={removePdf}
+                  disabled={loading}
+                  className="inline-flex items-center rounded-md border px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Eliminar
+                </button>
               </div>
             </div>
           ) : (

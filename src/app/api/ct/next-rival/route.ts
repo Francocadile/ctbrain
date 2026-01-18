@@ -142,3 +142,53 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error?.message || "Error" }, { status: 500 });
   }
 }
+
+// DELETE /api/ct/next-rival
+export async function DELETE(req: Request) {
+  try {
+    assertCsrf(req);
+    const { prisma, team } = await dbScope({ req, roles: [Role.CT, Role.ADMIN] });
+
+    const row = await prisma.nextRivalFile.findUnique({
+      where: { teamId: team.id },
+      select: { fileUrl: true },
+    });
+
+    // Idempotente: si no existe, respondemos ok igualmente.
+    if (!row) return NextResponse.json({ ok: true, deleted: false });
+
+    const token = process.env.BLOB_READ_WRITE_TOKEN;
+    if (!token) {
+      return NextResponse.json(
+        {
+          error:
+            "Blob storage no configurado: falta la env BLOB_READ_WRITE_TOKEN en el entorno de despliegue.",
+        },
+        { status: 500 },
+      );
+    }
+
+    // Best-effort delete del blob (no bloquea el flujo si falla).
+    try {
+      if (row.fileUrl) {
+        await del(row.fileUrl, { token });
+      }
+    } catch (e) {
+      console.warn("ct next-rival: failed to delete blob", {
+        teamId: team.id,
+        url: row.fileUrl,
+        error: (e as any)?.message || String(e),
+      });
+    }
+
+    await prisma.nextRivalFile.delete({ where: { teamId: team.id } });
+
+    return NextResponse.json({ ok: true, deleted: true });
+  } catch (error: any) {
+    const csrf = handleCsrfError(error);
+    if (csrf) return csrf;
+    if (error instanceof Response) return error;
+    console.error("ct next-rival DELETE error", error);
+    return NextResponse.json({ error: error?.message || "Error" }, { status: 500 });
+  }
+}
