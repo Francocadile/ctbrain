@@ -155,8 +155,11 @@ export default function CtLayoutClient({
               </NavItem>
             </li>
             <li>
-              <NavItem href={"/ct/rival" as Route} active={isActive("/ct/rival")}>
-                Rival
+              <NavItem
+                href={"/ct/proximo-rival" as Route}
+                active={isActive("/ct/proximo-rival")}
+              >
+                Próximo rival
               </NavItem>
             </li>
           </ul>
