@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { del, put } from "@vercel/blob";
+import { del } from "@vercel/blob";
 import { Role } from "@prisma/client";
 import { dbScope } from "@/lib/dbScope";
 import { assertCsrf, handleCsrfError } from "@/lib/security/csrf";
@@ -8,17 +8,9 @@ export const dynamic = "force-dynamic";
 
 const MAX_PDF_BYTES = 20 * 1024 * 1024; // 20MB
 
-function safeFileName(name: string) {
-  return name
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-zA-Z0-9._-]/g, "_")
-    .slice(0, 120);
-}
-
-function isPdfFile(file: File) {
-  const name = (file.name || "").toLowerCase();
-  const type = (file.type || "").toLowerCase();
+function isPdfMeta(fileName: string, contentType?: string | null) {
+  const name = (fileName || "").toLowerCase();
+  const type = (contentType || "").toLowerCase();
   return type === "application/pdf" || name.endsWith(".pdf");
 }
 
@@ -45,28 +37,44 @@ export async function GET(req: Request) {
   }
 }
 
-// POST /api/ct/next-rival (multipart/form-data)
+// POST /api/ct/next-rival (JSON metadata)
 export async function POST(req: Request) {
   try {
     assertCsrf(req);
     const { prisma, team } = await dbScope({ req, roles: [Role.CT, Role.ADMIN] });
 
-    const form = await req.formData();
-    const file = form.get("file");
-    if (!file || !(file instanceof File)) {
-      return NextResponse.json({ error: "Falta archivo" }, { status: 400 });
+    const json = (await req.json().catch(() => null)) as any;
+    const fileUrl = typeof json?.fileUrl === "string" ? json.fileUrl : "";
+    const pathname = typeof json?.pathname === "string" ? json.pathname : "";
+    const fileName = typeof json?.fileName === "string" ? json.fileName : "";
+    const contentType = typeof json?.contentType === "string" ? json.contentType : "";
+    const size = typeof json?.size === "number" ? json.size : 0;
+
+    if (!fileUrl || !pathname || !fileName) {
+      return NextResponse.json(
+        { error: "Faltan datos del archivo (fileUrl/pathname/fileName)" },
+        { status: 400 },
+      );
     }
 
-    if (!isPdfFile(file)) {
+    if (!isPdfMeta(fileName, contentType)) {
       return NextResponse.json({ error: "Solo se permite PDF" }, { status: 400 });
     }
-    if (file.size <= 0) {
-      return NextResponse.json({ error: "Archivo vacío" }, { status: 400 });
+    if (!Number.isFinite(size) || size <= 0) {
+      return NextResponse.json({ error: "Archivo inválido" }, { status: 400 });
     }
-    if (file.size > MAX_PDF_BYTES) {
+    if (size > MAX_PDF_BYTES) {
       return NextResponse.json(
         { error: "El archivo supera el límite de 20MB" },
         { status: 413 },
+      );
+    }
+
+    const expectedPrefix = `openbase/${team.id}/next-rival/`;
+    if (!pathname.startsWith(expectedPrefix)) {
+      return NextResponse.json(
+        { error: "Path inválido" },
+        { status: 400 },
       );
     }
 
@@ -86,31 +94,18 @@ export async function POST(req: Request) {
       select: { fileUrl: true },
     });
 
-    const originalName = file.name || "next-rival.pdf";
-    const name = safeFileName(originalName);
-    const ts = new Date().toISOString().replace(/[:.]/g, "-");
-    const path = `openbase/${team.id}/next-rival/${ts}-${name}`;
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-
-    const blob = await put(path, buffer, {
-      access: "public",
-      contentType: "application/pdf",
-      token,
-    });
-
     const uploadedAt = new Date();
     const upserted = await prisma.nextRivalFile.upsert({
       where: { teamId: team.id },
       create: {
         teamId: team.id,
-        fileUrl: blob.url,
-        fileName: originalName,
+        fileUrl,
+        fileName,
         uploadedAt,
       },
       update: {
-        fileUrl: blob.url,
-        fileName: originalName,
+        fileUrl,
+        fileName,
         uploadedAt,
       },
       select: { fileName: true, uploadedAt: true, fileUrl: true },

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { upload } from "@vercel/blob/client";
 
 type NextRivalMeta =
   | { exists: false }
@@ -46,7 +47,7 @@ export default function CtProximoRivalPage() {
     return null;
   }
 
-  async function upload() {
+  async function uploadPdf() {
     if (!file) {
       setError("Seleccioná un PDF");
       return;
@@ -62,16 +63,34 @@ export default function CtProximoRivalPage() {
       setLoading(true);
       setError(null);
 
-      const fd = new FormData();
-      fd.set("file", file);
+      // 1) Upload directo a Vercel Blob (sin pasar el archivo por la Function)
+      const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  // NOTE: el pathname debe respetar la regla del server: openbase/{teamId}/next-rival/
+  // El teamId se infiere desde la session en el endpoint de handleUpload.
+  const pathname = `openbase/next-rival/${ts}-${file.name}`;
 
+  const blob = await upload(pathname, file, {
+        access: "public",
+        contentType: "application/pdf",
+        // Este endpoint implementa el flow handleUpload (genera client token y recibe callback)
+        handleUploadUrl: "/api/ct/next-rival/client-upload",
+      });
+
+      // 2) Confirmar/persistir metadata en DB (1 solo activo por equipo)
       // CSRF pattern del repo: assertCsrf acepta X-CT-CSRF: "1" o "ctb".
       const res = await fetch("/api/ct/next-rival", {
         method: "POST",
         headers: {
           "X-CT-CSRF": "1",
+          "Content-Type": "application/json",
         },
-        body: fd,
+        body: JSON.stringify({
+          fileUrl: blob.url,
+          pathname: blob.pathname,
+          fileName: file.name,
+          contentType: blob.contentType ?? "application/pdf",
+          size: file.size,
+        }),
       });
 
       if (!res.ok) {
@@ -181,7 +200,7 @@ export default function CtProximoRivalPage() {
 
           <button
             type="button"
-            onClick={upload}
+            onClick={uploadPdf}
             disabled={loading}
             className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
