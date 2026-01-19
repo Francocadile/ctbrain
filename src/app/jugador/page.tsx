@@ -687,6 +687,39 @@ function PlayerHomeTodayStatus({
 }
 
 function PlayerHomeRoutines({ routines }: { routines: any[] }) {
+  function RoutineCard({
+    routine,
+    label,
+  }: {
+    routine: any;
+    label?: string;
+  }) {
+    return (
+      <div className="rounded-xl border bg-gray-50 p-3 space-y-2">
+        {label ? (
+          <p className="text-[11px] font-semibold text-gray-500 mb-1">{label}</p>
+        ) : null}
+        <h3 className="text-sm font-semibold text-gray-900 truncate">
+          {routine.title}
+        </h3>
+        {routine.goal ? (
+          <p className="text-xs text-gray-600 line-clamp-2">{routine.goal}</p>
+        ) : null}
+        <div className="flex items-center justify-between mt-2 gap-2">
+          <p className="text-[11px] text-gray-500">
+            Creada el {routine.createdAt.toLocaleDateString()}
+          </p>
+          <Link
+            href={`/jugador/rutinas/${routine.id}`}
+            className="inline-flex items-center justify-center rounded-md bg-black px-3 py-1.5 text-[11px] font-medium text-white hover:bg-gray-800"
+          >
+            Ver rutina
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   if (!routines || routines.length === 0) {
     return (
       <section className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
@@ -729,53 +762,18 @@ function PlayerHomeRoutines({ routines }: { routines: any[] }) {
       </p>
 
       {/* Rutina destacada (última creada / de hoy en el futuro) */}
-      <div className="rounded-xl border bg-gray-50 p-3 space-y-2">
-        <p className="text-[11px] font-semibold text-gray-500 mb-1">
-          Rutina asignada por tu CT
-        </p>
-        <h3 className="text-sm font-semibold text-gray-900 truncate">{first.title}</h3>
-        {first.goal && (
-          <p className="text-xs text-gray-600 line-clamp-2">{first.goal}</p>
-        )}
-        <div className="flex items-center justify-between mt-2 gap-2">
-          <p className="text-[11px] text-gray-500">
-            Creada el {first.createdAt.toLocaleDateString()}
-          </p>
-          <Link
-            href={`/jugador/rutinas/${first.id}`}
-            className="inline-flex items-center justify-center rounded-md bg-black px-3 py-1.5 text-[11px] font-medium text-white hover:bg-gray-800"
-          >
-            Ver rutina
-          </Link>
-        </div>
-      </div>
+      <RoutineCard routine={first} label="Rutina asignada por tu CT" />
 
       {rest.length > 0 && (
         <div className="space-y-1 pt-1 border-t mt-2">
           <p className="text-[11px] font-semibold text-gray-500 mb-1">
             Otras rutinas disponibles
           </p>
-          <ul className="space-y-1 text-xs">
+          <div className="space-y-3">
             {rest.map((rt) => (
-              <li
-                key={rt.id}
-                className="flex items-center justify-between gap-2 rounded-md border px-2 py-1 bg-gray-50"
-              >
-                <div className="min-w-0">
-                  <p className="font-medium text-gray-800 truncate">{rt.title}</p>
-                  {rt.goal && (
-                    <p className="text-[11px] text-gray-500 truncate">{rt.goal}</p>
-                  )}
-                </div>
-                <Link
-                  href={`/jugador/rutinas/${rt.id}`}
-                  className="text-[11px] text-blue-600 hover:underline shrink-0"
-                >
-                  Ver rutina
-                </Link>
-              </li>
+              <RoutineCard key={rt.id} routine={rt} />
             ))}
-          </ul>
+          </div>
         </div>
       )}
     </section>
