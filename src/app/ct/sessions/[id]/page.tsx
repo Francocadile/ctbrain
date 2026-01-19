@@ -446,7 +446,10 @@ export default function SesionDetailEditorPage() {
   async function openLibraryPicker(arg: number | ExerciseDTO) {
     // Si me pasan un ejercicio de biblioteca, aplico y cierro el modal
     if (typeof arg !== "number") {
-      applyLibraryExercise(arg);
+      // En el modal, el click pasa el objeto ExerciseDTO; usamos el índice ya seleccionado.
+      // (En embed, este handler se ejecuta igual; no queremos depender de pasar idx otra vez.)
+      if (pickerIndex === null) return;
+      applyLibraryExercise(arg, pickerIndex);
       return;
     }
 
@@ -470,11 +473,10 @@ export default function SesionDetailEditorPage() {
     }
   }
 
-  function applyLibraryExercise(exLib: ExerciseDTO) {
-    if (pickerIndex === null) return;
+  function applyLibraryExercise(exLib: ExerciseDTO, index: number) {
 
     // UX segura: si el ejercicio ya tiene contenido, confirmamos antes de reemplazar.
-    const current = exercises[pickerIndex];
+  const current = exercises[index];
     if (current && !isExerciseEffectivelyEmpty(current)) {
       const ok = window.confirm(
         "Esto va a reemplazar el contenido del ejercicio actual. ¿Continuar?",
@@ -511,9 +513,7 @@ export default function SesionDetailEditorPage() {
       diagram: (metaWithDiagram as any).diagram ?? undefined,
     };
 
-    setExercises((prev) =>
-      prev.map((e, idx) => (idx === pickerIndex ? { ...e, ...patched } : e))
-    );
+    setExercises((prev) => prev.map((e, idx) => (idx === index ? { ...e, ...patched } : e)));
 
     setPickerIndex(null);
     setPickerSearch("");
