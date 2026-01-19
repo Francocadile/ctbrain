@@ -306,6 +306,22 @@ export default function SesionDetailEditorPage() {
     ]);
   }
 
+  function isExerciseEffectivelyEmpty(ex: Exercise): boolean {
+    const hasExerciseFields =
+      !!ex.title?.trim() ||
+      !!ex.kind?.trim() ||
+      !!ex.description?.trim() ||
+      !!ex.space?.trim() ||
+      !!ex.players?.trim() ||
+      !!ex.duration?.trim() ||
+      !!ex.imageUrl?.trim() ||
+      !!ex.videoUrl?.trim() ||
+      !!(ex as any)?.material?.trim();
+    const hasDiagram = !!ex.diagram;
+    const hasRoutine = !!ex.routineId?.trim();
+    return !hasExerciseFields && !hasDiagram && !hasRoutine;
+  }
+
   function removeExercise(idx: number) {
     if (isViewMode) return;
     setExercises((prev) => prev.filter((_, i) => i !== idx));
@@ -457,6 +473,15 @@ export default function SesionDetailEditorPage() {
   function applyLibraryExercise(exLib: ExerciseDTO) {
     if (pickerIndex === null) return;
 
+    // UX segura: si el ejercicio ya tiene contenido, confirmamos antes de reemplazar.
+    const current = exercises[pickerIndex];
+    if (current && !isExerciseEffectivelyEmpty(current)) {
+      const ok = window.confirm(
+        "Esto va a reemplazar el contenido del ejercicio actual. ¿Continuar?",
+      );
+      if (!ok) return;
+    }
+
     const meta = exLib.sessionMeta || {};
 
     const rawPlayers = (meta as any).players ?? "";
@@ -478,7 +503,7 @@ export default function SesionDetailEditorPage() {
       players,
       duration: (meta as any).duration || "",
       description: (meta as any).description || "",
-      imageUrl: (meta as any).imageUrl || exLib.videoUrl || "",
+      imageUrl: (meta as any).imageUrl || "",
       routineId: (meta as any).routineId || "",
       routineName: (meta as any).routineName || "",
       isRoutineOnly: false,
