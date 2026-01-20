@@ -219,43 +219,71 @@ export default async function JugadorHomePage() {
 
   const todayBase = getTodayInBuenosAires();
 
-  const [todaySession] = await Promise.all([
-    (prisma as any).session.findFirst({
-      where: {
-        teamId: player.teamId,
-        date: {
-          gte: startOfDay,
-          lt: endOfDay,
-        },
+  // Antes: traíamos 1 sola sesión del día (la primera por fecha), lo que hacía que el Jugador
+  // solo viera un turno. Ahora traemos las sesiones del día y elegimos 1 por turno.
+  const todaySessions = (await (prisma as any).session.findMany({
+    where: {
+      teamId: player!.teamId,
+      date: {
+        gte: startOfDay,
+        lt: endOfDay,
       },
-      orderBy: { date: "asc" },
-    }) as Promise<Session | null>,
-  ]);
+    },
+    orderBy: { date: "asc" },
+  })) as Session[];
 
-  const marker = todaySession ? parseMarker(todaySession.description as string | undefined) : null;
-  const todayYmd = marker?.ymd || todayYmdFromTz;
+  const sessionsByTurn = todaySessions.reduce<{
+    morning: Session[];
+    afternoon: Session[];
+  }>(
+    (acc, s) => {
+      const marker = parseMarker(s.description as string | undefined);
+      if (marker.turn === "afternoon") acc.afternoon.push(s);
+      else acc.morning.push(s);
+      return acc;
+    },
+    { morning: [], afternoon: [] },
+  );
+
+  const todaySessionMorning: Session | null = sessionsByTurn.morning[0] ?? null;
+  const todaySessionAfternoon: Session | null = sessionsByTurn.afternoon[0] ?? null;
+
+  // Mantenemos el comportamiento actual: si hay morning, ese es "el" turno principal.
+  // Si no hay morning pero sí afternoon, mostramos afternoon como único.
+  const primarySession = todaySessionMorning ?? todaySessionAfternoon;
+  const primaryMarker = primarySession
+    ? parseMarker(primarySession.description as string | undefined)
+    : null;
+
+  const todayYmd = primaryMarker?.ymd || todayYmdFromTz;
   const todayTurn: "morning" | "afternoon" =
-    marker?.turn === "morning" || marker?.turn === "afternoon" ? marker.turn : "morning";
+    primaryMarker?.turn === "morning" || primaryMarker?.turn === "afternoon"
+      ? primaryMarker.turn
+      : "morning";
 
-  let sessionName: string | null = null;
-  if (todaySession) {
-    const nameSession = await (prisma as any).session.findFirst({
+  async function getSessionNameForTurn(turn: "morning" | "afternoon") {
+    const nameSession = (await (prisma as any).session.findFirst({
       where: {
-        teamId: player.teamId,
+        teamId: player!.teamId,
         date: {
           gte: todayBase.startOfDay,
           lt: todayBase.endOfDay,
         },
         description: {
-          startsWith: `[GRID:${todayTurn}:NOMBRE SESIÓN]`,
+          startsWith: `[GRID:${turn}:NOMBRE SESIÓN]`,
         },
       },
       orderBy: { date: "asc" },
-    }) as Session | null;
-    sessionName = nameSession?.title ? nameSession.title.trim() : null;
+    })) as Session | null;
+    return nameSession?.title ? nameSession.title.trim() : null;
   }
 
-  const hasTodaySession = !!todaySession;
+  const [sessionNameMorning, sessionNameAfternoon] = await Promise.all([
+    todaySessionMorning ? getSessionNameForTurn("morning") : Promise.resolve(null),
+    todaySessionAfternoon ? getSessionNameForTurn("afternoon") : Promise.resolve(null),
+  ]);
+
+  const hasTodaySession = !!primarySession;
   const hasRoutine = Array.isArray(routines) && routines.length > 0;
 
   return (
@@ -270,12 +298,35 @@ export default async function JugadorHomePage() {
             hasRoutine={hasRoutine}
           />
 
-          <PlayerHomeTodaySessionCard
-            todaySession={todaySession}
-            todayYmd={todayYmd}
-            todayTurn={todayTurn}
-            sessionName={sessionName}
-          />
+          {/* Sesión de la mañana (igual que hoy) */}
+          {todaySessionMorning ? (
+            <PlayerHomeTodaySessionCard
+              todaySession={todaySessionMorning}
+              todayYmd={todayYmd}
+              todayTurn="morning"
+              sessionName={sessionNameMorning}
+              labelOverride={todaySessionAfternoon ? "Sesión (Mañana)" : null}
+            />
+          ) : null}
+
+          {/* Sesión de la tarde (solo si existe) */}
+          {todaySessionAfternoon ? (
+            <PlayerHomeTodaySessionCard
+              todaySession={todaySessionAfternoon}
+              todayYmd={todayYmd}
+              todayTurn="afternoon"
+              sessionName={sessionNameAfternoon}
+              labelOverride={todaySessionMorning ? "Sesión (Tarde)" : null}
+            />
+          ) : !todaySessionMorning ? (
+            <PlayerHomeTodaySessionCard
+              todaySession={null}
+              todayYmd={todayYmd}
+              todayTurn={todayTurn}
+              sessionName={null}
+              labelOverride={null}
+            />
+          ) : null}
 
           <RivalSection />
 
@@ -311,11 +362,13 @@ function PlayerHomeTodaySessionCard({
   todayYmd,
   todayTurn,
   sessionName,
+  labelOverride,
 }: {
   todaySession: Session | null;
   todayYmd: string;
   todayTurn: "morning" | "afternoon";
   sessionName: string | null;
+  labelOverride?: string | null;
 }) {
   if (!todaySession) {
     return (
@@ -336,7 +389,7 @@ function PlayerHomeTodaySessionCard({
     <section className="rounded-2xl border bg-white p-4 shadow-sm space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-          Entrenamiento de hoy
+          {labelOverride || "Entrenamiento de hoy"}
         </h2>
       </div>
 
