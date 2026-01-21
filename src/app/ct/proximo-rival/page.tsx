@@ -63,10 +63,14 @@ export default function CtProximoRivalPage() {
       setLoading(true);
       setError(null);
 
-      // 1) Upload directo a Vercel Blob (sin pasar el archivo por la Function)
-  // Path estable (sin "/" inicial). El teamId lo infiere el server y lo reescribe a
-  // openbase/{teamId}/next-rival/* en el endpoint de handleUpload.
-  const blobPath = `next-rival/current.pdf`;
+  // 1) Upload directo a Vercel Blob (sin pasar el archivo por la Function)
+  // Importante: el backend reescribe a openbase/{teamId}/next-rival/*.
+  // Por eso mantenemos el prefijo openbase/next-rival/ y un sufijo .pdf.
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const blobPath = `openbase/next-rival/${ts}-${file.name}`;
+
+  // TEMP DEBUG: confirmar exactamente qué pathname se manda al SDK
+  console.log("[ct/proximo-rival] upload() pathname:", blobPath);
 
   const blob = await upload(blobPath, file, {
         access: "public",
