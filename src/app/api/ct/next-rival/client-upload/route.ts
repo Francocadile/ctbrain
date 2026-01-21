@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Role } from "@prisma/client";
 import { handleUpload } from "@vercel/blob/client";
 import { dbScope } from "@/lib/dbScope";
-import { assertCsrf, handleCsrfError } from "@/lib/security/csrf";
+import { handleCsrfError } from "@/lib/security/csrf";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +14,6 @@ function json(data: unknown, init?: ResponseInit) {
 
 export async function POST(req: Request) {
   try {
-    assertCsrf(req);
-
     // Asegura auth + team scope + roles (mismo scope que /api/ct/next-rival)
     const { team } = await dbScope({ req, roles: [Role.CT, Role.ADMIN] });
 
@@ -42,7 +40,13 @@ export async function POST(req: Request) {
       onBeforeGenerateToken: async (pathname, clientPayload, multipart) => {
         // payload opcional enviado desde el cliente, por si a futuro necesitamos validación extra
         void clientPayload;
+        // En este flujo solo permitimos PDFs.
+        // Nota: `multipart` en esta API es boolean; el enforcement real lo hace Vercel con allowedContentTypes.
         void multipart;
+
+        if (!pathname.toLowerCase().endsWith(".pdf")) {
+          throw new Error("Solo se permite PDF");
+        }
 
         // Forzamos que el pathname siempre quede dentro de la carpeta del team, para evitar writes arbitrarios.
         // El cliente NO necesita conocer el teamId; aceptamos openbase/next-rival/* y lo reescribimos.
