@@ -66,8 +66,22 @@ export default function CtProximoRivalPage() {
   // 1) Upload directo a Vercel Blob (sin pasar el archivo por la Function)
   // Importante: el backend reescribe a openbase/{teamId}/next-rival/*.
   // Por eso mantenemos el prefijo openbase/next-rival/ y un sufijo .pdf.
-  const ts = new Date().toISOString().replace(/[:.]/g, "-");
-  const blobPath = `openbase/next-rival/${ts}-${file.name}`;
+      const ts = new Date().toISOString().replace(/[:.]/g, "-");
+
+      // Sanitizar filename para path de Vercel Blob:
+      // - lower
+      // - espacios → "-"
+      // - sacar caracteres raros
+      // - asegurar .pdf
+      const safeName = (file.name || "documento.pdf")
+        .toLowerCase()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9._-]/g, "") // deja solo letras/números/._-
+        .replace(/-+/g, "-");
+
+      const ensuredPdf = safeName.endsWith(".pdf") ? safeName : `${safeName}.pdf`;
+
+      const blobPath = `openbase/next-rival/${ts}-${ensuredPdf}`;
 
   // TEMP DEBUG: confirmar exactamente qué pathname se manda al SDK
   console.log("[ct/proximo-rival] upload() pathname:", blobPath);
