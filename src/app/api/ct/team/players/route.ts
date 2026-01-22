@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { dbScope } from "@/lib/dbScope";
+import { Role } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   try {
-    const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN"] as any });
+    const { prisma, team } = await dbScope({ req, roles: [Role.CT, Role.ADMIN] });
 
     const players = await prisma.user.findMany({
       where: {
