@@ -162,6 +162,14 @@ export default function CtLayoutClient({
                 Próximo rival
               </NavItem>
             </li>
+            <li>
+              <NavItem
+                href={"/ct/videos" as Route}
+                active={isActive("/ct/videos")}
+              >
+                Videos
+              </NavItem>
+            </li>
           </ul>
 
           <div className="px-2 py-1 text-[10px] font-semibold text-gray-500">
