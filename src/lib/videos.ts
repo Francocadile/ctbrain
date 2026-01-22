@@ -27,6 +27,10 @@ export const teamVideoSelect = {
   notes: true,
   type: true,
   visibleToDirectivo: true,
+  audienceMode: true,
+  audience: {
+    select: { userId: true },
+  },
   createdAt: true,
 };
 
@@ -38,6 +42,8 @@ export type TeamVideoDTO = {
   notes: string | null;
   type: string;
   visibleToDirectivo: boolean;
+  audienceMode: "ALL" | "SELECTED";
+  selectedUserIds: string[];
   createdAt: Date;
 };
 
@@ -46,20 +52,40 @@ type ListOptions = {
   roles?: Role[];
   take?: number;
   scope?: "ct" | "directivo" | "all";
+  userId?: string;
 };
 
 export async function listTeamVideos(options: ListOptions = {}) {
-  const { team } = await dbScope({ req: options.req, roles: options.roles });
+  const { team, user } = await dbScope({ req: options.req, roles: options.roles });
 
   const where: any = { teamId: team.id };
   if (options.scope === "directivo") {
     where.visibleToDirectivo = true;
   }
 
-  return prisma.teamVideo.findMany({
+  // Jugador: solo videos habilitados (ALL o SELECTED con audiencia explícita).
+  // No afecta CT/ADMIN/DIRECTIVO porque el scope/roles para esos flujos es distinto.
+  const effectiveUserId = options.userId ?? user.id;
+  if ((user.role as any) === Role.JUGADOR) {
+    where.OR = [
+      { audienceMode: "ALL" },
+      { audienceMode: "SELECTED", audience: { some: { userId: effectiveUserId } } },
+    ];
+  }
+
+  const rows = await prisma.teamVideo.findMany({
     where,
     orderBy: { createdAt: "desc" },
     select: teamVideoSelect,
     take: options.take,
+  });
+
+  return rows.map((row: any) => {
+    const selectedUserIds = Array.isArray(row.audience) ? row.audience.map((a: any) => a.userId) : [];
+    const { audience, ...rest } = row;
+    return {
+      ...rest,
+      selectedUserIds,
+    } as TeamVideoDTO;
   });
 }

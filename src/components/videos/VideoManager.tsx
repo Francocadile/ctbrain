@@ -1,8 +1,16 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { TeamVideoDTO } from "@/lib/videos";
 import { VIDEO_TYPE_OPTIONS, getVideoTypeLabel } from "@/lib/videos";
+
+type AudienceMode = "ALL" | "SELECTED";
+
+type TeamPlayerOption = {
+  id: string;
+  name: string | null;
+  email: string;
+};
 
 const shortDateFormatter = new Intl.DateTimeFormat("es-AR", {
   day: "2-digit",
@@ -22,6 +30,9 @@ type FormState = {
   url: string;
   type: string;
   notes: string;
+  visibleToDirectivo: boolean;
+  audienceMode: AudienceMode;
+  selectedUserIds: string[];
 };
 
 const initialForm: FormState = {
@@ -29,6 +40,9 @@ const initialForm: FormState = {
   url: "",
   type: VIDEO_TYPE_OPTIONS[0].value,
   notes: "",
+  visibleToDirectivo: true,
+  audienceMode: "ALL",
+  selectedUserIds: [],
 };
 
 type Props = {
@@ -43,6 +57,30 @@ export default function VideoManager({ initialVideos }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [players, setPlayers] = useState<TeamPlayerOption[]>([]);
+  const [loadingPlayers, setLoadingPlayers] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    async function loadPlayers() {
+      setLoadingPlayers(true);
+      try {
+        const res = await fetch("/api/ct/team/players", { cache: "no-store" });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(payload?.error || "No se pudieron cargar los jugadores");
+        const list = Array.isArray(payload?.data) ? (payload.data as TeamPlayerOption[]) : [];
+        if (active) setPlayers(list);
+      } catch {
+        // Silencioso: si falla, igual se puede publicar ALL.
+      } finally {
+        if (active) setLoadingPlayers(false);
+      }
+    }
+    loadPlayers();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const totalLabel = useMemo(() => {
     const total = videos.length;
@@ -63,7 +101,7 @@ export default function VideoManager({ initialVideos }: Props) {
     try {
       const res = await fetch("/api/videos", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-CT-CSRF": "1" },
         body: JSON.stringify(form),
       });
       const payload = await res.json().catch(() => ({}));
@@ -84,6 +122,80 @@ export default function VideoManager({ initialVideos }: Props) {
     }
   }
 
+  async function handleUpdate() {
+    if (!selected) return;
+    setSubmitting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/videos/${selected.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "X-CT-CSRF": "1" },
+        body: JSON.stringify({
+          ...form,
+          // si es ALL, limpiamos selectedUserIds para que el backend borre audiencia
+          selectedUserIds: form.audienceMode === "SELECTED" ? form.selectedUserIds : [],
+        }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.error || "No se pudo actualizar el video");
+      const updated = payload?.data as TeamVideoDTO | undefined;
+      if (updated) {
+        setVideos((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
+        setSelected(updated);
+        setMessage("Video actualizado");
+      }
+    } catch (err: any) {
+      setError(err?.message || "Error inesperado");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!selected) return;
+    const ok = window.confirm("¿Borrar este video?");
+    if (!ok) return;
+    setSubmitting(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/videos/${selected.id}`, {
+        method: "DELETE",
+        headers: { "X-CT-CSRF": "1" },
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.error || "No se pudo borrar el video");
+      setVideos((prev) => prev.filter((v) => v.id !== selected.id));
+      setSelected((prev) => {
+        if (!prev) return null;
+        if (prev.id !== selected.id) return prev;
+        return null;
+      });
+      setForm(initialForm);
+      setMessage("Video eliminado");
+    } catch (err: any) {
+      setError(err?.message || "Error inesperado");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function startEdit(video: TeamVideoDTO) {
+    setSelected(video);
+    setForm((prev) => ({
+      ...prev,
+      title: video.title,
+      url: video.url,
+      type: video.type,
+      notes: video.notes ?? "",
+      visibleToDirectivo: video.visibleToDirectivo,
+      audienceMode: video.audienceMode,
+      selectedUserIds: video.audienceMode === "ALL" ? [] : video.selectedUserIds,
+    }));
+    setMessage("Editando: ajustá campos y guardá cambios");
+  }
+
   async function refresh() {
     setRefreshing(true);
     setError(null);
@@ -95,7 +207,13 @@ export default function VideoManager({ initialVideos }: Props) {
       }
       const list = Array.isArray(payload?.data) ? (payload.data as TeamVideoDTO[]) : [];
       setVideos(list);
-      setSelected(list[0] ?? null);
+      const first = list[0] ?? null;
+      if (first) {
+        startEdit(first);
+      } else {
+        setSelected(null);
+        setForm(initialForm);
+      }
       setMessage("Listado actualizado");
     } catch (err: any) {
       setError(err?.message || "Error inesperado");
@@ -138,6 +256,56 @@ export default function VideoManager({ initialVideos }: Props) {
               ))}
             </select>
           </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={form.visibleToDirectivo}
+                onChange={(e) => updateField("visibleToDirectivo", e.target.checked)}
+              />
+              Visible para directivos
+            </label>
+            <div>
+              <label className="text-sm font-medium text-gray-700">Audiencia</label>
+              <select
+                value={form.audienceMode}
+                onChange={(e) => updateField("audienceMode", e.target.value as AudienceMode)}
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
+              >
+                <option value="ALL">Todo el plantel</option>
+                <option value="SELECTED">Jugadores seleccionados</option>
+              </select>
+            </div>
+          </div>
+
+          {form.audienceMode === "SELECTED" ? (
+            <div>
+              <label className="text-sm font-medium text-gray-700">Jugadores</label>
+              <select
+                multiple
+                value={form.selectedUserIds}
+                onChange={(e) => {
+                  const ids = Array.from(e.target.selectedOptions).map((o) => o.value);
+                  updateField("selectedUserIds", ids);
+                }}
+                className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
+              >
+                {players.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {(p.name || p.email).trim()}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                {loadingPlayers
+                  ? "Cargando jugadores…"
+                  : players.length
+                    ? "Ctrl/Cmd + click para seleccionar múltiples."
+                    : "No se pudo cargar el listado; podés publicar para todo el plantel."}
+              </p>
+            </div>
+          ) : null}
           <div>
             <label className="text-sm font-medium text-gray-700">URL</label>
             <input
@@ -168,6 +336,25 @@ export default function VideoManager({ initialVideos }: Props) {
           >
             {submitting ? "Guardando..." : "Publicar video"}
           </button>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={handleUpdate}
+              disabled={submitting || !selected}
+              className="inline-flex w-full items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+            >
+              Guardar cambios
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={submitting || !selected}
+              className="inline-flex w-full items-center justify-center rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-60"
+            >
+              Borrar
+            </button>
+          </div>
           <button
             type="button"
             onClick={refresh}
@@ -200,7 +387,7 @@ export default function VideoManager({ initialVideos }: Props) {
                   <button
                     key={video.id}
                     type="button"
-                    onClick={() => setSelected(video)}
+                    onClick={() => startEdit(video)}
                     className={`w-full rounded-xl border px-4 py-3 text-left text-sm transition ${
                       active ? "border-gray-900 bg-gray-900/90 text-white" : "border-gray-200 hover:border-gray-400"
                     }`}

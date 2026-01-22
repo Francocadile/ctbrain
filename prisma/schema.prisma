@@ -170,6 +170,7 @@ model User {
   reports         Report[]
   players         Player[]
   routineShares   RoutinePlayerShare[]
+  videoAudience   TeamVideoAudience[]
   resetTokens     PasswordResetToken[]
   deviceTokens    DeviceToken[]
 }
@@ -670,11 +671,32 @@ model TeamVideo {
   notes              String?
   type               String // "propio" | "rival"
   visibleToDirectivo Boolean  @default(true)
+  audienceMode       TeamVideoAudienceMode @default(ALL)
   createdAt          DateTime @default(now())
 
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  audience TeamVideoAudience[]
 
   @@index([teamId, createdAt])
+}
+
+enum TeamVideoAudienceMode {
+  ALL
+  SELECTED
+}
+
+model TeamVideoAudience {
+  id          String   @id @default(cuid())
+  teamVideoId String
+  userId      String
+  createdAt   DateTime @default(now())
+
+  teamVideo TeamVideo @relation(fields: [teamVideoId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamVideoId, userId])
+  @@index([teamVideoId])
+  @@index([userId])
 }
 
 model DeviceToken {

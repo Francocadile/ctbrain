@@ -23,7 +23,7 @@ export default function LeftMenu() {
         <MenuLink href="/ct/sessions/editor">Plan semanal (Editor)</MenuLink>
         <MenuLink soon>Sesiones y Ejercicios (almacén)</MenuLink>
         <MenuLink href="/ct/proximo-rival">Próximo rival</MenuLink>
-        <MenuLink soon>Videos propios (colectivo / individual)</MenuLink>
+        <MenuLink href="/ct/videos">Videos</MenuLink>
         <MenuLink soon>Calendario general / Competencia</MenuLink>
       </div>
 
