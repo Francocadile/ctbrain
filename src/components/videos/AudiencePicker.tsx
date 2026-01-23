@@ -19,7 +19,10 @@ export default function AudiencePicker({ players, value, onChange, disabled }: P
   const [query, setQuery] = useState("");
   const [criterion, setCriterion] = useState<"name" | "surname">("surname");
 
-  const selectedSet = useMemo(() => new Set(value), [value]);
+  // Defensa: nunca asumimos que el valor viene como array.
+  const ids = Array.isArray(value) ? value : [];
+
+  const selectedSet = useMemo(() => new Set(ids), [ids]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -32,20 +35,20 @@ export default function AudiencePicker({ players, value, onChange, disabled }: P
 
   const selectedNames = useMemo(() => {
     const byId = new Map(players.map((p) => [p.id, p] as const));
-    return value
+    return ids
       .map((id) => byId.get(id))
       .filter(Boolean)
       .map((p) => ((p!.name || p!.email).trim() ? (p!.name || p!.email).trim() : p!.email));
-  }, [players, value]);
+  }, [players, ids]);
 
   function toggle(id: string) {
     if (disabled) return;
-    onChange(selectedSet.has(id) ? value.filter((x) => x !== id) : [...value, id]);
+    onChange(selectedSet.has(id) ? ids.filter((x) => x !== id) : [...ids, id]);
   }
 
   function selectAllFiltered() {
     if (disabled) return;
-    const merged = new Set(value);
+    const merged = new Set(ids);
     filtered.forEach((p) => merged.add(p.id));
     onChange(Array.from(merged));
   }
@@ -84,7 +87,7 @@ export default function AudiencePicker({ players, value, onChange, disabled }: P
         <button
           type="button"
           onClick={selectAllFiltered}
-          disabled={disabled || filtered.length === 0 || value.length >= filtered.length}
+          disabled={disabled || filtered.length === 0 || ids.length >= filtered.length}
           className="inline-flex min-h-10 w-full items-center justify-center whitespace-nowrap rounded-lg border border-gray-300 px-2 text-[11px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
         >
           Seleccionar todos
@@ -92,7 +95,7 @@ export default function AudiencePicker({ players, value, onChange, disabled }: P
         <button
           type="button"
           onClick={clear}
-          disabled={disabled || value.length === 0}
+          disabled={disabled || ids.length === 0}
           className="inline-flex min-h-10 w-full items-center justify-center whitespace-nowrap rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
         >
           Limpiar
@@ -101,7 +104,7 @@ export default function AudiencePicker({ players, value, onChange, disabled }: P
 
       {/* Fila 3: estado */}
       <p className="mt-2 text-xs text-gray-500">
-        {value.length} seleccionados · {filtered.length} visibles
+        {ids.length} seleccionados · {filtered.length} visibles
       </p>
 
       <div className="mt-2 max-h-64 overflow-auto rounded-lg border border-gray-100">

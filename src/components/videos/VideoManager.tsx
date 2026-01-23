@@ -109,6 +109,7 @@ export default function VideoManager({ initialVideos }: Props) {
   const baseline = useMemo(() => {
     if (mode === "create") return initialForm;
     if (!selected) return initialForm;
+    const safeSelectedUserIds = Array.isArray(selected.selectedUserIds) ? selected.selectedUserIds : [];
     return {
       title: selected.title,
       url: selected.url,
@@ -116,7 +117,7 @@ export default function VideoManager({ initialVideos }: Props) {
       notes: selected.notes ?? "",
       visibleToDirectivo: selected.visibleToDirectivo,
       audienceMode: selected.audienceMode,
-      selectedUserIds: selected.audienceMode === "ALL" ? [] : selected.selectedUserIds,
+      selectedUserIds: selected.audienceMode === "ALL" ? [] : safeSelectedUserIds,
     } satisfies FormState;
   }, [mode, selected]);
 
@@ -229,6 +230,7 @@ export default function VideoManager({ initialVideos }: Props) {
   function startEdit(video: TeamVideoDTO) {
     setSelected(video);
     setMode("edit");
+    const safeSelectedUserIds = Array.isArray(video.selectedUserIds) ? video.selectedUserIds : [];
     setForm((prev) => ({
       ...prev,
       title: video.title,
@@ -237,7 +239,7 @@ export default function VideoManager({ initialVideos }: Props) {
       notes: video.notes ?? "",
       visibleToDirectivo: video.visibleToDirectivo,
       audienceMode: video.audienceMode,
-      selectedUserIds: video.audienceMode === "ALL" ? [] : video.selectedUserIds,
+      selectedUserIds: video.audienceMode === "ALL" ? [] : safeSelectedUserIds,
     }));
     setMessage("Editando: ajustá campos y guardá cambios");
   }
