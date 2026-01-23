@@ -164,14 +164,22 @@ export default function VideoManager({ initialVideos }: Props) {
     setError(null);
     setMessage(null);
     try {
+      // TEMP LOG: diagnosticar crash al guardar audiencia
+      const patchPayload = {
+        ...form,
+        // si es ALL, limpiamos selectedUserIds para que el backend borre audiencia
+        selectedUserIds: form.audienceMode === "SELECTED" ? form.selectedUserIds : [],
+      };
+      console.log("[ct/videos] PATCH /api/videos/:id", {
+        id: selected.id,
+        headers: { "Content-Type": "application/json", "X-CT-CSRF": "1" },
+        payload: patchPayload,
+      });
+
       const res = await fetch(`/api/videos/${selected.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", "X-CT-CSRF": "1" },
-        body: JSON.stringify({
-          ...form,
-          // si es ALL, limpiamos selectedUserIds para que el backend borre audiencia
-          selectedUserIds: form.audienceMode === "SELECTED" ? form.selectedUserIds : [],
-        }),
+        body: JSON.stringify(patchPayload),
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload?.error || "No se pudo actualizar el video");

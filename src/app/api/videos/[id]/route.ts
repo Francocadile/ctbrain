@@ -75,12 +75,75 @@ export async function PATCH(req: NextRequest) {
     // Reemplazo de audiencia (si mandan audienceMode o selectedUserIds)
     const shouldTouchAudience = nextAudienceMode !== undefined || selectedUserIds !== undefined;
     if (shouldTouchAudience) {
+      // TEMP LOGS: diagnosticar error runtime al editar audiencia
+      try {
+        console.log("[videos/[id] PATCH] audience replace start", {
+          id,
+          teamId: team.id,
+          nextAudienceMode,
+          audienceModeInput,
+          selectedUserIds,
+          selectedUserIdsType: typeof selectedUserIds,
+          selectedUserIdsIsArray: Array.isArray(selectedUserIds),
+          selectedUserIdsLength: selectedUserIds?.length ?? null,
+          selectedUserIdsHasInvalid: Array.isArray(selectedUserIds)
+            ? selectedUserIds.some((v) => typeof v !== "string" || v.trim().length === 0)
+            : null,
+        });
+
+        if (Array.isArray(selectedUserIds)) {
+          if (selectedUserIds.some((v) => v === undefined || v === null || v === "")) {
+            console.error("[videos/[id] PATCH] INVALID selectedUserIds values", selectedUserIds);
+          }
+
+          // Validar que pertenezcan al team actual (solo diagnóstico)
+          // Nota: multi-tenant => la relación es vía UserTeam
+          const uniqueIds = Array.from(new Set(selectedUserIds));
+          const users = await prisma.user.findMany({
+            where: { id: { in: uniqueIds } },
+            select: { id: true, email: true, name: true, role: true },
+          });
+          const byId = new Map(users.map((u) => [u.id, u] as const));
+          const missing = uniqueIds.filter((uid) => !byId.has(uid));
+          if (missing.length) {
+            console.error("[videos/[id] PATCH] selectedUserIds missing users", { missing });
+          }
+
+          const memberships = await prisma.userTeam.findMany({
+            where: { teamId: team.id, userId: { in: uniqueIds } },
+            select: { userId: true },
+          });
+          const inTeam = new Set(memberships.map((m) => m.userId));
+          const notInTeam = uniqueIds.filter((uid) => !inTeam.has(uid));
+          if (notInTeam.length) {
+            console.error(
+              "[videos/[id] PATCH] selectedUserIds NOT in current team",
+              notInTeam.map((uid) => ({
+                userId: uid,
+                email: byId.get(uid)?.email,
+                role: byId.get(uid)?.role,
+              }))
+            );
+          }
+        }
+      } catch (logErr) {
+        console.error("[videos/[id] PATCH] audience debug logging failed", logErr);
+      }
+
       if (nextAudienceMode === "ALL") {
+        console.log("[videos/[id] PATCH] deleteMany (ALL)", { id, teamVideoId: id });
         await prisma.teamVideoAudience.deleteMany({ where: { teamVideoId: id } });
       } else {
         const dedup = Array.from(new Set(selectedUserIds ?? []));
+        console.log("[videos/[id] PATCH] deleteMany (before createMany)", { id, teamVideoId: id, dedupLength: dedup.length });
         await prisma.teamVideoAudience.deleteMany({ where: { teamVideoId: id } });
         if (dedup.length) {
+          console.log("[videos/[id] PATCH] createMany", {
+            id,
+            teamVideoId: id,
+            dedupLength: dedup.length,
+            sample: dedup.slice(0, 10),
+          });
           await prisma.teamVideoAudience.createMany({
             data: dedup.map((userId) => ({ teamVideoId: id, userId })),
             skipDuplicates: true,
