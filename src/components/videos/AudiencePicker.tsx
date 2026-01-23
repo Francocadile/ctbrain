@@ -57,39 +57,35 @@ export default function AudiencePicker({ players, value, onChange, disabled }: P
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-3">
+      <p className="text-xs text-gray-500">Jugadores</p>
+
       {/* Fila 1: búsqueda */}
-      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr),180px] sm:items-end">
-        <div>
-          <label className="text-sm font-medium text-gray-700">Buscar jugador</label>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Apellido, nombre o email"
-            disabled={disabled}
-            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none disabled:bg-gray-50"
-          />
-        </div>
-        <div>
-          <label className="text-sm font-medium text-gray-700">Criterio</label>
-          <select
-            value={criterion}
-            onChange={(e) => setCriterion(e.target.value as "name" | "surname")}
-            disabled={disabled}
-            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none disabled:bg-gray-50"
-          >
-            <option value="name">Nombre</option>
-            <option value="surname">Apellido</option>
-          </select>
-        </div>
+      <div className="mt-2 grid grid-cols-[1fr_160px] items-end gap-2">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Buscar jugador…"
+          disabled={disabled}
+          className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-gray-900 focus:outline-none disabled:bg-gray-50"
+        />
+        <select
+          value={criterion}
+          onChange={(e) => setCriterion(e.target.value as "name" | "surname")}
+          disabled={disabled}
+          className="h-10 w-full rounded-lg border border-gray-300 px-3 text-sm focus:border-gray-900 focus:outline-none disabled:bg-gray-50"
+        >
+          <option value="surname">Apellido</option>
+          <option value="name">Nombre</option>
+        </select>
       </div>
 
       {/* Fila 2: acciones */}
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      <div className="mt-3 grid grid-cols-2 gap-2">
         <button
           type="button"
           onClick={selectAllFiltered}
           disabled={disabled || filtered.length === 0 || value.length >= filtered.length}
-          className="inline-flex h-10 items-center justify-center rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+          className="inline-flex min-h-10 w-full items-center justify-center whitespace-nowrap rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
         >
           Seleccionar todos
         </button>
@@ -97,14 +93,14 @@ export default function AudiencePicker({ players, value, onChange, disabled }: P
           type="button"
           onClick={clear}
           disabled={disabled || value.length === 0}
-          className="inline-flex h-10 items-center justify-center rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+          className="inline-flex min-h-10 w-full items-center justify-center whitespace-nowrap rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
         >
           Limpiar
         </button>
       </div>
 
       {/* Fila 3: estado */}
-      <p className="mt-3 text-xs text-gray-500">
+      <p className="mt-2 text-xs text-gray-500">
         {value.length} seleccionados · {filtered.length} visibles
       </p>
 
