@@ -17,6 +17,7 @@ type Props = {
 
 export default function AudiencePicker({ players, value, onChange, disabled }: Props) {
   const [query, setQuery] = useState("");
+  const [criterion, setCriterion] = useState<"name" | "surname">("surname");
 
   const selectedSet = useMemo(() => new Set(value), [value]);
 
@@ -56,8 +57,9 @@ export default function AudiencePicker({ players, value, onChange, disabled }: P
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex-1">
+      {/* Fila 1: búsqueda */}
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr),180px] sm:items-end">
+        <div>
           <label className="text-sm font-medium text-gray-700">Buscar jugador</label>
           <input
             value={query}
@@ -67,31 +69,44 @@ export default function AudiencePicker({ players, value, onChange, disabled }: P
             className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none disabled:bg-gray-50"
           />
         </div>
-        <div className="flex gap-2 sm:pt-6">
-          <button
-            type="button"
-            onClick={selectAllFiltered}
-            disabled={disabled || filtered.length === 0}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+        <div>
+          <label className="text-sm font-medium text-gray-700">Criterio</label>
+          <select
+            value={criterion}
+            onChange={(e) => setCriterion(e.target.value as "name" | "surname")}
+            disabled={disabled}
+            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none disabled:bg-gray-50"
           >
-            Seleccionar todos
-          </button>
-          <button
-            type="button"
-            onClick={clear}
-            disabled={disabled || value.length === 0}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-          >
-            Limpiar
-          </button>
+            <option value="name">Nombre</option>
+            <option value="surname">Apellido</option>
+          </select>
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between">
-        <p className="text-xs text-gray-500">
-          {value.length} seleccionados · {filtered.length} visibles
-        </p>
+      {/* Fila 2: acciones */}
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={selectAllFiltered}
+          disabled={disabled || filtered.length === 0 || value.length >= filtered.length}
+          className="inline-flex h-10 items-center justify-center rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+        >
+          Seleccionar todos
+        </button>
+        <button
+          type="button"
+          onClick={clear}
+          disabled={disabled || value.length === 0}
+          className="inline-flex h-10 items-center justify-center rounded-lg border border-gray-300 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+        >
+          Limpiar
+        </button>
       </div>
+
+      {/* Fila 3: estado */}
+      <p className="mt-3 text-xs text-gray-500">
+        {value.length} seleccionados · {filtered.length} visibles
+      </p>
 
       <div className="mt-2 max-h-64 overflow-auto rounded-lg border border-gray-100">
         {filtered.length === 0 ? (
