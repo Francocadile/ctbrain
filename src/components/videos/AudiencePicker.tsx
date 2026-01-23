@@ -85,7 +85,7 @@ export default function AudiencePicker({ players, value, onChange, disabled }: P
           type="button"
           onClick={selectAllFiltered}
           disabled={disabled || filtered.length === 0 || value.length >= filtered.length}
-          className="inline-flex min-h-10 w-full items-center justify-center whitespace-nowrap rounded-lg border border-gray-300 px-3 text-[13px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+          className="inline-flex min-h-10 w-full items-center justify-center whitespace-nowrap rounded-lg border border-gray-300 px-3 text-[12px] font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
         >
           Seleccionar todos
         </button>
