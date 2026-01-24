@@ -68,18 +68,21 @@ export default function CtProximoRivalPage() {
   // Por eso mantenemos el prefijo openbase/next-rival/ y un sufijo .pdf.
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
 
-      // Sanitizar filename para path de Vercel Blob:
+      // Sanitizar filename para path de Blob (slugify estricto):
       // - lower
       // - espacios → "-"
-      // - sacar caracteres raros
+      // - solo [a-z0-9-]
       // - asegurar .pdf
-      const safeName = (file.name || "documento.pdf")
-        .toLowerCase()
+      const base = (file.name || "documento.pdf").toLowerCase();
+      const withoutExt = base.replace(/\.pdf$/i, "");
+      const slug = withoutExt
         .replace(/\s+/g, "-")
-        .replace(/[^a-z0-9._-]/g, "") // deja solo letras/números/._-
-        .replace(/-+/g, "-");
+        .replace(/[^a-z0-9-]/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-+/, "")
+        .replace(/-+$/, "");
 
-      const ensuredPdf = safeName.endsWith(".pdf") ? safeName : `${safeName}.pdf`;
+      const ensuredPdf = `${slug || "documento"}.pdf`;
 
       const blobPath = `openbase/next-rival/${ts}-${ensuredPdf}`;
 
@@ -103,6 +106,9 @@ export default function CtProximoRivalPage() {
         },
         body: JSON.stringify({
           fileUrl: blob.url,
+          // El backend exige openbase/{teamId}/next-rival/*.
+          // El upload() se inicia con openbase/next-rival/* pero el handshake lo reescribe.
+          // Guardamos SIEMPRE el pathname final que devuelve Blob.
           pathname: blob.pathname,
           fileName: file.name,
           contentType: blob.contentType ?? "application/pdf",
