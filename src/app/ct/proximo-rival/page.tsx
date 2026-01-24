@@ -29,37 +29,17 @@ export default function CtProximoRivalPage() {
       setError(null);
       const res = await fetch("/api/ct/next-rival", { cache: "no-store" });
       if (!res.ok) throw new Error(await res.text());
-      setMeta((await res.json()) as NextRivalMeta);
+      const data = (await res.json()) as any;
+      setMeta(data as NextRivalMeta);
+      const id = typeof data?.teamId === "string" ? data.teamId : null;
+      setTeamId(id);
     } catch (e: any) {
       setError(e?.message || "No se pudo cargar el estado actual");
     }
   }
 
-  async function loadTeamId() {
-    try {
-      const res = await fetch("/api/session/team", { cache: "no-store" });
-      if (!res.ok) throw new Error(await res.text());
-      const data = (await res.json()) as any;
-      const id =
-        typeof data?.teamId === "string"
-          ? data.teamId
-          : typeof data?.team?.id === "string"
-            ? data.team.id
-            : typeof data?.id === "string"
-              ? data.id
-              : null;
-
-      if (!id) throw new Error("No se pudo determinar el teamId");
-      setTeamId(id);
-    } catch (e: any) {
-      console.error("[ct/proximo-rival] failed to load teamId", e);
-      setTeamId(null);
-    }
-  }
-
   useEffect(() => {
     loadMeta();
-    loadTeamId();
   }, []);
 
   function validateSelectedFile(f: File): string | null {
@@ -119,7 +99,7 @@ export default function CtProximoRivalPage() {
 
   console.log("[ct/proximo-rival] blobPath", blobPath);
 
-  const blob = await upload(blobPath, file, {
+      const blob = await upload(blobPath, file, {
         access: "public",
         contentType: "application/pdf",
         // Este endpoint implementa el flow handleUpload (genera client token y recibe callback)
@@ -128,6 +108,23 @@ export default function CtProximoRivalPage() {
 
       // TEMP DEBUG (diagnóstico): confirmar el pathname real que se manda al backend
   console.log("[ct/proximo-rival] saving", { fileUrl: blob.url, pathname: blob.pathname });
+
+      // Cinturón de seguridad: si el blob.pathname no es team-scoped, no intentamos guardar y evitamos el 400.
+      const expectedPrefix = `openbase/${teamId}/next-rival/`;
+      if (!blob.pathname?.startsWith(expectedPrefix)) {
+        throw new Error(
+          JSON.stringify(
+            {
+              error: "Path inválido (client-check)",
+              expectedPrefix,
+              receivedPathname: blob.pathname ?? null,
+              teamId,
+            },
+            null,
+            2,
+          ),
+        );
+      }
 
       // 2) Confirmar/persistir metadata en DB (1 solo activo por equipo)
       // CSRF pattern del repo: assertCsrf acepta X-CT-CSRF: "1" o "ctb".

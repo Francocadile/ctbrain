@@ -24,8 +24,9 @@ export async function GET(req: Request) {
       select: { fileName: true, uploadedAt: true },
     });
 
-    if (!row) return NextResponse.json({ exists: false });
+    if (!row) return NextResponse.json({ teamId: team.id, exists: false });
     return NextResponse.json({
+      teamId: team.id,
       exists: true,
       fileName: row.fileName,
       uploadedAt: row.uploadedAt.toISOString(),
