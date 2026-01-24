@@ -4,9 +4,11 @@ import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import RoleGate from "@/components/auth/RoleGate";
+import { listTeamVideos } from "@/lib/videos";
 import { NotificationsSection } from "./NotificationsSection";
 import { RivalSection } from "./RivalSection";
 import type { Session, Team } from "@prisma/client";
+import { Role } from "@prisma/client";
 
 type PlayerWithTeam = {
   id: string;
@@ -286,6 +288,9 @@ export default async function JugadorHomePage() {
   const hasTodaySession = !!primarySession;
   const hasRoutine = Array.isArray(routines) && routines.length > 0;
 
+  const videos = await listTeamVideos({ roles: [Role.JUGADOR] });
+  const videoCount = Array.isArray(videos) ? videos.length : 0;
+
   return (
     <RoleGate allow={["JUGADOR"]}>
       <main className="min-h-screen px-4 py-4 md:px-6 md:py-8">
@@ -330,6 +335,8 @@ export default async function JugadorHomePage() {
 
           <RivalSection />
 
+          <PlayerHomeVideosCard count={videoCount} />
+
           {/* Primero las rutinas visibles para el jugador */}
           <PlayerHomeRoutines routines={routines} />
 
@@ -354,6 +361,39 @@ export default async function JugadorHomePage() {
         </div>
       </main>
     </RoleGate>
+  );
+}
+
+function PlayerHomeVideosCard({ count }: { count: number }) {
+  const hasVideos = count > 0;
+  return (
+    <section className="rounded-2xl border bg-white p-4 shadow-sm space-y-2">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Videos</h2>
+      <p className="text-sm text-gray-600">Material del CT para vos</p>
+
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-gray-800">
+          {hasVideos ? `Tenés ${count} videos` : "No hay videos asignados"}
+        </p>
+
+        {hasVideos ? (
+          <Link
+            href="/jugador/videos"
+            className="text-xs rounded-md border px-3 py-1.5 bg-black text-white hover:bg-gray-800"
+          >
+            Ver videos
+          </Link>
+        ) : (
+          <button
+            type="button"
+            disabled
+            className="text-xs rounded-md border px-3 py-1.5 bg-gray-100 text-gray-400 cursor-not-allowed"
+          >
+            Ver videos
+          </button>
+        )}
+      </div>
+    </section>
   );
 }
 
