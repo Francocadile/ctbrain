@@ -45,7 +45,8 @@ export async function POST(req: Request) {
 
     const json = (await req.json().catch(() => null)) as any;
     const fileUrl = typeof json?.fileUrl === "string" ? json.fileUrl : "";
-    const pathname = typeof json?.pathname === "string" ? json.pathname : "";
+    // DERIVAR PATHNAME REAL DESDE EL BLOB (source of truth)
+    const pathname = fileUrl ? new URL(fileUrl).pathname.replace(/^\/+/, "") : "";
     const fileName = typeof json?.fileName === "string" ? json.fileName : "";
     const contentType = typeof json?.contentType === "string" ? json.contentType : "";
     const size = typeof json?.size === "number" ? json.size : 0;
