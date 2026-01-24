@@ -14,6 +14,8 @@ export default function CtProximoRivalPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [teamId, setTeamId] = useState<string | null>(null);
+
   const [file, setFile] = useState<File | null>(null);
 
   const fileLabel = useMemo(() => {
@@ -33,8 +35,31 @@ export default function CtProximoRivalPage() {
     }
   }
 
+  async function loadTeamId() {
+    try {
+      const res = await fetch("/api/session/team", { cache: "no-store" });
+      if (!res.ok) throw new Error(await res.text());
+      const data = (await res.json()) as any;
+      const id =
+        typeof data?.teamId === "string"
+          ? data.teamId
+          : typeof data?.team?.id === "string"
+            ? data.team.id
+            : typeof data?.id === "string"
+              ? data.id
+              : null;
+
+      if (!id) throw new Error("No se pudo determinar el teamId");
+      setTeamId(id);
+    } catch (e: any) {
+      console.error("[ct/proximo-rival] failed to load teamId", e);
+      setTeamId(null);
+    }
+  }
+
   useEffect(() => {
     loadMeta();
+    loadTeamId();
   }, []);
 
   function validateSelectedFile(f: File): string | null {
@@ -53,6 +78,13 @@ export default function CtProximoRivalPage() {
       return;
     }
 
+    if (!teamId) {
+      setError("No se pudo determinar el equipo. Reintentá recargando la página.");
+      return;
+    }
+
+    console.log("[ct/proximo-rival] teamId", teamId);
+
     const v = validateSelectedFile(file);
     if (v) {
       setError(v);
@@ -63,9 +95,8 @@ export default function CtProximoRivalPage() {
       setLoading(true);
       setError(null);
 
-  // 1) Upload directo a Vercel Blob (sin pasar el archivo por la Function)
-  // Importante: el backend reescribe a openbase/{teamId}/next-rival/*.
-  // Por eso mantenemos el prefijo openbase/next-rival/ y un sufijo .pdf.
+    // 1) Upload directo a Vercel Blob (sin pasar el archivo por la Function)
+    // Importante: generamos SIEMPRE un pathname team-scoped desde el cliente.
       const ts = new Date().toISOString().replace(/[:.]/g, "-");
 
       // Sanitizar filename para path de Blob (slugify estricto):
@@ -84,10 +115,9 @@ export default function CtProximoRivalPage() {
 
       const ensuredPdf = `${slug || "documento"}.pdf`;
 
-      const blobPath = `openbase/next-rival/${ts}-${ensuredPdf}`;
+  const blobPath = `openbase/${teamId}/next-rival/${ts}-${ensuredPdf}`;
 
-  // TEMP DEBUG: confirmar exactamente qué pathname se manda al SDK
-  console.log("[ct/proximo-rival] upload() pathname:", blobPath);
+  console.log("[ct/proximo-rival] blobPath", blobPath);
 
   const blob = await upload(blobPath, file, {
         access: "public",
@@ -97,7 +127,7 @@ export default function CtProximoRivalPage() {
       });
 
       // TEMP DEBUG (diagnóstico): confirmar el pathname real que se manda al backend
-      console.log("[next-rival] saving", { fileUrl: blob.url, pathname: blob.pathname });
+  console.log("[ct/proximo-rival] saving", { fileUrl: blob.url, pathname: blob.pathname });
 
       // 2) Confirmar/persistir metadata en DB (1 solo activo por equipo)
       // CSRF pattern del repo: assertCsrf acepta X-CT-CSRF: "1" o "ctb".
