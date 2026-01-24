@@ -96,6 +96,9 @@ export default function CtProximoRivalPage() {
         handleUploadUrl: "/api/ct/next-rival/client-upload",
       });
 
+      // TEMP DEBUG (diagnóstico): confirmar el pathname real que se manda al backend
+      console.log("[next-rival] saving", { fileUrl: blob.url, pathname: blob.pathname });
+
       // 2) Confirmar/persistir metadata en DB (1 solo activo por equipo)
       // CSRF pattern del repo: assertCsrf acepta X-CT-CSRF: "1" o "ctb".
       const res = await fetch("/api/ct/next-rival", {
@@ -118,6 +121,15 @@ export default function CtProximoRivalPage() {
 
       if (!res.ok) {
         const text = await res.text().catch(() => "");
+        // Mostrar el JSON completo si viene (incluye expectedPrefix/receivedPathname)
+        try {
+          const parsed = text ? JSON.parse(text) : null;
+          if (parsed && typeof parsed === "object") {
+            throw new Error(JSON.stringify(parsed, null, 2));
+          }
+        } catch {
+          // noop
+        }
         throw new Error(text || res.statusText);
       }
 

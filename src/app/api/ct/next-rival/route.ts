@@ -72,8 +72,18 @@ export async function POST(req: Request) {
 
     const expectedPrefix = `openbase/${team.id}/next-rival/`;
     if (!pathname.startsWith(expectedPrefix)) {
+      console.error("[next-rival] invalid pathname", {
+        teamId: team.id,
+        expectedPrefix,
+        receivedPathname: pathname,
+      });
       return NextResponse.json(
-        { error: "Path inválido" },
+        {
+          error: "Path inválido",
+          expectedPrefix,
+          receivedPathname: pathname ?? null,
+          teamId: team.id,
+        },
         { status: 400 },
       );
     }
