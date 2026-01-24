@@ -6,11 +6,13 @@ import Link from "next/link";
 type NotificationsSectionProps = {
   hasTodaySession: boolean;
   hasRoutine: boolean;
+  videosCount?: number;
 };
 
 export function NotificationsSection({
   hasTodaySession,
   hasRoutine,
+  videosCount = 0,
 }: NotificationsSectionProps) {
   const [hasRival, setHasRival] = useState(false);
   const [loadingRival, setLoadingRival] = useState(false);
@@ -50,6 +52,10 @@ export function NotificationsSection({
     items.push("Hay información cargada del próximo rival.");
   }
 
+  if (videosCount > 0) {
+    items.push(videosCount === 1 ? "Tenés 1 video disponible." : `Tenés ${videosCount} videos disponibles.`);
+  }
+
   if (!loadingRival && items.length === 0) {
     items.push("No tenés novedades por ahora. Estás al día.");
   }
@@ -83,6 +89,14 @@ export function NotificationsSection({
               </li>
             ))}
           </ul>
+
+          {videosCount > 0 ? (
+            <div className="mt-2">
+              <Link href="/jugador/videos" className="text-xs text-blue-600 hover:underline">
+                Ver videos
+              </Link>
+            </div>
+          ) : null}
 
           {hasRoutine && (
             <div className="mt-2">

@@ -301,6 +301,7 @@ export default async function JugadorHomePage() {
           <NotificationsSection
             hasTodaySession={hasTodaySession}
             hasRoutine={hasRoutine}
+            videosCount={videoCount}
           />
 
           {/* Sesión de la mañana (igual que hoy) */}
