@@ -8,6 +8,21 @@ export const dynamic = "force-dynamic";
 
 const MAX_PDF_BYTES = 20 * 1024 * 1024; // 20MB
 
+function safePdfSlug(input: unknown) {
+  const base = String(input ?? "documento")
+    .toLowerCase()
+    .replace(/\.pdf$/i, "");
+
+  const slug = base
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "");
+
+  return `${slug || "documento"}.pdf`;
+}
+
 function json(data: unknown, init?: ResponseInit) {
   return NextResponse.json(data, init);
 }
@@ -48,16 +63,17 @@ export async function POST(req: Request) {
           throw new Error("Solo se permite PDF");
         }
 
-        // Forzamos que el pathname siempre quede dentro de la carpeta del team, para evitar writes arbitrarios.
-        // El cliente NO necesita conocer el teamId; aceptamos openbase/next-rival/* y lo reescribimos.
+        // Forzamos SIEMPRE un pathname team-scoped, ignorando cualquier pathname que venga del cliente.
+        // Fuente: team.id (scope) + timestamp + slug seguro.
         const expectedPrefix = `openbase/${team.id}/next-rival/`;
-        if (!pathname.startsWith(expectedPrefix)) {
-          const stripped = pathname
-            .replace(/^\/+/, "")
-            .replace(/^openbase\//, "")
-            .replace(/^next-rival\//, "");
-          pathname = `${expectedPrefix}${stripped}`;
-        }
+        const ts = new Date().toISOString().replace(/[:.]/g, "-");
+        const safeName = safePdfSlug((body as any)?.filename ?? (clientPayload as any)?.fileName ?? "documento");
+        pathname = `${expectedPrefix}${ts}-${safeName}`;
+
+        console.log("[next-rival client-upload] generating pathname", {
+          teamId: team.id,
+          pathname,
+        });
 
         return {
           pathname,
