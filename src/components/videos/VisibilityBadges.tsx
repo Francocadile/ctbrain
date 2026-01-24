@@ -13,11 +13,13 @@ export default function VisibilityBadges({ video, active, className }: Props) {
     ? "border-white/20 bg-white/10 text-white"
     : "border-gray-200 bg-gray-50 text-gray-700";
 
+  const selectedCount = Array.isArray(video.selectedUserIds) ? video.selectedUserIds.length : 0;
+
   const chips: { key: string; label: string }[] = [];
   if (video.visibleToDirectivo) chips.push({ key: "directivo", label: "Directivos" });
   if (video.audienceMode === "ALL") chips.push({ key: "all", label: "Todos" });
   if (video.audienceMode === "SELECTED")
-    chips.push({ key: "selected", label: `Seleccionados (${video.selectedUserIds.length})` });
+    chips.push({ key: "selected", label: `Seleccionados (${selectedCount})` });
 
   return (
     <div className={className ?? ""}>
