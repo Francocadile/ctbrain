@@ -980,6 +980,16 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
             setQuickPreviewExercise(ex);
             setIsPreviewOpen(true);
           }}
+          onOpenVideoFromItem={(payload) => {
+            setQuickPreviewExercise({
+              id: payload.id,
+              name: payload.name,
+              zone: null,
+              videoUrl: payload.videoUrl,
+              usage: "ROUTINE",
+            });
+            setIsPreviewOpen(true);
+          }}
           onAddExerciseToRoutine={addExerciseToRoutine}
           onLocalChangeItem={updateLocalItem}
           onSaveItemField={saveItemField}
@@ -1071,6 +1081,7 @@ type RoutineStructurePanelProps = {
   onDragEndItem: () => void;
   onCloseInlinePanel: () => void;
   onQuickPreview: (exercise: ExerciseDTO) => void;
+  onOpenVideoFromItem: (payload: { id: string; name: string; videoUrl: string }) => void;
   onAddExerciseToRoutine: (exercise: ExerciseDTO) => Promise<void>;
   onLocalChangeItem: (itemId: string, partial: Partial<RoutineItemDTO>) => void;
   onSaveItemField: (
@@ -1108,6 +1119,7 @@ function RoutineStructurePanel({
   onDragEndItem,
   onCloseInlinePanel,
   onQuickPreview,
+  onOpenVideoFromItem,
   onAddExerciseToRoutine,
   onLocalChangeItem,
   onSaveItemField,
@@ -1324,6 +1336,23 @@ function RoutineStructurePanel({
                                     <span className="truncate font-medium text-gray-900">
                                       {name}
                                     </span>
+                                    {!!it.videoUrl && (
+                                      <button
+                                        type="button"
+                                        className="shrink-0 rounded-md border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-emerald-700 hover:bg-emerald-50"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          onOpenVideoFromItem({
+                                            id: it.id,
+                                            name,
+                                            videoUrl: it.videoUrl!,
+                                          });
+                                        }}
+                                      >
+                                        Ver video
+                                      </button>
+                                    )}
                                   </div>
                                   <span className="shrink-0 text-[10px] text-gray-400">
                                     #{it.order}
