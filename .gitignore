@@ -19,3 +19,6 @@ node_modules/
 # Android signing (local only, do not commit)
 apps/mobile/android/keystore.properties
 apps/mobile/android/*.jks
+
+# TypeScript incremental build info
+tsconfig.tsbuildinfo
