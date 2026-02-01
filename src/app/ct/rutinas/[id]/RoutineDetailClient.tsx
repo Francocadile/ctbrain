@@ -1306,10 +1306,17 @@ function RoutineStructurePanel({
                           )}
 
                           {/* Botón para seleccionar / togglear editor */}
-                          <button
-                            type="button"
+                          <div
+                            role="button"
+                            tabIndex={0}
                             className="flex-1 text-left"
                             onClick={() => onSelectItem(block.id, it.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                onSelectItem(block.id, it.id);
+                              }
+                            }}
                           >
                             <div className="relative flex gap-3">
                               {/* Columna timeline */}
@@ -1368,7 +1375,7 @@ function RoutineStructurePanel({
                                 </div>
                               </div>
                             </div>
-                          </button>
+                          </div>
 
                           {!readOnly && (
                             <button
