@@ -781,9 +781,8 @@ model Routine {
   shareMode         RoutineShareMode     @default(STAFF_ONLY)
   sharedWithPlayers RoutinePlayerShare[]
 
-  items       RoutineItem[]
-  blocks      RoutineBlock[]
-  programDays ProgramDay[]
+  items  RoutineItem[]
+  blocks RoutineBlock[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -932,8 +931,7 @@ model ProgramDay {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  week    ProgramWeek @relation(fields: [weekId], references: [id], onDelete: Cascade)
-  Routine Routine     @relation(fields: [routineId], references: [id])
+  week ProgramWeek @relation(fields: [weekId], references: [id], onDelete: Cascade)
 
   @@unique([weekId, weekday])
   @@index([weekId])
