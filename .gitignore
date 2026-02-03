@@ -22,3 +22,5 @@ apps/mobile/android/*.jks
 
 # TypeScript incremental build info
 tsconfig.tsbuildinfo
+.vercel
+.env*.local

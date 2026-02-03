@@ -1,30 +1,31 @@
 model Team {
-  id                 String             @id @default(cuid())
-  name               String             @unique
-  slug               String             @unique
-  isActive           Boolean            @default(true)
-  logoUrl            String?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  members            UserTeam[]
-  rivals             Rival[]
-  feedback           PlayerFeedback[]
-  sessions           Session[]
-  places             Place[]
-  plannerPrefs       PlannerPrefs?
-  scoutingCategories ScoutingCategory[]
-  scoutingPlayers    ScoutingPlayer[]
-  videos             TeamVideo[]
-  reports            Report[]
-  players            Player[]
-  routines           Routine[]
-  exercises          Exercise[]
-  rivalReports       RivalReport[]
-  deviceTokens       DeviceToken[]
-  plannerDayTypes    PlannerDayType[]
+  id                        String                     @id @default(cuid())
+  name                      String                     @unique
+  slug                      String                     @unique
+  isActive                  Boolean                    @default(true)
+  logoUrl                   String?
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  members                   UserTeam[]
+  rivals                    Rival[]
+  feedback                  PlayerFeedback[]
+  sessions                  Session[]
+  places                    Place[]
+  plannerPrefs              PlannerPrefs?
+  scoutingCategories        ScoutingCategory[]
+  scoutingPlayers           ScoutingPlayer[]
+  videos                    TeamVideo[]
+  reports                   Report[]
+  players                   Player[]
+  routines                  Routine[]
+  exercises                 Exercise[]
+  rivalReports              RivalReport[]
+  deviceTokens              DeviceToken[]
+  plannerDayTypes           PlannerDayType[]
   plannerDayTypeAssignments PlannerDayTypeAssignment[]
-  protocols          Protocol[]
-  nextRivalFile      NextRivalFile?
+  protocols                 Protocol[]
+  nextRivalFile             NextRivalFile?
+  Program                   Program[]
 }
 
 model NextRivalFile {
@@ -159,20 +160,20 @@ model User {
 
   passwordChangedAt DateTime?
 
-  sessions        Session[]            @relation("UserSessions")
-  rpeEntries      RPEEntry[]
-  wellnessEntries WellnessEntry[]
+  sessions          Session[]            @relation("UserSessions")
+  rpeEntries        RPEEntry[]
+  wellnessEntries   WellnessEntry[]
   // plannerPrefs: ahora es por equipo (no por usuario)
-  clinicalEntries ClinicalEntry[]
-  protocolsAsPlayer  Protocol[]        @relation("ProtocolPlayer")
-  protocolsCreated   Protocol[]        @relation("ProtocolCreatedBy")
-  teams           UserTeam[]
-  reports         Report[]
-  players         Player[]
-  routineShares   RoutinePlayerShare[]
-  videoAudience   TeamVideoAudience[]
-  resetTokens     PasswordResetToken[]
-  deviceTokens    DeviceToken[]
+  clinicalEntries   ClinicalEntry[]
+  protocolsAsPlayer Protocol[]           @relation("ProtocolPlayer")
+  protocolsCreated  Protocol[]           @relation("ProtocolCreatedBy")
+  teams             UserTeam[]
+  reports           Report[]
+  players           Player[]
+  routineShares     RoutinePlayerShare[]
+  videoAudience     TeamVideoAudience[]
+  resetTokens       PasswordResetToken[]
+  deviceTokens      DeviceToken[]
 }
 
 model UserTeam {
@@ -405,15 +406,15 @@ model WellnessEntry {
 }
 
 model PlannerPrefs {
-  id        String   @id @default(cuid())
-  teamId    String
-  rowLabels Json     @default("{}")
-  places    Json     @default("[]")
+  id            String   @id @default(cuid())
+  teamId        String
+  rowLabels     Json     @default("{}")
+  places        Json     @default("[]")
   contentRowIds Json?
-  metaRowIds     Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  metaRowIds    Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  team          Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@unique([teamId])
 }
@@ -495,7 +496,7 @@ enum ProtocolBlockType {
 }
 
 model Protocol {
-  id              String   @id @default(cuid())
+  id              String  @id @default(cuid())
   teamId          String
   playerId        String
   clinicalEntryId String?
@@ -664,17 +665,17 @@ model Report {
 }
 
 model TeamVideo {
-  id                 String   @id @default(cuid())
+  id                 String                @id @default(cuid())
   teamId             String
   url                String
   title              String
   notes              String?
   type               String // "propio" | "rival"
-  visibleToDirectivo Boolean  @default(true)
+  visibleToDirectivo Boolean               @default(true)
   audienceMode       TeamVideoAudienceMode @default(ALL)
-  createdAt          DateTime @default(now())
+  createdAt          DateTime              @default(now())
 
-  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team     Team                @relation(fields: [teamId], references: [id], onDelete: Cascade)
   audience TeamVideoAudience[]
 
   @@index([teamId, createdAt])
@@ -721,23 +722,23 @@ model DeviceToken {
 }
 
 model PlannerDayType {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   teamId    String
-  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team      Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
   key       String
   label     String
   color     String
   order     Int
-  isDefault Boolean  @default(false)
+  isDefault Boolean @default(false)
 
   @@unique([teamId, key])
   @@index([teamId, order])
 }
 
 model PlannerDayTypeAssignment {
-  id         String   @id @default(cuid())
+  id         String @id @default(cuid())
   teamId     String
-  team       Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team       Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
   ymd        String
   turn       String
   dayTypeKey String
@@ -780,8 +781,9 @@ model Routine {
   shareMode         RoutineShareMode     @default(STAFF_ONLY)
   sharedWithPlayers RoutinePlayerShare[]
 
-  items  RoutineItem[]
-  blocks RoutineBlock[]
+  items       RoutineItem[]
+  blocks      RoutineBlock[]
+  programDays ProgramDay[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -803,7 +805,6 @@ model RoutineBlock {
 
   items RoutineItem[]
 
-  createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
   @@index([routineId])
@@ -868,4 +869,76 @@ model PasswordResetToken {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+}
+
+// =========================
+// Programas (Fase 1) - ADITIVO
+// =========================
+
+enum ProgramWeekday {
+  MON
+  TUE
+  WED
+  THU
+  FRI
+  SAT
+  SUN
+}
+
+model Program {
+  id          String  @id @default(cuid())
+  teamId      String
+  title       String
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team  Team          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  weeks ProgramWeek[]
+
+  @@index([teamId])
+}
+
+model ProgramWeek {
+  id         String  @id @default(cuid())
+  programId  String
+  teamId     String
+  weekNumber Int
+  label      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  program Program      @relation(fields: [programId], references: [id], onDelete: Cascade)
+  days    ProgramDay[]
+
+  @@unique([programId, weekNumber])
+  @@index([programId])
+  @@index([teamId])
+  @@index([programId, teamId])
+}
+
+model ProgramDay {
+  id        String         @id @default(cuid())
+  weekId    String
+  teamId    String
+  weekday   ProgramWeekday
+  routineId String
+
+  titleOverride String?
+  notes         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  week    ProgramWeek @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  Routine Routine     @relation(fields: [routineId], references: [id])
+
+  @@unique([weekId, weekday])
+  @@index([weekId])
+  @@index([teamId])
+  @@index([routineId])
+  @@index([teamId, routineId])
+  @@index([weekId, teamId])
 }
