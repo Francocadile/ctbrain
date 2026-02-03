@@ -18,6 +18,7 @@ model Team {
   reports            Report[]
   players            Player[]
   routines           Routine[]
+  programs           RoutineProgram[]
   exercises          Exercise[]
   rivalReports       RivalReport[]
   deviceTokens       DeviceToken[]
@@ -780,6 +781,8 @@ model Routine {
   shareMode         RoutineShareMode     @default(STAFF_ONLY)
   sharedWithPlayers RoutinePlayerShare[]
 
+  programDays RoutineProgramDay[]
+
   items  RoutineItem[]
   blocks RoutineBlock[]
 
@@ -856,6 +859,34 @@ model RoutinePlayerShare {
   createdAt DateTime @default(now())
 
   @@unique([routineId, playerId])
+}
+
+model RoutineProgram {
+  id          String   @id @default(cuid())
+  teamId      String
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  days RoutineProgramDay[]
+
+  @@index([teamId])
+}
+
+model RoutineProgramDay {
+  id        String @id @default(cuid())
+  programId String
+  dayIndex  Int
+  label     String?
+  routineId String
+
+  program RoutineProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  routine  Routine        @relation(fields: [routineId], references: [id], onDelete: Restrict)
+
+  @@unique([programId, dayIndex])
+  @@index([routineId])
 }
 
 model PasswordResetToken {
