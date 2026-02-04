@@ -7,14 +7,18 @@ export const dynamic = "force-dynamic";
 
 type Weekday = "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT" | "SUN";
 
-const WEEKDAYS: Array<{ key: Weekday; label: string }> = [
-  { key: "MON", label: "L" },
-  { key: "TUE", label: "M" },
-  { key: "WED", label: "X" },
-  { key: "THU", label: "J" },
-  { key: "FRI", label: "V" },
-  { key: "SAT", label: "S" },
-  { key: "SUN", label: "D" },
+const WEEKDAYS: Array<{
+  key: Weekday;
+  short: string;
+  full: string;
+}> = [
+  { key: "MON", short: "L", full: "Lunes" },
+  { key: "TUE", short: "M", full: "Martes" },
+  { key: "WED", short: "X", full: "Miércoles" },
+  { key: "THU", short: "J", full: "Jueves" },
+  { key: "FRI", short: "V", full: "Viernes" },
+  { key: "SAT", short: "S", full: "Sábado" },
+  { key: "SUN", short: "D", full: "Domingo" },
 ];
 
 function normalizeDay(x: unknown): Weekday {
@@ -110,33 +114,89 @@ export default async function CTRoutineDetailPage({
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">Rutina por día</div>
-        <div className="flex gap-2">
-          {WEEKDAYS.map((d) => {
-            const active = d.key === selectedDay;
-            return (
-              <Link
-                key={d.key}
-                href={`/ct/rutinas/${params.id}?day=${d.key}`}
-                className={`inline-flex h-8 w-8 items-center justify-center rounded-full border text-sm font-medium transition ${
-                  active
-                    ? "bg-foreground text-background"
-                    : "bg-background text-foreground hover:bg-muted"
-                }`}
-              >
-                {d.label}
-              </Link>
-            );
-          })}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[220px_1fr] md:gap-6">
+        {/* Mobile day nav (horizontal) */}
+        <div className="md:hidden">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {WEEKDAYS.find((d) => d.key === selectedDay)?.full}
+          </h1>
+          <div className="mt-3 -mx-4 overflow-x-auto px-4">
+            <div className="inline-flex min-w-max gap-1 rounded-lg bg-muted p-1">
+              {WEEKDAYS.map((d) => {
+                const active = d.key === selectedDay;
+                return (
+                  <Link
+                    key={d.key}
+                    href={`/ct/rutinas/${params.id}?day=${d.key}`}
+                    className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition ${
+                      active
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-md border bg-background text-xs">
+                      {d.short}
+                    </span>
+                    <span className="whitespace-nowrap">{d.full}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
         </div>
+
+        {/* Desktop sidebar day nav (vertical) */}
+        <aside className="hidden md:block">
+          <div className="sticky top-4">
+            <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Días</div>
+            <nav className="rounded-lg border bg-background p-1">
+              <ul className="space-y-1">
+                {WEEKDAYS.map((d) => {
+                  const active = d.key === selectedDay;
+                  return (
+                    <li key={d.key}>
+                      <Link
+                        href={`/ct/rutinas/${params.id}?day=${d.key}`}
+                        className={`group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition ${
+                          active
+                            ? "bg-muted text-foreground shadow-sm"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        }`}
+                        aria-current={active ? "page" : undefined}
+                      >
+                        <span
+                          className={`inline-flex h-7 w-7 items-center justify-center rounded-md border bg-background text-xs ${
+                            active ? "border-foreground/20" : "border-muted-foreground/20"
+                          }`}
+                        >
+                          {d.short}
+                        </span>
+                        <span>{d.full}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </nav>
+          </div>
+        </aside>
+
+        {/* Editor column */}
+        <section className="space-y-3">
+          <div className="hidden md:block">
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Semana 1</div>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+              {WEEKDAYS.find((d) => d.key === selectedDay)?.full}
+            </h1>
+          </div>
+          <RoutineDetailClient
+            routine={dto.routine}
+            blocks={dto.blocks}
+            items={dto.items}
+            sharedPlayerIds={sharedPlayerIds}
+          />
+        </section>
       </div>
-      <RoutineDetailClient
-        routine={dto.routine}
-        blocks={dto.blocks}
-        items={dto.items}
-        sharedPlayerIds={sharedPlayerIds}
-      />
     </div>
   );
 }
