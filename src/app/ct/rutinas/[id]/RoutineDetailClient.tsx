@@ -4,6 +4,8 @@ import type { FocusEvent } from "react";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import VideoPlayerModal from "@/components/training/VideoPlayerModal";
+import SaveBlockTemplateButton from "./SaveBlockTemplateButton";
+import InsertBlockFromTemplateButton from "./InsertBlockFromTemplateButton";
 
 type RoutineHeaderDTO = {
   id: string;
@@ -308,6 +310,18 @@ export function RoutineDetailClient({ routine, blocks, items, sharedPlayerIds }:
     } catch (e) {
       console.error(e);
       setError("No se pudo crear el bloque");
+    } finally {
+      startTransition(() => router.refresh());
+    }
+  }
+
+  async function insertBlockFromTemplate(templateId: string) {
+    setError(null);
+    try {
+      await postJSON(`/api/ct/routines/${header.id}/blocks/from-template`, { templateId });
+    } catch (e: any) {
+      console.error(e);
+      setError("No se pudo insertar el bloque desde template");
     } finally {
       startTransition(() => router.refresh());
     }
@@ -1149,13 +1163,16 @@ function RoutineStructurePanel({
           {header.goal && <p className="text-xs text-gray-500">{header.goal}</p>}
         </div>
         {!readOnly && (
-          <button
-            type="button"
+          <div className="flex items-center gap-2">
+            <InsertBlockFromTemplateButton routineId={header.id} />
+            <button
+              type="button"
               className="rounded-md border px-3 py-1 text-xs font-medium bg-white hover:bg-gray-50"
-            onClick={onAddBlock}
-          >
-            + Bloque
-          </button>
+              onClick={onAddBlock}
+            >
+              + Bloque
+            </button>
+          </div>
         )}
       </div>
 
@@ -1165,6 +1182,8 @@ function RoutineStructurePanel({
             Todavía no hay bloques. Creá el primero.
           </p>
         )}
+
+        {/* NOTE: the rest of the component renders each block card; we inject the template button inside each card header below. */}
 
         {blocks.map((block) => {
           const blockIndex = blocks.findIndex((b) => b.id === block.id);
@@ -1212,6 +1231,7 @@ function RoutineStructurePanel({
                   </p>
                   {!readOnly && (
                     <div className="flex items-center gap-2">
+                      <SaveBlockTemplateButton blockId={block.id} defaultTitle={derivedName} />
                       <button
                         type="button"
                         className="rounded border border-white/30 px-2 py-0.5 text-[10px] hover:bg-white/10"

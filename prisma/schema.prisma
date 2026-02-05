@@ -27,6 +27,7 @@ model Team {
   nextRivalFile             NextRivalFile?
   Program                   Program[]
   routinePrograms           RoutineProgram[]
+  blockTemplates            BlockTemplate[]
 }
 
 model NextRivalFile {
@@ -990,4 +991,50 @@ model RoutineProgramPhaseRoutine {
   @@unique([phaseId, routineId])
   @@index([phaseId])
   @@index([routineId])
+}
+
+// =========================
+// Block Templates - ADITIVO
+// =========================
+
+model BlockTemplate {
+  id        String   @id @default(cuid())
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  title     String
+  // Copia de RoutineBlock.type en formato string (WARMUP/MAIN/...)
+  blockType String
+
+  items     BlockTemplateItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teamId])
+}
+
+model BlockTemplateItem {
+  id         String   @id @default(cuid())
+  templateId String
+  template   BlockTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  // Referencia blanda: si el ejercicio se borra, lo omitimos al insertar.
+  exerciseId String
+
+  order Int
+
+  sets  Int?
+  reps  Int?
+  load  String?
+  tempo String?
+  rest  String?
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([templateId])
+  @@index([exerciseId])
+  @@unique([templateId, exerciseId, order])
 }
