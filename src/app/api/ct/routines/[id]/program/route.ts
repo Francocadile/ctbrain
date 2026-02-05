@@ -8,6 +8,9 @@ type Weekday = "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT" | "SUN";
 
 const WEEKDAYS: Weekday[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
 
+type MappingDay = { weekday: Weekday; routineId: string };
+type MappingWeek = { id: string; weekNumber: number; label: string | null; days: MappingDay[] };
+
 function normalizeWeekday(x: unknown): Weekday | null {
   return WEEKDAYS.includes(x as any) ? (x as Weekday) : null;
 }
@@ -23,7 +26,7 @@ async function getMapping(prisma: any, teamId: string, baseRoutineId: string) {
     },
     include: {
       weeks: {
-        where: { weekNumber: 1 },
+        orderBy: { weekNumber: "asc" },
         include: { days: true },
       },
     },
@@ -31,18 +34,19 @@ async function getMapping(prisma: any, teamId: string, baseRoutineId: string) {
 
   if (!program) return null;
 
-  const week = program.weeks?.[0] ?? null;
-  if (!week) return null;
-
-  const days = (week.days || []).map((d: any) => ({
-    weekday: d.weekday as Weekday,
-    routineId: d.routineId as string,
+  const weeks: MappingWeek[] = (program.weeks || []).map((w: any) => ({
+    id: w.id as string,
+    weekNumber: w.weekNumber as number,
+    label: (w.label ?? null) as string | null,
+    days: (w.days || []).map((d: any) => ({
+      weekday: d.weekday as Weekday,
+      routineId: d.routineId as string,
+    })),
   }));
 
   return {
     programId: program.id as string,
-    weekId: week.id as string,
-    days,
+    weeks,
   };
 }
 
@@ -74,20 +78,26 @@ async function ensureProgram(prisma: any, teamId: string, baseRoutineId: string)
       select: { id: true },
     });
 
-    const week = await tx.programWeek.create({
-      data: {
-        teamId,
-        programId: program.id,
-        weekNumber: 1,
-        label: "Semana 1",
-      },
-      select: { id: true },
-    });
+    // 1) Ensure 4 weeks (weekNumber 1..4)
+    const weeks: Array<{ id: string; weekNumber: number; label: string | null }> = [];
+    for (let weekNumber = 1; weekNumber <= 4; weekNumber++) {
+      const w = await tx.programWeek.create({
+        data: {
+          teamId,
+          programId: program.id,
+          weekNumber,
+          label: `Semana ${weekNumber}`,
+        },
+        select: { id: true, weekNumber: true, label: true },
+      });
+      weeks.push({ id: w.id, weekNumber: w.weekNumber, label: w.label ?? null });
+    }
 
-    const days: Array<{ weekday: Weekday; routineId: string }> = [];
+    // 2) Clone base routine ONLY 7 times (one per weekday)
+    const routineIdByWeekday = new Map<Weekday, string>();
 
     for (const weekday of WEEKDAYS) {
-      const newRoutine = await tx.routine.create({
+      const weekdayRoutine = await tx.routine.create({
         data: {
           teamId,
           title: `${base.title} (${weekday})`,
@@ -100,11 +110,13 @@ async function ensureProgram(prisma: any, teamId: string, baseRoutineId: string)
         select: { id: true },
       });
 
+      routineIdByWeekday.set(weekday, weekdayRoutine.id);
+
       const blockIdMap = new Map<string, string>();
       for (const b of base.blocks) {
         const nb = await tx.routineBlock.create({
           data: {
-            routineId: newRoutine.id,
+            routineId: weekdayRoutine.id,
             name: b.name,
             order: b.order,
             description: b.description ?? null,
@@ -119,7 +131,7 @@ async function ensureProgram(prisma: any, teamId: string, baseRoutineId: string)
         const newBlockId = it.blockId ? blockIdMap.get(it.blockId) ?? null : null;
         await tx.routineItem.create({
           data: {
-            routineId: newRoutine.id,
+            routineId: weekdayRoutine.id,
             title: it.title,
             description: it.description ?? null,
             order: it.order,
@@ -137,21 +149,36 @@ async function ensureProgram(prisma: any, teamId: string, baseRoutineId: string)
           },
         });
       }
-
-      await tx.programDay.create({
-        data: {
-          weekId: week.id,
-          teamId,
-          weekday,
-          routineId: newRoutine.id,
-        },
-        select: { id: true },
-      });
-
-      days.push({ weekday, routineId: newRoutine.id });
     }
 
-    return { programId: program.id, weekId: week.id, days };
+    // 3) For each week create 7 ProgramDays pointing to the SAME weekday routine
+    for (const w of weeks) {
+      for (const weekday of WEEKDAYS) {
+        const routineId = routineIdByWeekday.get(weekday);
+        if (!routineId) continue;
+        await tx.programDay.create({
+          data: {
+            weekId: w.id,
+            teamId,
+            weekday,
+            routineId,
+          },
+          select: { id: true },
+        });
+      }
+    }
+
+    const payloadWeeks: MappingWeek[] = weeks.map((w) => ({
+      id: w.id,
+      weekNumber: w.weekNumber,
+      label: w.label,
+      days: WEEKDAYS.map((weekday) => ({
+        weekday,
+        routineId: routineIdByWeekday.get(weekday)!,
+      })),
+    }));
+
+    return { programId: program.id, weeks: payloadWeeks };
   });
 
   return created;
@@ -169,8 +196,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       return NextResponse.json(
         {
           programId: null,
-          weekId: null,
-          days: [],
+          weeks: [],
         },
         { status: 200 },
       );

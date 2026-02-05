@@ -31,18 +31,18 @@ export default async function CTRoutineDetailPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams?: { day?: string };
+  searchParams?: { day?: string; week?: string };
 }) {
   const { prisma, team } = await dbScope();
 
   const selectedDay = normalizeDay(searchParams?.day);
+  const selectedWeek = Math.min(4, Math.max(1, Number(searchParams?.week ?? 1) || 1));
 
   // Read mapping (no mutation). If it doesn't exist, we fallback to base routine and show a CTA to activate.
   const origin = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  let program: { programId: string | null; weekId: string | null; days: Array<{ weekday: Weekday; routineId: string }> } = {
+  let program: { programId: string | null; weeks: Array<{ id: string; weekNumber: number; label: string | null; days: Array<{ weekday: Weekday; routineId: string }> }> } = {
     programId: null,
-    weekId: null,
-    days: [],
+    weeks: [],
   };
   try {
     const res = await fetch(`${origin}/api/ct/routines/${params.id}/program`, {
@@ -53,16 +53,17 @@ export default async function CTRoutineDetailPage({
       const json = (await res.json()) as any;
       program = {
         programId: json?.programId ?? null,
-        weekId: json?.weekId ?? null,
-        days: Array.isArray(json?.days) ? json.days : [],
+        weeks: Array.isArray(json?.weeks) ? json.weeks : [],
       };
     }
   } catch {
     // noop
   }
 
+  const selectedWeekObj = (program.weeks || []).find((w) => Number(w.weekNumber) === selectedWeek) ?? null;
+
   const mappingByDay = new Map<Weekday, string>();
-  for (const d of program.days || []) {
+  for (const d of selectedWeekObj?.days || []) {
     if (d?.weekday && d?.routineId) mappingByDay.set(d.weekday, d.routineId);
   }
 
@@ -89,6 +90,7 @@ export default async function CTRoutineDetailPage({
     select: { id: true, title: true },
   });
 
+  // Titles for the 7 routines of the selected week (in weekday-template mode, this doesn't change across weeks)
   const routineIdsForWeek = WEEKDAYS.map((d) => mappingByDay.get(d.key)).filter(Boolean) as string[];
   const routinesForWeek =
     routineIdsForWeek.length > 0
@@ -148,42 +150,40 @@ export default async function CTRoutineDetailPage({
       {/* Header */}
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="space-y-1">
-          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Semana 1</div>
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Semana {selectedWeek}</div>
           <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Plan semanal</h1>
           <div className="text-sm text-muted-foreground">
             {baseRoutine ? <>Rutina base: <span className="font-medium text-foreground">{baseRoutine.title}</span></> : null}
           </div>
         </div>
 
-        {/* Week selector (UI only for now) */}
+        {/* Week selector */}
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border bg-background text-sm"
+          <Link
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-md border bg-background text-sm ${selectedWeek === 1 ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}
             aria-label="Semana anterior"
-            disabled
+            href={`/ct/rutinas/${params.id}?week=${Math.max(1, selectedWeek - 1)}&day=${selectedDay}`}
           >
             ◀
-          </button>
-          <div className="rounded-md border bg-background px-3 py-2 text-sm font-medium">Semana 1</div>
-          <button
-            type="button"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md border bg-background text-sm"
+          </Link>
+          <div className="rounded-md border bg-background px-3 py-2 text-sm font-medium">Semana {selectedWeek}</div>
+          <Link
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-md border bg-background text-sm ${selectedWeek === 4 ? "pointer-events-none opacity-50" : "hover:bg-muted"}`}
             aria-label="Semana siguiente"
-            disabled
+            href={`/ct/rutinas/${params.id}?week=${Math.min(4, selectedWeek + 1)}&day=${selectedDay}`}
           >
             ▶
-          </button>
+          </Link>
         </div>
       </div>
 
       {/* CTA when program is not yet activated */}
-      {!program.programId ? <WeekProgramActivator baseRoutineId={params.id} /> : null}
+  {!program.programId ? <WeekProgramActivator baseRoutineId={params.id} /> : null}
 
       {/* Weekly grid */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <div className="text-sm font-medium">Semana 1 · {selectedDayLabel}</div>
+          <div className="text-sm font-medium">Semana {selectedWeek} · {selectedDayLabel}</div>
           <div className="text-xs text-muted-foreground">Elegí un día para editar</div>
         </div>
 
@@ -197,7 +197,7 @@ export default async function CTRoutineDetailPage({
               return (
                 <Link
                   key={d.key}
-                  href={`/ct/rutinas/${params.id}?day=${d.key}`}
+                  href={`/ct/rutinas/${params.id}?week=${selectedWeek}&day=${d.key}`}
                   className={`block rounded-xl border p-3 transition ${
                     isActive
                       ? "border-foreground/40 bg-muted shadow-sm"

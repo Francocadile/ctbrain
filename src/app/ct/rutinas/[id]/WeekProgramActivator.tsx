@@ -35,9 +35,9 @@ export default function WeekProgramActivator({ baseRoutineId }: { baseRoutineId:
     <div className="rounded-lg border bg-muted/30 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="text-sm font-medium">Activar semana desde esta rutina</div>
+          <div className="text-sm font-medium">Activar plan de 4 semanas desde esta rutina</div>
           <div className="text-sm text-muted-foreground">
-            Se crearán 7 rutinas (Lun–Dom) clonadas desde esta rutina base.
+            Se crearán 7 rutinas (Lun–Dom) clonadas desde esta rutina base y se reutilizarán en 4 semanas.
           </div>
         </div>
 
