@@ -1,187 +1,109 @@
-import { notFound } from "next/navigation";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { dbScope } from "@/lib/dbScope";
-import { RoutineDetailClient } from "@/app/ct/rutinas/[id]/RoutineDetailClient";
+import ProgramTitleEditor from "../ProgramTitleEditor";
+import PhaseActions from "../PhaseActions";
+import CreatePhaseButtonClient from "./CreatePhaseButtonClient";
 
 export const dynamic = "force-dynamic";
 
-type Weekday = "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT" | "SUN";
-
-const WEEKDAY_LABEL: Record<Weekday, string> = {
-  MON: "Lun",
-  TUE: "Mar",
-  WED: "Mié",
-  THU: "Jue",
-  FRI: "Vie",
-  SAT: "Sáb",
-  SUN: "Dom",
-};
+function byOrder(a: { order: number; createdAt: Date }, b: { order: number; createdAt: Date }) {
+  if (a.order !== b.order) return a.order - b.order;
+  return a.createdAt.getTime() - b.createdAt.getTime();
+}
 
 export default async function CTProgramDetailPage({
   params,
-  searchParams,
 }: {
   params: { id: string };
-  searchParams?: { week?: string; day?: string };
 }) {
   const { prisma, team } = await dbScope();
 
-  const program = (await prisma.program.findFirst({
+  const program = await prisma.routineProgram.findFirst({
     where: { id: params.id, teamId: team.id },
-    include: {
-      weeks: {
-        orderBy: { weekNumber: "asc" },
-        include: { days: { orderBy: { weekday: "asc" } } },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      phases: {
+        select: {
+          id: true,
+          title: true,
+          order: true,
+          createdAt: true,
+          _count: { select: { routines: true } },
+        },
       },
     },
-  } as any)) as any;
+  });
 
   if (!program) return notFound();
 
-  const weeks = (program.weeks || []) as any[];
-  const activeWeekId = searchParams?.week || weeks[0]?.id || null;
-  const activeWeek = weeks.find((w) => w.id === activeWeekId) || weeks[0] || null;
-
-  const days = (activeWeek?.days || []) as any[];
-  const activeDayKey =
-    (searchParams?.day as Weekday | undefined) || (days[0]?.weekday as Weekday | undefined) || null;
-  const activeDay = days.find((d) => d.weekday === activeDayKey) || days[0] || null;
-
-  if (!activeWeek || !activeDay) {
-    return (
-      <div className="max-w-5xl mx-auto space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-semibold">{program.title}</h1>
-            <div className="text-sm text-gray-600">Sin semanas/días todavía</div>
-          </div>
-          <Link href="/ct/programas" className="text-sm text-blue-600 hover:underline">
-            Volver
-          </Link>
-        </div>
-        <div className="rounded border p-4 text-sm text-gray-600">
-          Este programa todavía no tiene semanas o días cargados.
-        </div>
-      </div>
-    );
-  }
-
-  const routine = (await prisma.routine.findFirst({
-    where: { id: activeDay.routineId, teamId: team.id },
-    include: {
-      blocks: { orderBy: { order: "asc" } },
-      items: { orderBy: { order: "asc" } },
-      sharedWithPlayers: { select: { playerId: true } },
-    },
-  } as any)) as any;
-
-  if (!routine) return notFound();
-
-  const sharedPlayerIds = (routine.sharedWithPlayers || []).map((s: any) => s.playerId);
-
-  const dto = {
-    routine: {
-      id: routine.id,
-      title: routine.title,
-      description: routine.description ?? null,
-      goal: routine.goal ?? null,
-      visibility: routine.visibility ?? null,
-      notesForAthlete: routine.notesForAthlete ?? null,
-      shareMode: routine.shareMode,
-      createdAt: routine.createdAt.toISOString(),
-      updatedAt: routine.updatedAt.toISOString(),
-    },
-    blocks: (routine.blocks || []).map((b: any) => ({
-      id: b.id,
-      name: b.name,
-      order: b.order,
-      description: b.description ?? null,
-      type: b.type ?? null,
-    })),
-    items: (routine.items || []).map((it: any) => ({
-      id: it.id,
-      routineId: it.routineId,
-      blockId: it.blockId ?? null,
-      title: it.title,
-      description: it.description ?? null,
-      order: it.order,
-      exerciseName: it.exerciseName ?? null,
-      exerciseId: it.exerciseId ?? null,
-      sets: it.sets ?? null,
-      reps: it.reps ?? null,
-      load: it.load ?? null,
-      tempo: it.tempo ?? null,
-      rest: it.rest ?? null,
-      notes: it.notes ?? null,
-      athleteNotes: it.athleteNotes ?? null,
-      videoUrl: it.videoUrl ?? null,
-    })),
-  };
+  const phases = (program.phases || []).slice().sort(byOrder);
 
   return (
-    <div className="max-w-5xl mx-auto space-y-4">
+    <div className="max-w-5xl mx-auto space-y-6">
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold">{program.title}</h1>
-          {program.description ? (
-            <div className="text-sm text-gray-600">{program.description}</div>
-          ) : null}
+        <div className="space-y-1">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Programa</div>
+          <h1 className="text-3xl font-semibold tracking-tight">{program.title}</h1>
+          <div className="text-sm text-muted-foreground">Fases + playlist de rutinas.</div>
         </div>
-        <Link href="/ct/programas" className="text-sm text-blue-600 hover:underline">
+
+        <Link
+          href="/ct/programas"
+          className="inline-flex items-center rounded-md border bg-background px-3 py-2 text-sm hover:bg-muted"
+        >
           Volver
         </Link>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {weeks.map((w) => {
-          const isActive = w.id === activeWeek.id;
-          return (
-            <Link
-              key={w.id}
-              href={`/ct/programas/${program.id}?week=${encodeURIComponent(w.id)}&day=${encodeURIComponent(
-                (activeDay.weekday as Weekday) || "MON",
-              )}`}
-              className={
-                "px-3 py-1 rounded border text-sm " +
-                (isActive ? "bg-gray-900 text-white border-gray-900" : "bg-white hover:bg-gray-50")
-              }
-            >
-              Semana {w.weekNumber}
-            </Link>
-          );
-        })}
+      <div className="rounded-xl border bg-background p-4">
+        <ProgramTitleEditor
+          programId={program.id}
+          initialTitle={program.title}
+          initialDescription={program.description ?? null}
+        />
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {(activeWeek.days || []).map((d: any) => {
-          const key = d.weekday as Weekday;
-          const isActive = key === (activeDay.weekday as Weekday);
-          return (
-            <Link
-              key={d.id}
-              href={`/ct/programas/${program.id}?week=${encodeURIComponent(activeWeek.id)}&day=${encodeURIComponent(
-                key,
-              )}`}
-              className={
-                "px-3 py-1 rounded border text-sm " +
-                (isActive ? "bg-blue-600 text-white border-blue-600" : "bg-white hover:bg-gray-50")
-              }
-              aria-label={`Día ${WEEKDAY_LABEL[key]}`}
-            >
-              {WEEKDAY_LABEL[key]}
-            </Link>
-          );
-        })}
-      </div>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm font-medium">Fases</div>
+            <div className="text-xs text-muted-foreground">Entrá a cada fase para armar la playlist.</div>
+          </div>
+          <CreatePhaseButtonClient programId={program.id} existingCount={phases.length} />
+        </div>
 
-      <RoutineDetailClient
-        routine={dto.routine}
-        blocks={dto.blocks}
-        items={dto.items}
-        sharedPlayerIds={sharedPlayerIds}
-      />
+        {phases.length === 0 ? (
+          <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
+            Sin fases todavía. Creá la primera para empezar.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {phases.map((p: { id: string; title: string; order: number; _count: { routines: number } }) => (
+              <div key={p.id} className="rounded-xl border bg-background p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold">{p.title}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">{p._count.routines} rutinas</div>
+                    <div className="mt-2">
+                      <Link
+                        href={`/ct/programas/fases/${p.id}`}
+                        className="inline-flex items-center rounded-md border bg-background px-3 py-2 text-sm hover:bg-muted"
+                      >
+                        Abrir fase
+                      </Link>
+                    </div>
+                  </div>
+
+                  <PhaseActions phaseId={p.id} initialTitle={p.title} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
-
-// ApplyProgram is handled by ApplyProgramClient
