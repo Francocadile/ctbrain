@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { dbScope } from "@/lib/dbScope";
 import { RoutineDetailClient } from "./RoutineDetailClient";
 import Link from "next/link";
+import WeekProgramActivator from "./WeekProgramActivator";
 
 export const dynamic = "force-dynamic";
 
@@ -36,25 +37,36 @@ export default async function CTRoutineDetailPage({
 
   const selectedDay = normalizeDay(searchParams?.day);
 
-  // Auto-create (idempotent) weekday mapping on first access.
-  // If the ensure call fails (e.g. CSRF restrictions), we silently fall back to the base routine.
-  let effectiveRoutineId = params.id;
+  // Read mapping (no mutation). If it doesn't exist, we fallback to base routine and show a CTA to activate.
+  const origin = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  let program: { programId: string | null; weekId: string | null; days: Array<{ weekday: Weekday; routineId: string }> } = {
+    programId: null,
+    weekId: null,
+    days: [],
+  };
   try {
-    const origin = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const res = await fetch(`${origin}/api/ct/routines/${params.id}/program`, {
-      method: "POST",
+      method: "GET",
       cache: "no-store",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ weekday: selectedDay }),
     });
     if (res.ok) {
       const json = (await res.json()) as any;
-      const match = (json?.days || []).find((d: any) => d?.weekday === selectedDay);
-      if (match?.routineId) effectiveRoutineId = match.routineId;
+      program = {
+        programId: json?.programId ?? null,
+        weekId: json?.weekId ?? null,
+        days: Array.isArray(json?.days) ? json.days : [],
+      };
     }
   } catch {
     // noop
   }
+
+  const mappingByDay = new Map<Weekday, string>();
+  for (const d of program.days || []) {
+    if (d?.weekday && d?.routineId) mappingByDay.set(d.weekday, d.routineId);
+  }
+
+  const effectiveRoutineId = mappingByDay.get(selectedDay) ?? params.id;
 
   const routine = (await prisma.routine.findFirst({
     where: { id: effectiveRoutineId, teamId: team.id },
@@ -71,6 +83,23 @@ export default async function CTRoutineDetailPage({
   if (!routine) {
     return notFound();
   }
+
+  const baseRoutine = await prisma.routine.findFirst({
+    where: { id: params.id, teamId: team.id },
+    select: { id: true, title: true },
+  });
+
+  const routineIdsForWeek = WEEKDAYS.map((d) => mappingByDay.get(d.key)).filter(Boolean) as string[];
+  const routinesForWeek =
+    routineIdsForWeek.length > 0
+      ? await prisma.routine.findMany({
+          where: { teamId: team.id, id: { in: routineIdsForWeek } },
+          select: { id: true, title: true },
+        })
+      : [];
+
+  const titleByRoutineId = new Map<string, string>();
+  for (const r of routinesForWeek) titleByRoutineId.set(r.id, r.title);
 
   const sharedPlayerIds = routine.sharedWithPlayers.map((s: any) => s.playerId);
 
@@ -112,90 +141,110 @@ export default async function CTRoutineDetailPage({
     })),
   };
 
+  const selectedDayLabel = WEEKDAYS.find((d) => d.key === selectedDay)?.full ?? "";
+
   return (
-    <div className="max-w-5xl mx-auto space-y-4">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[220px_1fr] md:gap-6">
-        {/* Mobile day nav (horizontal) */}
-        <div className="md:hidden">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {WEEKDAYS.find((d) => d.key === selectedDay)?.full}
-          </h1>
-          <div className="mt-3 -mx-4 overflow-x-auto px-4">
-            <div className="inline-flex min-w-max gap-1 rounded-lg bg-muted p-1">
-              {WEEKDAYS.map((d) => {
-                const active = d.key === selectedDay;
-                return (
-                  <Link
-                    key={d.key}
-                    href={`/ct/rutinas/${params.id}?day=${d.key}`}
-                    className={`inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition ${
-                      active
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <span className="inline-flex h-6 w-6 items-center justify-center rounded-md border bg-background text-xs">
-                      {d.short}
-                    </span>
-                    <span className="whitespace-nowrap">{d.full}</span>
-                  </Link>
-                );
-              })}
-            </div>
+    <div className="max-w-6xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="space-y-1">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Semana 1</div>
+          <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Plan semanal</h1>
+          <div className="text-sm text-muted-foreground">
+            {baseRoutine ? <>Rutina base: <span className="font-medium text-foreground">{baseRoutine.title}</span></> : null}
           </div>
         </div>
 
-        {/* Desktop sidebar day nav (vertical) */}
-        <aside className="hidden md:block">
-          <div className="sticky top-4">
-            <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Días</div>
-            <nav className="rounded-lg border bg-background p-1">
-              <ul className="space-y-1">
-                {WEEKDAYS.map((d) => {
-                  const active = d.key === selectedDay;
-                  return (
-                    <li key={d.key}>
-                      <Link
-                        href={`/ct/rutinas/${params.id}?day=${d.key}`}
-                        className={`group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition ${
-                          active
-                            ? "bg-muted text-foreground shadow-sm"
-                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                        }`}
-                        aria-current={active ? "page" : undefined}
-                      >
-                        <span
-                          className={`inline-flex h-7 w-7 items-center justify-center rounded-md border bg-background text-xs ${
-                            active ? "border-foreground/20" : "border-muted-foreground/20"
-                          }`}
-                        >
-                          {d.short}
-                        </span>
-                        <span>{d.full}</span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </nav>
-          </div>
-        </aside>
+        {/* Week selector (UI only for now) */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border bg-background text-sm"
+            aria-label="Semana anterior"
+            disabled
+          >
+            ◀
+          </button>
+          <div className="rounded-md border bg-background px-3 py-2 text-sm font-medium">Semana 1</div>
+          <button
+            type="button"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border bg-background text-sm"
+            aria-label="Semana siguiente"
+            disabled
+          >
+            ▶
+          </button>
+        </div>
+      </div>
 
-        {/* Editor column */}
-        <section className="space-y-3">
-          <div className="hidden md:block">
-            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Semana 1</div>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-              {WEEKDAYS.find((d) => d.key === selectedDay)?.full}
-            </h1>
+      {/* CTA when program is not yet activated */}
+      {!program.programId ? <WeekProgramActivator baseRoutineId={params.id} /> : null}
+
+      {/* Weekly grid */}
+      <div>
+        <div className="mb-3 flex items-center justify-between">
+          <div className="text-sm font-medium">Semana 1 · {selectedDayLabel}</div>
+          <div className="text-xs text-muted-foreground">Elegí un día para editar</div>
+        </div>
+
+        <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:overflow-visible md:px-0">
+          <div className="grid min-w-[840px] grid-cols-7 gap-3 md:min-w-0">
+            {WEEKDAYS.map((d) => {
+              const isActive = d.key === selectedDay;
+              const rid = mappingByDay.get(d.key) ?? null;
+              const dayTitle = rid ? titleByRoutineId.get(rid) ?? "Rutina asignada" : "Sin rutina";
+
+              return (
+                <Link
+                  key={d.key}
+                  href={`/ct/rutinas/${params.id}?day=${d.key}`}
+                  className={`block rounded-xl border p-3 transition ${
+                    isActive
+                      ? "border-foreground/40 bg-muted shadow-sm"
+                      : "bg-background hover:bg-muted"
+                  }`}
+                  aria-current={isActive ? "page" : undefined}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-xs font-medium text-muted-foreground">{d.short}</div>
+                      <div className="text-sm font-semibold">{d.full}</div>
+                    </div>
+                    {isActive ? (
+                      <span className="rounded-full bg-foreground px-2 py-1 text-[11px] font-medium text-background">
+                        Editando
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-3 text-sm">
+                    <div className={`line-clamp-2 ${rid ? "text-foreground" : "text-muted-foreground"}`}>
+                      {dayTitle}
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
-          <RoutineDetailClient
-            routine={dto.routine}
-            blocks={dto.blocks}
-            items={dto.items}
-            sharedPlayerIds={sharedPlayerIds}
-          />
-        </section>
+        </div>
+      </div>
+
+      {/* Editor */}
+      <div className="space-y-3">
+        <div className="rounded-lg border bg-background p-4">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Editando</div>
+          <div className="text-lg font-semibold">{selectedDayLabel}</div>
+          <div className="text-sm text-muted-foreground">
+            Los cambios se guardan en la rutina correspondiente al día seleccionado.
+          </div>
+        </div>
+
+        <RoutineDetailClient
+          routine={dto.routine}
+          blocks={dto.blocks}
+          items={dto.items}
+          sharedPlayerIds={sharedPlayerIds}
+        />
       </div>
     </div>
   );
