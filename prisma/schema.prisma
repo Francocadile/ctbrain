@@ -26,6 +26,7 @@ model Team {
   protocols                 Protocol[]
   nextRivalFile             NextRivalFile?
   Program                   Program[]
+  routinePrograms           RoutineProgram[]
 }
 
 model NextRivalFile {
@@ -939,4 +940,54 @@ model ProgramDay {
   @@index([routineId])
   @@index([teamId, routineId])
   @@index([weekId, teamId])
+}
+
+// =========================
+// Rutinas: Programas -> Fases -> Playlist (ADITIVO)
+// =========================
+
+model RoutineProgram {
+  id          String  @id @default(cuid())
+  teamId      String
+  title       String
+  description String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team   Team                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  phases RoutineProgramPhase[]
+
+  @@index([teamId])
+}
+
+model RoutineProgramPhase {
+  id        String @id @default(cuid())
+  programId String
+  title     String
+  order     Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  program  RoutineProgram              @relation(fields: [programId], references: [id], onDelete: Cascade)
+  routines RoutineProgramPhaseRoutine[]
+
+  @@index([programId])
+}
+
+model RoutineProgramPhaseRoutine {
+  id        String @id @default(cuid())
+  phaseId   String
+  routineId String
+  order     Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  phase RoutineProgramPhase @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+
+  @@unique([phaseId, routineId])
+  @@index([phaseId])
+  @@index([routineId])
 }
