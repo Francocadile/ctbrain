@@ -3,6 +3,7 @@ import { dbScope } from "@/lib/dbScope";
 import { RoutineDetailClient } from "./RoutineDetailClient";
 import Link from "next/link";
 import WeekProgramActivator from "./WeekProgramActivator";
+import DuplicateForDayButton from "./DuplicateForDayButton";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +69,11 @@ export default async function CTRoutineDetailPage({
   }
 
   const effectiveRoutineId = mappingByDay.get(selectedDay) ?? params.id;
+
+  const effectiveRoutineUsageCount = (selectedWeekObj?.days || []).filter(
+    (d) => d?.routineId === effectiveRoutineId,
+  ).length;
+  const isSharedRoutineForWeek = effectiveRoutineUsageCount > 1;
 
   const routine = (await prisma.routine.findFirst({
     where: { id: effectiveRoutineId, teamId: team.id },
@@ -233,9 +239,26 @@ export default async function CTRoutineDetailPage({
       <div className="space-y-3">
         <div className="rounded-lg border bg-background p-4">
           <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Editando</div>
-          <div className="text-lg font-semibold">{selectedDayLabel}</div>
-          <div className="text-sm text-muted-foreground">
-            Los cambios se guardan en la rutina correspondiente al día seleccionado.
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-lg font-semibold">{selectedDayLabel}</div>
+              <div className="text-sm text-muted-foreground">
+                Los cambios se guardan en la rutina correspondiente al día seleccionado.
+              </div>
+            </div>
+
+            {program.programId && isSharedRoutineForWeek ? (
+              <div className="flex items-center gap-2">
+                <span className="rounded-full border bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-800">
+                  Rutina compartida
+                </span>
+                <DuplicateForDayButton
+                  baseRoutineId={params.id}
+                  weekNumber={selectedWeek}
+                  weekday={selectedDay}
+                />
+              </div>
+            ) : null}
           </div>
         </div>
 
