@@ -958,6 +958,7 @@ model RoutineProgram {
 
   team   Team                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
   phases RoutineProgramPhase[]
+  days   RoutineProgramDay[]
 
   @@index([teamId])
 }
