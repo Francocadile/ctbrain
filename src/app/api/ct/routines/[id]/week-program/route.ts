@@ -92,7 +92,8 @@ async function ensureWeekProgram(prisma: any, teamId: string, baseRoutineId: str
   }
 
   const ensured = await prisma.$transaction(async (tx: any) => {
-    // Program
+    // Program (team-scoped). Security for RoutineProgramDay is enforced by selecting the program by teamId,
+    // then reading/writing days ONLY by programId (RoutineProgramDay has no teamId in production).
     const programs = await tx.routineProgram.findMany({
       where: { teamId, description: marker },
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
@@ -122,7 +123,7 @@ async function ensureWeekProgram(prisma: any, teamId: string, baseRoutineId: str
 
     // Existing days
     const existingDays = await tx.routineProgramDay.findMany({
-      where: { teamId, programId: program.id },
+      where: { programId: program.id },
       select: { id: true, dayIndex: true, routineId: true },
       orderBy: [{ dayIndex: "asc" }],
     });
@@ -136,7 +137,6 @@ async function ensureWeekProgram(prisma: any, teamId: string, baseRoutineId: str
       const routineId = await cloneRoutine(tx, teamId, base, `${base.title} (Día ${dayIndex + 1})`);
       const created = await tx.routineProgramDay.create({
         data: {
-          teamId,
           programId: program.id,
           dayIndex,
           routineId,

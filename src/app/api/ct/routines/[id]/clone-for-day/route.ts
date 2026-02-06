@@ -65,7 +65,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       }
 
       const day = await tx.routineProgramDay.findFirst({
-        where: { teamId: team.id, programId: program.id, dayIndex },
+        where: { programId: program.id, dayIndex },
         select: { id: true, routineId: true },
       });
 
