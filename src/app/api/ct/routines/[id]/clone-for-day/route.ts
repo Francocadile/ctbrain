@@ -12,6 +12,11 @@ function isWeekday(x: unknown): x is Weekday {
   return WEEKDAYS.includes(x as any);
 }
 
+function dayIndexFrom(weekNumber: number, weekday: Weekday) {
+  const weekdayIndex = WEEKDAYS.indexOf(weekday);
+  return (weekNumber - 1) * 7 + weekdayIndex;
+}
+
 // POST /api/ct/routines/[id]/clone-for-day
 // body: { weekNumber: number, weekday: ProgramWeekday }
 export async function POST(req: Request, { params }: { params: { id: string } }) {
@@ -33,16 +38,20 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     }
 
     const marker = `BASE_ROUTINE:${baseRoutineId}`;
+    const dayIndex = dayIndexFrom(weekNumber, weekday);
+    if (dayIndex < 0 || dayIndex > 27) {
+      return NextResponse.json({ ok: false, error: "dayIndex inválido" }, { status: 400 });
+    }
 
     const result = await prisma.$transaction(async (tx: any) => {
-      const programs = await tx.program.findMany({
+      const programs = await tx.routineProgram.findMany({
         where: { teamId: team.id, description: marker },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
         select: { id: true },
       });
 
       if (programs.length > 1) {
-        console.warn("Multiple Programs found for BASE_ROUTINE marker in clone-for-day; using most recent", {
+        console.warn("Multiple RoutinePrograms found for BASE_ROUTINE marker in clone-for-day; using most recent", {
           marker,
           teamId: team.id,
           programIds: programs.map((p: any) => p.id),
@@ -52,20 +61,11 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       const program = programs[0] ?? null;
 
       if (!program) {
-        return { error: "program no activado" as const };
+        return { error: "program no encontrado" as const };
       }
 
-      const week = await tx.programWeek.findFirst({
-        where: { teamId: team.id, programId: program.id, weekNumber },
-        select: { id: true },
-      });
-
-      if (!week) {
-        return { error: "week no encontrada" as const };
-      }
-
-      const day = await tx.programDay.findFirst({
-        where: { teamId: team.id, weekId: week.id, weekday },
+      const day = await tx.routineProgramDay.findFirst({
+        where: { teamId: team.id, programId: program.id, dayIndex },
         select: { id: true, routineId: true },
       });
 
@@ -73,7 +73,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         return { error: "day no encontrado" as const };
       }
 
-      const currentRoutineId = day.routineId || baseRoutineId;
+      const currentRoutineId = day.routineId;
 
       const fromRoutine = await tx.routine.findFirst({
         where: { id: currentRoutineId, teamId: team.id },
@@ -140,7 +140,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         }
       }
 
-      await tx.programDay.update({
+      await tx.routineProgramDay.update({
         where: { id: day.id },
         data: { routineId: newRoutine.id },
         select: { id: true },
@@ -149,11 +149,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       return { ok: true as const, newRoutineId: newRoutine.id as string };
     });
 
-    if ((result as any)?.error === "program no activado") {
-      return NextResponse.json({ ok: false, error: "program no activado" }, { status: 400 });
-    }
-    if ((result as any)?.error === "week no encontrada") {
-      return NextResponse.json({ ok: false, error: "week no encontrada" }, { status: 404 });
+    if ((result as any)?.error === "program no encontrado") {
+      return NextResponse.json({ ok: false, error: "program no encontrado" }, { status: 404 });
     }
     if ((result as any)?.error === "day no encontrado") {
       return NextResponse.json({ ok: false, error: "day no encontrado" }, { status: 404 });

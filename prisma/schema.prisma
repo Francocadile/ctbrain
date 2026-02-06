@@ -994,6 +994,32 @@ model RoutineProgramPhaseRoutine {
 }
 
 // =========================
+// Rutinas: Mapping semanal/día (produce RoutineProgramDay)
+// =========================
+
+model RoutineProgramDay {
+  id        String  @id @default(cuid())
+  teamId    String
+  programId String
+
+  // 0..27, donde dayIndex = (weekNumber-1)*7 + weekdayIndex(MON=0..SUN=6)
+  dayIndex Int
+  label    String?
+  routineId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  program RoutineProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, dayIndex])
+  @@index([teamId])
+  @@index([programId])
+  @@index([routineId])
+  @@index([teamId, routineId])
+}
+
+// =========================
 // Block Templates - ADITIVO
 // =========================
 

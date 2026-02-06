@@ -39,14 +39,14 @@ export default async function CTRoutineDetailPage({
   const selectedDay = normalizeDay(searchParams?.day);
   const selectedWeek = Math.min(4, Math.max(1, Number(searchParams?.week ?? 1) || 1));
 
-  // Read mapping (no mutation). If it doesn't exist, we fallback to base routine and show a CTA to activate.
+  // Read + ensure mapping for this base routine using RoutineProgramDay.
   const origin = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   let program: { programId: string | null; weeks: Array<{ id: string; weekNumber: number; label: string | null; days: Array<{ weekday: Weekday; routineId: string }> }> } = {
     programId: null,
     weeks: [],
   };
   try {
-    const res = await fetch(`${origin}/api/ct/routines/${params.id}/program`, {
+    const res = await fetch(`${origin}/api/ct/routines/${params.id}/week-program`, {
       method: "GET",
       cache: "no-store",
     });
