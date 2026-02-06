@@ -1007,9 +1007,6 @@ model RoutineProgramDay {
   label    String?
   routineId String
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
   program RoutineProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
 
   @@unique([programId, dayIndex])
