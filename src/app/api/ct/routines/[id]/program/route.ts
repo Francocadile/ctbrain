@@ -19,11 +19,12 @@ async function getMapping(prisma: any, teamId: string, baseRoutineId: string) {
   // We use Program.description as a stable marker to find the program created for this base routine.
   const marker = `BASE_ROUTINE:${baseRoutineId}`;
 
-  const program = await prisma.program.findFirst({
+  const programs = await prisma.program.findMany({
     where: {
       teamId,
       description: marker,
     },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     include: {
       weeks: {
         orderBy: { weekNumber: "asc" },
@@ -31,6 +32,16 @@ async function getMapping(prisma: any, teamId: string, baseRoutineId: string) {
       },
     },
   });
+
+  if (programs.length > 1) {
+    console.warn("Multiple Programs found for BASE_ROUTINE marker; using most recent", {
+      marker,
+      teamId,
+      programIds: programs.map((p: any) => p.id),
+    });
+  }
+
+  const program = programs[0] ?? null;
 
   if (!program) return null;
 
@@ -123,10 +134,21 @@ async function ensureProgram(prisma: any, teamId: string, baseRoutineId: string)
 
   const ensured = await prisma.$transaction(async (tx: any) => {
     // Program
-    let program = await tx.program.findFirst({
+    const existingPrograms = await tx.program.findMany({
       where: { teamId, description: marker },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       select: { id: true },
     });
+
+    if (existingPrograms.length > 1) {
+      console.warn("Multiple Programs found for BASE_ROUTINE marker in ensureProgram; using most recent", {
+        marker,
+        teamId,
+        programIds: existingPrograms.map((p: any) => p.id),
+      });
+    }
+
+    let program = existingPrograms[0] ?? null;
 
     if (!program) {
       program = await tx.program.create({

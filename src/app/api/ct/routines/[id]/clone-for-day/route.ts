@@ -35,10 +35,21 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     const marker = `BASE_ROUTINE:${baseRoutineId}`;
 
     const result = await prisma.$transaction(async (tx: any) => {
-      const program = await tx.program.findFirst({
+      const programs = await tx.program.findMany({
         where: { teamId: team.id, description: marker },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         select: { id: true },
       });
+
+      if (programs.length > 1) {
+        console.warn("Multiple Programs found for BASE_ROUTINE marker in clone-for-day; using most recent", {
+          marker,
+          teamId: team.id,
+          programIds: programs.map((p: any) => p.id),
+        });
+      }
+
+      const program = programs[0] ?? null;
 
       if (!program) {
         return { error: "program no activado" as const };
