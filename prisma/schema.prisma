@@ -956,7 +956,7 @@ model RoutineProgram {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  team   Team                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team   Team                  @relation(fields: [teamId], references: [id], onDelete: Cascade)
   phases RoutineProgramPhase[]
   days   RoutineProgramDay[]
 
@@ -972,8 +972,9 @@ model RoutineProgramPhase {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  program  RoutineProgram              @relation(fields: [programId], references: [id], onDelete: Cascade)
+  program  RoutineProgram               @relation(fields: [programId], references: [id], onDelete: Cascade)
   routines RoutineProgramPhaseRoutine[]
+  blocks   RoutineProgramBlock[]
 
   @@index([programId])
 }
@@ -994,17 +995,52 @@ model RoutineProgramPhaseRoutine {
   @@index([routineId])
 }
 
+model RoutineProgramBlock {
+  id            String  @id @default(cuid())
+  phaseId       String
+  key           String
+  title         String?
+  order         Int     @default(0)
+  durationWeeks Int     @default(4)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  phase RoutineProgramPhase      @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  days  RoutineProgramBlockDay[]
+
+  @@index([phaseId])
+  @@index([phaseId, order])
+}
+
+model RoutineProgramBlockDay {
+  id        String  @id @default(cuid())
+  blockId   String
+  dayIndex  Int
+  label     String?
+  routineId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  block RoutineProgramBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+
+  @@unique([blockId, dayIndex])
+  @@index([blockId])
+  @@index([routineId])
+}
+
 // =========================
 // Rutinas: Mapping semanal/día (produce RoutineProgramDay)
 // =========================
 
 model RoutineProgramDay {
-  id        String  @id @default(cuid())
+  id        String @id @default(cuid())
   programId String
 
   // 0..27, donde dayIndex = (weekNumber-1)*7 + weekdayIndex(MON=0..SUN=6)
-  dayIndex Int
-  label    String?
+  dayIndex  Int
+  label     String?
   routineId String
 
   program RoutineProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
@@ -1019,15 +1055,15 @@ model RoutineProgramDay {
 // =========================
 
 model BlockTemplate {
-  id        String   @id @default(cuid())
-  teamId    String
-  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   title     String
   // Copia de RoutineBlock.type en formato string (WARMUP/MAIN/...)
   blockType String
 
-  items     BlockTemplateItem[]
+  items BlockTemplateItem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1036,7 +1072,7 @@ model BlockTemplate {
 }
 
 model BlockTemplateItem {
-  id         String   @id @default(cuid())
+  id         String        @id @default(cuid())
   templateId String
   template   BlockTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
@@ -1055,7 +1091,7 @@ model BlockTemplateItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([templateId, exerciseId, order])
   @@index([templateId])
   @@index([exerciseId])
-  @@unique([templateId, exerciseId, order])
 }

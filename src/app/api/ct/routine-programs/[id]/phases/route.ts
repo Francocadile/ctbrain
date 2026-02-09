@@ -4,6 +4,44 @@ import { assertCsrf, handleCsrfError } from "@/lib/security/csrf";
 
 export const dynamic = "force-dynamic";
 
+// GET /api/ct/routine-programs/[id]/phases
+export async function GET(req: Request, { params }: { params: { id: string } }) {
+  try {
+    const { prisma, team } = await dbScope({ req, roles: ["CT", "ADMIN"] as any });
+    const programId = params.id;
+
+    const program = await prisma.routineProgram.findFirst({
+      where: { id: programId, teamId: team.id },
+      select: { id: true },
+    });
+    if (!program) {
+      return NextResponse.json({ error: "Program not found" }, { status: 404 });
+    }
+
+    const rows = await prisma.routineProgramPhase.findMany({
+      where: { programId },
+      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      select: {
+        id: true,
+        title: true,
+        order: true,
+      },
+    });
+
+    const data = rows.map((ph) => ({
+      id: ph.id,
+      title: ph.title,
+      order: ph.order,
+    }));
+
+    return NextResponse.json({ data });
+  } catch (error: any) {
+    if (error instanceof Response) return error;
+    console.error("ct routine-program phases list error", error);
+    return NextResponse.json({ error: error?.message || "Error" }, { status: 500 });
+  }
+}
+
 // POST /api/ct/routine-programs/[id]/phases
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
